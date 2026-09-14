@@ -66,11 +66,26 @@ def checkpw(p,h):
     except:return False
 def seed(db):
     admin_password=os.getenv('ADMIN_PASSWORD','admin123')
-    if not db.query(User).first(): db.add(User(username=os.getenv('ADMIN_USERNAME','admin'),password_hash=hashpw(admin_password),role='admin'))
-    if not db.query(School).first(): db.add(School(name=os.getenv('SCHOOL_NAME','My School'),motto='Excellence in Education'))
+    admin_user=os.getenv('ADMIN_USERNAME','admin')
+    user = db.query(User).filter(User.username=='admin').first()
+    if not user:
+        user=db.query(User).first()
+    if not user:
+        db.add(User(username=admin_user , password_hash=hashpw(admin_password), role='admin'))
+    else:
+        if os.getenv('ADMIN_PASSWORD'):
+            user.password_hash = hashpw(admin_password)
+            user.username = admin_user
+    db.commit()   
+    if not db.query(School).first():
+        db.add(School(name=os.getenv('SCHOOL_NAME','My School'),motto='Excellence in Education'))
     if not db.query(AcademicYear).first():
-        y=AcademicYear(name=str(datetime.date.today().year),active=True);db.add(y);db.flush();db.add_all([Term(name='Term 1',year_id=y.id,active=True),Term(name='Term 2',year_id=y.id),Term(name='Term 3',year_id=y.id)])
-    if not db.query(GradeScale).first(): db.add_all([GradeScale(grade='A',min_percent=80,max_percent=100,remark='Excellent'),GradeScale(grade='B',min_percent=70,max_percent=79.99,remark='Very Good'),GradeScale(grade='C',min_percent=60,max_percent=69.99,remark='Good'),GradeScale(grade='D',min_percent=50,max_percent=59.99,remark='Satisfactory'),GradeScale(grade='E',min_percent=0,max_percent=49.99,remark='Needs Improvement')])
+            db.add(AcademicYear(name=str(datetime.date.today().year),active=True))
+            db.commit()
+            db.flush()
+            db.add_all([Term(name='Term 1',year_id=db.query(AcademicYear).first().id,active=True),Term(name='Term 2',year_id=db.query(AcademicYear).first().id,active=False),Term(name='Term 3',year_id=db.query(AcademicYear).first().id,active=False)])
+    if not db.query(GradeScale).first():    
+           db.query(GradeScale).first(): db.add_all([GradeScale(grade='A',min_percent=80,max_percent=100,remark='Excellent'),GradeScale(grade='B',min_percent=70,max_percent=79.99,remark='Very Good'),GradeScale(grade='C',min_percent=60,max_percent=69.99,remark='Good'),GradeScale(grade='D',min_percent=50,max_percent=59.99,remark='Satisfactory'),GradeScale(grade='E',min_percent=0,max_percent=49.99,remark='Needs Improvement')])
     db.commit()
 db=SessionLocal();seed(db);db.close()
 APP_NAME='DaviSchool Management System'
