@@ -8,9 +8,13 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
     con=get_db(); cur=con.cursor()
     cur.execute("SELECT DISTINCT class FROM students WHERE school_id=?", (request.session.get("school_id",0),))
     classes_from_db = [r["class"] for r in cur.fetchall() if r["class"]]
+    cur.execute("SELECT name FROM students WHERE school_id=? LIMIT 5", (request.session.get("school_id",0),))
+    student_names = [r["name"] for r in cur.fetchall()]
     con.close()
     if not classes_from_db: classes_from_db = ["GRADE 7", "GRADE 8", "GRADE 9"]
+    if not student_names: student_names = ["FLORENCE"]
     grades_options = "".join([f"<option value='{g}' {'selected' if g==grade else ''}>{g}</option>" for g in classes_from_db])
+    students_badges = "".join([f"<span style='background:#f1f5f9; border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:12px; margin-right:6px'>{n.upper()} →</span>" for n in student_names[:3]])
 
     tab_links = f"""
         <div style='display:flex; gap:24px; border-bottom:1px solid #e2e8f0; margin-bottom:20px; font-size:14px'>
@@ -38,20 +42,41 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
         """
     elif tab == "teacher":
         content_cards = f"""
-        <!-- Teacher Performance Tab - YOUR NEW SCREENSHOTS -->
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
             <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>📈 Top 10 Teachers by Value Added</div>
             <div style='height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
-                <div style='font-size:36px; margin-bottom:12px'>📊</div>
-                <div style='font-size:14px'>No teacher performance data available</div>
-                <div style='font-size:12px; margin-top:4px'>Term: {term} | Year: {year} | Grade: {grade}</div>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div><div style='font-size:14px'>No teacher performance data available</div><div style='font-size:12px; margin-top:4px'>Term: {term} | Year: {year} | Grade: {grade}</div>
             </div>
         </div>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
             <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>🎓 Teacher Value-Added Details</div>
             <div style='height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div><div style='font-size:14px'>No teacher value-added data available</div>
+            </div>
+        </div>
+        """
+    elif tab == "student":
+        content_cards = f"""
+        <!-- Student Tracking Tab - YOUR NEW SCREENSHOTS -->
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:20px'>
+                <div style='font-weight:600; display:flex; gap:8px; align-items:center'>👥 Student Trajectories</div>
+                <label style='display:flex; align-items:center; gap:6px; font-size:12px; color:#64748b; border:1px solid #e2e8f0; padding:6px 12px; border-radius:20px; background:#f8fafc'>
+                    <input type='checkbox'> ⚠️ Show At-Risk Only
+                </label>
+            </div>
+            <div style='height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
                 <div style='font-size:36px; margin-bottom:12px'>📊</div>
-                <div style='font-size:14px'>No teacher value-added data available</div>
+                <div style='font-size:14px'>No student trajectory data available</div>
+            </div>
+        </div>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:12px; display:flex; gap:8px; align-items:center'>📈 Cohort Tracking</div>
+            <div style='font-size:13px; color:#475569; margin-bottom:10px'>Select students to track their progression:</div>
+            <div style='margin-bottom:20px'>{students_badges}</div>
+            <div style='height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div>
+                <div style='font-size:13px'>Select students above to view their progression chart</div>
             </div>
         </div>
         """
@@ -69,9 +94,7 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
                 <div style='position:absolute; left:0; top:0; height:220px; display:flex; flex-direction:column; justify-content:space-between; font-size:12px; color:#94a3b8'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
                 <div style='height:220px; border-left:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1; position:relative; display:flex; align-items:flex-end; justify-content:center'>
                     <div style='position:absolute; bottom:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:30px; height:220px; justify-content:flex-end; padding-bottom:20px'>
-                        <div style='width:8px; height:8px; background:#22c55e; border-radius:50%'></div>
-                        <div style='width:8px; height:8px; background:#3b82f6; border-radius:50%; margin-top:20px'></div>
-                        <div style='width:8px; height:8px; background:#ef4444; border-radius:50%; margin-top:40px'></div>
+                        <div style='width:8px; height:8px; background:#22c55e; border-radius:50%'></div><div style='width:8px; height:8px; background:#3b82f6; border-radius:50%; margin-top:20px'></div><div style='width:8px; height:8px; background:#ef4444; border-radius:50%; margin-top:40px'></div>
                     </div>
                 </div>
                 <div style='text-align:center; font-size:12px; color:#64748b; margin-top:8px'>{year}</div>
