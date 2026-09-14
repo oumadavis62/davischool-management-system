@@ -20,7 +20,6 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT, name TEXT, class TEXT, gender TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, subject TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, amount INTEGER, status TEXT)")
     try: cur.execute("ALTER TABLE students ADD COLUMN gender TEXT")
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN_EMAIL,))
@@ -43,7 +42,8 @@ def login_page(error_msg=""):
     <div style='display:flex; justify-content:space-between; margin:16px 0 24px; font-size:14px'><label><input type='checkbox'> Remember me</label><a href='#' style='color:#0f7a5a; font-weight:600; text-decoration:none'>Forgot Password?</a></div>
     <button class='btn-sign' type='submit'>Sign In</button></form><div class='bottom-link'>Don't have account? <a href='/register'>Register your School</a></div></div></body></html>"""
 
-def wrap(school_name, body_html):
+def wrap(school_name, body_html, user_email, user_role_display):
+    # user_role_display = Super Admin for you, School Admin for others
     return f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     *{{box-sizing:border-box}} body{{margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial; background:#fcfcfc; display:flex}}
     .sidebar{{width:270px; background:white; border-right:1px solid #e2e8f0; height:100vh; position:fixed; overflow-y:auto}}
@@ -57,15 +57,40 @@ def wrap(school_name, body_html):
     .grid4{{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px}} .card{{background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px; display:flex; justify-content:space-between}}
     .card h4{{margin:0; color:#64748b; font-size:13px; font-weight:500}} .card h2{{margin:6px 0 4px; font-size:26px; font-weight:700}} .card small{{color:#94a3b8; font-size:12px}}
     .icon-box{{width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px}}
+    /* Profile dropdown */
+    .profile-wrap{{position:relative}} .profile-btn{{display:flex; align-items:center; gap:8px; cursor:pointer; border:none; background:transparent}} 
+    .avatar{{width:36px; height:36px; background:#f1f5f9; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}}
+    .dropdown{{position:absolute; top:45px; right:0; width:250px; background:white; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.1); display:none; z-index:100; overflow:hidden}}
+    .dropdown.show{{display:block}} .drop-header{{padding:14px 16px; border-bottom:1px solid #f1f5f9}} .drop-header b{{display:block; font-size:14px}} .drop-header small{{color:#64748b; font-size:12px}}
+    .drop-item{{display:flex; align-items:center; gap:12px; padding:12px 16px; text-decoration:none; color:#334155; font-size:14px}} .drop-item:hover{{background:#f8fafc}} .drop-item.logout{{color:#dc2626; border-top:1px solid #f1f5f9}}
     @media(max-width:900px){{.sidebar{{display:none}} .main{{margin-left:0}} .grid4{{grid-template-columns:1fr 1fr}}}}
     </style></head><body>
     <div class='sidebar'><div class='logo'><div class='logo-icon'>D</div><div><b>DaviSchool</b><small>SCHOOL MANAGEMENT SYSTEM</small></div></div>
     <div class='nav-section'><div class='nav-label'>Main Navigation</div><a class='nav-item active'>📊 Dashboard</a>
     <div class='sub'><a class='nav-item' href='/dashboard' style='background:#f1f5f9; border:1px solid #e2e8f0; font-weight:700; color:#0f172a'>🏠 System Overview</a><a class='nav-item'>📈 Academic Analytics</a><a class='nav-item'>📈 Financial Analytics</a><a class='nav-item'>📅 Attendance Analy...</a><a class='nav-item'>💡 Automated Insig...</a><a class='nav-item'>🤝 Benchmarking</a></div>
     <a class='nav-item' href='/students'>🎓 Students Manager</a><a class='nav-item' href='/teachers'>👥 Staff Manager</a><a class='nav-item'>📖 Academic Manager</a><a class='nav-item' href='/classes'>🗓️ Timetable</a><a class='nav-item'>🎥 Online Classes</a></div>
-    <div style='padding:14px; border-top:1px solid #f1f5f9; margin-top:20px; display:flex; gap:10px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>oumadavis62@gmail.com</div></div></div></div>
-    <div class='main'><div class='topbar'><div><b style='font-size:16px'>{school_name.upper()}</b> <small style='color:#64748b'>(Code: DS-2026)</small></div><div style='display:flex; gap:16px; align-items:center'><span>🗂️</span><span>☀️</span><span>🔔</span><span>❓</span><div style='display:flex; gap:8px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>School Admin</div></div></div></div></div>
-    {body_html}</div></body></html>"""
+    <div style='padding:14px; border-top:1px solid #f1f5f9; margin-top:20px; display:flex; gap:10px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>{user_email}</div></div></div></div>
+    <div class='main'><div class='topbar'><div><b style='font-size:16px'>{school_name.upper()}</b> <small style='color:#64748b'>(Code: DS-2026)</small></div>
+    <div style='display:flex; gap:16px; align-items:center'>
+        <span>☀️</span><span>🔔</span><span>❓</span>
+        <div class='profile-wrap'>
+            <button class='profile-btn' onclick='document.getElementById("profileDrop").classList.toggle("show")'>
+                <div class='avatar'>DO</div>
+                <div style='text-align:left; line-height:1.1'><div style='font-size:14px; font-weight:600'>Davis Ouma</div><div style='font-size:12px; color:#64748b'>{user_role_display}</div></div>
+                <span style='font-size:12px; margin-left:4px'>⌄</span>
+            </button>
+            <div id='profileDrop' class='dropdown'>
+                <div class='drop-header'><b>Davis Ouma</b><small>{user_email}</small></div>
+                <a class='drop-item' href='/profile'><span>👤</span> Profile</a>
+                <a class='drop-item' href='/settings'><span>⚙️</span> Settings</a>
+                <a class='drop-item logout' href='/logout'><span>↪</span> Log out</a>
+            </div>
+        </div>
+    </div>
+    </div>
+    {body_html}</div>
+    <script>window.onclick=function(e){{if(!e.target.closest('.profile-wrap')){{document.getElementById('profileDrop').classList.remove('show')}}}}</script>
+    </body></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 def home(): return HTMLResponse(login_page())
@@ -90,16 +115,20 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
-    if "school_id" not in request.session: return RedirectResponse("/")
+    if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
+    # Determine role display
+    is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
+    user_email = request.session.get("user_email", SUPER_ADMIN_EMAIL)
+    role_display = "Super Admin" if is_super else "School Admin"
+    school_name = request.session.get("school_name", "DaviSchool")
+    if is_super: school_name = request.session.get("school_name", "DaviSchool - Super Admin View")
     con=get_db(); cur=con.cursor()
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=?", (request.session["school_id"],)); sc=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM teachers WHERE school_id=?", (request.session["school_id"],)); tc=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM school_classes WHERE school_id=?", (request.session["school_id"],)); cc=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=? AND gender='Boy'", (request.session["school_id"],)); boys=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=? AND gender='Girl'", (request.session["school_id"],)); girls=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE class LIKE '%7%' OR class LIKE '%GRADE 7%'",); g7=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE class LIKE '%8%' OR class LIKE '%GRADE 8%'",); g8=cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students WHERE class LIKE '%9%' OR class LIKE '%GRADE 9%'",); g9=cur.fetchone()["c"]
+    sid = request.session.get("school_id", 0)
+    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=?", (sid,)); sc=cur.fetchone()["c"] if sid else 0
+    cur.execute("SELECT COUNT(*) as c FROM teachers WHERE school_id=?", (sid,)); tc=cur.fetchone()["c"] if sid else 0
+    cur.execute("SELECT COUNT(*) as c FROM school_classes WHERE school_id=?", (sid,)); cc=cur.fetchone()["c"] if sid else 0
+    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=? AND gender='Boy'", (sid,)); boys=cur.fetchone()["c"] if sid else 0
+    cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=? AND gender='Girl'", (sid,)); girls=cur.fetchone()["c"] if sid else 0
     con.close()
     total = boys + girls
     ratio = f"{(girls/boys):.2f}:1" if boys>0 and girls>0 else "0:1"
@@ -109,7 +138,7 @@ def dashboard(request: Request):
 
     body=f"""
     <div class='content'>
-        <div style='display:flex; justify-content:space-between; align-items:center'><div><h1>School Overview</h1><div class='welcome'>Welcome back, Davis! Here's what's happening at {request.session.get('school_name')}.</div></div><button style='border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600'>✨ Getting Started</button></div>
+        <div style='display:flex; justify-content:space-between; align-items:center'><div><h1>School Overview</h1><div class='welcome'>Welcome back, Davis! Here's what's happening at {school_name}.</div></div><button style='border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600'>✨ Getting Started</button></div>
         <div class='grid4'>
             <div class='card'><div><h4>Total Students</h4><h2>{sc}</h2><small>{cc} classes</small></div><div class='icon-box' style='background:#e0f2fe'>🎓</div></div>
             <div class='card'><div><h4>Total Staff</h4><h2>{tc}</h2><small>{tc} system users</small></div><div class='icon-box' style='background:#f3e8ff'>👥</div></div>
@@ -123,7 +152,6 @@ def dashboard(request: Request):
             <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#dcfce7; width:40px; height:40px'>💵</div><div><h4 style='color:#0f172a; font-weight:600'>Payroll</h4><small>0 runs<br>No runs yet</small></div></div></div>
         </div>
 
-        <!-- Students by Gender - SCROLL PART 1 -->
         <div style='margin-top:28px; background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; max-width:700px; margin-left:auto; margin-right:auto'>
             <div style='display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px'><span style='color:#7c3aed'>👥</span> Students by Gender</div>
             <div style='color:#64748b; font-size:13px; margin:4px 0 16px'>Boys vs Girls enrollment per form</div>
@@ -141,7 +169,6 @@ def dashboard(request: Request):
             </div>
         </div>
 
-        <!-- VERY LAST PART - BELOW GENDER TREND -->
         <div style='margin-top:24px; background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'>
             <div style='display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px'>📊 Cumulative Balances by Class</div>
             <div style='color:#64748b; font-size:13px; margin:4px 0 18px'>Current outstanding fee balances — Total: KES 0</div>
@@ -153,55 +180,74 @@ def dashboard(request: Request):
         </div>
 
         <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px'>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'>
-                <div style='display:flex; align-items:center; gap:8px; font-weight:700'>🕒 Recent Activity</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Latest system activity</div>
-                <div style='display:flex; flex-direction:column; gap:12px; font-size:13px'>
-                    <div><div style='display:flex; justify-content:space-between'><span>Viewed: communications > ...</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- 3h ago</small></div>
-                    <div><div style='display:flex; justify-content:space-between'><span>Viewed: dashboard > overvi...</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- 3h ago</small></div>
-                    <div><div style='display:flex; justify-content:space-between'><span>Viewed: terms</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- 3h ago</small></div>
-                    <div><div style='display:flex; justify-content:space-between'><span>Viewed: analytics > finance</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- 3h ago</small></div>
-                </div>
-            </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'>
-                <div style='display:flex; align-items:center; gap:8px; font-weight:700'>🔴 Top Fee Defaulters</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Highest outstanding balances</div>
-                <div style='height:150px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px'>No defaulters</div>
-            </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'>
-                <div style='display:flex; align-items:center; gap:8px; font-weight:700'>💳 Recent Payments</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Latest fee payments received</div>
-                <div style='height:150px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px'>No payments yet</div>
-            </div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><div style='display:flex; align-items:center; gap:8px; font-weight:700'>🕒 Recent Activity</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Latest system activity</div><div style='height:150px; display:flex; flex-direction:column; gap:10px; font-size:13px'><div><div style='display:flex; justify-content:space-between'><span>Viewed: dashboard > overvi...</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- now</small></div></div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><div style='display:flex; align-items:center; gap:8px; font-weight:700'>🔴 Top Fee Defaulters</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Highest outstanding balances</div><div style='height:150px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px'>No defaulters</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><div style='display:flex; align-items:center; gap:8px; font-weight:700'>💳 Recent Payments</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Latest fee payments received</div><div style='height:150px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px'>No payments yet</div></div>
         </div>
-
     </div>
     """
-    return HTMLResponse(wrap(request.session.get('school_name'), body))
+    return HTMLResponse(wrap(school_name, body, user_email, role_display))
 
 @app.get("/students", response_class=HTMLResponse)
 def students_list(request: Request):
-    if "school_id" not in request.session: return RedirectResponse("/")
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM students WHERE school_id=?", (request.session["school_id"],)); rows=cur.fetchall(); con.close()
-    rows_html="".join([f"<tr><td>{r['adm']}</td><td>{r['name']}</td><td>{r['class']}</td><td>{r['gender'] or '-'}</td></tr>" for r in rows]) or "<tr><td colspan=4 style='text-align:center; padding:20px; color:#94a3b8'>No students yet - Fresh (0 initially)</td></tr>"
-    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h3>Students - {request.session.get('school_name')}</h3>
-    <form method='post' action='/students/add' style='margin-top:12px; display:flex; gap:6px; flex-wrap:wrap'><input name='adm' placeholder='ADM No' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='name' placeholder='Full Name' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='class' placeholder='Class e.g Grade 7' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'>
+    if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
+    is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
+    user_email = request.session.get("user_email", SUPER_ADMIN_EMAIL)
+    role_display = "Super Admin" if is_super else "School Admin"
+    school_name = request.session.get("school_name", "DaviSchool")
+    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM students WHERE school_id=?", (request.session.get("school_id",0),)); rows=cur.fetchall(); con.close()
+    rows_html="".join([f"<tr><td>{r['adm']}</td><td>{r['name']}</td><td>{r['class']}</td><td>{r['gender'] or '-'}</td></tr>" for r in rows]) or "<tr><td colspan=4 style='text-align:center; padding:20px; color:#94a3b8'>No students yet - Fresh</td></tr>"
+    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h3>Students - {school_name}</h3>
+    <form method='post' action='/students/add' style='margin-top:12px; display:flex; gap:6px; flex-wrap:wrap'><input name='adm' placeholder='ADM No' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='name' placeholder='Full Name' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='class' placeholder='Class' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'>
     <select name='gender' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><option value='Boy'>Boy</option><option value='Girl'>Girl</option></select>
     <button style='background:#2563eb; color:white; padding:10px 16px; border:none; border-radius:8px; font-weight:600'>+ Add Student</button></form></div>
     <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px; margin-top:16px'><table style='width:100%; border-collapse:collapse'><tr><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>ADM</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Name</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Class</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Gender</th></tr>{rows_html}</table></div></div>"""
-    return HTMLResponse(wrap(request.session.get('school_name'), body))
+    return HTMLResponse(wrap(school_name, body, user_email, role_display))
 
 @app.post("/students/add")
 def add_student(request: Request, adm: str = Form(...), name: str = Form(...), class_: str = Form("", alias="class"), gender: str = Form("Boy")):
-    if "school_id" not in request.session: return RedirectResponse("/")
-    con=get_db(); cur=con.cursor(); cur.execute("INSERT INTO students (school_id, adm, name, class, gender) VALUES (?,?,?,?,?)", (request.session["school_id"], adm, name, class_, gender)); con.commit(); con.close()
+    if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
+    sid = request.session.get("school_id", 1)
+    con=get_db(); cur=con.cursor(); cur.execute("INSERT INTO students (school_id, adm, name, class, gender) VALUES (?,?,?,?,?)", (sid, adm, name, class_, gender)); con.commit(); con.close()
     return RedirectResponse("/students", status_code=303)
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile(request: Request):
+    if not request.session.get("user_email"): return RedirectResponse("/")
+    is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
+    role_display = "Super Admin" if is_super else "School Admin"
+    user_email = request.session.get("user_email")
+    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; max-width:500px'>
+    <h2>Profile</h2><div style='margin-top:20px'><p><b>Name:</b> Davis Ouma</p><p><b>Email:</b> {user_email}</p><p><b>Role:</b> {role_display}</p><p><b>System:</b> DaviSchool Management System</p></div>
+    <div style='margin-top:20px'><a href='/dashboard' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Back to Dashboard</a></div>
+    </div></div>"""
+    return HTMLResponse(wrap("DaviSchool", body, user_email, role_display))
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings(request: Request):
+    if not request.session.get("user_email"): return RedirectResponse("/")
+    is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
+    role_display = "Super Admin" if is_super else "School Admin"
+    user_email = request.session.get("user_email")
+    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; max-width:500px'>
+    <h2>Settings</h2><p style='color:#64748b'>Manage your DaviSchool settings</p>
+    <div style='margin-top:20px; display:flex; flex-direction:column; gap:10px'>
+    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Email:</b> {user_email}</div>
+    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Role:</b> {role_display}</div>
+    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Theme:</b> Light / Dark - Coming soon</div>
+    </div>
+    <div style='margin-top:20px'><a href='/dashboard' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Back to Dashboard</a></div>
+    </div></div>"""
+    return HTMLResponse(wrap("DaviSchool", body, user_email, role_display))
 
 @app.get("/super-admin", response_class=HTMLResponse)
 def super_admin(request: Request):
     if request.session.get("user_email") != SUPER_ADMIN_EMAIL: return HTMLResponse("Denied", status_code=403)
     con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM schools"); schools=cur.fetchall(); con.close()
     schools_html="".join([f"<tr><td>{s['name']}</td><td>{s['email']}</td><td>{'✅ Approved' if s['approved'] else '⏳ Pending'}</td><td><a href='/super-admin/approve/{s['id']}' style='background:#16a34a; color:white; padding:6px 12px; border-radius:6px; text-decoration:none'>Approve</a></td></tr>" for s in schools]) or "<tr><td colspan=4 style='text-align:center'>No schools</td></tr>"
-    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h3>Super Admin - {SUPER_ADMIN_EMAIL}</h3><a href='/super-admin/reset-all-mabale-data' style='background:#dc2626; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>RESET ALL DATA</a> <a href='/logout' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none; margin-left:8px'>Logout</a></div>
+    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h3>Super Admin - {SUPER_ADMIN_EMAIL} - Role: Super Admin</h3><a href='/super-admin/reset-all-mabale-data' style='background:#dc2626; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>RESET ALL DATA</a> <a href='/logout' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none; margin-left:8px'>Logout</a></div>
     <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px; margin-top:16px'><h3>Schools Management</h3><table style='width:100%; margin-top:10px'><tr><th>School Name</th><th>Email</th><th>Status</th><th>Action</th></tr>{schools_html}</table></div></div>"""
-    return HTMLResponse(wrap("Super Admin - DaviSchool", body))
+    return HTMLResponse(wrap("Super Admin - DaviSchool", body, SUPER_ADMIN_EMAIL, "Super Admin"))
 
 @app.get("/super-admin/approve/{school_id}")
 def approve(request: Request, school_id: int):
@@ -213,7 +259,7 @@ def approve(request: Request, school_id: int):
 def reset_all(request: Request):
     if request.session.get("user_email") != SUPER_ADMIN_EMAIL: return HTMLResponse("Denied", status_code=403)
     con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM students"); cur.execute("DELETE FROM teachers"); cur.execute("DELETE FROM school_classes"); cur.execute("DELETE FROM schools WHERE email != ?", (SUPER_ADMIN_EMAIL,)); cur.execute("DELETE FROM users WHERE email != ?", (SUPER_ADMIN_EMAIL,)); con.commit(); con.close()
-    return HTMLResponse(wrap("Wiped", f"<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h1>✅ Wiped!</h1><p>Fresh system. Only {SUPER_ADMIN_EMAIL} remains.</p><a href='/super-admin' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Go to Super Admin</a></div></div>"))
+    return HTMLResponse(wrap("Wiped", f"<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h1>✅ Wiped!</h1><p>Fresh system. Only {SUPER_ADMIN_EMAIL} remains.</p><a href='/super-admin' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Go to Super Admin</a></div></div>", SUPER_ADMIN_EMAIL, "Super Admin"))
 
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/", status_code=303)
