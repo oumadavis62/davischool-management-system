@@ -20,6 +20,7 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT, name TEXT, class TEXT, gender TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, subject TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, term TEXT, year TEXT, grade TEXT, subject TEXT, class_mean REAL, highest REAL, lowest REAL)")
     try: cur.execute("ALTER TABLE students ADD COLUMN gender TEXT")
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN_EMAIL,))
@@ -42,7 +43,7 @@ def login_page(error_msg=""):
     <div style='display:flex; justify-content:space-between; margin:16px 0 24px; font-size:14px'><label><input type='checkbox'> Remember me</label><a href='#' style='color:#0f7a5a; font-weight:600; text-decoration:none'>Forgot Password?</a></div>
     <button class='btn-sign' type='submit'>Sign In</button></form><div class='bottom-link'>Don't have account? <a href='/register'>Register your School</a></div></div></body></html>"""
 
-def wrap(school_name, body_html, user_email, user_role_display):
+def wrap(school_name, body_html, user_email, user_role_display, active_tab="overview"):
     return f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     *{{box-sizing:border-box}} body{{margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial; background:#fcfcfc; display:flex}}
     .sidebar{{width:270px; background:white; border-right:1px solid #e2e8f0; height:100vh; position:fixed; overflow-y:auto}}
@@ -65,7 +66,11 @@ def wrap(school_name, body_html, user_email, user_role_display):
     </style></head><body>
     <div class='sidebar'><div class='logo'><div class='logo-icon'>D</div><div><b>DaviSchool</b><small>SCHOOL MANAGEMENT SYSTEM</small></div></div>
     <div class='nav-section'><div class='nav-label'>Main Navigation</div><a class='nav-item active'>📊 Dashboard</a>
-    <div class='sub'><a class='nav-item' href='/dashboard' style='background:#f1f5f9; border:1px solid #e2e8f0; font-weight:700; color:#0f172a'>🏠 System Overview</a><a class='nav-item'>📈 Academic Analytics</a><a class='nav-item'>📈 Financial Analytics</a><a class='nav-item'>📅 Attendance Analy...</a><a class='nav-item'>💡 Automated Insig...</a><a class='nav-item'>🤝 Benchmarking</a></div>
+    <div class='sub'>
+        <a class='nav-item' href='/dashboard' style='{"background:#0f172a; color:white" if active_tab=="overview" else "background:#f1f5f9; border:1px solid #e2e8f0; font-weight:700; color:#0f172a"}'>🏠 System Overview</a>
+        <a class='nav-item' href='/academics' style='{"background:#0f172a; color:white" if active_tab=="academics" else ""}'>📊 Academic Analyt...</a>
+        <a class='nav-item'>📈 Financial Analytics</a><a class='nav-item'>📅 Attendance Analy...</a><a class='nav-item'>💡 Automated Insig...</a><a class='nav-item'>🤝 Benchmarking</a>
+    </div>
     <a class='nav-item' href='/students'>🎓 Students Manager</a><a class='nav-item' href='/teachers'>👥 Staff Manager</a><a class='nav-item'>📖 Academic Manager</a><a class='nav-item' href='/classes'>🗓️ Timetable</a><a class='nav-item'>🎥 Online Classes</a></div>
     <div style='padding:14px; border-top:1px solid #f1f5f9; margin-top:20px; display:flex; gap:10px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>{user_email}</div></div></div></div>
     <div class='main'><div class='topbar'><div><b style='font-size:16px'>{school_name.upper()}</b> <small style='color:#64748b'>(Code: DS-2026)</small></div>
@@ -164,7 +169,126 @@ def dashboard(request: Request):
         </div>
     </div>
     """
-    return HTMLResponse(wrap(school_name, body, user_email, role_display))
+    return HTMLResponse(wrap(school_name, body, user_email, role_display, "overview"))
+
+@app.get("/academics", response_class=HTMLResponse)
+def academics(request: Request, term: str = "Term 1", year: str = "2026", grade: str = "GRADE 7"):
+    if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
+    is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
+    user_email = request.session.get("user_email", SUPER_ADMIN_EMAIL)
+    role_display = "Super Admin" if is_super else "School Admin"
+    school_name = request.session.get("school_name", "DaviSchool")
+    if is_super: school_name = request.session.get("school_name", "DaviSchool")
+
+    # Get actual grades from students table for dropdown
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT DISTINCT class FROM students WHERE school_id=?", (request.session.get("school_id",0),))
+    classes_from_db = [r["class"] for r in cur.fetchall() if r["class"]]
+    con.close()
+    if not classes_from_db: classes_from_db = ["GRADE 7", "GRADE 8", "GRADE 9"]
+
+    grades_options = "".join([f"<option value='{g}' {'selected' if g==grade else ''}>{g}</option>" for g in classes_from_db])
+
+    body=f"""
+    <div class='content'>
+        <h1 style='font-size:26px; font-weight:700'>Academic Analytics</h1>
+        <div style='color:#64748b; font-size:14px; margin:6px 0 18px'>Performance insights across subjects, teachers, and students</div>
+
+        <div style='display:flex; gap:12px; margin-bottom:20px'>
+            <select id='termSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
+                <option {'selected' if term=='Term 1' else ''}>Term 1</option><option {'selected' if term=='Term 2' else ''}>Term 2</option><option {'selected' if term=='Term 3' else ''}>Term 3</option>
+            </select>
+            <select id='yearSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
+                <option {'selected' if year=='2024' else ''}>2024</option><option {'selected' if year=='2025' else ''}>2025</option><option {'selected' if year=='2026' else ''}>2026</option>
+            </select>
+            <select id='gradeSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:140px' onchange="updateFilters()">
+                {grades_options}
+            </select>
+        </div>
+
+        <div style='display:flex; gap:24px; border-bottom:1px solid #e2e8f0; margin-bottom:20px; font-size:14px'>
+            <div style='padding:10px 0; border-bottom:2px solid #0f172a; font-weight:600'>📈 Performance Trends</div>
+            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>📖 Subject Analysis</a>
+            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>🎓 Teacher Performance</a>
+            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>👥 Student Tracking</a>
+        </div>
+
+        <!-- SCROLL PART 1 - Class Performance Over Time -->
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>📊 Class Performance Over Time</div>
+            <div style='height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div>
+                <div style='font-size:14px'>No exam data available for the selected filters</div>
+                <div style='font-size:12px; margin-top:4px'>Term: {term} | Year: {year} | Grade: {grade}</div>
+            </div>
+        </div>
+
+        <!-- SCROLL PART 2 - Yearly Progression - YOUR 2ND PICTURE -->
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:16px; display:flex; gap:8px; align-items:center'>📈 Yearly Progression</div>
+            <div style='position:relative; height:280px; padding-left:40px'>
+                <div style='position:absolute; left:0; top:0; height:220px; display:flex; flex-direction:column; justify-content:space-between; font-size:12px; color:#94a3b8'>
+                    <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+                </div>
+                <div style='height:220px; border-left:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1; position:relative; display:flex; align-items:flex-end; justify-content:center'>
+                    <div style='position:absolute; bottom:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:30px; height:220px; justify-content:flex-end; padding-bottom:20px'>
+                        <div style='width:8px; height:8px; background:#22c55e; border-radius:50%'></div>
+                        <div style='width:8px; height:8px; background:#3b82f6; border-radius:50%; margin-top:20px'></div>
+                        <div style='width:8px; height:8px; background:#ef4444; border-radius:50%; margin-top:40px'></div>
+                    </div>
+                </div>
+                <div style='text-align:center; font-size:12px; color:#64748b; margin-top:8px'>{year}</div>
+                <div style='display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px'>
+                    <span style='display:flex; align-items:center; gap:6px'><span style='width:8px; height:8px; background:#3b82f6; border-radius:50%; display:inline-block'></span>Class Mean</span>
+                    <span style='display:flex; align-items:center; gap:6px'><span style='width:8px; height:8px; background:#22c55e; border-radius:50%; display:inline-block'></span>Highest</span>
+                    <span style='display:flex; align-items:center; gap:6px'><span style='width:8px; height:8px; background:#ef4444; border-radius:50%; display:inline-block'></span>Lowest</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCROLL PART 3 - Subject Trends Across Terms - YOUR 3RD PICTURE -->
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:16px; display:flex; gap:8px; align-items:center'>📖 Subject Trends Across Terms</div>
+            <div style='position:relative; height:340px; padding-left:40px'>
+                <div style='position:absolute; left:0; top:0; height:220px; display:flex; flex-direction:column; justify-content:space-between; font-size:12px; color:#94a3b8'>
+                    <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+                </div>
+                <div style='height:220px; border-left:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1; position:relative;'>
+                    <div style='position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; align-items:center'>
+                        <div style='width:6px; height:6px; background:#ef4444; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#22c55e; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#3b82f6; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#f59e0b; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#ef4444; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#8b5cf6; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#06b6d4; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#22c55e; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#3b82f6; border-radius:50%'></div>
+                        <div style='width:6px; height:6px; background:#3b82f6; border-radius:50%'></div>
+                    </div>
+                </div>
+                <div style='text-align:center; font-size:11px; color:#64748b; margin-top:8px'>T3 2026</div>
+                <div style='display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:14px; font-size:11px; line-height:1.6'>
+                    <span style='color:#0ea5e9'>◉ AGRICULTURE</span><span style='color:#22c55e'>◉ CHRISTIAN_RELIGIOUS_EDUCATION</span><span style='color:#ef4444'>◉ CREATIVE_ARTS</span><span style='color:#f59e0b'>◉ ENGLISH</span>
+                    <span style='color:#06b6d4'>◉ INTERGRATED_SCIENCE</span><span style='color:#8b5cf6'>◉ KISWAHILI</span><span style='color:#ec4899'>◉ MATHEMATICS</span><span style='color:#84cc16'>◉ PRE-TECHNICAL_STUDIES</span><span style='color:#f97316'>◉ SOCIAL_STUDIES</span>
+                </div>
+                <div style='display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px; font-size:10px; color:#64748b'>
+                    <span>AGRICULTURE: 0.0 →</span><span>CHRISTIAN_RELIGIOUS_EDUCATION: 0.0 →</span><span>CREATIVE ARTS: 0.0 →</span><span>ENGLISH: 0.0 →</span><span>INTERGRATED_SCIENCE: 0.0 →</span>
+                    <span>KISWAHILI: 0.0 →</span><span>MATHEMATICS: 0.0 →</span><span>PRE-TECHNICAL_STUDIES: 0.0 →</span><span>SOCIAL_STUDIES: 0.0 →</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    function updateFilters(){{
+        var t=document.getElementById('termSel').value;
+        var y=document.getElementById('yearSel').value;
+        var g=document.getElementById('gradeSel').value;
+        window.location='/academics?term='+encodeURIComponent(t)+'&year='+encodeURIComponent(y)+'&grade='+encodeURIComponent(g);
+    }}
+    </script>
+    """
+    return HTMLResponse(wrap(school_name, body, user_email, role_display, "academics"))
 
 @app.get("/students", response_class=HTMLResponse)
 def students_list(request: Request):
@@ -211,29 +335,14 @@ def settings(request: Request):
     <div class='content'>
         <h1 style='font-size:28px; font-weight:700; margin:0'>Settings</h1>
         <div style='color:#64748b; font-size:15px; margin:6px 0 24px'>School configuration and system settings</div>
-
         <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:18px'>
-            <a href='/settings/users' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>👥</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>User Management</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create, edit, and manage user accounts</div>
-            </div></a>
-            <a href='/settings/roles' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🛡️</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Roles & Permissions</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage user roles and access control</div>
-            </div></a>
-            <a href='/settings/school-profile' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🏫</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>School Profile</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Update school information and branding</div>
-            </div></a>
-            <a href='/settings/classes' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🎓</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Classes & Streams</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage class levels, streams, and teachers</div>
-            </div></a>
-            <a href='/settings/backup' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>💾</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Database Backup</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create and manage database backups</div>
-            </div></a>
-            <a href='/settings/audit' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>📄</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Audit Trail</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Track system activities and user actions</div>
-            </div></a>
-            <a href='/settings/integrations' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
-                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🔌</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Integrations</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Bulk SMS gateway and M-Pesa payments</div>
-            </div></a>
+            <a href='/settings/users' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>👥</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>User Management</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create, edit, and manage user accounts</div></div></a>
+            <a href='/settings/roles' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>🛡️</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Roles & Permissions</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage user roles and access control</div></div></a>
+            <a href='/settings/school-profile' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>🏫</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>School Profile</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Update school information and branding</div></div></a>
+            <a href='/settings/classes' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>🎓</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Classes & Streams</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage class levels, streams, and teachers</div></div></a>
+            <a href='/settings/backup' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>💾</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Database Backup</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create and manage database backups</div></div></a>
+            <a href='/settings/audit' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>📄</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Audit Trail</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Track system activities and user actions</div></div></a>
+            <a href='/settings/integrations' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'><div style='font-size:20px; color:#64748b; margin-bottom:12px'>🔌</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Integrations</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Bulk SMS gateway and M-Pesa payments</div></div></a>
         </div>
     </div>
     """
