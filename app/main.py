@@ -4,7 +4,7 @@ import sqlite3
 from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-elimika-system-overview-2026")
+app.add_middleware(SessionMiddleware, secret_key="davischool-final-key-2026") # SAME KEY - don't logout again
 SUPER_ADMIN_EMAIL = "oumadavis62@gmail.com"
 DB_PATH = "davischool.db"
 
@@ -22,7 +22,6 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, subject TEXT, score INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, amount INTEGER, status TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS email_verifications (email TEXT, code TEXT)")
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN_EMAIL,))
     if not cur.fetchone():
         cur.execute("INSERT INTO users (email, password, role) VALUES (?,?,?)", (SUPER_ADMIN_EMAIL, "DaviSchool@2026!", "super_admin"))
@@ -30,44 +29,30 @@ def init_db():
 init_db()
 
 def elimika_login_page(error_msg=""):
-    return f"""
-    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
-    <style>
+    return f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; margin:0; background:white; display:flex; justify-content:center; align-items:center; min-height:100vh}}
-    .login-box{{width:100%; max-width:440px; padding:40px 20px}}
-    h1{{font-size:34px; font-weight:800; margin:0 0 6px; color:#0f172a}} .subtitle{{color:#475569; margin-bottom:32px}}
-    label{{font-weight:600; color:#334155; font-size:14px; display:block; margin:20px 0 8px}}
-    input{{width:100%; padding:14px 16px; border:1px solid #e2e8f0; border-radius:10px; font-size:15px; box-sizing:border-box; outline:none}}
+    .login-box{{width:100%; max-width:440px; padding:40px 20px}} h1{{font-size:34px; font-weight:800; margin:0 0 6px; color:#0f172a}} .subtitle{{color:#475569; margin-bottom:32px}}
+    label{{font-weight:600; color:#334155; font-size:14px; display:block; margin:20px 0 8px}} input{{width:100%; padding:14px 16px; border:1px solid #e2e8f0; border-radius:10px; font-size:15px; box-sizing:border-box}}
     .btn-sign{{width:100%; background:#2563eb; color:white; border:none; padding:14px; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer}}
-    .error{{background:#fef2f2; color:#b91c1c; padding:10px; border-radius:8px; margin-bottom:16px; border:1px solid #fecaca}} 
-    .bottom-link{{text-align:center; margin-top:20px; color:#64748b; font-size:14px}} .bottom-link a{{color:#2563eb; text-decoration:none; font-weight:600}}
+    .error{{background:#fef2f2; color:#b91c1c; padding:10px; border-radius:8px; margin-bottom:16px; border:1px solid #fecaca}} .bottom-link{{text-align:center; margin-top:20px; color:#64748b; font-size:14px}} .bottom-link a{{color:#2563eb; text-decoration:none; font-weight:600}}
     </style></head><body><div class='login-box'><h1>Welcome Back</h1><div class='subtitle'>Sign in to your DaviSchool account</div>
     {f"<div class='error'>{error_msg}</div>" if error_msg else ""}
     <form method='post' action='/login'><label>Username or Email</label><input type='text' name='email' placeholder='Enter your username or email' required>
     <label>Password</label><input type='password' name='password' placeholder='Enter your password' required>
     <div style='display:flex; justify-content:space-between; margin:16px 0 24px; font-size:14px'><label><input type='checkbox'> Remember me</label><a href='#' style='color:#0f7a5a; font-weight:600; text-decoration:none'>Forgot Password?</a></div>
-    <button class='btn-sign' type='submit'>Sign In</button></form>
-    <div class='bottom-link'>Don't have account? <a href='/register'>Register your School</a></div></div></body></html>
-    """
+    <button class='btn-sign' type='submit'>Sign In</button></form><div class='bottom-link'>Don't have account? <a href='/register'>Register your School</a></div></div></body></html>"""
 
-def system_overview_wrap(school_name, body_html):
-    # This builds EXACTLY like your sample screenshot
+def system_overview_wrap(school_name, body_html, active="overview"):
     return f"""
-    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
-    <style>
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     *{{box-sizing:border-box}} body{{margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial; background:#fcfcfc; display:flex}}
     .sidebar{{width:270px; background:white; border-right:1px solid #e2e8f0; height:100vh; position:fixed; overflow-y:auto}}
-    .logo{{padding:18px 20px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; gap:10px}}
-    .logo-icon{{width:38px; height:38px; background:#0f172a; color:white; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800}}
+    .logo{{padding:18px 20px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; gap:10px}} .logo-icon{{width:38px; height:38px; background:#0f172a; color:white; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800}}
     .logo b{{color:#0f5b9e; font-size:16px}} .logo small{{display:block; color:#64748b; font-size:9px; letter-spacing:1px}}
     .nav-section{{padding:12px 14px}} .nav-label{{font-size:12px; color:#94a3b8; font-weight:600; margin:10px 8px 8px; text-transform:uppercase}}
-    .nav-item{{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; color:#334155; text-decoration:none; font-size:14px; margin-bottom:2px}}
-    .nav-item.active{{background:#0f172a; color:white}} .nav-item.has-sub{{justify-content:space-between}} .sub{{margin-left:28px; border-left:1px dashed #e2e8f0; padding-left:12px}}
-    .main{{margin-left:270px; flex:1; min-height:100vh}}
-    .topbar{{background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10}}
-    .expiring{{background:#f59e0b; color:white; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; font-size:14px}}
-    .expiring b{{background:rgba(0,0,0,0.15); padding:3px 8px; border-radius:4px; font-size:12px}}
-    .btn-renew{{background:white; color:#0f172a; border:none; padding:8px 14px; border-radius:8px; font-weight:600; cursor:pointer}}
+    .nav-item{{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; color:#334155; text-decoration:none; font-size:14px; margin-bottom:2px; cursor:pointer}}
+    .nav-item.active{{background:#0f172a; color:white}} .sub{{margin-left:28px; border-left:1px dashed #e2e8f0; padding-left:12px}}
+    .main{{margin-left:270px; flex:1; min-height:100vh}} .topbar{{background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10}}
     .content{{padding:24px}} h1{{font-size:26px; margin:0}} .welcome{{color:#64748b; margin:8px 0 20px}}
     .grid4{{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px}} .grid4-2{{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px}}
     .card{{background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px; display:flex; justify-content:space-between}}
@@ -75,26 +60,17 @@ def system_overview_wrap(school_name, body_html):
     .icon-box{{width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px}}
     .btn-get{{border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600}}
     @media(max-width:900px){{.sidebar{{display:none}} .main{{margin-left:0}} .grid4,.grid4-2{{grid-template-columns:1fr 1fr}}}}
-    @media(max-width:500px){{.grid4,.grid4-2{{grid-template-columns:1fr}}}}
     </style></head><body>
     <div class='sidebar'>
         <div class='logo'><div class='logo-icon'>D</div><div><b>DaviSchool</b><small>SCHOOL MANAGEMENT SYSTEM</small></div></div>
         <div class='nav-section'>
             <div class='nav-label'>Main Navigation</div>
-            <a class='nav-item active' href='/dashboard'>📊 Dashboard</a>
+            <a class='nav-item active'>📊 Dashboard</a>
             <div class='sub'>
-                <a class='nav-item' href='/dashboard' style='background:#f1f5f9; border:1px solid #e2e8f0; font-weight:600'>🏠 System Overview</a>
-                <a class='nav-item' href='#'>📈 Academic Analytics</a>
-                <a class='nav-item' href='#'>📈 Financial Analytics</a>
-                <a class='nav-item' href='#'>📅 Attendance Analy...</a>
-                <a class='nav-item' href='#'>💡 Automated Insig...</a>
-                <a class='nav-item' href='#'>🤝 Benchmarking</a>
+                <a class='nav-item' href='/dashboard' style='background:#f1f5f9; border:1px solid #e2e8f0; font-weight:700; color:#0f172a'>🏠 System Overview</a>
+                <a class='nav-item'>📈 Academic Analytics</a><a class='nav-item'>📈 Financial Analytics</a><a class='nav-item'>📅 Attendance Analy...</a><a class='nav-item'>💡 Automated Insig...</a><a class='nav-item'>🤝 Benchmarking</a>
             </div>
-            <a class='nav-item has-sub' href='/students'>🎓 Students Manager <span>⌄</span></a>
-            <a class='nav-item has-sub' href='/teachers'>👥 Staff Manager <span>⌄</span></a>
-            <a class='nav-item has-sub' href='#'>📖 Academic Manager <span>⌄</span></a>
-            <a class='nav-item' href='/classes'>🗓️ Timetable</a>
-            <a class='nav-item has-sub' href='#'>🎥 Online Classes <span>⌄</span></a>
+            <a class='nav-item' href='/students'>🎓 Students Manager</a><a class='nav-item' href='/teachers'>👥 Staff Manager</a><a class='nav-item' href='#'>📖 Academic Manager</a><a class='nav-item' href='/classes'>🗓️ Timetable</a><a class='nav-item' href='#'>🎥 Online Classes</a>
         </div>
         <div style='padding:14px; border-top:1px solid #f1f5f9; margin-top:20px; display:flex; gap:10px; align-items:center'>
             <div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700'>DO</div>
@@ -104,19 +80,14 @@ def system_overview_wrap(school_name, body_html):
     <div class='main'>
         <div class='topbar'>
             <div><b style='font-size:16px'>{school_name.upper()}</b> <small style='color:#64748b'>(Code: DS-2026)</small></div>
-            <div style='display:flex; gap:16px; align-items:center'><span>🗂️</span><span>☀️</span><span>🔔</span><span>❓</span>
-                <div style='display:flex; gap:8px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>School Admin</div></div></div>
-            </div>
+            <div style='display:flex; gap:16px; align-items:center'><span>🗂️</span><span>☀️</span><span>🔔</span><span>❓</span><div style='display:flex; gap:8px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>School Admin</div></div></div></div>
         </div>
-        <div class='expiring'><div><b>⚠️ EXPIRING SOON</b> &nbsp; Your subscription expires in 6 days.</div><button class='btn-renew'>✨ Renew Now</button></div>
         {body_html}
     </div></body></html>
     """
 
 @app.get("/", response_class=HTMLResponse)
 def home(): return HTMLResponse(elimika_login_page())
-@app.get("/login", response_class=HTMLResponse)
-def login_get(): return HTMLResponse(elimika_login_page())
 @app.get("/register", response_class=HTMLResponse)
 def register_page():
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{font-family:Arial; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f8fafc; margin:0}} .box{{background:white; padding:30px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,0.08); width:100%; max-width:400px}} input{{width:100%; padding:12px; margin:8px 0; border:1px solid #e2e8f0; border-radius:8px; box-sizing:border-box}} .btn{{width:100%; background:#2563eb; color:white; padding:12px; border:none; border-radius:8px; font-weight:600; cursor:pointer; margin-top:10px}}</style></head><body><div class='box'><h2 style='text-align:center'>Register School - DaviSchool</h2><form method='post' action='/register'><input name='school_name' placeholder='School Name' required><input name='email' placeholder='Admin Email' required><input name='password' type='password' placeholder='Password' required><button class='btn'>Register</button></form><p style='text-align:center; margin-top:15px'><a href='/'>Back to Login</a></p></div></body></html>")
@@ -144,25 +115,21 @@ def dashboard(request: Request):
     cur.execute("SELECT COUNT(*) as c FROM teachers WHERE school_id=?", (request.session["school_id"],)); tc=cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) as c FROM school_classes WHERE school_id=?", (request.session["school_id"],)); cc=cur.fetchone()["c"]
     con.close()
-    # FRESH SYSTEM - 0 initially
     body=f"""
     <div class='content'>
         <div style='display:flex; justify-content:space-between; align-items:center'><div><h1>School Overview</h1><div class='welcome'>Welcome back, Davis! Here's what's happening at {request.session.get('school_name')}.</div></div><button class='btn-get'>✨ Getting Started</button></div>
-        
         <div class='grid4'>
             <div class='card'><div><h4>Total Students</h4><h2>{sc}</h2><small>{cc} classes</small></div><div class='icon-box' style='background:#e0f2fe'>🎓</div></div>
             <div class='card'><div><h4>Total Staff</h4><h2>{tc}</h2><small>{tc} system users</small></div><div class='icon-box' style='background:#f3e8ff'>👥</div></div>
-            <div class='card'><div><h4>Fee Collection</h4><h2>0%</h2><small>KES 0 of 0</small></div><div class='icon-box' style='background:#dcfce7; color:#16a34a'>💰</div></div>
+            <div class='card'><div><h4>Fee Collection</h4><h2>0%</h2><small>KES 0 of 0</small></div><div class='icon-box' style='background:#dcfce7'>💰</div></div>
             <div class='card'><div><h4>Attendance Today</h4><h2>--</h2><small>Not marked yet</small></div><div class='icon-box' style='background:#fef9c3'>📅</div></div>
         </div>
-
-        <div class='grid4-2'>
+        <div class='grid4'>
             <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#e0f2fe; width:40px; height:40px'>📖</div><div><h4 style='color:#0f172a; font-weight:600'>Library</h4><small>0 books<br>0 issued, 0 overdue</small></div></div></div>
             <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#fef9c3; width:40px; height:40px'>🚚</div><div><h4 style='color:#0f172a; font-weight:600'>Transport</h4><small>0 vehicles<br>0 routes</small></div></div></div>
             <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#f3e8ff; width:40px; height:40px'>📦</div><div><h4 style='color:#0f172a; font-weight:600'>Inventory</h4><small>0 items<br>0 low stock, 0 out</small></div></div></div>
             <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#dcfce7; width:40px; height:40px'>💵</div><div><h4 style='color:#0f172a; font-weight:600'>Payroll</h4><small>0 runs<br>No runs yet</small></div></div></div>
         </div>
-
         <div style='display:grid; grid-template-columns:1fr 1fr; gap:16px'>
             <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h4 style='margin:0'>📈 Fee Collection Trend</h4><div style='height:120px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:13px'>Fresh System - No data yet (0 initially)</div></div>
             <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><h4 style='margin:0'>👥 Students by Gender</h4><div style='height:120px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:13px'>Fresh System - Add students to see chart</div></div>
@@ -177,8 +144,8 @@ def students_list(request: Request):
     con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM students WHERE school_id=?", (request.session["school_id"],)); rows=cur.fetchall(); con.close()
     rows_html="".join([f"<tr><td>{r['adm']}</td><td>{r['name']}</td><td>{r['class']}</td></tr>" for r in rows]) or "<tr><td colspan=3 style='text-align:center; padding:20px; color:#94a3b8'>No students yet - Fresh (0 initially)</td></tr>"
     body=f"""<div class='content'><div class='card' style='display:block'><h3>Students - {request.session.get('school_name')} - Fresh (0 initially)</h3>
-    <form method='post' action='/students/add' style='margin-top:12px'><input name='adm' placeholder='ADM No' required><input name='name' placeholder='Full Name' required><input name='class' placeholder='Class'><button style='background:#2563eb; color:white; padding:10px 16px; border:none; border-radius:8px; font-weight:600'>+ Add Student</button></form></div>
-    <div class='card' style='display:block'><table style='width:100%; border-collapse:collapse'><tr><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>ADM</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Name</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Class</th></tr>{rows_html}</table></div></div>"""
+    <form method='post' action='/students/add' style='margin-top:12px'><input name='adm' placeholder='ADM No' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin:3px'><input name='name' placeholder='Full Name' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin:3px'><input name='class' placeholder='Class' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin:3px'><button style='background:#2563eb; color:white; padding:10px 16px; border:none; border-radius:8px; font-weight:600'>+ Add Student</button></form></div>
+    <div class='card' style='display:block; margin-top:16px'><table style='width:100%; border-collapse:collapse'><tr><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>ADM</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Name</th><th style='text-align:left; padding:10px; color:#64748b; font-size:12px'>Class</th></tr>{rows_html}</table></div></div>"""
     return HTMLResponse(system_overview_wrap(request.session.get('school_name'), body))
 
 @app.post("/students/add")
@@ -190,9 +157,9 @@ def add_student(request: Request, adm: str = Form(...), name: str = Form(...), c
 @app.get("/super-admin", response_class=HTMLResponse)
 def super_admin(request: Request):
     if request.session.get("user_email") != SUPER_ADMIN_EMAIL: return HTMLResponse("Denied", status_code=403)
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM schools"); schools=cur.fetchall(); cur.execute("SELECT COUNT(*) as c FROM students"); sc=cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) as c FROM teachers"); tc=cur.fetchone()["c"]; con.close()
+    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM schools"); schools=cur.fetchall(); cur.execute("SELECT COUNT(*) as c FROM students"); sc=cur.fetchone()["c"]; con.close()
     schools_html="".join([f"<tr><td>{s['name']}</td><td>{s['email']}</td><td>{'✅ Approved' if s['approved'] else '⏳ Pending'}</td><td><a href='/super-admin/approve/{s['id']}' style='background:#16a34a; color:white; padding:6px 12px; border-radius:6px; text-decoration:none'>Approve</a></td></tr>" for s in schools]) or "<tr><td colspan=4 style='text-align:center'>No schools - Fresh System</td></tr>"
-    body=f"""<div class='content'><div class='card' style='display:block'><h3>Super Admin - {SUPER_ADMIN_EMAIL} - FRESH SYSTEM</h3><p>Students: {sc} | Teachers: {tc} - Only you remain after reset</p><a href='/super-admin/reset-all-mabale-data' style='background:#dc2626; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>RESET ALL MABALE DATA (Make Fresh)</a> <a href='/logout' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none; margin-left:8px'>Logout</a></div>
+    body=f"""<div class='content'><div class='card' style='display:block'><h3>Super Admin - {SUPER_ADMIN_EMAIL}</h3><p>Students: {sc} - Fresh</p><a href='/super-admin/reset-all-mabale-data' style='background:#dc2626; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>RESET ALL MABALE DATA</a> <a href='/logout' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none; margin-left:8px'>Logout</a></div>
     <div class='card' style='display:block; margin-top:16px'><h3>Schools Management</h3><table style='width:100%; margin-top:10px'><tr><th>School Name</th><th>Email</th><th>Status</th><th>Action</th></tr>{schools_html}</table></div></div>"""
     return HTMLResponse(system_overview_wrap("Super Admin - DaviSchool", body))
 
@@ -206,11 +173,11 @@ def approve(request: Request, school_id: int):
 def reset_all(request: Request):
     if request.session.get("user_email") != SUPER_ADMIN_EMAIL: return HTMLResponse("Denied", status_code=403)
     con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM students"); cur.execute("DELETE FROM teachers"); cur.execute("DELETE FROM marks"); cur.execute("DELETE FROM fees"); cur.execute("DELETE FROM school_classes"); cur.execute("DELETE FROM schools WHERE email != ?", (SUPER_ADMIN_EMAIL,)); cur.execute("DELETE FROM users WHERE email != ?", (SUPER_ADMIN_EMAIL,)); con.commit(); con.close()
-    return HTMLResponse(system_overview_wrap("Wiped", f"<div class='content'><div class='card' style='display:block'><h1>✅ Wiped!</h1><p>Fresh system. Only {SUPER_ADMIN_EMAIL} remains. Mabale data deleted.</p><a href='/super-admin' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Go to Super Admin</a></div></div>"))
+    return HTMLResponse(system_overview_wrap("Wiped", f"<div class='content'><div class='card' style='display:block'><h1>✅ Wiped!</h1><p>Fresh system. Only {SUPER_ADMIN_EMAIL} remains.</p><a href='/super-admin' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Go to Super Admin</a></div></div>"))
 
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/", status_code=303)
 @app.get("/teachers")
-def teachers_page(request: Request): return RedirectResponse("/students")
+def teachers_page(request: Request): return RedirectResponse("/dashboard")
 @app.get("/classes")
-def classes_page(request: Request): return RedirectResponse("/students")
+def classes_page(request: Request): return RedirectResponse("/dashboard")
