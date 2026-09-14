@@ -1,117 +1,267 @@
+# DaviSchool Management System v2 - Multi-School SaaS - FastAPI Version
+# Owner & Super Admin: oumadavis62@gmail.com
+# Fresh System - No Mabale Data - You Control Everything
 import sqlite3
-from datetime import datetime
+import random
+import os
+import smtplib
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
+
 DB="school.db"
+SUPER_ADMIN_EMAIL = "oumadavis62@gmail.com"
+SUPER_ADMIN_PASS = "DaviSchool@2026!" # Change after first login
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "oumadavis62@gmail.com")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
 app=FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davi-secret-2026")
+app.add_middleware(SessionMiddleware, secret_key="davi-secret-2026-v2-super-secure")
+
+def send_email(to, subject, body):
+    if not SMTP_PASSWORD:
+        print(f"[MOCK EMAIL] To:{to} | {subject} | {body}")
+        return True
+    try:
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = SMTP_EMAIL
+        msg['To'] = to
+        with smtplib.SMTP('smtp.gmail.com', 587) as s:
+            s.starttls()
+            s.login(SMTP_EMAIL, SMTP_PASSWORD)
+            s.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Email fail: {e}")
+        return False
+
 def init_db():
-    con=sqlite3.connect(DB); c=con.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, adm TEXT UNIQUE, name TEXT, class TEXT, stream TEXT, gender TEXT, kcpe INTEGER, school TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, tsc TEXT UNIQUE, name TEXT, subject TEXT, phone TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, adm TEXT, term TEXT, year TEXT, subject TEXT, score INTEGER, grade TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, adm TEXT, amount INTEGER, balance INTEGER, term TEXT, year TEXT, date TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, code TEXT, box TEXT, phone TEXT, email TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT)")
-    c.execute("INSERT OR IGNORE INTO users VALUES (1,'admin','Ouma@940','admin')")
-    con.commit(); con.close()
+    c=sqlite3.connect(DB); cur=c.cursor()
+    # Fresh multi-tenant tables
+    cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, code TEXT UNIQUE, name TEXT, admin_name TEXT, email TEXT UNIQUE, phone TEXT, county TEXT, status TEXT DEFAULT 'PENDING', is_active INTEGER DEFAULT 0, trial_ends_at TEXT, created_at TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, email TEXT UNIQUE, username TEXT UNIQUE, password TEXT, role TEXT, is_super_admin INTEGER DEFAULT 0, is_school_admin INTEGER DEFAULT 0, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS email_verifications (id INTEGER PRIMARY KEY, school_id INTEGER, code TEXT, expires_at TEXT, verified_at TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    # Core school data - isolated by school_id
+    cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT UNIQUE, name TEXT, class TEXT, stream TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, tsc TEXT UNIQUE, name TEXT, subject TEXT, phone TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT, term TEXT, year TEXT, subject TEXT, score INTEGER, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT, amount INTEGER, balance INTEGER, term TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))")
+    cur.execute("CREATE TABLE IF NOT EXISTS school_classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))")
+
+    # Create Super Admin - YOU
+    cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN_EMAIL,))
+    if not cur.fetchone():
+        cur.execute("INSERT INTO users (school_id, name, email, username, password, role, is_super_admin, is_school_admin) VALUES (NULL, 'Davis Ouma - Owner',?,?,?, 'Super Admin', 1, 1)", (SUPER_ADMIN_EMAIL, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASS))
+        print(f"Super Admin created: {SUPER_ADMIN_EMAIL}")
+
+    c.commit(); c.close()
+
 init_db()
+
 def get_db():
     con=sqlite3.connect(DB); con.row_factory=sqlite3.Row; return con
-def layout(title, body, user="admin", school="DAVISCHOOL - School Management System"):
-    return f"""<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} - DAVISCHOOL</title><style>*{{box-sizing:border-box;font-family:'Segoe UI',Arial}}body{{margin:0;background:#f5f7fb;display:flex;min-height:100vh}}.sidebar{{width:280px;background:#f0f6ff;border-right:1px solid #e2e8f0;position:fixed;height:100vh;overflow-y:auto;padding:0 10px}}.main{{margin-left:280px;flex:1}}.topbar{{background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}}.logo{{display:flex;align-items:center;gap:10px;padding:18px 12px;border-bottom:1px solid #e2e8f0;margin:0 -10px 10px -10px;background:#fff}}.logo-icon{{width:44px;height:44px;background:#e0f2fe;border:2px solid #0ea5e9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#0ea5e9;font-size:20px}}.nav-title{{font-size:11px;color:#64748b;font-weight:700;padding:10px 12px;margin-top:10px;text-transform:uppercase}}.nav-item{{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;cursor:pointer;color:#334155;font-size:14px}}.nav-item:hover{{background:#e0f2fe}}.submenu{{display:none;padding-left:20px;margin:4px 0}}.submenu.open{{display:block}}.submenu a{{display:flex;align-items:center;gap:8px;padding:8px 12px;color:#475569;text-decoration:none;font-size:13px;border-radius:6px}}.submenu a:hover{{background:#fff;color:#0ea5e9}}.content{{padding:20px 24px}}.card{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:18px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px 12px;border:1px solid #e2e8f0;text-align:left;font-size:13px}}th{{background:#f8fafc}}.btn{{padding:8px 14px;border-radius:8px;border:none;cursor:pointer;text-decoration:none;display:inline-block;font-size:13px}}.btn-primary{{background:#0f172a;color:#fff}}.user-box{{padding:12px;border-top:1px solid #e2e8f0;margin-top:10px;display:flex;align-items:center;gap:10px}}.user-avatar{{width:32px;height:32px;background:#0f172a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}}input,select{{padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;width:100%}}</style></head><body><div class="sidebar"><div class="logo"><div class="logo-icon">D</div><div><b>DAVISCHOOL</b><br><span style="font-size:10px;color:#64748b">SCHOOL MANAGEMENT</span></div></div><div class="nav-title">Main Navigation</div><div class="nav-item" onclick="toggle('dash')"><span>📊 Dashboard</span><span>⌄</span></div><div id="dash" class="submenu"><a href="/dashboard">Overview</a></div><div class="nav-item" onclick="toggle('stud')"><span>🎓 Students Manager</span><span>⌄</span></div><div id="stud" class="submenu"><a href="/students">Students List</a><a href="/classes">Class List</a></div><div class="nav-item" onclick="toggle('staff')"><span>👥 Staff Manager</span><span>⌄</span></div><div id="staff" class="submenu"><a href="/teachers">Staff List</a></div><div class="nav-item" onclick="toggle('acad')"><span>📖 Academic Manager</span><span>⌄</span></div><div id="acad" class="submenu open"><a href="/marks">Record Marks</a><a href="/reports">Exam Analysis</a></div><div class="nav-item" onclick="toggle('fin')"><span>💰 Finance</span><span>⌄</span></div><div id="fin" class="submenu"><a href="/fees">Fees</a></div><div class="nav-item" onclick="toggle('sys')"><span>⚙️ System Settings</span><span>⌄</span></div><div id="sys" class="submenu open"><a href="/schools">🏫 School Profile - Register Schools</a><a href="/classes">🏫 Classes</a><a href="/profile">👤 My Profile</a></div><div class="user-box"><div class="user-avatar">DO</div><div><div style="font-size:13px;font-weight:600">Davis Ouma</div><div style="font-size:11px;color:#64748b">oumadavis940@gmail.com</div></div></div></div><div class="main"><div class="topbar"><div><b>{school}</b></div><div style="display:flex;gap:12px;align-items:center"><span>🔔</span><div style="display:flex;align-items:center;gap:8px"><div class="user-avatar">DO</div><div style="font-size:12px"><b>Davis Ouma</b><br>Admin</div></div></div></div><div class="content"><h2>{title}</h2><p style="color:#64748b;font-size:13px">DAVISCHOOL Management System</p>{body}</div></div><script>function toggle(id){{let e=document.getElementById(id); if(e) e.classList.toggle('open');}} function editCell(b,t,i,f){{let v=prompt("Enter "+f,b.dataset.val||""); if(v===null)return; fetch("/api/edit/"+t,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{id:i,field:f,value:v}})}}).then(r=>r.json()).then(d=>{{if(d.ok)location.reload()}})}} function saveMark(a,t,y,s){{let v=prompt("Score"); if(v===null)return; fetch("/marks/save",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{adm:a,term:t,year:y,subject:s,score:v}})}}).then(()=>location.reload())}}</script></body></html>"""
+
+def gen_code(): return str(random.randint(100000,999999))
+def gen_school_code():
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT COUNT(*) FROM schools")
+    count=cur.fetchone()[0]
+    con.close()
+    return f"SCH-{10001+count}"
+
+def is_super_admin(request: Request):
+    return request.session.get("user_email") == SUPER_ADMIN_EMAIL
+
+# === HOME ===
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+    <style>body{font-family:Arial;max-width:800px;margin:30px auto;padding:20px}.card{background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 10px #0001} button{background:#0d6efd;color:#fff;padding:12px 20px;border:none;border-radius:6px}</style>
+    <div class="card"><h1>DaviSchool Management System</h1><p>Multi-School SaaS - Owner: oumadavis62@gmail.com</p><p><b>Fresh System - No Mabale Data</b></p>
+    <a href="/register"><button>Register Your School</button></a> <a href="/login"><button style="background:gray">Login</button></a></div>
+    """
+
+# === REGISTER ===
+@app.get("/register", response_class=HTMLResponse)
+def reg_page():
+    return """
+    <style>input{width:100%;padding:10px;margin:5px 0} button{background:#0d6efd;color:#fff;padding:10px 20px;border:none}</style>
+    <h2>DaviSchool - Register School</h2>
+    <form method="post" action="/register">
+    <input name="school_name" placeholder="School Name" required><br>
+    <input name="admin_name" placeholder="Your Full Name" required><br>
+    <input name="email" type="email" placeholder="School Email" required><br>
+    <input name="phone" placeholder="Phone" required><br>
+    <input name="county" placeholder="County e.g. Busia"><br>
+    <input name="password" type="password" placeholder="Password min 8" required><br>
+    <button>Register & Get Activation Code</button>
+    </form><p><a href="/login">Login</a></p>
+    """
+
+@app.post("/register")
+def register(request: Request, school_name: str = Form(...), admin_name: str = Form(...), email: str = Form(...), phone: str = Form(...), county: str = Form(""), password: str = Form(...)):
+    email=email.lower().strip()
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM schools WHERE email=?", (email,))
+    if cur.fetchone():
+        con.close(); return HTMLResponse(f"Email {email} already registered. <a href='/login'>Login</a>")
+
+    code = gen_school_code()
+    trial = (datetime.now() + timedelta(days=14)).isoformat()
+    cur.execute("INSERT INTO schools (code, name, admin_name, email, phone, county, status, is_active, trial_ends_at, created_at) VALUES (?,?,?,?,?,?, 'PENDING', 0,?,?)", (code, school_name, admin_name, email, phone, county, trial, datetime.now().isoformat()))
+    school_id = cur.lastrowid
+    cur.execute("INSERT INTO users (school_id, name, email, username, password, role, is_school_admin) VALUES (?,?,?,?,?,?,1)", (school_id, admin_name, email, email, password, "School Admin"))
+
+    vcode = gen_code()
+    expires = (datetime.now() + timedelta(minutes=30)).isoformat()
+    cur.execute("INSERT INTO email_verifications (school_id, code, expires_at) VALUES (?,?,?)", (school_id, vcode, expires))
+    con.commit(); con.close()
+
+    send_email(email, f"DaviSchool Activation Code {vcode}", f"Hello {school_name},\nYour code is: {vcode}\nExpires in 30 mins\nVerify: https://davischool-management-system.onrender.com/verify?email={email}")
+    send_email(SUPER_ADMIN_EMAIL, f"NEW SCHOOL PENDING - {school_name}", f"New school: {school_name} ({code})\nAdmin: {admin_name}\nEmail: {email}\nPhone: {phone}\nCounty: {county}\nApprove at /super-admin")
+
+    return RedirectResponse(f"/verify?email={email}", status_code=303)
+
+@app.get("/verify", response_class=HTMLResponse)
+def verify_page(email: str = ""):
+    return f"""
+    <h2>Enter Code sent to {email}</h2><p>Check inbox & spam</p>
+    <form method="post" action="/verify">
+    <input type="hidden" name="email" value="{email}">
+    <input name="code" placeholder="6-digit code" maxlength="6" required>
+    <button>Verify</button></form>
+    <form method="post" action="/resend-code"><input type="hidden" name="email" value="{email}"><button>Resend Code</button></form>
+    """
+
+@app.post("/verify", response_class=HTMLResponse)
+def verify_email(email: str = Form(...), code: str = Form(...)):
+    email=email.lower()
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM schools WHERE email=?", (email,))
+    school=cur.fetchone()
+    if not school: return HTMLResponse("School not found")
+    cur.execute("SELECT * FROM email_verifications WHERE school_id=? AND code=? ORDER BY id DESC", (school['id'], code))
+    ev=cur.fetchone()
+    if not ev or datetime.fromisoformat(ev['expires_at']) < datetime.now():
+        con.close(); return HTMLResponse("Invalid or expired code. <a href='/register'>Try again</a>")
+    cur.execute("UPDATE email_verifications SET verified_at=? WHERE id=?", (datetime.now().isoformat(), ev['id']))
+    cur.execute("UPDATE schools SET status='VERIFIED' WHERE id=?", (school['id'],))
+    con.commit(); con.close()
+    send_email(SUPER_ADMIN_EMAIL, f"SCHOOL VERIFIED - {school['name']}", f"{school['name']} verified. Approve at /super-admin")
+    return HTMLResponse(f"<h2>Email Verified!</h2><p>{school['name']} awaiting approval from {SUPER_ADMIN_EMAIL}. You will get email when approved.</p><a href='/login'>Login</a>")
+
+@app.post("/resend-code")
+def resend(email: str = Form(...)):
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM schools WHERE email=?", (email,))
+    school=cur.fetchone()
+    if not school: con.close(); return HTMLResponse("Not found")
+    code=gen_code(); exp=(datetime.now()+timedelta(minutes=30)).isoformat()
+    cur.execute("INSERT INTO email_verifications (school_id, code, expires_at) VALUES (?,?,?)", (school['id'], code, exp))
+    con.commit(); con.close()
+    send_email(email, f"DaviSchool New Code {code}", f"New code: {code}")
+    return RedirectResponse(f"/verify?email={email}", status_code=303)
+
+# === LOGIN ===
 @app.get("/login", response_class=HTMLResponse)
-def login_page(): return """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>DAVISCHOOL Login</title><style>body{background:#f0f6ff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:Segoe UI}.box{background:#fff;padding:30px;border-radius:16px;width:360px;box-shadow:0 10px 30px rgba(0,0,0,.08)}input{width:100%;padding:12px;margin:8px 0;border:1px solid #cbd5e1;border-radius:8px}button{width:100%;padding:12px;background:#0f172a;color:#fff;border:none;border-radius:8px;margin-top:10px}</style></head><body><div class="box"><h2 style="text-align:center">DAVISCHOOL</h2><form method="post" action="/login" autocomplete="off"><input name="username" placeholder="Username" autocomplete="off" required><input name="password" type="password" placeholder="Password" autocomplete="new-password" required><button>Login</button></form></div></body></html>"""
+def login_page():
+    return """<h2>Login - DaviSchool</h2><form method="post" action="/login"><input name="email" type="email" placeholder="Email" required><br><input name="password" type="password" placeholder="Password" required><br><button>Login</button></form><p><a href="/register">Register School</a></p>"""
+
 @app.post("/login")
-def do_login(request: Request, username: str = Form(...), password: str = Form(...)):
-    con=get_db(); u=con.execute("SELECT * FROM users WHERE username=? AND password=?",(username,password)).fetchone(); con.close()
-    if u: request.session["user"]=username; return RedirectResponse("/dashboard", status_code=302)
-    return HTMLResponse("<h3>Wrong <a href=/login>Retry</a></h3>")
+def login(request: Request, email: str = Form(...), password: str = Form(...)):
+    email=email.lower()
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email, password))
+    user=cur.fetchone()
+    if not user:
+        con.close(); return HTMLResponse("Invalid login <a href='/login'>Try again</a>")
+
+    if email == SUPER_ADMIN_EMAIL:
+        request.session["user_id"]=user["id"]; request.session["user_email"]=user["email"]; request.session["is_super_admin"]=True
+        con.close(); return RedirectResponse("/super-admin", status_code=303)
+
+    cur.execute("SELECT * FROM schools WHERE id=?", (user["school_id"],))
+    school=cur.fetchone()
+    con.close()
+    if not school: return HTMLResponse("School not found")
+    if school["status"]=="PENDING": return RedirectResponse(f"/verify?email={school['email']}", status_code=303)
+    if school["status"]=="VERIFIED" and school["is_active"]==0: return HTMLResponse(f"Awaiting approval from {SUPER_ADMIN_EMAIL}. You will get email.")
+    if school["is_active"]==0: return HTMLResponse(f"Blocked. Contact {SUPER_ADMIN_EMAIL}")
+
+    request.session["user_id"]=user["id"]; request.session["user_email"]=user["email"]; request.session["user_name"]=user["name"]; request.session["role"]=user["role"]; request.session["school_id"]=user["school_id"]; request.session["school_name"]=school["name"]; request.session["is_super_admin"]=False
+    return RedirectResponse("/dashboard", status_code=303)
+
 @app.get("/logout")
-def logout(request: Request): request.session.clear(); return RedirectResponse("/login", status_code=302)
-@app.get("/")
-def root(request: Request): return RedirectResponse("/dashboard" if request.session.get("user") else "/login", status_code=302)
+def logout(request: Request):
+    request.session.clear(); return RedirectResponse("/login", status_code=303)
+
+# === SUPER ADMIN - YOU ===
+@app.get("/super-admin", response_class=HTMLResponse)
+def super_admin(request: Request):
+    if not is_super_admin(request): return HTMLResponse("Access Denied: Only oumadavis62@gmail.com", status_code=403)
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools=cur.fetchall(); con.close()
+    total=len(schools); active=len([s for s in schools if s["is_active"]==1]); pending=len([s for s in schools if s["status"] in ("PENDING","VERIFIED")])
+    html=f"<h1>Super Admin - {SUPER_ADMIN_EMAIL}</h1><p>Total: {total} | Active: {active} | Pending: {pending} | <a href='/logout'>Logout</a></p><table border=1 cellpadding=8><tr><th>Code</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Trial</th><th>Action</th></tr>"
+    for s in schools:
+        html+=f"<tr><td>{s['code']}</td><td>{s['name']}</td><td>{s['email']}</td><td>{s['phone']}</td><td>{s['status']}</td><td>{s['trial_ends_at'][:10] if s['trial_ends_at'] else ''}</td><td><a href='/super-admin/approve/{s['id']}'>Approve</a> | <a href='/super-admin/block/{s['id']}'>Block</a></td></tr>"
+    html+="</table><p>Fresh System - No Mabale Data</p>"
+    return HTMLResponse(html)
+
+@app.get("/super-admin/approve/{sid}")
+def approve(sid: int, request: Request):
+    if not is_super_admin(request): return HTMLResponse("Denied", status_code=403)
+    con=get_db(); cur=con.cursor()
+    cur.execute("UPDATE schools SET is_active=1, status='ACTIVE' WHERE id=?", (sid,))
+    cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s=cur.fetchone()
+    con.commit(); con.close()
+    if s: send_email(s["email"], "DaviSchool Approved!", f"Your school {s['name']} ({s['code']}) is ACTIVE. Login at /login\nTrial ends: {s['trial_ends_at']}")
+    return RedirectResponse("/super-admin", status_code=303)
+
+@app.get("/super-admin/block/{sid}")
+def block(sid: int, request: Request):
+    if not is_super_admin(request): return HTMLResponse("Denied", status_code=403)
+    con=get_db(); cur=con.cursor(); cur.execute("UPDATE schools SET is_active=0, status='BLOCKED' WHERE id=?", (sid,)); con.commit(); con.close()
+    return RedirectResponse("/super-admin", status_code=303)
+
+# === SCHOOL DASHBOARD ===
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); sc=con.execute("SELECT COUNT(*) FROM students").fetchone()[0]; tc=con.execute("SELECT COUNT(*) FROM teachers").fetchone()[0]; sch=con.execute("SELECT COUNT(*) FROM schools").fetchone()[0]; con.close()
-    body=f"""<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px"><div class="card"><h3>Schools Registered</h3><h1>{sch}</h1><a href="/schools">Manage</a></div><div class="card"><h3>Students</h3><h1>{sc}</h1></div><div class="card"><h3>Teachers</h3><h1>{tc}</h1></div></div>"""
-    return HTMLResponse(layout("Dashboard", body, request.session.get("user")))
+    if "user_id" not in request.session: return RedirectResponse("/login", status_code=303)
+    if is_super_admin(request): return RedirectResponse("/super-admin", status_code=303)
+    school_id=request.session.get("school_id")
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT COUNT(*) FROM students WHERE school_id=?", (school_id,)); sc=cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM teachers WHERE school_id=?", (school_id,)); tc=cur.fetchone()[0]
+    cur.execute("SELECT * FROM schools WHERE id=?", (school_id,)); school=cur.fetchone()
+    con.close()
+    return f"""
+    <h2>{request.session.get('school_name')} - Dashboard (Fresh)</h2>
+    <p>{request.session.get('user_name')} - Role: {request.session.get('role')} | Header shows Teacher exactly like School Admin as requested</p>
+    <p>School Code: {school['code']} | Trial ends: {school['trial_ends_at']} | Students: {sc} | Teachers: {tc}</p>
+    <p><a href="/students">Students</a> | <a href="/teachers">Teachers</a> | <a href="/my-profile">My Profile (shows role)</a> | <a href="/logout">Logout</a></p>
+    <p><b>Fresh System - 0 students initially, no Mabale data</b></p>
+    """
+
+@app.get("/my-profile", response_class=HTMLResponse)
+def my_profile(request: Request):
+    if "user_id" not in request.session: return RedirectResponse("/login", status_code=303)
+    return f"<h3>My Profile</h3><p>Name: {request.session.get('user_name')}</p><p>Email: {request.session.get('user_email')}</p><p>Role: {request.session.get('role')} - This shows in header exactly as requested (Teacher or School Admin)</p><a href='/dashboard'>Back</a>"
+
 @app.get("/students", response_class=HTMLResponse)
-def students_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); studs=con.execute("SELECT * FROM students ORDER BY name").fetchall(); schools=con.execute("SELECT * FROM schools").fetchall(); con.close()
-    opts="".join([f"<option>{s['name']}</option>" for s in schools])
-    tr="".join([f"<tr><td>{s['adm']}</td><td>{s['name']}</td><td>{s['class']}</td><td>{s['school'] or ''}</td></tr>" for s in studs])
-    body=f"""<div class="card"><form method="post" action="/students/add" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"><input name="adm" placeholder="ADM" required><input name="name" placeholder="Name" required><input name="class" placeholder="Class"><input name="stream" placeholder="Stream"><select name="school"><option>Select School</option>{opts}</select><button class="btn btn-primary">Add Student</button></form></div><div class="card"><table><tr><th>ADM</th><th>Name</th><th>Class</th><th>School</th></tr>{tr}</table></div>"""
-    return HTMLResponse(layout("Students List", body, request.session.get("user")))
+def list_students(request: Request):
+    if "user_id" not in request.session: return RedirectResponse("/login", status_code=303)
+    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM students WHERE school_id=?", (request.session["school_id"],)); rows=cur.fetchall(); con.close()
+    html=f"<h3>Students - {request.session.get('school_name')} - Fresh (0 initially)</h3><table border=1><tr><th>ADM</th><th>Name</th><th>Class</th></tr>"
+    for r in rows: html+=f"<tr><td>{r['adm']}</td><td>{r['name']}</td><td>{r['class']}</td></tr>"
+    html+=f"</table><form method='post' action='/students/add'><input name='adm' placeholder='ADM' required><input name='name' placeholder='Name' required><input name='class' placeholder='Class'><button>Add</button></form><a href='/dashboard'>Dashboard</a>"
+    return HTMLResponse(html)
+
 @app.post("/students/add")
-def add_student(adm: str = Form(...), name: str = Form(...), class_: str = Form("", alias="class"), stream: str = Form(""), school: str = Form("")):
-    con=get_db()
-    try: con.execute("INSERT INTO students (adm,name,class,stream,school) VALUES (?,?,?,?,?)",(adm,name,class_,stream,school)); con.commit()
-    except: pass
-    con.close(); return RedirectResponse("/students", status_code=302)
-@app.get("/teachers", response_class=HTMLResponse)
-def teachers_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); ts=con.execute("SELECT * FROM teachers").fetchall(); con.close()
-    tr="".join([f"<tr><td>{t['tsc']}</td><td>{t['name']}</td><td>{t['subject']}</td></tr>" for t in ts])
-    body=f"""<div class="card"><form method="post" action="/teachers/add" style="display:flex;gap:8px"><input name="tsc" placeholder="TSC"><input name="name" placeholder="Name"><input name="subject" placeholder="Subject"><button class="btn btn-primary">Add</button></form></div><div class="card"><table><tr><th>TSC</th><th>Name</th><th>Subject</th></tr>{tr}</table></div>"""
-    return HTMLResponse(layout("Staff List", body, request.session.get("user")))
-@app.post("/teachers/add")
-def add_teacher(tsc: str = Form(...), name: str = Form(...), subject: str = Form(...)): con=get_db(); con.execute("INSERT OR IGNORE INTO teachers (tsc,name,subject) VALUES (?,?,?)",(tsc,name,subject)); con.commit(); con.close(); return RedirectResponse("/teachers", status_code=302)
-@app.get("/marks", response_class=HTMLResponse)
-def marks_page(request: Request, class_: str = "", term: str = "Term 1", year: str = "2026", subject: str = "Mathematics"):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); studs=con.execute("SELECT * FROM students").fetchall() if not class_ else con.execute("SELECT * FROM students WHERE class LIKE?",(f"%{class_}%",)).fetchall()
-    marks={};
-    for m in con.execute("SELECT * FROM marks WHERE term=? AND year=? AND subject=?",(term,year,subject)).fetchall(): marks[m["adm"]]=m
-    con.close(); tr="".join([f"<tr><td>{s['adm']}</td><td>{s['name']}</td><td onclick=\"saveMark('{s['adm']}','{term}','{year}','{subject}')\" style='background:#fff9c4;cursor:pointer'>{marks.get(s['adm'],{}).get('score','Enter')}</td></tr>" for s in studs])
-    body=f"""<div class="card"><form method="get" style="display:flex;gap:8px"><input name="class_" placeholder="Class"><select name="term"><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name="year" value="{year}"><select name="subject"><option>Mathematics</option><option>English</option></select><button class="btn btn-primary">Load</button></form></div><div class="card"><table><tr><th>ADM</th><th>Name</th><th>Score</th></tr>{tr}</table></div>"""
-    return HTMLResponse(layout("Record Marks", body, request.session.get("user")))
-@app.post("/marks/save")
-async def save_marks(request: Request):
-    d=await request.json(); con=get_db(); ex=con.execute("SELECT id FROM marks WHERE adm=? AND term=? AND year=? AND subject=?",(d["adm"],d["term"],d["year"],d["subject"])).fetchone()
-    if ex: con.execute("UPDATE marks SET score=? WHERE id=?",(d["score"],ex["id"]))
-    else: con.execute("INSERT INTO marks (adm,term,year,subject,score) VALUES (?,?,?,?,?)",(d["adm"],d["term"],d["year"],d["subject"],d["score"]))
-    con.commit(); con.close(); return {"ok":True}
-@app.get("/fees", response_class=HTMLResponse)
-def fees_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); fees=con.execute("SELECT * FROM fees").fetchall(); con.close()
-    tr="".join([f"<tr><td>{r['adm']}</td><td>{r['amount']}</td></tr>" for r in fees])
-    body=f"""<div class="card"><form method="post" action="/fees/add" style="display:flex;gap:8px"><input name="adm" placeholder="ADM"><input name="amount" type="number" placeholder="Paid"><button class="btn btn-primary">Add</button></form></div><div class="card"><table><tr><th>ADM</th><th>Paid</th></tr>{tr}</table></div>"""
-    return HTMLResponse(layout("Fees", body, request.session.get("user")))
-@app.post("/fees/add")
-def add_fee(adm: str = Form(...), amount: int = Form(...)): con=get_db(); con.execute("INSERT INTO fees (adm,amount,date) VALUES (?,?,?)",(adm,amount,datetime.now().strftime("%Y-%m-%d"))); con.commit(); con.close(); return RedirectResponse("/fees", status_code=302)
-@app.get("/classes", response_class=HTMLResponse)
-def classes_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); cls=con.execute("SELECT class, COUNT(*) as cnt FROM students GROUP BY class").fetchall(); con.close()
-    tr="".join([f"<tr><td>{c['class']}</td><td>{c['cnt']}</td></tr>" for c in cls])
-    return HTMLResponse(layout("Class List", f"<div class='card'><table><tr><th>Class</th><th>Count</th></tr>{tr}</table></div>", request.session.get("user")))
-@app.get("/reports", response_class=HTMLResponse)
-def reports_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    return HTMLResponse(layout("Exam Analysis", "<div class='card'>Analysis will show here after marks entry</div>", request.session.get("user")))
-@app.get("/schools", response_class=HTMLResponse)
-def schools_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    con=get_db(); schools=con.execute("SELECT * FROM schools").fetchall(); con.close()
-    tr="".join([f"<tr><td>{s['name']}</td><td>{s['code']}</td><td>{s['box']}</td><td>{s['phone']}</td></tr>" for s in schools])
-    body=f"""<div class="card"><h3>Register New School (like MABALE etc)</h3><form method="post" action="/schools/add" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><input name="name" placeholder="School Name e.g. MABALE COMPREHENSIVE" required><input name="code" placeholder="Code e.g. 10069"><input name="box" placeholder="P.O Box 300-50400"><input name="phone" placeholder="Phone 0721307699"><input name="email" placeholder="Email"><button class="btn btn-primary" style="grid-column:span 2">Add School</button></form></div><div class="card"><table><tr><th>School</th><th>Code</th><th>Box</th><th>Phone</th></tr>{tr if tr else '<tr><td colspan=4>No schools yet - Add MABALE above!</td></tr>'}</table></div>"""
-    return HTMLResponse(layout("School Profile - Register Schools", body, request.session.get("user")))
-@app.post("/schools/add")
-def add_school(name: str = Form(...), code: str = Form(""), box: str = Form(""), phone: str = Form(""), email: str = Form("")):
-    con=get_db(); con.execute("INSERT INTO schools (name,code,box,phone,email) VALUES (?,?,?,?,?)",(name,code,box,phone,email)); con.commit(); con.close(); return RedirectResponse("/schools", status_code=302)
-@app.get("/profile", response_class=HTMLResponse)
-def profile_page(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
-    body="""<div style="display:grid;grid-template-columns:320px 1fr;gap:18px"><div class="card" style="text-align:center"><div style="width:80px;height:80px;background:#0f172a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:24px">DO</div><h3>Davis Ouma</h3><span style="background:#e0f2fe;color:#0369a1;padding:4px 10px;border-radius:20px">School Admin</span><p>oumadavis940@gmail.com</p><p style="font-size:12px">DAVISCHOOL SYSTEM<br>Multi-School Platform</p></div><div class="card"><h3>Personal Information</h3><label>Full Name</label><input value="Davis Ouma"><br><br><label>Email</label><input value="oumadavis940@gmail.com"><br><br><a href="/schools" class="btn btn-primary">Go Register Schools</a></div></div>"""
-    return HTMLResponse(layout("My Profile", body, request.session.get("user")))
-@app.post("/api/edit/{table}")
-async def api_edit(table: str, request: Request):
-    d=await request.json(); con=get_db()
-    try: con.execute(f"UPDATE {table} SET {d['field']}=? WHERE id=?",(d["value"],d["id"])); con.commit(); con.close(); return {"ok":True}
-    except Exception as e: con.close(); return {"ok":False,"error":str(e)}
+def add_student(request: Request, adm: str = Form(...), name: str = Form(...), class_: str = Form("", alias="class")):
+    con=get_db(); cur=con.cursor(); cur.execute("INSERT INTO students (school_id, adm, name, class) VALUES (?,?,?,?)", (request.session["school_id"], adm, name, class_)); con.commit(); con.close()
+    return RedirectResponse("/students", status_code=303)
