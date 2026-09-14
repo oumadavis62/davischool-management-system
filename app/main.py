@@ -258,8 +258,21 @@ def list_students(request: Request):
     con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM students WHERE school_id=?", (request.session["school_id"],)); rows=cur.fetchall(); con.close()
     html=f"<h3>Students - {request.session.get('school_name')} - Fresh (0 initially)</h3><table border=1><tr><th>ADM</th><th>Name</th><th>Class</th></tr>"
     for r in rows: html+=f"<tr><td>{r['adm']}</td><td>{r['name']}</td><td>{r['class']}</td></tr>"
-    html+=f"</table><form method='post' action='/students/add'><input name='adm' placeholder='ADM' required><input name='name' placeholder='Name' required><input name='class' placeholder='Class'><button>Add</button></form><a href='/dashboard'>Dashboard</a>"
-    return HTMLResponse(html)
+    @app.get("/super-admin/reset-all-mabale-data")
+def reset_all(request: Request):
+    if request.session.get("user_email") != "oumadavis62@gmail.com": 
+        return HTMLResponse("Denied - Only oumadavis62@gmail.com", status_code=403)
+    con=get_db(); cur=con.cursor()
+    cur.execute("DELETE FROM students")
+    cur.execute("DELETE FROM teachers")
+    cur.execute("DELETE FROM marks")
+    cur.execute("DELETE FROM fees")
+    cur.execute("DELETE FROM school_classes")
+    cur.execute("DELETE FROM schools WHERE email != ?", (SUPER_ADMIN_EMAIL,))
+    cur.execute("DELETE FROM users WHERE email != ?", (SUPER_ADMIN_EMAIL,))
+    cur.execute("DELETE FROM email_verifications")
+    con.commit(); con.close()
+    return HTMLResponse(f"<h1>All Mabale data wiped!</h1><p>Fresh system ready. Only {SUPER_ADMIN_EMAIL} remains.</p><a href='/super-admin'>Go to Super Admin</a>")
 
 @app.post("/students/add")
 def add_student(request: Request, adm: str = Form(...), name: str = Form(...), class_: str = Form("", alias="class")):
