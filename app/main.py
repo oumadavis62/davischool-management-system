@@ -4,7 +4,7 @@ import sqlite3
 from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-academic-2026")
+app.add_middleware(SessionMiddleware, secret_key="davischool-staff-2026")
 SUPER_ADMIN_EMAIL = "oumadavis62@gmail.com"
 
 def get_db():
@@ -18,9 +18,8 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, approved INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, school_id INTEGER, role TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, adm TEXT, name TEXT, class TEXT, gender TEXT, status TEXT DEFAULT 'active')")
-    cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, max_marks INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, exam_id INTEGER, subject TEXT, marks INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS subject_allocation (id INTEGER PRIMARY KEY, school_id INTEGER, class TEXT, subject TEXT, teacher TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS staff (id INTEGER PRIMARY KEY, school_id INTEGER, staff_id TEXT, name TEXT, role TEXT, phone TEXT, status TEXT DEFAULT 'active')")
+    cur.execute("CREATE TABLE IF NOT EXISTS staff_attendance (id INTEGER PRIMARY KEY, school_id INTEGER, staff_id INTEGER, date TEXT, status TEXT)")
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN_EMAIL,))
     if not cur.fetchone():
         cur.execute("INSERT INTO users (email, password, role) VALUES (?,?,?)", (SUPER_ADMIN_EMAIL, "DaviSchool@2026!", "super_admin"))
@@ -53,26 +52,21 @@ table{width:100%; border-collapse:collapse} th,td{padding:8px; border:1px solid 
 <div class='logo'><div class='logo-icon'>D</div><div><b>DaviSchool</b><div style='font-size:9px; color:#64748b'>SCHOOL MANAGEMENT</div></div></div>
 <div class='nav-label'>MAIN NAVIGATION</div>
 <a class='nav-item' href='/dashboard' style='color:#334155'>📊 Dashboard</a>
-
 <a class='nav-item' href='/students?tab=list' style='color:#334155'>🎓 Students Manager</a>
-<a class='nav-item' href='/staff' style='color:#334155'>👔 Staff Manager</a>
 
-<a class='nav-item active'>📚 Academic Manager</a>
+<a class='nav-item active'>👔 Staff Manager</a>
 <div class='sub'>
-<a class='nav-item' href='/academic-manager?tab=dean' style='""" + ("background:#0f172a; color:white" if active_sub=="dean" else "color:#334155") + """'>⚙️ Dean Settings</a>
-<a class='nav-item' href='/academic-manager?tab=exam' style='""" + ("background:#0f172a; color:white" if active_sub=="exam" else "color:#334155") + """'>🔧 Exam Settings</a>
-<a class='nav-item' href='/academic-manager?tab=setmarks' style='""" + ("background:#0f172a; color:white" if active_sub=="setmarks" else "color:#334155") + """'>📝 Set Marks</a>
-<a class='nav-item' href='/academic-manager?tab=allocation' style='""" + ("background:#0f172a; color:white" if active_sub=="allocation" else "color:#334155") + """'>📋 Subject Allocation</a>
-<a class='nav-item' href='/academic-manager?tab=record' style='""" + ("background:#0f172a; color:white" if active_sub=="record" else "color:#334155") + """'>✏️ Record Marks</a>
-<a class='nav-item' href='/academic-manager?tab=edit' style='""" + ("background:#0f172a; color:white" if active_sub=="edit" else "color:#334155") + """'>✏️ Edit Marks</a>
-<a class='nav-item' href='/academic-manager?tab=status' style='""" + ("background:#0f172a; color:white" if active_sub=="status" else "color:#334155") + """'>📊 Marks Status</a>
-<a class='nav-item' href='/academic-manager?tab=analysis' style='""" + ("background:#0f172a; color:white" if active_sub=="analysis" else "color:#334155") + """'>📈 Exam Analysis</a>
-<a class='nav-item' href='/academic-manager?tab=spreadsheet' style='""" + ("background:#0f172a; color:white" if active_sub=="spreadsheet" else "color:#334155") + """'>📄 Spreadsheet</a>
-<a class='nav-item' href='/academic-manager?tab=sba' style='""" + ("background:#0f172a; color:white" if active_sub=="sba" else "color:#334155") + """'>✅ SBA (KNEC CBA)</a>
+<a class='nav-item' href='/staff?tab=list' style='""" + ("background:#0f172a; color:white" if active_sub=="list" else "color:#334155") + """'>👥 Staff List</a>
+<a class='nav-item' href='/staff?tab=sheet' style='""" + ("background:#0f172a; color:white" if active_sub=="sheet" else "color:#334155") + """'>📋 Attendance Sheet</a>
+<a class='nav-item' href='/staff?tab=report' style='""" + ("background:#0f172a; color:white" if active_sub=="report" else "color:#334155") + """'>📊 Attendance Report</a>
+<a class='nav-item' href='/staff?tab=former' style='""" + ("background:#0f172a; color:white" if active_sub=="former" else "color:#334155") + """'>👋 Former Staff</a>
 </div>
 
+<a class='nav-item' href='/academic-manager?tab=dean' style='color:#334155'>📚 Academic Manager</a>
 <a class='nav-item' href='/timetable?tab=periods' style='color:#334155'>📅 Timetable</a>
-<a class='nav-item' href='/academics' style='color:#334155'>📈 Academic Analytics</a>
+<a class='nav-item' href='/online-classes' style='color:#334155'>🎥 Online Classes</a>
+<a class='nav-item' href='/library' style='color:#334155'>📚 Library Manager</a>
+<a class='nav-item' href='/finance' style='color:#334155'>💰 Finance</a>
 
 <div style='padding:14px; border-top:1px solid #e2e8f0; margin-top:20px'><b>Davis Ouma</b><br><small>""" + email + """</small><br><small style='color:#2563eb'>""" + role + """</small></div>
 </div>
@@ -119,11 +113,11 @@ def dash(request: Request):
     email = request.session.get("user_email")
     role = "School Admin" if "940" in email else "Super Admin"
     sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
-    inner = f"<div class='content'><h1>Dashboard</h1><p>{sname} (Code: 10069)</p><div class='card'><div style='height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'><div>No correlation data available for the selected filters</div><div style='margin-top:10px'><span style='color:#ef4444'>● Danger zone (low attendance + low grades)</span> <span style='margin-left:10px; color:#2563eb'>● Other students</span></div></div></div><div class='card'><b>Students Requiring Attention</b><div style='display:flex; gap:8px; justify-content:end'><span style='background:#0f172a; color:white; padding:4px 10px; border-radius:20px; font-size:12px'>All (0)</span><span style='background:#f1f5f9; padding:4px 10px; border-radius:20px; font-size:12px'>Critical (0)</span><span style='background:#f1f5f9; padding:4px 10px; border-radius:20px; font-size:12px'>High (0)</span><span style='background:#f1f5f9; padding:4px 10px; border-radius:20px; font-size:12px'>Moderate (0)</span></div><div style='height:100px; display:flex; align-items:center; justify-content:center; color:#94a3b8'>No chronic absentees found for the selected period</div></div></div>"
+    inner = f"<div class='content'><h1>Dashboard</h1><p>{sname} (Code: 10069)</p><div class='card'><div style='height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'><div>No correlation data available for the selected filters</div><div style='margin-top:10px'><span style='color:#ef4444'>● Danger zone (low attendance + low grades)</span> <span style='color:#2563eb; margin-left:10px'>● Other students</span></div></div></div><div class='card'><b>Students Requiring Attention</b><div style='height:100px; display:flex; align-items:center; justify-content:center; color:#94a3b8'>No chronic absentees found for the selected period</div></div></div>"
     return HTMLResponse(wrap(sname, inner, email, role, "dashboard", ""))
 
-@app.get("/academic-manager", response_class=HTMLResponse)
-def academic_manager(request: Request, tab: str = "dean"):
+@app.get("/staff", response_class=HTMLResponse)
+def staff_page(request: Request, tab: str = "list"):
     if "user_email" not in request.session:
         return RedirectResponse("/")
     email = request.session.get("user_email")
@@ -131,162 +125,86 @@ def academic_manager(request: Request, tab: str = "dean"):
     sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
     sid = request.session.get("school_id",0)
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM exams WHERE school_id=?", (sid,))
-    exams = cur.fetchall()
-    cur.execute("SELECT * FROM subject_allocation WHERE school_id=?", (sid,))
-    allocs = cur.fetchall()
-    cur.execute("SELECT * FROM students WHERE school_id=? AND status='active'", (sid,))
-    students = cur.fetchall()
+    cur.execute("SELECT * FROM staff WHERE school_id=? AND status='active' ORDER BY id DESC", (sid,))
+    staff_list = cur.fetchall()
+    cur.execute("SELECT * FROM staff WHERE school_id=? AND status='former'", (sid,))
+    former = cur.fetchall()
     con.close()
 
-    if tab=="dean":
-        content = """
-<div class='card'><b>⚙️ Dean Settings</b><div style='color:#64748b; font-size:12px'>Configure academic year and dean office</div>
-<div style='margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:12px'>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:14px'><b>Current Academic Year</b><div style='margin-top:8px'><select class='btn2' style='width:100%'><option>2026</option><option>2025</option><option>2024</option></select></div><div style='font-size:12px; color:#64748b; margin-top:8px'>Year: 2026 | Term: Term 1</div></div>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:14px'><b>Dean of Studies</b><div style='margin-top:8px; font-size:13px'>Name: Davis Ouma<br>Email: oumadavis940@gmail.com<br>Role: School Admin</div></div>
-</div>
-<div style='margin-top:12px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px'>
-<div class='card' style='margin:0'><b>Classes</b><div style='font-size:12px'>GRADE 7, 8, 9 - CBC</div></div>
-<div class='card' style='margin:0'><b>Grading System</b><div style='font-size:12px'>CBC - Exceeding, Meeting, Approaching</div></div>
-<div class='card' style='margin:0'><b>Promotion</b><div style='font-size:12px'>Auto-promote: Enabled</div></div>
-</div>
-</div>
-"""
-    elif tab=="exam":
-        rows = "".join([f"<tr><td>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td>{e['max_marks']}</td></tr>" for e in exams]) or "<tr><td colspan=4 style='padding:20px; text-align:center; color:#94a3b8'>No exams setup yet</td></tr>"
+    if tab=="list":
+        rows = "".join([f"<tr><td>{s['staff_id']}</td><td>{s['name']}</td><td>{s['role']}</td><td>{s['phone']}</td><td><span style='background:#dcfce7; color:#16a34a; padding:2px 8px; border-radius:12px; font-size:11px'>Active</span></td><td><button class='btn2' style='padding:4px 8px; font-size:11px'>View</button></td></tr>" for s in staff_list]) or "<tr><td colspan=6 style='padding:30px; text-align:center; color:#94a3b8'>No staff yet - Add staff below<br>MABALE COMPREHENSIVE SCHOOL - Fresh system</td></tr>"
         content = f"""
-<div class='card'><div style='display:flex; justify-content:space-between'><div><b>🔧 Exam Settings</b><div style='color:#64748b; font-size:12px'>Define exams, terms, weightage</div></div><span style='background:#f1f5f9; padding:6px 12px; border-radius:20px; font-size:12px'>{len(exams)} exams</span></div>
-<table style='margin-top:12px'><tr><th>Exam Name</th><th>Term</th><th>Year</th><th>Max Marks</th></tr>{rows}</table>
-<form method='post' action='/academic-manager/add-exam' style='margin-top:16px; display:grid; grid-template-columns:1fr 120px 80px 100px 100px; gap:8px'><input name='name' placeholder='Mid Term 1' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><select name='term' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' placeholder='2026' value='2026' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='max_marks' type='number' placeholder='100' value='100' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><button class='btn'>Add Exam</button></form>
+<div class='card'><div style='display:flex; justify-content:space-between; align-items:center'><div><b>👥 Staff List</b><div style='color:#64748b; font-size:12px'>{len(staff_list)} active staff - {sname}</div></div><div style='display:flex; gap:8px'><button class='btn2'>Import CSV</button><button class='btn2'>Export</button></div></div>
+<table style='margin-top:14px'><tr><th>Staff ID</th><th>Name</th><th>Role</th><th>Phone</th><th>Status</th><th>Action</th></tr>{rows}</table>
+<form method='post' action='/staff/add' style='margin-top:16px; display:grid; grid-template-columns:100px 1fr 140px 120px 100px; gap:8px'><input name='staff_id' placeholder='T001' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='name' placeholder='Full Name e.g Mr. Ouma' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='role' placeholder='Teacher' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='phone' placeholder='07...' style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><button class='btn'>Add Staff</button></form>
 </div>
 """
-    elif tab=="setmarks":
+    elif tab=="sheet":
+        today = "2026-05-13"
+        rows = "".join([f"<tr><td>{s['staff_id']}</td><td>{s['name']}</td><td>{s['role']}</td><td><select class='btn2'><option>Present</option><option>Absent</option><option>Late</option><option>Leave</option></select></td></tr>" for s in staff_list]) or "<tr><td colspan=4 style='padding:20px; text-align:center; color:#94a3b8'>No staff to mark attendance</td></tr>"
         content = f"""
-<div class='card'><b>📝 Set Marks</b><div style='color:#64748b; font-size:12px'>Set maximum marks per subject per exam</div>
-<div style='margin-top:12px; display:flex; gap:8px'><select class='btn2'><option>Mid Term 1 - 2026</option><option>End Term - 2026</option></select><select class='btn2'><option>GRADE 7</option><option>GRADE 8</option><option>GRADE 9</option></select><button class='btn2'>Load Subjects</button></div>
-<div style='margin-top:12px'>
-<table><tr><th>Subject</th><th>Max Marks</th><th>Pass Marks</th><th>Weight</th></tr>
-<tr><td>Mathematics</td><td><input value='100' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input value='40' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td>100%</td></tr>
-<tr><td>English</td><td><input value='100' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input value='40' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td>100%</td></tr>
-<tr><td>Science</td><td><input value='100' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input value='40' style='width:60px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td>100%</td></tr>
-</table>
-<div style='margin-top:12px'><button class='btn'>Save Set Marks</button></div>
-</div>
+<div class='card'><div style='display:flex; justify-content:space-between'><div><b>📋 Staff Attendance Sheet</b><div style='color:#64748b; font-size:12px'>Mark daily staff attendance - {today}</div></div><div style='display:flex; gap:8px'><input type='date' value='{today}' class='btn2'><button class='btn'>Save Attendance</button></div></div>
+<table style='margin-top:12px'><tr><th>Staff ID</th><th>Name</th><th>Role</th><th>Status</th></tr>{rows}</table>
 </div>
 """
-    elif tab=="allocation":
-        rows = "".join([f"<tr><td>{a['class']}</td><td>{a['subject']}</td><td>{a['teacher']}</td></tr>" for a in allocs]) or "<tr><td colspan=3 style='padding:20px; text-align:center; color:#94a3b8'>No allocations yet</td></tr>"
+    elif tab=="report":
         content = f"""
-<div class='card'><div style='display:flex; justify-content:space-between'><div><b>📋 Subject Allocation</b><div style='color:#64748b; font-size:12px'>Allocate teachers to subjects per class</div></div><span style='background:#f1f5f9; padding:6px 12px; border-radius:20px; font-size:12px'>{len(allocs)} allocations</span></div>
-<table style='margin-top:12px'><tr><th>Class</th><th>Subject</th><th>Teacher</th></tr>{rows}</table>
-<form method='post' action='/academic-manager/add-allocation' style='margin-top:16px; display:grid; grid-template-columns:120px 1fr 1fr 100px; gap:8px'><input name='class' placeholder='GRADE 7' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='subject' placeholder='Mathematics' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='teacher' placeholder='Mr. Ouma' required style='padding:10px; border:1px solid #e2e8f0; border-radius:8px'><button class='btn'>Allocate</button></form>
+<div class='card'><b>📊 Staff Attendance Report</b><div style='color:#64748b; font-size:12px'>Monthly staff attendance summary - {sname}</div>
+<div style='margin-top:16px; display:flex; gap:8px'><select class='btn2'><option>May 2026</option><option>April 2026</option></select><select class='btn2'><option>All Staff</option><option>Teachers</option><option>Non-Teaching</option></select><button class='btn2'>Generate Report</button></div>
+<div style='margin-top:16px; height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; border:1px dashed #e2e8f0; border-radius:12px'><div>No staff attendance data available for selected period</div><div style='font-size:12px; margin-top:4px'>{len(staff_list)} active staff members</div></div>
 </div>
 """
-    elif tab=="record":
-        rows = "".join([f"<tr><td>{s['adm']}</td><td>{s['name']}</td><td><input style='width:70px; padding:6px; border:1px solid #e2e8f0; border-radius:6px' placeholder='0-100'></td></tr>" for s in students]) or "<tr><td colspan=3 style='padding:20px; text-align:center; color:#94a3b8'>No students - Add in Students Manager first</td></tr>"
+    elif tab=="former":
+        rows = "".join([f"<tr><td>{s['staff_id']}</td><td>{s['name']}</td><td>{s['role']}</td><td>{s['phone']}</td><td>Former</td></tr>" for s in former]) or "<tr><td colspan=5 style='padding:20px; text-align:center; color:#94a3b8'>No former staff</td></tr>"
         content = f"""
-<div class='card'><div style='display:flex; justify-content:space-between'><div><b>✏️ Record Marks</b><div style='color:#64748b; font-size:12px'>Enter marks per student per subject</div></div><div style='display:flex; gap:8px'><select class='btn2'><option>Mid Term 1</option></select><select class='btn2'><option>Mathematics</option><option>English</option><option>Science</option></select><select class='btn2'><option>GRADE 7</option></select></div></div>
-<table style='margin-top:12px'><tr><th>ADM</th><th>Name</th><th>Marks (0-100)</th></tr>{rows}</table>
-<div style='margin-top:12px'><button class='btn'>Save Marks</button> <span style='font-size:12px; color:#64748b; margin-left:8px'>{len(students)} students in GRADE 7</span></div>
-</div>
-"""
-    elif tab=="edit":
-        content = """
-<div class='card'><b>✏️ Edit Marks</b><div style='color:#64748b; font-size:12px'>Edit already recorded marks</div>
-<div style='margin-top:12px; display:flex; gap:8px'><select class='btn2'><option>Select Exam</option><option>Mid Term 1 - 2026</option></select><select class='btn2'><option>Select Subject</option><option>Mathematics</option></select><button class='btn2'>Load Marks</button></div>
-<div style='margin-top:12px; height:160px; display:flex; align-items:center; justify-content:center; color:#94a3b8; border:1px dashed #e2e8f0; border-radius:12px'>Select exam and subject to edit marks<br>No marks recorded yet</div>
-</div>
-"""
-    elif tab=="status":
-        content = f"""
-<div class='card'><b>📊 Marks Status</b><div style='color:#64748b; font-size:12px'>Track entry progress per class/subject</div>
-<div style='margin-top:12px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px'>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:12px'><b>GRADE 7</b><div style='font-size:12px; color:#64748b; margin-top:4px'>Mathematics: 0/{len(students)} entered<br>English: 0/{len(students)}<br>Science: 0/{len(students)}</div><div style='background:#f1f5f9; height:6px; border-radius:3px; margin-top:8px'><div style='background:#ef4444; height:6px; width:0%; border-radius:3px'></div></div><div style='font-size:11px; color:#ef4444; margin-top:4px'>0% complete</div></div>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:12px'><b>GRADE 8</b><div style='font-size:12px; color:#64748b; margin-top:4px'>Mathematics: 0/0 entered<br>English: 0/0<br>Science: 0/0</div><div style='background:#f1f5f9; height:6px; border-radius:3px; margin-top:8px'><div style='background:#ef4444; height:6px; width:0%; border-radius:3px'></div></div><div style='font-size:11px; color:#ef4444; margin-top:4px'>0% complete</div></div>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:12px'><b>GRADE 9</b><div style='font-size:12px; color:#64748b; margin-top:4px'>Mathematics: 0/0 entered<br>English: 0/0<br>Science: 0/0</div><div style='background:#f1f5f9; height:6px; border-radius:3px; margin-top:8px'><div style='background:#ef4444; height:6px; width:0%; border-radius:3px'></div></div><div style='font-size:11px; color:#ef4444; margin-top:4px'>0% complete</div></div>
-</div>
-</div>
-"""
-    elif tab=="analysis":
-        content = """
-<div class='card'><b>📈 Exam Analysis</b><div style='color:#64748b; font-size:12px'>Performance analysis per exam - No correlation data style</div>
-<div style='margin-top:16px'>
-<div style='height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; border:1px solid #e2e8f0; border-radius:12px'><div>No correlation data available for the selected filters</div><div style='margin-top:8px; font-size:13px'><span style='color:#ef4444'>● Danger zone (low attendance + low grades)</span> <span style='color:#2563eb; margin-left:12px'>● Other students</span></div></div>
-<div style='margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:12px'>
-<div class='card' style='margin:0'><b>Top Performers</b><div style='color:#94a3b8; font-size:12px; margin-top:8px'>No exam data</div></div>
-<div class='card' style='margin:0'><b>Low Performers</b><div style='color:#94a3b8; font-size:12px; margin-top:8px'>No exam data</div></div>
-</div>
-</div>
-</div>
-"""
-    elif tab=="spreadsheet":
-        content = """
-<div class='card'><div style='display:flex; justify-content:space-between'><div><b>📄 Spreadsheet</b><div style='color:#64748b; font-size:12px'>Excel-like marks entry - All subjects at once</div></div><div style='display:flex; gap:8px'><button class='btn2'>Import Excel</button><button class='btn2'>Export Excel</button><button class='btn'>Save All</button></div></div>
-<div style='margin-top:12px; overflow-x:auto'>
-<table><tr><th>ADM</th><th>Name</th><th>Math</th><th>Eng</th><th>Sci</th><th>CRE</th><th>SST</th><th>Total</th><th>Mean</th></tr>
-<tr><td>1001</td><td>FLORENCE</td><td><input style='width:50px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input style='width:50px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input style='width:50px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input style='width:50px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td><input style='width:50px; padding:4px; border:1px solid #e2e8f0; border-radius:4px'></td><td>0</td><td>0</td></tr>
-<tr><td colspan=9 style='padding:20px; text-align:center; color:#94a3b8'>No students - Add in Students Manager</td></tr>
-</table>
-</div>
-</div>
-"""
-    elif tab=="sba":
-        content = """
-<div class='card'><b>✅ SBA (KNEC CBA) - Competency Based Assessment</b><div style='color:#64748b; font-size:12px'>CBC SBA Records for KNEC - MABALE COMPREHENSIVE SCHOOL</div>
-<div style='margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:12px'>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:14px'><b>Strand Assessment</b><div style='font-size:12px; color:#64748b; margin-top:6px'>Exceeding Expectation (EE)<br>Meeting Expectation (ME)<br>Approaching Expectation (AE)<br>Below Expectation (BE)</div></div>
-<div style='border:1px solid #e2e8f0; border-radius:10px; padding:14px'><b>KNEC Upload</b><div style='font-size:12px; color:#64748b; margin-top:6px'>Term 1 2026 SBA<br>Status: Not Uploaded<br>Deadline: 30th May 2026</div><button class='btn' style='margin-top:8px; width:100%'>Generate KNEC CSV</button></div>
-</div>
-<div style='margin-top:12px; height:160px; display:flex; align-items:center; justify-content:center; color:#94a3b8; border:1px dashed #e2e8f0; border-radius:12px'>No SBA records - Record marks first in Record Marks tab</div>
+<div class='card'><b>👋 Former Staff</b><div style='color:#64748b; font-size:12px'>{len(former)} former staff members</div>
+<table style='margin-top:12px'><tr><th>Staff ID</th><th>Name</th><th>Last Role</th><th>Phone</th><th>Status</th></tr>{rows}</table>
+<div style='margin-top:12px; font-size:12px; color:#64748b'>Former staff are kept for records - Clearance, NSSF, pension etc.</div>
 </div>
 """
     else:
-        content = "<div class='card'>Invalid</div>"
+        content = "<div class='card'>Invalid tab</div>"
 
     inner = f"""
 <div class='content'>
-<h1 style='margin:0'>Academic Manager</h1><p style='color:#64748b; margin:6px 0 14px'>MABALE COMPREHENSIVE SCHOOL (Code: 10069) - Elimikasasa style - 10 tabs</p>
+<h1 style='margin:0'>Staff Manager</h1><p style='color:#64748b; margin:6px 0 14px'>MABALE COMPREHENSIVE SCHOOL (Code: 10069) - Staff Management</p>
 <div class='tab-bar'>
-<a class='tab-link' href='/academic-manager?tab=dean' style='{"background:#0f172a; color:white" if tab=="dean" else "background:#f1f5f9; color:#334155"}'>⚙️ Dean Settings</a>
-<a class='tab-link' href='/academic-manager?tab=exam' style='{"background:#0f172a; color:white" if tab=="exam" else "background:#f1f5f9; color:#334155"}'>🔧 Exam Settings</a>
-<a class='tab-link' href='/academic-manager?tab=setmarks' style='{"background:#0f172a; color:white" if tab=="setmarks" else "background:#f1f5f9; color:#334155"}'>📝 Set Marks</a>
-<a class='tab-link' href='/academic-manager?tab=allocation' style='{"background:#0f172a; color:white" if tab=="allocation" else "background:#f1f5f9; color:#334155"}'>📋 Subject Allocation</a>
-<a class='tab-link' href='/academic-manager?tab=record' style='{"background:#0f172a; color:white" if tab=="record" else "background:#f1f5f9; color:#334155"}'>✏️ Record Marks</a>
-<a class='tab-link' href='/academic-manager?tab=edit' style='{"background:#0f172a; color:white" if tab=="edit" else "background:#f1f5f9; color:#334155"}'>✏️ Edit Marks</a>
-<a class='tab-link' href='/academic-manager?tab=status' style='{"background:#0f172a; color:white" if tab=="status" else "background:#f1f5f9; color:#334155"}'>📊 Marks Status</a>
-<a class='tab-link' href='/academic-manager?tab=analysis' style='{"background:#0f172a; color:white" if tab=="analysis" else "background:#f1f5f9; color:#334155"}'>📈 Exam Analysis</a>
-<a class='tab-link' href='/academic-manager?tab=spreadsheet' style='{"background:#0f172a; color:white" if tab=="spreadsheet" else "background:#f1f5f9; color:#334155"}'>📄 Spreadsheet</a>
-<a class='tab-link' href='/academic-manager?tab=sba' style='{"background:#2563eb; color:white" if tab=="sba" else "background:#f1f5f9; color:#334155"}'>✅ SBA (KNEC CBA)</a>
+<a class='tab-link' href='/staff?tab=list' style='{"background:#0f172a; color:white" if tab=="list" else "background:#f1f5f9; color:#334155"}'>👥 Staff List</a>
+<a class='tab-link' href='/staff?tab=sheet' style='{"background:#0f172a; color:white" if tab=="sheet" else "background:#f1f5f9; color:#334155"}'>📋 Attendance Sheet</a>
+<a class='tab-link' href='/staff?tab=report' style='{"background:#0f172a; color:white" if tab=="report" else "background:#f1f5f9; color:#334155"}'>📊 Attendance Report</a>
+<a class='tab-link' href='/staff?tab=former' style='{"background:#0f172a; color:white" if tab=="former" else "background:#f1f5f9; color:#334155"}'>👋 Former Staff</a>
 </div>
 {content}
 </div>
 """
-    return HTMLResponse(wrap(sname, inner, email, role, "academic", tab))
+    return HTMLResponse(wrap(sname, inner, email, role, "staff", tab))
 
-@app.post("/academic-manager/add-exam")
-def add_exam(request: Request, name: str = Form(...), term: str = Form(...), year: str = Form(...), max_marks: int = Form(...)):
+@app.post("/staff/add")
+def add_staff(request: Request, staff_id: str = Form(...), name: str = Form(...), role: str = Form(...), phone: str = Form("")):
     con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO exams (school_id, name, term, year, max_marks) VALUES (?,?,?,?,?)", (request.session.get("school_id",0), name, term, year, max_marks))
+    cur.execute("INSERT INTO staff (school_id, staff_id, name, role, phone, status) VALUES (?,?,?,?,?,?)", (request.session.get("school_id",0), staff_id, name, role, phone, "active"))
     con.commit(); con.close()
-    return RedirectResponse("/academic-manager?tab=exam", status_code=303)
-
-@app.post("/academic-manager/add-allocation")
-def add_alloc(request: Request, class_: str = Form(..., alias="class"), subject: str = Form(...), teacher: str = Form(...)):
-    con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO subject_allocation (school_id, class, subject, teacher) VALUES (?,?,?,?)", (request.session.get("school_id",0), class_, subject, teacher))
-    con.commit(); con.close()
-    return RedirectResponse("/academic-manager?tab=allocation", status_code=303)
+    return RedirectResponse("/staff?tab=list", status_code=303)
 
 @app.get("/students", response_class=HTMLResponse)
-def students_page(request: Request, tab: str = "list"):
+def students(request: Request, tab: str = "list"):
     if "user_email" not in request.session:
         return RedirectResponse("/")
     email = request.session.get("user_email")
     role = "School Admin" if "940" in email else "Super Admin"
     sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
-    inner = f"<div class='content'><h1>Students Manager - {tab}</h1><p>8 tabs: Students List, Transferred, Class List, Alumni, Attendance Sheet, Report, ID Cards, Clearance</p><a href='/academic-manager?tab=dean'>Go to Academic Manager - 10 tabs</a></div>"
+    inner = f"<div class='content'><h1>Students Manager</h1><p>8 tabs built - Go to Staff Manager</p></div>"
     return HTMLResponse(wrap(sname, inner, email, role, "students", ""))
+
+@app.get("/academic-manager", response_class=HTMLResponse)
+def acad_mgr(request: Request, tab: str = "dean"):
+    if "user_email" not in request.session:
+        return RedirectResponse("/")
+    email = request.session.get("user_email")
+    role = "School Admin" if "940" in email else "Super Admin"
+    sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
+    inner = f"<div class='content'><h1>Academic Manager - 10 tabs built</h1></div>"
+    return HTMLResponse(wrap(sname, inner, email, role, "academic", ""))
 
 @app.get("/timetable", response_class=HTMLResponse)
 def timetable(request: Request, tab: str = "periods"):
@@ -295,35 +213,18 @@ def timetable(request: Request, tab: str = "periods"):
     email = request.session.get("user_email")
     role = "School Admin" if "940" in email else "Super Admin"
     sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
-    inner = f"<div class='content'><h1>Timetable - {tab}</h1><p>8 tabs built</p></div>"
+    inner = f"<div class='content'><h1>Timetable - 8 tabs built</h1></div>"
     return HTMLResponse(wrap(sname, inner, email, role, "timetable", ""))
 
-@app.get("/academics", response_class=HTMLResponse)
-def academics(request: Request):
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
     if "user_email" not in request.session:
         return RedirectResponse("/")
     email = request.session.get("user_email")
     role = "School Admin" if "940" in email else "Super Admin"
     sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
-    inner = "<div class='content'><h1>Academic Analytics</h1><div class='card'>Teacher Performance - No data available</div></div>"
-    return HTMLResponse(wrap(sname, inner, email, role, "academics", ""))
-
-@app.get("/attendance", response_class=HTMLResponse)
-def att(request: Request):
-    if "user_email" not in request.session:
-        return RedirectResponse("/")
-    email = request.session.get("user_email")
-    role = "School Admin" if "940" in email else "Super Admin"
-    sname = request.session.get("school_name","MABALE COMPREHENSIVE SCHOOL")
-    inner = "<div class='content'><h1>Attendance Analytics</h1><div class='card'>No correlation data available - Danger zone + Other students</div></div>"
-    return HTMLResponse(wrap(sname, inner, email, role, "attendance", ""))
-
-@app.get("/super-admin", response_class=HTMLResponse)
-def sa(request: Request):
-    if request.session.get("user_email") != SUPER_ADMIN_EMAIL:
-        return HTMLResponse("Denied", status_code=403)
-    inner = "<div class='content'><div class='card'><h3>Super Admin - oumadavis62@gmail.com - Role: Super Admin</h3><a href='/dashboard'>Dashboard</a></div></div>"
-    return HTMLResponse(wrap("Super Admin", inner, SUPER_ADMIN_EMAIL, "Super Admin", ""))
+    inner = f"<div class='content'><h1>Dashboard</h1><p>{sname} (Code: 10069)</p><div class='card'><div style='height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'><div>No correlation data available for the selected filters</div><div style='margin-top:10px'><span style='color:#ef4444'>● Danger zone (low attendance + low grades)</span> <span style='color:#2563eb; margin-left:10px'>● Other students</span></div></div></div><div class='card'><b>Students Requiring Attention</b><div style='height:100px; display:flex; align-items:center; justify-content:center; color:#94a3b8'>No chronic absentees found for the selected period</div></div></div>"
+    return HTMLResponse(wrap(sname, inner, email, role, "dashboard", ""))
 
 @app.get("/logout")
 def logout(request: Request):
