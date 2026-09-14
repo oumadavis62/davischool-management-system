@@ -172,48 +172,51 @@ def dashboard(request: Request):
     return HTMLResponse(wrap(school_name, body, user_email, role_display, "overview"))
 
 @app.get("/academics", response_class=HTMLResponse)
-def academics(request: Request, term: str = "Term 1", year: str = "2026", grade: str = "GRADE 7"):
+def academics(request: Request, term: str = "Term 1", year: str = "2026", grade: str = "GRADE 7", tab: str = "performance"):
     if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
     is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
     user_email = request.session.get("user_email", SUPER_ADMIN_EMAIL)
     role_display = "Super Admin" if is_super else "School Admin"
     school_name = request.session.get("school_name", "DaviSchool")
-    if is_super: school_name = request.session.get("school_name", "DaviSchool")
-
-    # Get actual grades from students table for dropdown
     con=get_db(); cur=con.cursor()
     cur.execute("SELECT DISTINCT class FROM students WHERE school_id=?", (request.session.get("school_id",0),))
     classes_from_db = [r["class"] for r in cur.fetchall() if r["class"]]
     con.close()
     if not classes_from_db: classes_from_db = ["GRADE 7", "GRADE 8", "GRADE 9"]
-
     grades_options = "".join([f"<option value='{g}' {'selected' if g==grade else ''}>{g}</option>" for g in classes_from_db])
 
-    body=f"""
-    <div class='content'>
-        <h1 style='font-size:26px; font-weight:700'>Academic Analytics</h1>
-        <div style='color:#64748b; font-size:14px; margin:6px 0 18px'>Performance insights across subjects, teachers, and students</div>
-
-        <div style='display:flex; gap:12px; margin-bottom:20px'>
-            <select id='termSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
-                <option {'selected' if term=='Term 1' else ''}>Term 1</option><option {'selected' if term=='Term 2' else ''}>Term 2</option><option {'selected' if term=='Term 3' else ''}>Term 3</option>
-            </select>
-            <select id='yearSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
-                <option {'selected' if year=='2024' else ''}>2024</option><option {'selected' if year=='2025' else ''}>2025</option><option {'selected' if year=='2026' else ''}>2026</option>
-            </select>
-            <select id='gradeSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:140px' onchange="updateFilters()">
-                {grades_options}
-            </select>
-        </div>
-
+    # Tabs header
+    tab_links = f"""
         <div style='display:flex; gap:24px; border-bottom:1px solid #e2e8f0; margin-bottom:20px; font-size:14px'>
-            <div style='padding:10px 0; border-bottom:2px solid #0f172a; font-weight:600'>📈 Performance Trends</div>
-            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>📖 Subject Analysis</a>
-            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>🎓 Teacher Performance</a>
-            <a href='#' style='padding:10px 0; color:#64748b; text-decoration:none'>👥 Student Tracking</a>
+            <a href='/academics?term={term}&year={year}&grade={grade}&tab=performance' style='padding:10px 0; text-decoration:none; {"border-bottom:2px solid #0f172a; font-weight:600; color:#0f172a" if tab=="performance" else "color:#64748b"}'>📈 Performance Trends</a>
+            <a href='/academics?term={term}&year={year}&grade={grade}&tab=subject' style='padding:10px 0; text-decoration:none; {"border-bottom:2px solid #0f172a; font-weight:600; color:#0f172a" if tab=="subject" else "color:#64748b"}'>📖 Subject Analysis</a>
+            <a href='/academics?term={term}&year={year}&grade={grade}&tab=teacher' style='padding:10px 0; text-decoration:none; color:#64748b'>🎓 Teacher Performance</a>
+            <a href='/academics?term={term}&year={year}&grade={grade}&tab=student' style='padding:10px 0; text-decoration:none; color:#64748b'>👥 Student Tracking</a>
         </div>
+    """
 
-        <!-- SCROLL PART 1 - Class Performance Over Time -->
+    if tab == "subject":
+        content_cards = f"""
+        <!-- Subject Analysis Tab - YOUR NEW SCREENSHOTS -->
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>📊 Subject Performance Matrix</div>
+            <div style='height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div>
+                <div style='font-size:14px'>No subject performance data available</div>
+                <div style='font-size:12px; margin-top:4px'>Term: {term} | Year: {year} | Grade: {grade}</div>
+            </div>
+        </div>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
+            <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>👥 Gender Gap Analysis</div>
+            <div style='height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
+                <div style='font-size:36px; margin-bottom:12px'>📊</div>
+                <div style='font-size:14px'>No gender gap data available</div>
+            </div>
+        </div>
+        """
+    else:
+        # Performance Trends tab (default)
+        content_cards = f"""
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
             <div style='font-weight:600; margin-bottom:20px; display:flex; gap:8px; align-items:center'>📊 Class Performance Over Time</div>
             <div style='height:240px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8'>
@@ -222,8 +225,6 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
                 <div style='font-size:12px; margin-top:4px'>Term: {term} | Year: {year} | Grade: {grade}</div>
             </div>
         </div>
-
-        <!-- SCROLL PART 2 - Yearly Progression - YOUR 2ND PICTURE -->
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
             <div style='font-weight:600; margin-bottom:16px; display:flex; gap:8px; align-items:center'>📈 Yearly Progression</div>
             <div style='position:relative; height:280px; padding-left:40px'>
@@ -245,8 +246,6 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
                 </div>
             </div>
         </div>
-
-        <!-- SCROLL PART 3 - Subject Trends Across Terms - YOUR 3RD PICTURE -->
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; margin-bottom:20px'>
             <div style='font-weight:600; margin-bottom:16px; display:flex; gap:8px; align-items:center'>📖 Subject Trends Across Terms</div>
             <div style='position:relative; height:340px; padding-left:40px'>
@@ -272,19 +271,35 @@ def academics(request: Request, term: str = "Term 1", year: str = "2026", grade:
                     <span style='color:#0ea5e9'>◉ AGRICULTURE</span><span style='color:#22c55e'>◉ CHRISTIAN_RELIGIOUS_EDUCATION</span><span style='color:#ef4444'>◉ CREATIVE_ARTS</span><span style='color:#f59e0b'>◉ ENGLISH</span>
                     <span style='color:#06b6d4'>◉ INTERGRATED_SCIENCE</span><span style='color:#8b5cf6'>◉ KISWAHILI</span><span style='color:#ec4899'>◉ MATHEMATICS</span><span style='color:#84cc16'>◉ PRE-TECHNICAL_STUDIES</span><span style='color:#f97316'>◉ SOCIAL_STUDIES</span>
                 </div>
-                <div style='display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px; font-size:10px; color:#64748b'>
-                    <span>AGRICULTURE: 0.0 →</span><span>CHRISTIAN_RELIGIOUS_EDUCATION: 0.0 →</span><span>CREATIVE ARTS: 0.0 →</span><span>ENGLISH: 0.0 →</span><span>INTERGRATED_SCIENCE: 0.0 →</span>
-                    <span>KISWAHILI: 0.0 →</span><span>MATHEMATICS: 0.0 →</span><span>PRE-TECHNICAL_STUDIES: 0.0 →</span><span>SOCIAL_STUDIES: 0.0 →</span>
-                </div>
             </div>
         </div>
+        """
+
+    body=f"""
+    <div class='content'>
+        <h1 style='font-size:26px; font-weight:700'>Academic Analytics</h1>
+        <div style='color:#64748b; font-size:14px; margin:6px 0 18px'>Performance insights across subjects, teachers, and students</div>
+        <div style='display:flex; gap:12px; margin-bottom:20px'>
+            <select id='termSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
+                <option {'selected' if term=='Term 1' else ''}>Term 1</option><option {'selected' if term=='Term 2' else ''}>Term 2</option><option {'selected' if term=='Term 3' else ''}>Term 3</option>
+            </select>
+            <select id='yearSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:120px' onchange="updateFilters()">
+                <option {'selected' if year=='2024' else ''}>2024</option><option {'selected' if year=='2025' else ''}>2025</option><option {'selected' if year=='2026' else ''}>2026</option>
+            </select>
+            <select id='gradeSel' style='padding:10px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; min-width:140px' onchange="updateFilters()">
+                {grades_options}
+            </select>
+        </div>
+        {tab_links}
+        {content_cards}
     </div>
     <script>
     function updateFilters(){{
         var t=document.getElementById('termSel').value;
         var y=document.getElementById('yearSel').value;
         var g=document.getElementById('gradeSel').value;
-        window.location='/academics?term='+encodeURIComponent(t)+'&year='+encodeURIComponent(y)+'&grade='+encodeURIComponent(g);
+        var currentTab='{tab}';
+        window.location='/academics?term='+encodeURIComponent(t)+'&year='+encodeURIComponent(y)+'&grade='+encodeURIComponent(g)+'&tab='+currentTab;
     }}
     </script>
     """
