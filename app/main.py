@@ -43,7 +43,6 @@ def login_page(error_msg=""):
     <button class='btn-sign' type='submit'>Sign In</button></form><div class='bottom-link'>Don't have account? <a href='/register'>Register your School</a></div></div></body></html>"""
 
 def wrap(school_name, body_html, user_email, user_role_display):
-    # user_role_display = Super Admin for you, School Admin for others
     return f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     *{{box-sizing:border-box}} body{{margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial; background:#fcfcfc; display:flex}}
     .sidebar{{width:270px; background:white; border-right:1px solid #e2e8f0; height:100vh; position:fixed; overflow-y:auto}}
@@ -57,7 +56,6 @@ def wrap(school_name, body_html, user_email, user_role_display):
     .grid4{{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px}} .card{{background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px; display:flex; justify-content:space-between}}
     .card h4{{margin:0; color:#64748b; font-size:13px; font-weight:500}} .card h2{{margin:6px 0 4px; font-size:26px; font-weight:700}} .card small{{color:#94a3b8; font-size:12px}}
     .icon-box{{width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px}}
-    /* Profile dropdown */
     .profile-wrap{{position:relative}} .profile-btn{{display:flex; align-items:center; gap:8px; cursor:pointer; border:none; background:transparent}} 
     .avatar{{width:36px; height:36px; background:#f1f5f9; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700}}
     .dropdown{{position:absolute; top:45px; right:0; width:250px; background:white; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.1); display:none; z-index:100; overflow:hidden}}
@@ -71,8 +69,7 @@ def wrap(school_name, body_html, user_email, user_role_display):
     <a class='nav-item' href='/students'>🎓 Students Manager</a><a class='nav-item' href='/teachers'>👥 Staff Manager</a><a class='nav-item'>📖 Academic Manager</a><a class='nav-item' href='/classes'>🗓️ Timetable</a><a class='nav-item'>🎥 Online Classes</a></div>
     <div style='padding:14px; border-top:1px solid #f1f5f9; margin-top:20px; display:flex; gap:10px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700'>DO</div><div><div style='font-size:13px; font-weight:600'>Davis Ouma</div><div style='font-size:11px; color:#64748b'>{user_email}</div></div></div></div>
     <div class='main'><div class='topbar'><div><b style='font-size:16px'>{school_name.upper()}</b> <small style='color:#64748b'>(Code: DS-2026)</small></div>
-    <div style='display:flex; gap:16px; align-items:center'>
-        <span>☀️</span><span>🔔</span><span>❓</span>
+    <div style='display:flex; gap:16px; align-items:center'><span>☀️</span><span>🔔</span><span>❓</span>
         <div class='profile-wrap'>
             <button class='profile-btn' onclick='document.getElementById("profileDrop").classList.toggle("show")'>
                 <div class='avatar'>DO</div>
@@ -86,8 +83,7 @@ def wrap(school_name, body_html, user_email, user_role_display):
                 <a class='drop-item logout' href='/logout'><span>↪</span> Log out</a>
             </div>
         </div>
-    </div>
-    </div>
+    </div></div>
     {body_html}</div>
     <script>window.onclick=function(e){{if(!e.target.closest('.profile-wrap')){{document.getElementById('profileDrop').classList.remove('show')}}}}</script>
     </body></html>"""
@@ -116,14 +112,11 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "school_id" not in request.session and request.session.get("role")!="super_admin": return RedirectResponse("/")
-    # Determine role display
     is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
     user_email = request.session.get("user_email", SUPER_ADMIN_EMAIL)
     role_display = "Super Admin" if is_super else "School Admin"
     school_name = request.session.get("school_name", "DaviSchool")
-    if is_super: school_name = request.session.get("school_name", "DaviSchool - Super Admin View")
-    con=get_db(); cur=con.cursor()
-    sid = request.session.get("school_id", 0)
+    con=get_db(); cur=con.cursor(); sid = request.session.get("school_id", 0)
     cur.execute("SELECT COUNT(*) as c FROM students WHERE school_id=?", (sid,)); sc=cur.fetchone()["c"] if sid else 0
     cur.execute("SELECT COUNT(*) as c FROM teachers WHERE school_id=?", (sid,)); tc=cur.fetchone()["c"] if sid else 0
     cur.execute("SELECT COUNT(*) as c FROM school_classes WHERE school_id=?", (sid,)); cc=cur.fetchone()["c"] if sid else 0
@@ -135,23 +128,10 @@ def dashboard(request: Request):
     max_val = max(boys, girls, 1)
     boy_h = int((boys/max_val)*140) if boys>0 else 8
     girl_h = int((girls/max_val)*140) if girls>0 else 8
-
-    body=f"""
-    <div class='content'>
+    body=f"""<div class='content'>
         <div style='display:flex; justify-content:space-between; align-items:center'><div><h1>School Overview</h1><div class='welcome'>Welcome back, Davis! Here's what's happening at {school_name}.</div></div><button style='border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600'>✨ Getting Started</button></div>
-        <div class='grid4'>
-            <div class='card'><div><h4>Total Students</h4><h2>{sc}</h2><small>{cc} classes</small></div><div class='icon-box' style='background:#e0f2fe'>🎓</div></div>
-            <div class='card'><div><h4>Total Staff</h4><h2>{tc}</h2><small>{tc} system users</small></div><div class='icon-box' style='background:#f3e8ff'>👥</div></div>
-            <div class='card'><div><h4>Fee Collection</h4><h2>0%</h2><small>KES 0 of 0</small></div><div class='icon-box' style='background:#dcfce7'>💰</div></div>
-            <div class='card'><div><h4>Attendance Today</h4><h2>--</h2><small>Not marked yet</small></div><div class='icon-box' style='background:#fef9c3'>📅</div></div>
-        </div>
-        <div class='grid4'>
-            <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#e0f2fe; width:40px; height:40px'>📖</div><div><h4 style='color:#0f172a; font-weight:600'>Library</h4><small>0 books<br>0 issued, 0 overdue</small></div></div></div>
-            <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#fef9c3; width:40px; height:40px'>🚚</div><div><h4 style='color:#0f172a; font-weight:600'>Transport</h4><small>0 vehicles<br>0 routes</small></div></div></div>
-            <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#f3e8ff; width:40px; height:40px'>📦</div><div><h4 style='color:#0f172a; font-weight:600'>Inventory</h4><small>0 items<br>0 low stock, 0 out</small></div></div></div>
-            <div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#dcfce7; width:40px; height:40px'>💵</div><div><h4 style='color:#0f172a; font-weight:600'>Payroll</h4><small>0 runs<br>No runs yet</small></div></div></div>
-        </div>
-
+        <div class='grid4'><div class='card'><div><h4>Total Students</h4><h2>{sc}</h2><small>{cc} classes</small></div><div class='icon-box' style='background:#e0f2fe'>🎓</div></div><div class='card'><div><h4>Total Staff</h4><h2>{tc}</h2><small>{tc} system users</small></div><div class='icon-box' style='background:#f3e8ff'>👥</div></div><div class='card'><div><h4>Fee Collection</h4><h2>0%</h2><small>KES 0 of 0</small></div><div class='icon-box' style='background:#dcfce7'>💰</div></div><div class='card'><div><h4>Attendance Today</h4><h2>--</h2><small>Not marked yet</small></div><div class='icon-box' style='background:#fef9c3'>📅</div></div></div>
+        <div class='grid4'><div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#e0f2fe; width:40px; height:40px'>📖</div><div><h4 style='color:#0f172a; font-weight:600'>Library</h4><small>0 books<br>0 issued, 0 overdue</small></div></div></div><div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#fef9c3; width:40px; height:40px'>🚚</div><div><h4 style='color:#0f172a; font-weight:600'>Transport</h4><small>0 vehicles<br>0 routes</small></div></div></div><div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#f3e8ff; width:40px; height:40px'>📦</div><div><h4 style='color:#0f172a; font-weight:600'>Inventory</h4><small>0 items<br>0 low stock, 0 out</small></div></div></div><div class='card'><div style='display:flex; gap:12px'><div class='icon-box' style='background:#dcfce7; width:40px; height:40px'>💵</div><div><h4 style='color:#0f172a; font-weight:600'>Payroll</h4><small>0 runs<br>No runs yet</small></div></div></div></div>
         <div style='margin-top:28px; background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; max-width:700px; margin-left:auto; margin-right:auto'>
             <div style='display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px'><span style='color:#7c3aed'>👥</span> Students by Gender</div>
             <div style='color:#64748b; font-size:13px; margin:4px 0 16px'>Boys vs Girls enrollment per form</div>
@@ -168,7 +148,6 @@ def dashboard(request: Request):
                 <div style='background:#f8fafc; border-radius:10px; padding:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Girl:Boy Ratio</div><div style='font-weight:700; color:#0f172a; font-size:16px'>{ratio}</div></div>
             </div>
         </div>
-
         <div style='margin-top:24px; background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'>
             <div style='display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px'>📊 Cumulative Balances by Class</div>
             <div style='color:#64748b; font-size:13px; margin:4px 0 18px'>Current outstanding fee balances — Total: KES 0</div>
@@ -178,7 +157,6 @@ def dashboard(request: Request):
                 <div style='display:flex; align-items:center; justify-content:space-between; background:#f8fafc; border-radius:8px; padding:10px 14px'><div style='display:flex; gap:20px; align-items:center'><b style='width:70px'>GRADE 9</b><span style='background:white; border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:12px; color:#64748b'>0 students</span></div><b style='color:#dc2626; font-size:13px'>KES 0</b></div>
             </div>
         </div>
-
         <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px'>
             <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><div style='display:flex; align-items:center; gap:8px; font-weight:700'>🕒 Recent Activity</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Latest system activity</div><div style='height:150px; display:flex; flex-direction:column; gap:10px; font-size:13px'><div><div style='display:flex; justify-content:space-between'><span>Viewed: dashboard > overvi...</span><span style='background:#f1f5f9; padding:2px 8px; border-radius:10px; font-size:10px'>data_view</span></div><small style='color:#94a3b8'>Davis Ouma -- now</small></div></div></div>
             <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px'><div style='display:flex; align-items:center; gap:8px; font-weight:700'>🔴 Top Fee Defaulters</div><div style='color:#64748b; font-size:12px; margin:4px 0 14px'>Highest outstanding balances</div><div style='height:150px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px'>No defaulters</div></div>
@@ -229,15 +207,36 @@ def settings(request: Request):
     is_super = request.session.get("role")=="super_admin" or request.session.get("user_email")==SUPER_ADMIN_EMAIL
     role_display = "Super Admin" if is_super else "School Admin"
     user_email = request.session.get("user_email")
-    body=f"""<div class='content'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; max-width:500px'>
-    <h2>Settings</h2><p style='color:#64748b'>Manage your DaviSchool settings</p>
-    <div style='margin-top:20px; display:flex; flex-direction:column; gap:10px'>
-    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Email:</b> {user_email}</div>
-    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Role:</b> {role_display}</div>
-    <div style='padding:12px; background:#f8fafc; border-radius:8px'><b>Theme:</b> Light / Dark - Coming soon</div>
+    body=f"""
+    <div class='content'>
+        <h1 style='font-size:28px; font-weight:700; margin:0'>Settings</h1>
+        <div style='color:#64748b; font-size:15px; margin:6px 0 24px'>School configuration and system settings</div>
+
+        <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:18px'>
+            <a href='/settings/users' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>👥</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>User Management</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create, edit, and manage user accounts</div>
+            </div></a>
+            <a href='/settings/roles' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🛡️</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Roles & Permissions</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage user roles and access control</div>
+            </div></a>
+            <a href='/settings/school-profile' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🏫</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>School Profile</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Update school information and branding</div>
+            </div></a>
+            <a href='/settings/classes' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🎓</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Classes & Streams</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Manage class levels, streams, and teachers</div>
+            </div></a>
+            <a href='/settings/backup' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>💾</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Database Backup</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Create and manage database backups</div>
+            </div></a>
+            <a href='/settings/audit' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>📄</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Audit Trail</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Track system activities and user actions</div>
+            </div></a>
+            <a href='/settings/integrations' style='text-decoration:none; color:inherit'><div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:24px; height:180px; display:flex; flex-direction:column; justify-content:center; cursor:pointer'>
+                <div style='font-size:20px; color:#64748b; margin-bottom:12px'>🔌</div><div style='font-weight:700; font-size:16px; margin-bottom:6px'>Integrations</div><div style='color:#64748b; font-size:13px; line-height:1.4'>Bulk SMS gateway and M-Pesa payments</div>
+            </div></a>
+        </div>
     </div>
-    <div style='margin-top:20px'><a href='/dashboard' style='background:#2563eb; color:white; padding:10px 16px; border-radius:8px; text-decoration:none'>Back to Dashboard</a></div>
-    </div></div>"""
+    """
     return HTMLResponse(wrap("DaviSchool", body, user_email, role_display))
 
 @app.get("/super-admin", response_class=HTMLResponse)
