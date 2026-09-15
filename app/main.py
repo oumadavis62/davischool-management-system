@@ -1,210 +1,306 @@
+import sqlite3, os, hashlib
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
-import sqlite3, random
+from fastapi.responses import HTMLResponse, RedirectResponse
+from itsdangerous import URLSafeTimedSerializer
 from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-final-fixed-v1")
-SUPER_ADMIN = "oumadavis62@gmail.com"
-PERIODS = ["8:00-8:40","8:40-9:20","9:20-10:00","10:30-11:10","11:10-11:50","11:50-12:30","14:00-14:40","14:40-15:20"]
-DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"]
-ROLES = {
-    "school_admin": ["dashboard","students","classes","subjects","exams","marks","marksheets","ranking","analysis","reports","timetable","fees","sms","staff","profile"],
-    "deputy_principal": ["dashboard","students","classes","subjects","exams","marks","marksheets","ranking","analysis","reports","timetable","fees","sms","profile"],
-    "dos": ["dashboard","students","exams","marks","marksheets","ranking","analysis","reports","timetable","profile"],
-    "hod": ["dashboard","students","marks","marksheets","analysis","reports","timetable","profile"],
-    "teacher": ["dashboard","students","marks","marksheets","timetable","profile"],
-    "bursar": ["dashboard","students","fees","profile"],
-    "class_teacher": ["dashboard","students","marks","marksheets","timetable","profile"],
-}
-def has_perm(role, page):
-    if role == "super_admin": return True
-    return page in ROLES.get(role, [])
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY","davischool-secret-2026"))
+serializer = URLSafeTimedSerializer(os.getenv("SECRET_KEY","davischool-secret-2026"))
+DB = "davischool.db"
+
 def get_db():
-    con = sqlite3.connect("davischool.db")
-    con.row_factory = sqlite3.Row
-    return con
+    conn = sqlite3.connect(DB, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def init_db():
-    con = get_db(); cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, level TEXT, class_name TEXT, stream TEXT, class_teacher_id INTEGER, class_teacher_name TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, admission_no TEXT, name TEXT, class_id INTEGER, parent_phone TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, code TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, exam_id INTEGER, student_id INTEGER, subject_id INTEGER, score INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER, day TEXT, period TEXT, subject TEXT, teacher TEXT, teacher_id INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS pending_schools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, auth_code TEXT)")
-    cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
-    if not cur.fetchone():
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (SUPER_ADMIN,"DaviSchool@2026!","super_admin","Davis Ouma",0))
-    con.commit(); con.close()
+    conn = get_db(); c = conn.cursor()
+    c.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, code TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'school')")
+    c.execute("CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, stream TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, adm_no TEXT, name TEXT, class_id INTEGER)")
+    c.execute("CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, teacher TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year INTEGER)")
+    c.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER, day TEXT, period INTEGER, subject_id INTEGER, teacher TEXT)")
+    c.execute("SELECT * FROM schools WHERE code='ADMIN001'")
+    if not c.fetchone():
+        ph = hashlib.sha256("Admin@2026".encode()).hexdigest()
+        c.execute("INSERT INTO schools (name,code,password_hash,role) VALUES (?,?,?,?)", ("Admin","ADMIN001",ph,"admin"))
+    conn.commit(); conn.close()
+
 init_db()
-def get_school(req):
-    sid = req.session.get("school_id",0)
-    if sid==0 or req.session.get("role")=="super_admin": return None
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s=cur.fetchone(); con.close(); return s
-def school_header(school, name, active, role):
-    def nav(link, icon, label):
-        if not has_perm(role, link): return ""
-        style="background:#0f172a;color:white" if active==link else "color:#475569"
-        return f"<a href='/school/{link}' style='display:flex;gap:8px;padding:9px 11px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:3px;{style}'>{icon} {label}</a>"
-    staff=""
-    if role=="school_admin":
-        st="background:#0f172a;color:white" if active=="staff" else "color:#7c3aed"
-        staff=f"<a href='/school/staff' style='display:flex;gap:8px;padding:9px 11px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:3px;{st}'>👥 Staff</a>"
-    return f"<div style='display:flex;min-height:100vh'><div style='width:230px;background:white;border-right:1px solid #e2e8f0;padding:12px'><div style='padding:8px;border-bottom:1px solid #f1f5f9;margin-bottom:8px'><b>{school['name'][:18]}</b><div style='font-size:10px;color:#64748b'>{role}</div></div>{nav('dashboard','📊','Dashboard')}{nav('students','🎓','Students')}{nav('classes','🏫','Classes')}{nav('subjects','📚','Subjects')}{nav('exams','📝','Exams')}{nav('marks','✍️','Marks')}{nav('timetable','🗓️','Timetable ASC')}{nav('fees','💰','Fees')}{nav('sms','💬','SMS')}{staff}<a href='/logout' style='display:flex;gap:8px;padding:9px 11px;border-radius:8px;text-decoration:none;font-size:13px;color:#dc2626;margin-top:10px'>🚪 Logout</a></div><div style='flex:1;background:#f8fafc'><div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 14px;display:flex;justify-content:space-between'><b>DaviSchool - {role}</b><span style='font-size:11px;background:#ede9fe;color:#5b21b6;padding:4px 8px;border-radius:12px'>{name}</span></div>"
+def hash_pw(p): return hashlib.sha256(p.encode()).hexdigest()
+def check_pw(p,h): return hash_pw(p)==h
+def get_user(request: Request):
+    token = request.cookies.get("session")
+    if not token: return None
+    try: return serializer.loads(token, max_age=86400)
+    except: return None
 
-@app.get("/health")
-def health(): return PlainTextResponse("OK")
+DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"]
+PERIODS = [1,2,3,4,5,6,7,8]
+
+def layout(title, body, user=None):
+    nav=""
+    if user:
+        if user['role']=='admin':
+            nav='<a href="/dashboard">Dashboard</a> | <a href="/schools">Schools</a> | <a href="/logout">Logout</a>'
+        else:
+            nav='<a href="/dashboard">Dashboard</a> | <a href="/students">Students</a> | <a href="/classes">Classes</a> | <a href="/subjects">Subjects</a> | <a href="/exams">Exams</a> | <a href="/timetable">Timetable ASC</a> | <a href="/logout">Logout</a>'
+    html = "<html><head><title>" + title + "</title><style>"
+    html += "body{font-family:Arial;margin:0;background:#f4f6f9}.top{background:#1a237e;color:white;padding:12px 20px;display:flex;justify-content:space-between}.top a{color:white;text-decoration:none;margin-right:12px}.container{padding:20px}.card{background:white;padding:16px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.1);margin-bottom:16px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:6px;font-size:14px} th{background:#e8eaf6}.btn{background:#3949ab;color:white;padding:6px 12px;border:none;border-radius:4px;cursor:pointer;text-decoration:none}.btn-red{background:#c62828}.wall td{height:52px;min-width:110px}.slot{background:#e3f2fd;border-radius:4px;padding:3px;font-size:12px}.conflict{background:#ffcdd2;border:1px solid red} @media print{.top,.no-print{display:none}}"
+    html += "</style></head><body><div class='top'><div><b>DaviSchool</b></div><div>" + nav + "</div></div><div class='container'><h2>" + title + "</h2>" + body + "</div></body></html>"
+    return html
+
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return "<html><body style='font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8fafc'><div style='background:white;padding:28px;border-radius:12px;border:1px solid #e2e8f0;width:340px'><h2 style='text-align:center'>Davischool</h2><form method='post' action='/login'><input name='email' placeholder='Email' required style='width:100%;padding:10px;margin:5px 0;border:1px solid #e2e8f0;border-radius:8px'><input name='password' type='password' placeholder='Password' required style='width:100%;padding:10px;margin:5px 0 14px;border:1px solid #e2e8f0;border-radius:8px'><button style='width:100%;background:#0f172a;color:white;padding:10px;border:none;border-radius:8px'>Sign In</button></form></div></body></html>"
+def home(): return RedirectResponse("/login")
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    body='<div class="card" style="max-width:400px;margin:auto"><form method="post" action="/login"><label>Code</label><br><input name="code" required style="width:100%;padding:8px"><br><br><label>Password</label><br><input type="password" name="password" required style="width:100%;padding:8px"><br><br><button class="btn" type="submit">Login</button></form></div>'
+    return HTMLResponse(layout("Login", body))
+
 @app.post("/login")
-def login(request: Request, email: str = Form(...), password: str = Form(...)):
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u=cur.fetchone(); con.close()
-    if not u: return HTMLResponse("Invalid <a href='/'>Back</a>")
-    request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0
-    if u["role"]!="super_admin": return RedirectResponse("/school/dashboard", status_code=303)
-    return RedirectResponse("/dashboard", status_code=303)
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/school/dashboard")
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT COUNT(*) c FROM schools"); total=cur.fetchone()["c"]; cur.execute("SELECT * FROM schools ORDER BY id DESC LIMIT 5"); recent=cur.fetchall(); con.close()
-    rows="".join([f"<tr><td style='padding:8px;border-bottom:1px solid #eee'>{s['name']}</td><td style='padding:8px;border-bottom:1px solid #eee'>{s['location']}</td></tr>" for s in recent]) or "<tr><td colspan=2 style='padding:12px;text-align:center'>No schools</td></tr>"
-    return HTMLResponse(f"<html><body style='margin:0;font-family:Arial;background:#f8fafc'><div style='background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0'><b>🏫 Super Admin - {total} Schools</b></div><div style='padding:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px'><table style='width:100%;border-collapse:collapse'><tr style='background:#f8fafc'><th style='padding:8px;text-align:left'>Name</th><th>Location</th></tr>{rows}</table></div><div style='margin-top:12px'><a href='/schools/manage' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none'>Manage Schools</a></div></div></body></html>")
-
-@app.get("/school/dashboard", response_class=HTMLResponse)
-def school_dashboard(request: Request):
-    school=get_school(request)
-    if not school: return RedirectResponse("/dashboard")
-    name=request.session.get("name",""); role=request.session.get("role","")
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc=cur.fetchone()["c"]; con.close()
-    html=school_header(school,name,"dashboard",role)
-    html+=f"<div style='padding:14px'><h3>Dashboard - {role}</h3><div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:12px'>Students: {sc} | ASC Timetable Ready</div></div></div></div>"
-    return HTMLResponse(f"<html><body style='margin:0;font-family:Arial'>{html}</body></html>")
-
-@app.get("/school/timetable", response_class=HTMLResponse)
-def timetable_page(request: Request, class_id: str = "", teacher_id: str = "", view: str = "class", error: str = ""):
-    if not has_perm(request.session.get("role",""), "timetable"): return RedirectResponse("/school/dashboard")
-    school=get_school(request); con=get_db(); cur=con.cursor()
-    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes=cur.fetchall()
-    cur.execute("SELECT id, full_name FROM users WHERE school_id=? AND role!='school_admin' ORDER BY full_name", (school["id"],)); teachers=cur.fetchall()
-    cur.execute("SELECT t.*, c.name as cname FROM timetable t LEFT JOIN classes c ON t.class_id=c.id WHERE t.school_id=?", (school["id"],)); all_tt=cur.fetchall()
-    cur.execute("SELECT name FROM subjects WHERE school_id=?", (school["id"],)); subjects=cur.fetchall()
-    con.close()
-    if not class_id and classes: class_id=str(classes[0]["id"])
-    if not teacher_id and teachers: teacher_id=str(teachers[0]["id"])
-    class_opts="".join([f"<option value='{c['id']}' {'selected' if str(c['id'])==class_id else ''}>{c['name']}</option>" for c in classes])
-    teacher_opts="".join([f"<option value='{t['id']}' {'selected' if str(t['id'])==teacher_id else ''}>{t['full_name']}</option>" for t in teachers])
-    subject_opts="".join([f"<option value='{s['name']}'>{s['name']}</option>" for s in subjects])
-    sel_teacher_name=""
-    for t in teachers:
-        if str(t["id"])==teacher_id: sel_teacher_name=t["full_name"]
-    cmap={}
-    for e in all_tt:
-        if str(e["class_id"])==str(class_id): cmap[(e["day"], e["period"])]=e
-    grid=""
-    for p in PERIODS:
-        row=""
-        for d in DAYS:
-            en=cmap.get((d,p))
-            if en: row+=f"<td style='padding:5px;border:1px solid #e2e8f0;background:#dbeafe;text-align:center;font-size:11px'><b>{en['subject']}</b><br>{en['teacher'][:8]}<br><a href='/school/timetable/delete/{en['id']}' style='color:#dc2626;font-size:10px'>x</a></td>"
-            else: row+="<td style='padding:5px;border:1px solid #f1f5f9;text-align:center;color:#cbd5e1'>-</td>"
-        grid+=f"<tr><td style='padding:6px;border:1px solid #e2e8f0;background:#f8fafc;font-size:11px'>{p}</td>{row}</tr>"
-    tmap={}
-    for e in all_tt:
-        if e["teacher"]==sel_teacher_name or str(e["teacher_id"])==teacher_id: tmap[(e["day"], e["period"])]=e
-    tgrid=""
-    for p in PERIODS:
-        row=""
-        for d in DAYS:
-            en=tmap.get((d,p))
-            if en: row+=f"<td style='padding:5px;border:1px solid #e2e8f0;background:#ede9fe;text-align:center;font-size:11px'><b>{en['subject']}</b><br>{en['cname'] or ''}</td>"
-            else: row+="<td style='padding:5px;border:1px solid #f1f5f9;text-align:center;color:#cbd5e1'>-</td>"
-        tgrid+=f"<tr><td style='padding:6px;border:1px solid #e2e8f0;background:#f8fafc;font-size:11px'>{p}</td>{row}</tr>"
-    err=f"<div style='background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:8px;border-radius:6px;margin-bottom:10px'>{error}</div>" if error else ""
-    header_days="".join([f"<th style='padding:6px;border:1px solid #1e293b;font-size:11px'>{d}</th>" for d in DAYS])
-    if view=="teacher":
-        main=f"<div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px;overflow-x:auto'><div style='display:flex;justify-content:space-between;margin-bottom:8px'><b>Teacher: {sel_teacher_name}</b><form method='get'><input type='hidden' name='view' value='teacher'><select name='teacher_id' onchange='this.form.submit()' style='padding:5px;border:1px solid #e2e8f0;border-radius:6px'>{teacher_opts}</select></form></div><table style='width:100%;border-collapse:collapse;min-width:600px'><tr style='background:#5b21b6;color:white'><th style='padding:6px;border:1px solid #4c1d95;font-size:11px'>Period</th>{header_days}</tr>{tgrid}</table></div>"
-    else:
-        main=f"<div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px;overflow-x:auto'><div style='display:flex;justify-content:space-between;margin-bottom:8px'><b>Class WallMaster ASC</b><div style='display:flex;gap:6px'><form method='get'><input type='hidden' name='view' value='class'><select name='class_id' onchange='this.form.submit()' style='padding:5px;border:1px solid #e2e8f0;border-radius:6px'>{class_opts}</select></form><a href='/school/timetable/print?class_id={class_id}' target='_blank' style='background:#0f172a;color:white;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:11px'>Print</a></div></div><table style='width:100%;border-collapse:collapse;min-width:600px'><tr style='background:#0f172a;color:white'><th style='padding:6px;border:1px solid #1e293b;font-size:11px'>Period</th>{header_days}</tr>{grid}</table></div>"
-    html=school_header(school, request.session.get("name",""), "timetable", request.session.get("role",""))
-    html+=f"<div style='padding:12px'>{err}<div style='display:flex;gap:6px;margin-bottom:10px'><a href='/school/timetable?view=class&class_id={class_id}' style='padding:6px 10px;border-radius:6px;text-decoration:none;font-size:12px;background:#0f172a;color:white'>Class WallMaster</a><a href='/school/timetable?view=teacher&teacher_id={teacher_id}' style='padding:6px 10px;border-radius:6px;text-decoration:none;font-size:12px;background:white;border:1px solid #e2e8f0'>Teacher View</a></div><div style='display:grid;grid-template-columns:1fr 320px;gap:12px'><div>{main}</div><div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px;position:sticky;top:10px'><b>Add Lesson - ASC Checker</b><form method='post' action='/school/timetable/add' style='display:flex;flex-direction:column;gap:8px;margin-top:8px'><select name='class_id' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Class *</option>{class_opts}</select><select name='day' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Day *</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select><select name='period' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Period *</option>{''.join([f'<option>{p}</option>' for p in PERIODS])}</select><select name='subject' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Subject *</option>{subject_opts}</select><select name='teacher_id' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Teacher *</option>{teacher_opts}</select><button style='background:#0f172a;color:white;padding:9px;border:none;border-radius:6px'>Add - Check Conflict</button></form></div></div></div></div></div>"
-    return HTMLResponse(f"<html><body style='margin:0;font-family:Arial;background:#f8fafc'>{html}</body></html>")
-
-@app.post("/school/timetable/add")
-def add_tt(request: Request, class_id: int = Form(...), day: str = Form(...), period: str = Form(...), subject: str = Form(...), teacher_id: int = Form(...)):
-    school=get_school(request); con=get_db(); cur=con.cursor()
-    cur.execute("SELECT full_name FROM users WHERE id=?", (teacher_id,)); t=cur.fetchone(); tname=t["full_name"] if t else f"Teacher {teacher_id}"
-    cur.execute("SELECT * FROM timetable WHERE school_id=? AND class_id=? AND day=? AND period=?", (school["id"], class_id, day, period))
-    if cur.fetchone(): con.close(); return RedirectResponse(f"/school/timetable?error=Class busy at {day} {period}&view=class&class_id={class_id}", status_code=303)
-    cur.execute("SELECT * FROM timetable WHERE school_id=? AND day=? AND period=? AND (teacher_id=? OR teacher=?)", (school["id"], day, period, teacher_id, tname))
-    if cur.fetchone(): con.close(); return RedirectResponse(f"/school/timetable?error=Teacher {tname} busy at {day} {period}&view=teacher&teacher_id={teacher_id}", status_code=303)
-    cur.execute("INSERT INTO timetable (school_id, class_id, day, period, subject, teacher, teacher_id) VALUES (?,?,?,?,?,?,?)", (school["id"], class_id, day, period, subject, tname, teacher_id)); con.commit(); con.close()
-    return RedirectResponse(f"/school/timetable?view=class&class_id={class_id}", status_code=303)
-
-@app.get("/school/timetable/delete/{tid}")
-def del_tt(tid: int, request: Request):
-    school=get_school(request); con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM timetable WHERE id=? AND school_id=?", (tid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/timetable", status_code=303)
-
-@app.get("/school/timetable/print")
-def print_tt(request: Request, class_id: str = ""):
-    school=get_school(request); con=get_db(); cur=con.cursor()
-    cur.execute("SELECT * FROM classes WHERE id=?", (class_id,)); cls=cur.fetchone()
-    if not cls: cur.execute("SELECT * FROM classes WHERE school_id=? LIMIT 1", (school["id"],)); cls=cur.fetchone()
-    if not cls: con.close(); return HTMLResponse("No class")
-    cur.execute("SELECT * FROM timetable WHERE class_id=?", (cls["id"],)); entries=cur.fetchall(); con.close()
-    mp={(e["day"], e["period"]): e for e in entries}
-    rows=""
-    for p in PERIODS:
-        cells=""
-        for d in DAYS:
-            e=mp.get((d,p))
-            cells+=f"<td style='padding:8px;border:2px solid #000;text-align:center'><b>{e['subject'] if e else '-'}</b><br>{e['teacher'] if e else ''}</td>" if e else "<td style='padding:8px;border:2px solid #000;text-align:center'>-</td>"
-        rows+=f"<tr><td style='padding:8px;border:2px solid #000;background:#f1f5f9'>{p}</td>{cells}</tr>"
-    header="".join([f"<th style='padding:8px;border:2px solid #000'>{d}</th>" for d in DAYS])
-    return HTMLResponse(f"<html><body style='font-family:Arial;padding:16px'><h2 style='text-align:center'>{school['name']} - {cls['name']} WallMaster</h2><table style='width:100%;border-collapse:collapse;border:3px solid #000'><tr style='background:#000;color:white'><th style='padding:8px;border:2px solid #000'>Period</th>{header}</tr>{rows}</table><div style='text-align:right;margin-top:12px'><button onclick='window.print()' style='background:#000;color:white;padding:8px 16px;border:none;border-radius:6px'>Print</button></div></body></html>")
-
-@app.get("/schools/manage", response_class=HTMLResponse)
-def manage_schools(request: Request, pending_id: str = "", success: str = "", new_pass: str = "", school_email: str = "", school_name: str = ""):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/school/dashboard")
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools=cur.fetchall(); cur.execute("SELECT * FROM users WHERE role='school_admin'"); users=cur.fetchall(); con.close()
-    users_by={u["school_id"]: u for u in users}
-    banner=f"<div style='background:#dcfce7;padding:10px;border-radius:8px;margin-bottom:10px'><b>{school_name} added!</b> User: {school_email} Pass: <b>{new_pass}</b></div>" if success=="added" else "<div style='background:#fef3c7;padding:10px;border-radius:8px;margin-bottom:10px'>Code sent</div>" if success=="code_sent" else ""
-    rows="".join([f"<tr><td style='padding:8px;border-bottom:1px solid #eee'>{s['name']}<div style='font-size:10px'>{s['code']}</div></td><td style='padding:8px;border-bottom:1px solid #eee'>{s['email']}</td><td style='padding:8px;border-bottom:1px solid #eee'>{s['location']}</td><td style='padding:8px;border-bottom:1px solid #eee'>{(users_by.get(s['id']) or {}).get('email','-') if isinstance(users_by.get(s['id']), dict) else (users_by.get(s['id'])['email'] if users_by.get(s['id']) else s['email'])}</td><td style='padding:8px;border-bottom:1px solid #eee'><a href='/schools/delete/{s['id']}' style='color:#dc2626'>Delete</a></td></tr>" for s in schools]) or "<tr><td colspan=5 style='padding:16px;text-align:center'>No schools</td></tr>"
-    verify=""
-    if pending_id:
-        con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,)); pending=cur.fetchone(); con.close()
-        if pending: verify=f"<div style='background:#fffbeb;border:1px solid #f59e0b;padding:10px;border-radius:8px;margin-bottom:10px'><b>Code for {pending['name']}: {pending['auth_code']}</b><form method='post' action='/verify-school-code' style='display:flex;gap:6px;margin-top:6px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='Enter code' required style='flex:1;padding:6px;border:1px solid #e2e8f0;border-radius:6px'><button style='background:#0f172a;color:white;padding:6px 10px;border:none;border-radius:6px'>Verify</button></form></div>"
-    return HTMLResponse(f"<html><body style='margin:0;font-family:Arial;background:#f8fafc'><div style='background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0'><b>🏫 Manage Schools</b> <a href='/dashboard' style='margin-left:12px'>Dashboard</a></div><div style='padding:12px;display:grid;grid-template-columns:1fr 320px;gap:12px'><div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px;overflow-x:auto'>{banner}{verify}<table style='width:100%;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:8px;text-align:left'>School</th><th>Contact</th><th>Location</th><th>Username</th><th>Action</th></tr>{rows}</table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:12px'><b>Register School</b><form method='post' action='/register-school' style='display:flex;flex-direction:column;gap:6px;margin-top:8px'><input name='school_name' placeholder='School Name *' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><input name='school_email' placeholder='Admin Email *' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><input name='location' placeholder='Location *' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><input name='phone' placeholder='Phone *' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><input name='principal' placeholder='Principal *' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><select name='school_type' required style='padding:8px;border:1px solid #e2e8f0;border-radius:6px'><option value=''>Type *</option><option>Primary</option><option>Secondary</option></select><button style='background:#0f172a;color:white;padding:8px;border:none;border-radius:6px'>Send Code & Create</button></form></div></div></body></html>")
-
-@app.post("/register-school")
-def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
-    auth_code=str(random.randint(100000,999999)); con=get_db(); cur=con.cursor(); cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,auth_code) VALUES (?,?,?,?,?,?,?)", (school_name.upper(), school_email, location, phone, principal, school_type, auth_code)); pid=cur.lastrowid; con.commit(); con.close(); return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pid}", status_code=303)
-
-@app.post("/verify-school-code")
-def verify_code(pending_id: str = Form(...), auth_code: str = Form(...)):
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,)); pending=cur.fetchone()
-    if not pending or pending["auth_code"]!=auth_code.strip(): con.close(); return HTMLResponse(f"Wrong code <a href='/schools/manage?pending_id={pending_id}'>Try again</a>")
-    code=str(random.randint(10000,99999)); upass=f"{pending['name'][:4].upper()}@{random.randint(1000,9999)}!"
-    cur.execute("INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)", (pending["name"], pending["email"], code, pending["location"], pending["phone"], pending["principal"], pending["school_type"])); sid=cur.lastrowid
-    cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (pending["email"], upass, "school_admin", pending["principal"], sid)); cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,)); con.commit(); con.close()
-    return RedirectResponse(f"/schools/manage?success=added&new_pass={upass}&school_email={pending['email']}&school_name={pending['name']}", status_code=303)
-
-@app.get("/schools/delete/{school_id}")
-def delete_school(school_id: int, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM schools WHERE id=?", (school_id,)); cur.execute("DELETE FROM users WHERE school_id=?", (school_id,)); con.commit(); con.close(); return RedirectResponse("/schools/manage", status_code=303)
-
-@app.get("/school/{page}", response_class=HTMLResponse)
-def generic(page: str, request: Request):
-    school=get_school(request)
-    if not school: return RedirectResponse("/dashboard")
-    html=school_header(school, request.session.get("name",""), page, request.session.get("role",""))
-    html+=f"<div style='padding:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:20px;text-align:center'><h3>{page.title()} - Working</h3><p>Go to Timetable ASC - now fixed and deploys</p><a href='/school/timetable' style='background:#0f172a;color:white;padding:8px 14px;border-radius:6px;text-decoration:none'>Open ASC Timetable</a></div></div></div></div>"
-    return HTMLResponse(f"<html><body style='margin:0;font-family:Arial;background:#f8fafc'>{html}</body></html>")
+def do_login(request: Request, code: str = Form(...), password: str = Form(...)):
+    conn=get_db(); c=conn.cursor()
+    c.execute("SELECT * FROM schools WHERE code=?", (code,))
+    sch=c.fetchone()
+    if sch and check_pw(password, sch["password_hash"]):
+        data={"school_id":sch["id"],"role":sch["role"],"name":sch["name"],"code":sch["code"]}
+        token=serializer.dumps(data)
+        conn.close()
+        resp=RedirectResponse("/dashboard", status_code=302)
+        resp.set_cookie("session", token, httponly=True)
+        return resp
+    conn.close()
+    return HTMLResponse(layout("Login", '<div class="card"><p style="color:red">Invalid</p><a href="/login">Back</a></div>'))
 
 @app.get("/logout")
-def logout(request: Request):
-    request.session.clear(); return RedirectResponse("/", status_code=303)
+def logout():
+    r=RedirectResponse("/login"); r.delete_cookie("session"); return r
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor()
+    if user['role']=='admin':
+        c.execute("SELECT COUNT(*) as cnt FROM schools WHERE role!='admin'"); sc=c.fetchone()["cnt"]
+        body="<div class='card'>Admin - Schools: " + str(sc) + "</div><div class='card'><a class='btn' href='/schools'>Manage Schools</a></div>"
+    else:
+        sid=user['school_id']
+        c.execute("SELECT COUNT(*) as cnt FROM students WHERE school_id=?", (sid,)); stu=c.fetchone()["cnt"]
+        c.execute("SELECT COUNT(*) as cnt FROM classes WHERE school_id=?", (sid,)); cls=c.fetchone()["cnt"]
+        body="<div class='card'>Welcome " + user['name'] + " Students:" + str(stu) + " Classes:" + str(cls) + "</div>"
+        body+="<div class='card'><a class='btn' href='/students'>Students</a> <a class='btn' href='/classes'>Classes</a> <a class='btn' href='/subjects'>Subjects</a> <a class='btn' href='/exams'>Exams</a> <a class='btn' href='/timetable' style='background:#00897b'>Timetable ASC</a></div>"
+    conn.close()
+    return HTMLResponse(layout("Dashboard", body, user))
+
+@app.get("/schools", response_class=HTMLResponse)
+def schools_page(request: Request):
+    user=get_user(request)
+    if not user or user['role']!='admin': return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor(); c.execute("SELECT * FROM schools WHERE role!='admin'"); rows=c.fetchall()
+    tr=""
+    for r in rows: tr+="<tr><td>" + r['name'] + "</td><td>" + r['code'] + "</td><td><a href='/schools/delete/" + str(r['id']) + "' class='btn btn-red'>Del</a></td></tr>"
+    body="<div class='card'><form method='post' action='/schools/add'><input name='name' placeholder='School Name' required><input name='code' placeholder='Code' required><input name='password' placeholder='Password' required><button class='btn'>Add</button></form></div><div class='card'><table><tr><th>Name</th><th>Code</th><th>Act</th></tr>" + tr + "</table></div>"
+    conn.close()
+    return HTMLResponse(layout("Schools", body, user))
+
+@app.post("/schools/add")
+def schools_add(request: Request, name: str=Form(...), code: str=Form(...), password: str=Form(...)):
+    user=get_user(request)
+    if not user or user['role']!='admin': return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor()
+    try:
+        c.execute("INSERT INTO schools (name,code,password_hash,role) VALUES (?,?,?,?)", (name,code,hash_pw(password),"school")); conn.commit()
+    except: pass
+    conn.close()
+    return RedirectResponse("/schools", status_code=302)
+
+@app.get("/classes", response_class=HTMLResponse)
+def classes_page(request: Request):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    sid=user['school_id'] if user['role']!='admin' else None
+    conn=get_db(); c=conn.cursor()
+    if sid: c.execute("SELECT * FROM classes WHERE school_id=?", (sid,))
+    else: c.execute("SELECT * FROM classes")
+    rows=c.fetchall()
+    tr="".join(["<tr><td>" + r['name'] + " " + (r['stream'] or "") + "</td></tr>" for r in rows])
+    form=""
+    if user['role']!='admin': form="<div class='card'><form method='post' action='/classes/add'><input name='name' placeholder='Class' required><input name='stream' placeholder='Stream'><button class='btn'>Add</button></form></div>"
+    body=form + "<div class='card'><table><tr><th>Class</th></tr>" + tr + "</table></div>"
+    conn.close()
+    return HTMLResponse(layout("Classes", body, user))
+
+@app.post("/classes/add")
+def classes_add(request: Request, name: str=Form(...), stream: str=Form(...)):
+    user=get_user(request)
+    conn=get_db(); c=conn.cursor()
+    c.execute("INSERT INTO classes (school_id,name,stream) VALUES (?,?,?)", (user['school_id'],name,stream)); conn.commit(); conn.close()
+    return RedirectResponse("/classes", status_code=302)
+
+@app.get("/students", response_class=HTMLResponse)
+def students_page(request: Request):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor()
+    c.execute("SELECT s.*, c.name as cname FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=?", (user['school_id'],))
+    rows=c.fetchall()
+    tr="".join(["<tr><td>" + r['adm_no'] + "</td><td>" + r['name'] + "</td><td>" + (r['cname'] or "") + "</td></tr>" for r in rows])
+    c.execute("SELECT * FROM classes WHERE school_id=?", (user['school_id'],)); cls=c.fetchall()
+    opts="".join(["<option value='" + str(cl['id']) + "'>" + cl['name'] + " " + (cl['stream'] or "") + "</option>" for cl in cls])
+    body="<div class='card'><form method='post' action='/students/add'><input name='adm_no' placeholder='Adm No' required><input name='name' placeholder='Name' required><select name='class_id'>" + opts + "</select><button class='btn'>Add</button></form></div><div class='card'><table><tr><th>Adm</th><th>Name</th><th>Class</th></tr>" + tr + "</table></div>"
+    conn.close()
+    return HTMLResponse(layout("Students", body, user))
+
+@app.post("/students/add")
+def students_add(request: Request, adm_no: str=Form(...), name: str=Form(...), class_id: int=Form(...)):
+    user=get_user(request)
+    conn=get_db(); c=conn.cursor()
+    c.execute("INSERT INTO students (school_id,adm_no,name,class_id) VALUES (?,?,?,?)", (user['school_id'],adm_no,name,class_id)); conn.commit(); conn.close()
+    return RedirectResponse("/students", status_code=302)
+
+@app.get("/subjects", response_class=HTMLResponse)
+def subjects_page(request: Request):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor(); c.execute("SELECT * FROM subjects WHERE school_id=?", (user['school_id'],)); rows=c.fetchall()
+    tr="".join(["<tr><td>" + r['name'] + "</td><td>" + (r['teacher'] or "") + "</td></tr>" for r in rows])
+    body="<div class='card'><form method='post' action='/subjects/add'><input name='name' placeholder='Subject' required><input name='teacher' placeholder='Teacher'><button class='btn'>Add</button></form></div><div class='card'><table><tr><th>Subject</th><th>Teacher</th></tr>" + tr + "</table></div>"
+    conn.close()
+    return HTMLResponse(layout("Subjects", body, user))
+
+@app.post("/subjects/add")
+def subjects_add(request: Request, name: str=Form(...), teacher: str=Form(...)):
+    user=get_user(request)
+    conn=get_db(); c=conn.cursor()
+    c.execute("INSERT INTO subjects (school_id,name,teacher) VALUES (?,?,?)", (user['school_id'],name,teacher)); conn.commit(); conn.close()
+    return RedirectResponse("/subjects", status_code=302)
+
+@app.get("/exams", response_class=HTMLResponse)
+def exams_page(request: Request):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor(); c.execute("SELECT * FROM exams WHERE school_id=?", (user['school_id'],)); rows=c.fetchall()
+    tr="".join(["<tr><td>" + r['name'] + "</td><td>" + (r['term'] or "") + "</td></tr>" for r in rows])
+    body="<div class='card'><form method='post' action='/exams/add'><input name='name' placeholder='Exam' required><input name='term' placeholder='Term'><input name='year' placeholder='2026'><button class='btn'>Add</button></form></div><div class='card'><table><tr><th>Exam</th><th>Term</th></tr>" + tr + "</table></div>"
+    conn.close()
+    return HTMLResponse(layout("Exams", body, user))
+
+@app.post("/exams/add")
+def exams_add(request: Request, name: str=Form(...), term: str=Form(...), year: int=Form(...)):
+    user=get_user(request)
+    conn=get_db(); c=conn.cursor()
+    c.execute("INSERT INTO exams (school_id,name,term,year) VALUES (?,?,?,?)", (user['school_id'],name,term,year)); conn.commit(); conn.close()
+    return RedirectResponse("/exams", status_code=302)
+
+@app.get("/timetable", response_class=HTMLResponse)
+def timetable_page(request: Request, class_id: int = 0, view: str = "class"):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    sid=user['school_id']
+    conn=get_db(); c=conn.cursor()
+    c.execute("SELECT * FROM classes WHERE school_id=?", (sid,)); classes=c.fetchall()
+    if not classes:
+        conn.close()
+        return HTMLResponse(layout("Timetable ASC", '<div class="card">Add Classes first</div>', user))
+    if class_id==0: class_id=classes[0]['id']
+    c.execute("SELECT * FROM subjects WHERE school_id=?", (sid,)); subjects=c.fetchall()
+    sub_map={}
+    for s in subjects: sub_map[s['id']]=s
+    c.execute("SELECT day, period, teacher, COUNT(*) as cnt FROM timetable WHERE school_id=? GROUP BY day, period, teacher HAVING cnt>1", (sid,)); conflicts=c.fetchall()
+    conflict_set=set()
+    for cf in conflicts: conflict_set.add((cf['day'], cf['period'], cf['teacher']))
+    c.execute("SELECT * FROM timetable WHERE school_id=? AND class_id=?", (sid, class_id)); tts=c.fetchall()
+    tt_map={}
+    for t in tts: tt_map[(t['day'], t['period'])]=t
+    c.execute("SELECT * FROM timetable WHERE school_id=?", (sid,)); all_tt=c.fetchall()
+
+    class_opts=""
+    for cl in classes:
+        sel="selected" if cl['id']==class_id else ""
+        class_opts+="<option value='" + str(cl['id']) + "' " + sel + ">" + cl['name'] + " " + (cl['stream'] or "") + "</option>"
+    sub_opts=""
+    for s in subjects:
+        sub_opts+="<option value='" + str(s['id']) + "'>" + s['name'] + " (" + (s['teacher'] or "") + ")</option>"
+
+    grid="<table class='wall'><tr><th>Period</th>"
+    for d in DAYS: grid+="<th>" + d + "</th>"
+    grid+="</tr>"
+    for p in PERIODS:
+        grid+="<tr><th>P" + str(p) + "</th>"
+        for d in DAYS:
+            key=(d,p)
+            if key in tt_map:
+                rec=tt_map[key]
+                sub=sub_map.get(rec['subject_id'])
+                sname=sub['name'] if sub else "?"
+                teacher=rec['teacher']
+                is_conf=(d,p,teacher) in conflict_set
+                cls_name="slot conflict" if is_conf else "slot"
+                grid+="<td><div class='" + cls_name + "'><b>" + sname + "</b><br><small>" + teacher + "</small><br><a href='/timetable/delete/" + str(rec['id']) + "?class_id=" + str(class_id) + "' class='no-print' style='color:red;font-size:10px'>x</a></div></td>"
+            else:
+                grid+="<td></td>"
+        grid+="</tr>"
+    grid+="</table>"
+
+    teacher_html=""
+    if view=="teacher":
+        teacher_html="<table><tr><th>Teacher</th>"
+        for d in DAYS: teacher_html+="<th>" + d + "</th>"
+        teacher_html+="</tr>"
+        teachers=list(set([r['teacher'] for r in all_tt if r['teacher']]))
+        for tch in teachers:
+            teacher_html+="<tr><td><b>" + tch + "</b></td>"
+            for d in DAYS:
+                cells=[]
+                for r in all_tt:
+                    if r['teacher']==tch and r['day']==d:
+                        cl_name=next((cl['name']+" "+(cl['stream'] or "") for cl in classes if cl['id']==r['class_id']), "?")
+                        sub=sub_map.get(r['subject_id'])
+                        sname=sub['name'] if sub else "?"
+                        cells.append(sname+"@"+cl_name+" P"+str(r['period']))
+                teacher_html+="<td><small>" + "<br>".join(cells) + "</small></td>"
+            teacher_html+="</tr>"
+        teacher_html+="</table>"
+
+    view_sel_class="selected" if view=="class" else ""
+    view_sel_teacher="selected" if view=="teacher" else ""
+
+    body="<div class='card no-print'><form method='get' action='/timetable' style='display:flex;gap:8px;flex-wrap:wrap'><select name='class_id'>" + class_opts + "</select><select name='view'><option value='class' " + view_sel_class + ">Class WallMaster (ASC)</option><option value='teacher' " + view_sel_teacher + ">Teacher View</option></select><button class='btn'>View</button><button class='btn' type='button' onclick='window.print()' style='background:#2e7d32'>Print Poster</button></form></div>"
+    body+="<div class='card no-print'><h4>Add Slot (ASC Format)</h4><form method='post' action='/timetable/add'><input type='hidden' name='class_id' value='" + str(class_id) + "'><select name='day' required>"
+    for d in DAYS: body+="<option>" + d + "</option>"
+    body+="</select><select name='period' required>"
+    for p in PERIODS: body+="<option value='" + str(p) + "'>Period " + str(p) + "</option>"
+    body+="</select><select name='subject_id' required>" + sub_opts + "</select><input name='teacher' placeholder='Teacher Name' required><button class='btn'>Add Slot</button></form><small>If teacher double-booked same day+period, RED like aSc.</small></div>"
+    body+="<div class='card'><h3>ASC Timetable - Class ID " + str(class_id) + "</h3>"
+    if view=="class": body+=grid
+    else: body+=teacher_html
+    body+="</div>"
+    body+="<div class='card no-print'><h4>Conflicts: " + str(len(conflicts)) + "</h4><ul>"
+    if conflicts:
+        for cf in conflicts: body+="<li style='color:red'>" + cf['teacher'] + " double booked " + cf['day'] + " P" + str(cf['period']) + "</li>"
+    else: body+="<li>No conflicts</li>"
+    body+="</ul></div>"
+
+    conn.close()
+    return HTMLResponse(layout("Timetable ASC Format", body, user))
+
+@app.post("/timetable/add")
+def timetable_add(request: Request, class_id: int=Form(...), day: str=Form(...), period: int=Form(...), subject_id: int=Form(...), teacher: str=Form(...)):
+    user=get_user(request)
+    if not user: return RedirectResponse("/login")
+    conn=get_db(); c=conn.cursor()
+    c.execute("INSERT INTO timetable (school_id,class_id,day,period,subject_id,teacher) VALUES (?,?,?,?,?,?)", (user['school_id'],class_id,day,period,subject_id,teacher))
+    conn.commit(); conn.close()
+    return RedirectResponse("/timetable?class_id=" + str(class_id), status_code=302)
+
+@app.get("/timetable/delete/{tid}")
+def timetable_del(request: Request, tid: int, class_id: int=0):
+    user=get_user(request)
+    conn=get_db(); c=conn.cursor()
+    c.execute("DELETE FROM timetable WHERE id=? AND school_id=?", (tid, user['school_id']))
+    conn.commit(); conn.close()
+    return RedirectResponse("/timetable?class_id=" + str(class_id), status_code=302)
