@@ -5,7 +5,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import random
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-final-stable-2026")
+app.add_middleware(SessionMiddleware, secret_key="davischool-final-full-working-2026")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -87,7 +87,7 @@ def dashboard(request: Request):
     name = request.session.get("name","")
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
     role_disp = "Super Admin" if is_super else "School Admin"
-    add_school_btn = "<a href='/schools/manage' style='background:#0f172a; color:white; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px'>Manage Schools</a>" if is_super else ""
+    add_btn = "<a href='/schools/manage' style='background:#0f172a; color:white; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px'>Manage Schools</a>" if is_super else ""
     return HTMLResponse(f"""
 <html><body style='font-family:Arial; margin:0; background:#f8fafc'>
 <div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center'>
@@ -102,7 +102,7 @@ def dashboard(request: Request):
 <div style='padding:24px'>
 <h2>School Overview</h2>
 <p style='color:#64748b; font-size:13px'>Welcome {name} - {top}</p>
-<div style='margin-top:16px'>{add_school_btn} <a href='/profile?tab=personal' style='border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; margin-left:8px'>View Profile (3 Tabs)</a></div>
+<div style='margin-top:16px'>{add_btn} <a href='/profile?tab=personal' style='border:1px solid #e2e8f0; background:white; padding:8px 14px; border-radius:8px; text-decoration:none; font-size:12px; margin-left:8px'>View Profile (3 Tabs)</a></div>
 </div>
 </body></html>
 """)
@@ -130,12 +130,14 @@ def profile(request: Request, tab: str = "personal"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
 
     if tab=="security":
-        right = """
+        right = f"""
         <b>Security Settings</b><p style='font-size:11px; color:#64748b'>Manage your password</p>
-        <label style='font-size:12px; display:block; margin-top:14px'>Current Password</label><input type='password' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-        <label style='font-size:12px; display:block; margin-top:12px'>New Password</label><input type='password' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-        <label style='font-size:12px; display:block; margin-top:12px'>Confirm Password</label><input type='password' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-        <div style='text-align:right; margin-top:16px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px'>Update Password</button></div>
+        <form method='post' action='/update-password'>
+        <label style='font-size:12px; display:block; margin-top:14px'>Current Password</label><input name='current_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+        <label style='font-size:12px; display:block; margin-top:12px'>New Password</label><input name='new_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+        <label style='font-size:12px; display:block; margin-top:12px'>Confirm Password</label><input name='confirm_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+        <div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px; cursor:pointer'>Update Password</button></div>
+        </form>
         """
     elif tab=="activity":
         right = f"""
@@ -149,14 +151,16 @@ def profile(request: Request, tab: str = "personal"):
     else:
         right = f"""
         <b>Personal Information</b><p style='font-size:11px; color:#64748b'>Update your name, email, and phone number</p>
-        <label style='font-size:12px; display:block; margin-top:14px'>Full Name</label><input value='{name}' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
-        <label style='font-size:12px; display:block; margin-top:12px'>Email Address</label><input value='{email}' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
-        <label style='font-size:12px; display:block; margin-top:12px'>Phone Number</label><input value='+254748588874' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
-        <div style='text-align:right; margin-top:18px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px'>Save Changes</button></div>
+        <form method='post' action='/update-profile'>
+        <label style='font-size:12px; display:block; margin-top:14px'>Full Name</label><input name='full_name' value='{name}' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
+        <label style='font-size:12px; display:block; margin-top:12px'>Email Address</label><input name='email_new' value='{email}' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
+        <label style='font-size:12px; display:block; margin-top:12px'>Phone Number</label><input name='phone' value='+254748588874' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'>
+        <div style='text-align:right; margin-top:18px'><button type='submit' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px; cursor:pointer'>Save Changes</button></div>
+        </form>
         """
 
     ap = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="personal" else "color:#64748b"
-    as_ = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="security" else "color:#64748b"
+    ase = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="security" else "color:#64748b"
     aa = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="activity" else "color:#64748b"
 
     html = f"""
@@ -166,7 +170,7 @@ def profile(request: Request, tab: str = "personal"):
 <div style='font-size:18px; font-weight:700'>My Profile</div><div style='font-size:12px; color:#64748b; margin-bottom:14px'>Manage your personal information and security settings</div>
 <div style='display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:16px'>
 <a href='/profile?tab=personal' style='padding:8px 4px; margin-right:16px; text-decoration:none; font-size:13px; {ap}'>Personal Info</a>
-<a href='/profile?tab=security' style='padding:8px 4px; margin-right:16px; text-decoration:none; font-size:13px; {as_}'>Security</a>
+<a href='/profile?tab=security' style='padding:8px 4px; margin-right:16px; text-decoration:none; font-size:13px; {ase}'>Security</a>
 <a href='/profile?tab=activity' style='padding:8px 4px; text-decoration:none; font-size:13px; {aa}'>Activity Log</a>
 </div>
 <div style='display:grid; grid-template-columns:340px 1fr; gap:16px'>
@@ -183,6 +187,39 @@ def profile(request: Request, tab: str = "personal"):
 </body></html>
 """
     return HTMLResponse(html)
+
+@app.post("/update-password")
+def update_password(request: Request, current_password: str = Form(...), new_password: str = Form(...), confirm_password: str = Form(...)):
+    if "email" not in request.session:
+        return RedirectResponse("/")
+    if new_password!= confirm_password:
+        return HTMLResponse("<h3>Error: New passwords do not match</h3><a href='/profile?tab=security'>Back</a>")
+    email = request.session.get("email")
+    con = get_db()
+    cur = con.cursor()
+    cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email, current_password))
+    u = cur.fetchone()
+    if not u:
+        con.close()
+        return HTMLResponse("<h3>Error: Current password is incorrect</h3><a href='/profile?tab=security'>Back</a>")
+    cur.execute("UPDATE users SET password=? WHERE email=?", (new_password, email))
+    con.commit()
+    con.close()
+    return HTMLResponse("<h3>Password Updated Successfully!</h3><p>Your password has been changed.</p><a href='/profile?tab=security'>Back to Security</a> | <a href='/logout'>Login again</a>")
+
+@app.post("/update-profile")
+def update_profile(request: Request, full_name: str = Form(...), email_new: str = Form(...), phone: str = Form(...)):
+    if "email" not in request.session:
+        return RedirectResponse("/")
+    old_email = request.session.get("email")
+    con = get_db()
+    cur = con.cursor()
+    cur.execute("UPDATE users SET full_name=?, email=? WHERE email=?", (full_name.strip(), email_new.strip(), old_email))
+    con.commit()
+    con.close()
+    request.session["email"] = email_new.strip()
+    request.session["name"] = full_name.strip()
+    return RedirectResponse("/profile?tab=personal", status_code=303)
 
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request):
