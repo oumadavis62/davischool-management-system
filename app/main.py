@@ -9,7 +9,7 @@ from email.message import EmailMessage
 import os
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-restore-v22-1-profile-fix")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v23-ok-eye-columns")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -93,16 +93,16 @@ def header_html(initials, name, email):
     return f"""
     <style>
 .do-avatar {{ width:36px; height:36px; background:#dbeafe; color:#1e40af; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; cursor:pointer; border:2px solid #e2e8f0; user-select:none; caret-color:transparent; outline:none; }}
-.dropdown-item {{ display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; font-size:13px; transition:0.2s; }}
+.dropdown-item {{ display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; font-size:13px; transition:0.2s; cursor:pointer; }}
 .dropdown-item-profile {{ color:#0f172a; border-bottom:1px solid #f8fafc; }}
 .dropdown-item-profile:hover {{ background:#0f172a; color:white; }}
 .dropdown-item-logout {{ color:#dc2626; }}
 .dropdown-item-logout:hover {{ background:#0f172a; color:white; }}
     </style>
-    <div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center'>
+    <div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; position:relative'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px; color:#64748b'>{name} • Super Admin</div></div>
         <div style='position:relative'>
-            <div onclick='toggleProfileMenu()' class='do-avatar'>{initials}</div>
+            <div onclick='toggleProfileMenu()' class='do-avatar' tabindex='-1'>{initials}</div>
             <div id='profileDropdown' style='display:none; position:absolute; right:0; top:44px; background:white; border:1px solid #e2e8f0; border-radius:12px; width:220px; box-shadow:0 10px 25px rgba(0,0,0,0.12); z-index:1000; overflow:hidden'>
                 <div style='padding:14px; border-bottom:1px solid #f1f5f9; background:#f8fafc'><div style='font-weight:700; font-size:13px'>{name}</div><div style='font-size:11px; color:#64748b'>{email}</div><div style='margin-top:6px'><span style='background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:20px; font-size:10px'>Super Admin</span></div></div>
                 <a href='/profile?tab=personal' class='dropdown-item dropdown-item-profile'>👤 Profile</a>
@@ -192,10 +192,9 @@ def school_dashboard(request: Request):
     school_obj = get_school_obj(request)
     if not school_obj: return RedirectResponse("/")
     name = request.session.get("name","")
-    email = request.session.get("email","")
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
-    header = f"<div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center'><div><b>🏫 {school_obj['name']}</b><div style='font-size:11px; color:#64748b'>{name} • School Admin</div></div><div style='width:36px; height:36px; background:#dcfce7; color:#166534; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800'>{initials}</div></div>"
-    content = f"<div style='padding:24px'><h2>Welcome {school_obj['name']}!</h2><p>Code {school_obj['code']} | {school_obj['location']}</p><p>Super admin untouched!</p><a href='/logout'>Logout</a></div>"
+    header = f"<div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center'><div><b>🏫 {school_obj['name']}</b><div style='font-size:11px; color:#64748b'>{name} • School Admin • 🔑 {school_obj['code']}</div></div><div style='width:36px; height:36px; background:#dcfce7; color:#166534; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800'>{initials}</div></div>"
+    content = f"<div style='padding:24px; max-width:1100px; margin:0 auto'><h2>🏫 Welcome, {school_obj['name']}!</h2><p>👋 {name} — Isolated portal</p><p>🔑 {school_obj['code']} | 📍 {school_obj['location']}</p><div style='margin-top:16px; background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:8px'>✅ Super admin untouched!</div><br><a href='/logout'>🚪 Logout</a></div>"
     return HTMLResponse(f"<html><body style='font-family:Arial; margin:0; background:#f8fafc'>{header}{content}</body></html>")
 
 @app.get("/profile", response_class=HTMLResponse)
@@ -211,10 +210,23 @@ def profile(request: Request, tab: str = "personal"):
     scode = "SUPER-ADMIN" if is_super else school_obj["code"]
     sloc = "Platform Owner" if is_super else school_obj["location"]
     badge = "Super Admin" if is_super else "School Admin"
-    hdr = header_html(initials, name, email) if is_super else f"<div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px'><b>{sname}</b> - {name}</div>"
+    hdr = header_html(initials, name, email) if is_super else f"<div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px'><b>🏫 {sname}</b> - {name}</div>"
     log_activity(email, f"👀 Viewed profile tab: {tab}", f"{tab}")
     if tab=="security":
-        right = f"<div><b>🔒 Security Settings</b><form method='post' action='/update-password' style='margin-top:18px'><label style='font-size:12px; font-weight:600'>Current Password</label><input name='current_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>New Password</label><input name='new_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>Confirm New Password</label><input name='confirm_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; font-weight:600'>Update Password</button></div></form></div>"
+        right = f"""
+        <div>
+            <b style='font-size:15px'>🔒 Security Settings</b>
+            <form method='post' action='/update-password' style='margin-top:18px'>
+                <label style='font-size:12px; font-weight:600; display:block; margin-top:14px'>🔑 Current Password</label>
+                <input name='current_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+                <label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>🆕 New Password</label>
+                <input name='new_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+                <label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>✅ Confirm New Password</label>
+                <input name='confirm_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
+                <div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; font-weight:600'>🔐 Update Password</button></div>
+            </form>
+        </div>
+        """
     elif tab=="activity":
         con = get_db()
         cur = con.cursor()
@@ -222,9 +234,9 @@ def profile(request: Request, tab: str = "personal"):
         logs = cur.fetchall()
         con.close()
         log_rows = "".join([f"<div style='padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><div><div style='font-size:12px; font-weight:600'>{l['action']}</div><div style='font-size:11px; color:#64748b'>{l['details']}</div></div><span style='font-size:10px; color:#94a3b8'>{l['timestamp']}</span></div>" for l in logs]) or "<div style='padding:24px; text-align:center; color:#999'>No activity yet</div>"
-        right = f"<div><div style='display:flex; justify-content:space-between'><div><b>📜 Activity Log</b><p style='font-size:11px; color:#64748b'>{len(logs)} events</p></div><a href='/clear-activity' style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>Clear</a></div><div style='border:1px solid #e2e8f0; border-radius:10px; margin-top:16px; overflow:hidden; max-height:500px; overflow-y:auto'>{log_rows}</div></div>"
+        right = f"<div><div style='display:flex; justify-content:space-between; align-items:center'><div><b style='font-size:15px'>📜 Activity Log</b><p style='font-size:11px; color:#64748b'>{len(logs)} events — EAT 🇰🇪</p></div><a href='/clear-activity' style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>🧹 Clear</a></div><div style='border:1px solid #e2e8f0; border-radius:10px; margin-top:16px; overflow:hidden; max-height:500px; overflow-y:auto'>{log_rows}</div></div>"
     else:
-        right = f"<div><b>👤 Personal Information</b><form method='post' action='/update-profile' style='margin-top:18px'><label style='font-size:12px; font-weight:600'>Full Name</label><input name='full_name' value='{name}' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>Email</label><input name='email_new' value='{email}' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>Organization</label><input value='{sname}' disabled style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; background:#f1f5f9; margin-top:4px'><div style='text-align:right; margin-top:20px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; font-weight:600'>Save Changes</button></div></form></div>"
+        right = f"<div><b style='font-size:15px'>👤 Personal Information</b><form method='post' action='/update-profile' style='margin-top:18px'><label style='font-size:12px; font-weight:600; display:block; margin-top:14px'>👨‍💼 Full Name</label><input name='full_name' value='{name}' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>📧 Email</label><input name='email_new' value='{email}' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>📱 Phone</label><input name='phone' value='+254748588874' style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>🏫 Organization</label><input value='{sname}' disabled style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; background:#f1f5f9; color:#64748b; margin-top:4px'><div style='text-align:right; margin-top:20px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; font-weight:600'>💾 Save Changes</button></div></form></div>"
     ap = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="personal" else "color:#64748b; border-bottom:2px solid transparent"
     ase = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="security" else "color:#64748b; border-bottom:2px solid transparent"
     aa = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="activity" else "color:#64748b; border-bottom:2px solid transparent"
@@ -247,11 +259,11 @@ def update_password(request: Request, current_password: str = Form(...), new_pas
     cur.execute("UPDATE users SET password=? WHERE email=?", (new_password, email))
     con.commit()
     con.close()
-    log_activity(email, "🔑 Changed password", "Updated")
-    return HTMLResponse("<h3>✅ Password Updated!</h3><a href='/profile?tab=security'>Back</a> | <a href='/dashboard'>Dashboard</a>")
+    log_activity(email, "🔑 Changed password", "Updated ✅")
+    return HTMLResponse("<h3>✅ Password Updated!</h3><a href='/profile?tab=security'>Back</a> | <a href='/dashboard'>📊 Dashboard</a>")
 
 @app.post("/update-profile")
-def update_profile(request: Request, full_name: str = Form(...), email_new: str = Form(...)):
+def update_profile(request: Request, full_name: str = Form(...), email_new: str = Form(...), phone: str = Form(...)):
     if "email" not in request.session: return RedirectResponse("/")
     old_email = request.session.get("email")
     con = get_db()
@@ -259,6 +271,7 @@ def update_profile(request: Request, full_name: str = Form(...), email_new: str 
     cur.execute("UPDATE users SET full_name=?, email=? WHERE email=?", (full_name.strip(), email_new.strip(), old_email))
     con.commit()
     con.close()
+    log_activity(email_new.strip(), "👤 Updated profile", f"{full_name}")
     request.session["email"] = email_new.strip()
     request.session["name"] = full_name.strip()
     return RedirectResponse("/profile?tab=personal", status_code=303)
@@ -272,6 +285,7 @@ def clear_activity(request: Request):
     cur.execute("DELETE FROM activity_log WHERE email=?", (email,))
     con.commit()
     con.close()
+    log_activity(email, "🧹 Cleared activity log", "Deleted")
     return RedirectResponse("/profile?tab=activity", status_code=303)
 
 @app.get("/schools/manage", response_class=HTMLResponse)
@@ -284,21 +298,49 @@ def manage_schools(request: Request, show: str = "", success: str = "", pending_
     cur = con.cursor()
     cur.execute("SELECT * FROM schools ORDER BY id DESC")
     schools = cur.fetchall()
+    cur.execute("SELECT * FROM users WHERE role='school_admin'")
+    users = cur.fetchall()
     con.close()
+    users_by_school = {u["school_id"]: u for u in users}
     success_banner = ""
     if success=="added":
-        success_banner = f"<div style='background:#dcfce7; border:2px solid #16a34a; color:#166534; padding:16px; border-radius:10px; margin-bottom:16px'><b>✅ Success! 🏫 School Added!</b><div style='background:white; border:1px dashed #16a34a; border-radius:8px; padding:12px; margin-top:10px'><div style='font-size:11px; color:#64748b'>🏫 School:</div><div style='font-weight:700'>{school_name}</div><div style='font-size:11px; color:#64748b; margin-top:8px'>👤 Username (Email):</div><div style='font-weight:700'>{school_email}</div><div style='font-size:11px; color:#64748b; margin-top:8px'>🔑 Password (Unique, active now):</div><div style='font-size:20px; font-weight:800; letter-spacing:1px; color:#0f172a'>{new_pass}</div><div style='font-size:10px; color:#dc2626; margin-top:6px'>⚠️ Copy now — Different from super admin! Will not show again!</div></div><div style='margin-top:8px; font-size:11px'>Same login window / — school uses this password to login</div></div>"
+        success_banner = f"""
+        <div id='successBanner' style='background:#dcfce7; border:2px solid #16a34a; color:#166534; padding:16px; border-radius:10px; margin-bottom:16px'>
+            <b>✅ Success! 🏫 School Added!</b>
+            <div style='background:white; border:1px dashed #16a34a; border-radius:8px; padding:12px; margin-top:10px'>
+                <div style='font-size:11px; color:#64748b'>🏫 School:</div><div style='font-weight:700'>{school_name}</div>
+                <div style='font-size:11px; color:#64748b; margin-top:8px'>👤 Username (Email):</div><div style='font-weight:700; color:#0f172a'>{school_email}</div>
+                <div style='font-size:11px; color:#64748b; margin-top:8px'>🔑 Password (Unique, active now):</div><div style='font-size:20px; font-weight:800; letter-spacing:1px; color:#0f172a'>{new_pass}</div>
+                <div style='font-size:10px; color:#dc2626; margin-top:6px'>⚠️ Copy now — Different from super admin! Will not show again!</div>
+            </div>
+            <div style='margin-top:12px; text-align:right'>
+                <button onclick="document.getElementById('successBanner').style.display='none'" style='background:#0f172a; color:white; padding:8px 18px; border:none; border-radius:8px; font-weight:600; cursor:pointer'>OK ✅</button>
+            </div>
+        </div>
+        """
     elif success=="code_sent":
         success_banner = f"<div style='background:#fef3c7; border:1px solid #fcd34d; color:#92400e; padding:12px 16px; border-radius:10px; margin-bottom:16px'>📧 <b>Code sent to {SUPER_ADMIN}! 🔐</b> Check inbox or see code below.</div>"
     rows_html = ""
     schools_json = {}
     for s in schools:
         sid = s["id"]
-        schools_json[sid] = {"id": sid, "name": s["name"], "email": s["email"], "code": s["code"], "location": s["location"], "phone": s["phone"] or "", "principal": s["principal"] or "", "school_type": s["school_type"] or ""}
-        rows_html += f"<tr id='row-{sid}' onclick='selectSchool({sid})' style='cursor:pointer'><td style='padding:10px; border-bottom:1px solid #eee; font-size:12px'><b>🏫 {s['name']}</b><div style='font-size:10px; color:#64748b'>🔑 {s['code']}</div></td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📧 {s['email']}</td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📍 {s['location']}</td></tr>"
+        u = users_by_school.get(sid)
+        upass = u["password"] if u else "—"
+        uemail = u["email"] if u else s["email"]
+        schools_json[sid] = {"id": sid, "name": s["name"], "email": s["email"], "code": s["code"], "location": s["location"], "phone": s["phone"] or "", "principal": s["principal"] or "", "school_type": s["school_type"] or "", "username": uemail, "password": upass}
+        rows_html += f"""
+        <tr id='row-{sid}' onclick='selectSchool({sid})' style='cursor:pointer'>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:12px'><b>🏫 {s['name']}</b><div style='font-size:10px; color:#64748b'>🔑 {s['code']}</div></td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📧 {s['email']}</td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📍 {s['location']}</td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>👤 {uemail}</td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'><span id='pwd-dot-{sid}'>••••••</span><span id='pwd-real-{sid}' style='display:none; font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer; margin-left:6px'>👁️</span></td>
+        </tr>
+        """
     if not rows_html:
-        rows_html = "<tr><td colspan=3 style='padding:24px; text-align:center; color:#999'>No schools yet</td></tr>"
+        rows_html = "<tr><td colspan=5 style='padding:24px; text-align:center; color:#999'>No schools yet 🏫</td></tr>"
     schools_data = json.dumps(schools_json)
+    hl = "border:2px solid #0f172a; box-shadow:0 0 0 3px #e0f2fe" if show=="add" else "border:1px solid #e2e8f0"
     verify_html = ""
     if pending_id:
         con = get_db()
@@ -308,8 +350,23 @@ def manage_schools(request: Request, show: str = "", success: str = "", pending_
         con.close()
         if pending:
             code_display = f"<div style='background:white; border:2px dashed #f59e0b; border-radius:10px; padding:14px; margin-top:12px; text-align:center'><div style='font-size:11px; color:#92400e; font-weight:600'>🔓 Your code:</div><div style='font-size:32px; font-weight:800; letter-spacing:8px; color:#0f172a; margin-top:6px'>🔑 {pending['auth_code']}</div></div>"
-            verify_html = f"<div style='background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:20px; margin-bottom:16px'><b>🔐 Enter Code for 🏫 {pending['name']}</b>{code_display}<form method='post' action='/verify-school-code' style='display:flex; gap:8px; margin-top:14px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='Enter 6-digit code' required style='flex:1; padding:12px; border:1px solid #fcd34d; border-radius:8px; font-size:18px; letter-spacing:4px; text-align:center'><button style='background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; font-weight:600'>✅ Verify & Create Login</button></form><div style='margin-top:8px'><a href='/resend-code/{pending_id}' style='font-size:11px; color:#2563eb; text-decoration:none'>📧 Resend</a> <a href='/schools/manage' style='font-size:11px; color:#64748b; text-decoration:none; margin-left:10px'>❌ Cancel</a></div></div>"
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; background:#f8fafc; margin:0'>{header_html(initials, name, email)}<div style='padding:20px; display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px'>{success_banner}{verify_html}<b>📚 Registered Schools ({len(schools)})</b><table style='width:100%; border-collapse:collapse; margin-top:10px'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px; text-align:left'>School</th><th style='padding:10px; text-align:left'>Contact</th><th style='padding:10px; text-align:left'>Location</th></tr>{rows_html}</table></div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:20px'><b>➕ Register New School 🏫</b><p style='font-size:11px; color:#64748b'>Unique password auto-created</p><form method='post' action='/register-school' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='school_name' placeholder='🏫 School Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='school_email' placeholder='📧 Admin Email *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='location' placeholder='📍 Location *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='phone' placeholder='📱 Phone *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='principal' placeholder='👨‍💼 Principal *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='school_type' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Junior Secondary</option><option>Mixed</option><option>Private Academy</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; font-weight:600'>📧 Send Code & Create Login</button></form></div></div><script>let selectedId=null; let schools={schools_data}; function selectSchool(id){{document.querySelectorAll('tr[id^=\"row-\"]').forEach(r=>{{r.style.background='white';}}); document.getElementById('row-'+id).style.background='#dbeafe'; selectedId=id;}}</script></body></html>")
+            verify_html = f"<div style='background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:20px; margin-bottom:16px'><b>🔐 Enter Code for 🏫 {pending['name']}</b>{code_display}<form method='post' action='/verify-school-code' style='display:flex; gap:8px; margin-top:14px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='🔢 Enter 6-digit code' required style='flex:1; padding:12px; border:1px solid #fcd34d; border-radius:8px; font-size:18px; letter-spacing:4px; text-align:center; font-weight:700'><button style='background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; font-weight:600'>✅ Verify & Create Login</button></form><div style='margin-top:8px; display:flex; gap:8px'><a href='/resend-code/{pending_id}' style='font-size:11px; color:#2563eb; text-decoration:none'>📧 Resend</a><a href='/schools/manage' style='font-size:11px; color:#64748b; text-decoration:none'>❌ Cancel</a></div></div>"
+    return HTMLResponse(f"""
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; background:#f8fafc; margin:0'>{header_html(initials, name, email)}
+    <div style='padding:20px; display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start'>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; overflow-x:auto'>{success_banner}{verify_html}
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px'><div><b>📚 Registered Schools ({len(schools)})</b><div style='font-size:11px; color:#64748b'>👆 Click row — blue highlight 💙 + 👁️ to show password</div></div></div>
+            <table style='width:100%; border-collapse:collapse; min-width:700px'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px; text-align:left'>🏫 School</th><th style='padding:10px; text-align:left'>📧 Contact</th><th style='padding:10px; text-align:left'>📍 Location</th><th style='padding:10px; text-align:left'>👤 Username</th><th style='padding:10px; text-align:left'>🔑 Password</th></tr>{rows_html}</table>
+        </div>
+        <div style='background:white; {hl}; border-radius:12px; padding:20px; position:sticky; top:20px'><b>➕ Register New School 🏫</b><p style='font-size:11px; color:#64748b'>Unique password auto-created 🔑</p><form method='post' action='/register-school' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='school_name' placeholder='🏫 School Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='school_email' placeholder='📧 Admin Email *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='location' placeholder='📍 Location *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='phone' placeholder='📱 Phone *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='principal' placeholder='👨‍💼 Principal *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='school_type' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Junior Secondary</option><option>Mixed</option><option>Private Academy</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; font-weight:600'>📧 Send Code & Create Login</button><a href='/schools/manage' style='background:white; border:1px solid #e2e8f0; color:#64748b; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-size:13px; display:block'>❌ Cancel</a></form></div>
+    </div>
+    <script>
+    let selectedId=null; let schools={schools_data};
+    function selectSchool(id){{document.querySelectorAll('tr[id^="row-"]').forEach(r=>{{r.style.background='white';}}); document.getElementById('row-'+id).style.background='#dbeafe'; selectedId=id;}}
+    function togglePwd(id){{ let dot=document.getElementById('pwd-dot-'+id); let real=document.getElementById('pwd-real-'+id); if(dot.style.display==='none'){{ dot.style.display='inline'; real.style.display='none'; }} else {{ dot.style.display='none'; real.style.display='inline'; }} }}
+    </script>
+    </body></html>
+    """)
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -321,7 +378,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     pending_id = cur.lastrowid
     con.commit()
     con.close()
-    send_email(SUPER_ADMIN, f"🔐 Code: {auth_code} - {school_name}", f"🏫 {school_name.upper()}\n🔑 CODE: {auth_code}\n\nEmail code system NOT tempered - same as before!")
+    send_email(SUPER_ADMIN, f"🔐 Code: {auth_code} - {school_name}", f"🏫 {school_name.upper()}\n🔑 CODE: {auth_code}")
     log_activity(SUPER_ADMIN, f"📧 Auth code sent for {school_name} 🔐", f"Code {auth_code}")
     return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}", status_code=303)
 
