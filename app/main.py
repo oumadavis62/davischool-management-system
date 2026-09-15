@@ -9,7 +9,7 @@ from email.message import EmailMessage
 import os
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-emojis-analytics-fix-v18")
+app.add_middleware(SessionMiddleware, secret_key="davischool-code-on-screen-v19")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 EMAIL_SENDER = SUPER_ADMIN
@@ -44,7 +44,7 @@ init_db()
 
 def send_email(to_email, subject, body):
     if not EMAIL_PASSWORD:
-        print(f"[EMAIL SKIPPED] {subject} -> {to_email}")
+        print(f"[EMAIL SKIPPED - NO PASSWORD] Code inside body: {body}")
         return False
     try:
         msg = EmailMessage()
@@ -112,7 +112,6 @@ def header_html(initials, name, email):
     </script>
     """
 
-# FIX FOR RENDER WELCOME SCREEN - Keeps service alive
 @app.get("/health")
 def health():
     return PlainTextResponse("OK - Davischool is awake 🏫")
@@ -170,8 +169,6 @@ def dashboard(request: Request):
         rows += f"<tr><td style='padding:12px; border-bottom:1px solid #f1f5f9'>🏫 {s['name']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>📍 {s['location']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>✅ Active</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>Today</td></tr>"
     if not rows:
         rows = "<tr><td colspan=4 style='padding:20px; text-align:center; color:#999'>No schools yet</td></tr>"
-
-    # FIXED ANALYTICS AND CARD TEXTS - RESTORED AS ORIGINAL
     content = f"""
     <style>.quick-btn{{display:block; background:white; border:1px solid #e2e8f0; color:#0f172a; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600; transition:0.2s;}}.quick-btn:hover{{background:#0f172a; color:white;}}.quick-btn-light{{display:block; background:white; border:1px solid #e2e8f0; color:#64748b; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600; transition:0.2s;}}.quick-btn-light:hover{{background:#0f172a; color:white; border-color:#0f172a;}}</style>
     <div style='padding:24px'><div style='margin-bottom:20px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='color:#64748b; font-size:13px'>Welcome {name}</p></div>
@@ -183,16 +180,7 @@ def dashboard(request: Request):
     </div>
     <div style='display:grid; grid-template-columns:2fr 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Recently Added Schools</b><a href='/schools/manage' style='font-size:12px; color:#2563eb; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px; text-align:left'>Name</th><th style='padding:10px; text-align:left'>Location</th><th style='padding:10px; text-align:left'>Status</th><th style='padding:10px; text-align:left'>Date</th></tr>{rows}</table></div>
     <div style='display:flex; flex-direction:column; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><b>⚡ Quick Actions</b><div style='margin-top:12px; display:flex; flex-direction:column; gap:8px'><a href='/schools/manage' class='quick-btn'>🏫 Manage Schools</a><a href='/schools/manage?show=add' class='quick-btn-light'>➕ Register New School</a></div></div>
-    <div style='background:#0f172a; border-radius:14px; padding:18px; color:white'>
-        <div style='font-size:13px; font-weight:700'>📊 Davischool Analytics</div>
-        <div style='font-size:11px; color:#94a3b8; margin-top:6px'>🛠️ All {total} schools are active</div>
-        <div style='margin-top:12px; background:#1e293b; border-radius:8px; padding:10px'>
-            <div style='font-size:10px; color:#94a3b8'>🔧 PLATFORM HEALTH</div>
-            <div style='font-size:18px; font-weight:700; color:#4ade80; margin-top:4px'>✅ 99.9% Uptime</div>
-            <div style='font-size:10px; color:#64748b; margin-top:4px'>⚡ System running smoothly</div>
-        </div>
-    </div>
-    </div></div></div>
+    <div style='background:#0f172a; border-radius:14px; padding:18px; color:white'><div style='font-size:13px; font-weight:700'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-top:6px'>🛠️ All {total} schools are active</div><div style='margin-top:12px; background:#1e293b; border-radius:8px; padding:10px'><div style='font-size:10px; color:#94a3b8'>🔧 PLATFORM HEALTH</div><div style='font-size:18px; font-weight:700; color:#4ade80; margin-top:4px'>✅ 99.9% Uptime</div><div style='font-size:10px; color:#64748b; margin-top:4px'>⚡ System running smoothly</div></div></div></div></div></div>
     """
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; margin:0; background:#f8fafc'>{header_html(initials, name, email)}{content}</body></html>")
 
@@ -211,20 +199,7 @@ def profile(request: Request, tab: str = "personal"):
     badge = "Super Admin" if is_super else "School Admin"
     log_activity(email, f"👀 Viewed profile tab: {tab}", f"{tab} tab")
     if tab=="security":
-        right = f"""
-        <div><b style='font-size:15px'>🔒 Security Settings</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Manage your password and security preferences</p>
-        <form method='post' action='/update-password' style='margin-top:18px'>
-            <label style='font-size:12px; font-weight:600; display:block; margin-top:14px'>🔑 Current Password</label>
-            <input name='current_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-            <label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>🆕 New Password</label>
-            <input name='new_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-            <label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>✅ Confirm New Password</label>
-            <input name='confirm_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'>
-            <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-top:14px'><div style='font-size:11px; font-weight:600'>💡 Password Requirements:</div><div style='font-size:11px; color:#64748b; margin-top:4px'>• At least 8 characters<br>• Mix of letters, numbers & symbols<br>• Different from current password</div></div>
-            <div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; cursor:pointer; font-weight:600'>🔐 Update Password</button></div>
-        </form>
-        </div>
-        """
+        right = f"<div><b style='font-size:15px'>🔒 Security Settings</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Manage your password and security preferences</p><form method='post' action='/update-password' style='margin-top:18px'><label style='font-size:12px; font-weight:600; display:block; margin-top:14px'>🔑 Current Password</label><input name='current_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>🆕 New Password</label><input name='new_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; font-weight:600; display:block; margin-top:12px'>✅ Confirm New Password</label><input name='confirm_password' type='password' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-top:14px'><div style='font-size:11px; font-weight:600'>💡 Password Requirements:</div><div style='font-size:11px; color:#64748b; margin-top:4px'>• At least 8 characters<br>• Mix of letters, numbers & symbols<br>• Different from current password</div></div><div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:11px 18px; border:none; border-radius:8px; cursor:pointer; font-weight:600'>🔐 Update Password</button></div></form></div>"
     elif tab=="activity":
         con = get_db()
         cur = con.cursor()
@@ -316,7 +291,10 @@ def manage_schools(request: Request, show: str = "", success: str = "", pending_
     if success=="added":
         success_banner = "<div style='background:#dcfce7; border:1px solid #86efac; color:#166534; padding:12px 16px; border-radius:10px; margin-bottom:16px'>✅ <b>Success! 🏫</b> School registered successfully — Code verified via email! 📧</div>"
     elif success=="code_sent":
-        success_banner = f"<div style='background:#fef3c7; border:1px solid #fcd34d; color:#92400e; padding:12px 16px; border-radius:10px; margin-bottom:16px'>📧 <b>Authorization code sent to {SUPER_ADMIN}! 🔐</b> Check your email and enter code below.</div>"
+        if EMAIL_PASSWORD:
+            success_banner = f"<div style='background:#fef3c7; border:1px solid #fcd34d; color:#92400e; padding:12px 16px; border-radius:10px; margin-bottom:16px'>📧 <b>Authorization code sent to {SUPER_ADMIN}! 🔐</b> Check your email and enter code below.</div>"
+        else:
+            success_banner = f"<div style='background:#fef3c7; border:1px solid #fcd34d; color:#92400e; padding:12px 16px; border-radius:10px; margin-bottom:16px'>⚠️ <b>Email not configured yet — Code shown below! 🔓</b> Enable email later in Render Environment.</div>"
     elif success=="updated":
         success_banner = "<div style='background:#e0f2fe; border:1px solid #7dd3fc; color:#0c4a6e; padding:12px 16px; border-radius:10px; margin-bottom:16px'>✅ <b>Updated! ✏️</b> School updated.</div>"
     elif success=="deleted":
@@ -339,7 +317,32 @@ def manage_schools(request: Request, show: str = "", success: str = "", pending_
         pending = cur.fetchone()
         con.close()
         if pending:
-            verify_html = f"<div style='background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:20px; margin-bottom:16px'><b>🔐 Enter Authorization Code for 🏫 {pending['name']}</b><p style='font-size:11px; color:#92400e'>📧 Code sent to {SUPER_ADMIN} 📬</p><form method='post' action='/verify-school-code' style='display:flex; gap:8px; margin-top:12px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='🔢 Enter 6-digit code' required style='flex:1; padding:12px; border:1px solid #fcd34d; border-radius:8px; font-size:18px; letter-spacing:4px; text-align:center; font-weight:700'><button style='background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; font-weight:600'>✅ Verify & Add School</button></form><div style='margin-top:8px; display:flex; gap:8px'><a href='/resend-code/{pending_id}' style='font-size:11px; color:#2563eb; text-decoration:none'>📧 Resend Code</a><a href='/schools/manage' style='font-size:11px; color:#64748b; text-decoration:none'>❌ Cancel</a></div></div>"
+            # NEW: Show code on screen if email not configured - ONLY CHANGE
+            code_display = ""
+            if not EMAIL_PASSWORD:
+                code_display = f"""
+                <div style='background:white; border:2px dashed #f59e0b; border-radius:10px; padding:14px; margin-top:12px; text-align:center'>
+                    <div style='font-size:11px; color:#92400e; font-weight:600'>🔓 Email not set — Your code is visible here for now:</div>
+                    <div style='font-size:32px; font-weight:800; letter-spacing:8px; color:#0f172a; margin-top:6px'>🔑 {pending['auth_code']}</div>
+                    <div style='font-size:10px; color:#64748b; margin-top:6px'>Copy this code and paste below to verify — Later when you add EMAIL_PASSWORD, codes will come via email 📧</div>
+                </div>
+                """
+            verify_html = f"""
+            <div style='background:#fffbeb; border:2px solid #f59e0b; border-radius:12px; padding:20px; margin-bottom:16px'>
+                <b>🔐 Enter Authorization Code for 🏫 {pending['name']}</b>
+                <p style='font-size:11px; color:#92400e'>{"📧 Code sent to "+SUPER_ADMIN+" 📬 — Check inbox" if EMAIL_PASSWORD else "⚠️ Email not configured — Code displayed below 👇"}</p>
+                {code_display}
+                <form method='post' action='/verify-school-code' style='display:flex; gap:8px; margin-top:14px'>
+                    <input type='hidden' name='pending_id' value='{pending_id}'>
+                    <input name='auth_code' placeholder='🔢 Enter 6-digit code' required style='flex:1; padding:12px; border:1px solid #fcd34d; border-radius:8px; font-size:18px; letter-spacing:4px; text-align:center; font-weight:700'>
+                    <button style='background:#0f172a; color:white; padding:12px 20px; border:none; border-radius:8px; font-weight:600'>✅ Verify & Add School</button>
+                </form>
+                <div style='margin-top:8px; display:flex; gap:8px'>
+                    <a href='/resend-code/{pending_id}' style='font-size:11px; color:#2563eb; text-decoration:none'>📧 Resend Code</a>
+                    <a href='/schools/manage' style='font-size:11px; color:#64748b; text-decoration:none'>❌ Cancel</a>
+                </div>
+            </div>
+            """
     return HTMLResponse(f"""
 <html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; background:#f8fafc; margin:0'>
 {header_html(initials, name, email)}
@@ -377,7 +380,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     con.commit()
     con.close()
     send_email(SUPER_ADMIN, f"🔐 Authorization Code: {auth_code} - Add School {school_name}", f"🏫 {school_name.upper()}\n📧 {school_email}\n📍 {location}\n📱 {phone}\n👨‍💼 {principal}\n🎓 {school_type}\n🕒 {ts} EAT\n\n🔑 CODE: {auth_code}")
-    log_activity(SUPER_ADMIN, f"📧 Auth code sent for {school_name} 🔐", f"Code {auth_code}")
+    log_activity(SUPER_ADMIN, f"📧 Auth code sent for {school_name} 🔐", f"Code {auth_code} | {'Email sent' if EMAIL_PASSWORD else 'Displayed on screen (email not set)'}")
     return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}", status_code=303)
 
 @app.post("/verify-school-code")
