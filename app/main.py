@@ -5,7 +5,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import random
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-final-emoji-cancel-v9")
+app.add_middleware(SessionMiddleware, secret_key="davischool-final-select-blue-v10")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -55,10 +55,8 @@ def home():
 <p style='font-size:11px; color:#64748b; margin:0; letter-spacing:1px'>SCHOOL MANAGEMENT SYSTEM</p>
 </div>
 <form method='post' action='/login'>
-<label style='font-size:12px; font-weight:600'>Email</label>
-<input name='email' required style='width:100%; padding:12px; margin:6px 0 12px; border:1px solid #e2e8f0; border-radius:10px'>
-<label style='font-size:12px; font-weight:600'>Password</label>
-<input name='password' type='password' required style='width:100%; padding:12px; margin:6px 0 20px; border:1px solid #e2e8f0; border-radius:10px'>
+<input name='email' placeholder='Email' required style='width:100%; padding:12px; margin:6px 0 12px; border:1px solid #e2e8f0; border-radius:10px'>
+<input name='password' type='password' placeholder='Password' required style='width:100%; padding:12px; margin:6px 0 20px; border:1px solid #e2e8f0; border-radius:10px'>
 <button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; font-weight:600'>Sign In</button>
 </form>
 </div>
@@ -87,9 +85,9 @@ def dashboard(request: Request):
     con = get_db()
     cur = con.cursor()
     cur.execute("SELECT COUNT(*) as c FROM schools")
-    total_schools = cur.fetchone()["c"]
+    total = cur.fetchone()["c"]
     cur.execute("SELECT * FROM schools ORDER BY id DESC LIMIT 5")
-    recent_schools = cur.fetchall()
+    recent = cur.fetchall()
     con.close()
     school = get_school(request)
     is_super = school is None
@@ -97,42 +95,29 @@ def dashboard(request: Request):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
     role_disp = "Super Admin" if is_super else "School Admin"
     if is_super:
-        schools_rows = ""
-        for s in recent_schools:
-            schools_rows += f"<tr><td style='padding:12px; border-bottom:1px solid #f1f5f9'><div style='font-weight:600; font-size:13px'>🏫 {s['name']}</div><div style='font-size:11px; color:#64748b'>{s['code']}</div></td><td style='padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px'>📍 {s['location']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'><span style='background:#dcfce7; color:#166534; padding:3px 8px; border-radius:12px; font-size:10px'>✅ Active</span></td><td style='padding:12px; border-bottom:1px solid #f1f5f9; font-size:11px; color:#64748b'>Today</td></tr>"
-        if not schools_rows:
-            schools_rows = "<tr><td colspan=4 style='padding:24px; text-align:center; color:#94a3b8; font-size:12px'>No schools yet. Click + Add School.</td></tr>"
+        rows = ""
+        for s in recent:
+            rows += f"<tr><td style='padding:12px; border-bottom:1px solid #f1f5f9'>🏫 {s['name']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>📍 {s['location']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>✅ Active</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>Today</td></tr>"
+        if not rows:
+            rows = "<tr><td colspan=4 style='padding:20px; text-align:center; color:#999'>No schools yet</td></tr>"
         content = f"""
         <div style='padding:24px'>
-        <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:20px'>
-        <div><h2 style='margin:0; font-size:22px; font-weight:800; color:#0f172a'>📊 School Overview</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name} - Monitor all schools</p></div>
-        <a href='/schools/manage' style='background:#0f172a; color:white; padding:10px 18px; border-radius:10px; text-decoration:none; font-size:13px; font-weight:600'>➕ Add School</a>
-        </div>
+        <div style='display:flex; justify-content:space-between; margin-bottom:20px'><div><h2 style='margin:0'>📊 School Overview</h2><p style='color:#64748b; font-size:13px'>Welcome {name}</p></div><a href='/schools/manage' style='background:#0f172a; color:white; padding:10px 18px; border-radius:10px; text-decoration:none'>➕ Add School</a></div>
         <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px'>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='display:flex; justify-content:space-between; align-items:center'><div style='font-size:11px; color:#64748b; font-weight:600'>🏫 TOTAL SCHOOLS</div><div style='font-size:22px'>🏫</div></div><div style='font-size:28px; font-weight:800; margin:8px 0 2px'>{total_schools}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12%</div></div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='display:flex; justify-content:space-between; align-items:center'><div style='font-size:11px; color:#64748b; font-weight:600'>✅ ACTIVE</div><div style='font-size:22px'>✅</div></div><div style='font-size:28px; font-weight:800; margin:8px 0 2px'>{total_schools}</div><div style='font-size:11px; color:#16a34a'>🟢 All active</div></div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='display:flex; justify-content:space-between; align-items:center'><div style='font-size:11px; color:#64748b; font-weight:600'>💰 REVENUE</div><div style='font-size:22px'>💰</div></div><div style='font-size:28px; font-weight:800; margin:8px 0 2px'>KES {total_schools*15000:,}</div><div style='font-size:11px; color:#64748b'>💵 15k per school</div></div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='display:flex; justify-content:space-between; align-items:center'><div style='font-size:11px; color:#64748b; font-weight:600'>🎓 STUDENTS</div><div style='font-size:22px'>🎓</div></div><div style='font-size:28px; font-weight:800; margin:8px 0 2px'>{total_schools*350:,}</div><div style='font-size:11px; color:#64748b'>👨‍🎓 Across all schools</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total}</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total}</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>💰 REVENUE</div><div style='font-size:28px; font-weight:800; margin-top:8px'>KES {total*15000:,}</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 STUDENTS</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total*350:,}</div></div>
         </div>
         <div style='display:grid; grid-template-columns:2fr 1fr; gap:16px'>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:16px 18px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b style='font-size:14px'>🏫 Recently Added Schools</b><a href='/schools/manage' style='font-size:12px; color:#2563eb; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px 12px; text-align:left'>School Name</th><th style='padding:10px 12px; text-align:left'>Location</th><th style='padding:10px 12px; text-align:left'>Status</th><th style='padding:10px 12px; text-align:left'>Date</th></tr>{schools_rows}</table></div>
-            <div style='display:flex; flex-direction:column; gap:16px'>
-                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'>
-                <b style='font-size:14px'>⚡ Quick Actions</b>
-                <div style='margin-top:12px; display:flex; flex-direction:column; gap:8px'>
-                <a href='/schools/manage' style='display:block; background:#0f172a; color:white; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600'>🏫 Manage Schools</a>
-                <a href='/schools/manage?show=add' style='display:block; background:white; border:1px solid #0f172a; color:#0f172a; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600'>➕ Register New School</a>
-                </div>
-                </div>
-                <div style='background:#0f172a; border-radius:14px; padding:18px; color:white'><div style='font-size:13px; font-weight:700'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-top:4px'>🚀 Platform performing well. All {total_schools} schools active.</div><div style='margin-top:12px; background:#1e293b; border-radius:8px; padding:10px'><div style='font-size:10px; color:#94a3b8'>💚 PLATFORM HEALTH</div><div style='font-size:18px; font-weight:700; color:#4ade80; margin-top:2px'>✅ 99.9% Uptime</div></div></div>
-            </div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Recently Added Schools</b><a href='/schools/manage' style='font-size:12px; color:#2563eb; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px; text-align:left'>Name</th><th style='padding:10px; text-align:left'>Location</th><th style='padding:10px; text-align:left'>Status</th><th style='padding:10px; text-align:left'>Date</th></tr>{rows}</table></div>
+            <div style='display:flex; flex-direction:column; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><b>⚡ Quick Actions</b><div style='margin-top:12px; display:flex; flex-direction:column; gap:8px'><a href='/schools/manage' style='display:block; background:#0f172a; color:white; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600'>🏫 Manage Schools</a><a href='/schools/manage?show=add' style='display:block; background:white; border:1px solid #0f172a; color:#0f172a; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600'>➕ Register New School</a></div></div><div style='background:#0f172a; border-radius:14px; padding:18px; color:white'><div style='font-size:13px; font-weight:700'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-top:4px'>🚀 All {total} schools active.</div><div style='margin-top:12px; background:#1e293b; border-radius:8px; padding:10px'><div style='font-size:10px; color:#94a3b8'>PLATFORM HEALTH</div><div style='font-size:18px; font-weight:700; color:#4ade80'>✅ 99.9% Uptime</div></div></div></div>
         </div>
         </div>
         """
     else:
-        top = school["name"] + " (Code: " + school["code"] + ")"
-        content = f"<div style='padding:24px'><h2>📊 School Overview</h2><p>Welcome {name} - {top}</p></div>"
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; margin:0; background:#f8fafc'><div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center'><div style='font-weight:700; font-size:14px'>{'🏫 Davischool Platform (Super Admin)' if is_super else top}</div><div style='display:flex; gap:12px; align-items:center; font-size:12px'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700'>{initials}</div><div><div style='font-weight:600'>{name}</div><div style='color:#64748b; font-size:11px'>{role_disp}</div></div><a href='/profile?tab=personal' style='border:1px solid #e2e8f0; padding:6px 10px; border-radius:6px; text-decoration:none'>👤 Profile</a><a href='/logout' style='color:#dc2626; text-decoration:none'>🚪 Logout</a></div></div>{content}</body></html>")
+        content = f"<div style='padding:24px'><h2>School Overview</h2><p>{school['name']}</p></div>"
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; margin:0; background:#f8fafc'><div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between'><b>🏫 Davischool Platform (Super Admin)</b><div style='display:flex; gap:12px; align-items:center'><div style='width:32px; height:32px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700'>{initials}</div><a href='/profile?tab=personal'>👤 Profile</a><a href='/logout' style='color:#dc2626'>🚪 Logout</a></div></div>{content}</body></html>")
 
 @app.get("/profile", response_class=HTMLResponse)
 def profile(request: Request, tab: str = "personal"):
@@ -140,57 +125,44 @@ def profile(request: Request, tab: str = "personal"):
         return RedirectResponse("/")
     email = request.session.get("email","")
     name = request.session.get("name","Davis Ouma")
-    school = get_school(request)
-    is_super = school is None
-    top = "🏫 Davischool Platform (Super Admin)" if is_super else school["name"] + " (Code: " + school["code"] + ")"
-    badge = "Super Admin" if is_super else "School Admin"
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
     if tab=="security":
-        right = f"<b>🔒 Security Settings</b><form method='post' action='/update-password'><label style='font-size:12px; display:block; margin-top:14px'>🔑 Current</label><input name='current_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; display:block; margin-top:12px'>🆕 New</label><input name='new_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; display:block; margin-top:12px'>✅ Confirm</label><input name='confirm_password' type='password' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><div style='text-align:right; margin-top:16px'><button type='submit' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px'>🔐 Update Password</button></div></form>"
-    elif tab=="activity":
-        right = f"<b>📜 Activity Log</b><div style='border:1px solid #e2e8f0; border-radius:8px; margin-top:12px'><div style='padding:10px; font-size:12px'>🔓 Logged in - {email}</div></div>"
+        right = f"<b>🔒 Security</b><form method='post' action='/update-password'><input name='current_password' type='password' placeholder='Current' required style='width:100%; padding:10px; margin-top:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='new_password' type='password' placeholder='New' required style='width:100%; padding:10px; margin-top:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='confirm_password' type='password' placeholder='Confirm' required style='width:100%; padding:10px; margin-top:10px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px; margin-top:12px'>🔐 Update Password</button></form>"
     else:
-        right = f"<b>👤 Personal Info</b><form method='post' action='/update-profile'><label style='font-size:12px; display:block; margin-top:14px'>👨‍💼 Full Name</label><input name='full_name' value='{name}' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; display:block; margin-top:12px'>📧 Email</label><input name='email_new' value='{email}' required style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><label style='font-size:12px; display:block; margin-top:12px'>📱 Phone</label><input name='phone' value='+254748588874' style='width:100%; padding:10px; border:1px solid #e2e8f0; border-radius:8px; margin-top:4px'><div style='text-align:right; margin-top:18px'><button type='submit' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px'>💾 Save Changes</button></div></form>"
-    ap = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="personal" else "color:#64748b"
-    ase = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="security" else "color:#64748b"
-    aa = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="activity" else "color:#64748b"
-    return HTMLResponse(f"<html><body style='margin:0; font-family:Arial; background:#f8fafc'><div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between'><div style='font-weight:700'>{top}</div><div><a href='/dashboard'>📊 Dashboard</a> | <a href='/logout'>🚪 Logout</a></div></div><div style='padding:20px'><div style='display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:16px'><a href='/profile?tab=personal' style='padding:8px 4px; margin-right:16px; text-decoration:none; font-size:13px; {ap}'>👤 Personal Info</a><a href='/profile?tab=security' style='padding:8px 4px; margin-right:16px; text-decoration:none; font-size:13px; {ase}'>🔒 Security</a><a href='/profile?tab=activity' style='padding:8px 4px; text-decoration:none; font-size:13px; {aa}'>📜 Activity Log</a></div><div style='display:grid; grid-template-columns:340px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:20px; text-align:center'><div style='width:80px; height:80px; background:#0f172a; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; margin:0 auto'>{initials}</div><div style='font-weight:700; margin-top:12px'>{name}</div><div style='font-size:12px'>{email}</div><div style='margin-top:6px'><span style='background:#e0f2fe; color:#0369a1; padding:4px 10px; border-radius:20px; font-size:11px'>{badge}</span></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:20px'>{right}</div></div></div></body></html>")
+        right = f"<b>👤 Personal Info</b><form method='post' action='/update-profile'><input name='full_name' value='{name}' required style='width:100%; padding:10px; margin-top:10px; border:1px solid #e2e8f0; border-radius:8px'><input name='email_new' value='{email}' required style='width:100%; padding:10px; margin-top:10px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:8px; margin-top:12px'>💾 Save Changes</button></form>"
+    return HTMLResponse(f"<html><body style='margin:0; font-family:Arial; background:#f8fafc'><div style='padding:20px'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:20px; max-width:700px'>{right}<div style='margin-top:20px'><a href='/dashboard'>Back</a></div></div></div></body></html>")
 
 @app.post("/update-password")
 def update_password(request: Request, current_password: str = Form(...), new_password: str = Form(...), confirm_password: str = Form(...)):
-    if "email" not in request.session:
-        return RedirectResponse("/")
-    if new_password!= confirm_password:
-        return HTMLResponse("<h3>❌ Error: Passwords do not match</h3><a href='/profile?tab=security'>Back</a>")
+    if "email" not in request.session: return RedirectResponse("/")
+    if new_password!= confirm_password: return HTMLResponse("<h3>❌ Passwords do not match</h3><a href='/profile?tab=security'>Back</a>")
     email = request.session.get("email")
     con = get_db()
     cur = con.cursor()
     cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email, current_password))
-    u = cur.fetchone()
-    if not u:
+    if not cur.fetchone():
         con.close()
-        return HTMLResponse("<h3>❌ Current password incorrect</h3><a href='/profile?tab=security'>Back</a>")
+        return HTMLResponse("<h3>❌ Current incorrect</h3><a href='/profile?tab=security'>Back</a>")
     cur.execute("UPDATE users SET password=? WHERE email=?", (new_password, email))
     con.commit()
     con.close()
-    return HTMLResponse("<h3>✅ Password Updated!</h3><a href='/profile?tab=security'>Back</a>")
+    return HTMLResponse("<h3>✅ Updated</h3><a href='/profile?tab=security'>Back</a>")
 
 @app.post("/update-profile")
-def update_profile(request: Request, full_name: str = Form(...), email_new: str = Form(...), phone: str = Form(...)):
-    if "email" not in request.session:
-        return RedirectResponse("/")
-    old_email = request.session.get("email")
+def update_profile(request: Request, full_name: str = Form(...), email_new: str = Form(...), phone: str = Form(default="")):
+    if "email" not in request.session: return RedirectResponse("/")
+    old = request.session.get("email")
     con = get_db()
     cur = con.cursor()
-    cur.execute("UPDATE users SET full_name=?, email=? WHERE email=?", (full_name.strip(), email_new.strip(), old_email))
+    cur.execute("UPDATE users SET full_name=?, email=? WHERE email=?", (full_name.strip(), email_new.strip(), old))
     con.commit()
     con.close()
-    request.session["email"] = email_new.strip()
-    request.session["name"] = full_name.strip()
+    request.session["email"]=email_new.strip()
+    request.session["name"]=full_name.strip()
     return RedirectResponse("/profile?tab=personal", status_code=303)
 
 @app.get("/schools/manage", response_class=HTMLResponse)
-def manage_schools(request: Request, show: str = ""):
+def manage_schools(request: Request, show: str = "", success: str = ""):
     if request.session.get("role")!= "super_admin":
         return RedirectResponse("/")
     con = get_db()
@@ -198,82 +170,192 @@ def manage_schools(request: Request, show: str = ""):
     cur.execute("SELECT * FROM schools ORDER BY id DESC")
     schools = cur.fetchall()
     con.close()
-    rows = ""
-    for s in schools:
-        phone = s["phone"] if "phone" in s.keys() and s["phone"] else "-"
-        principal = s["principal"] if "principal" in s.keys() and s["principal"] else "-"
-        stype = s["school_type"] if "school_type" in s.keys() and s["school_type"] else "-"
-        rows += f"<tr><td style='padding:10px; border-bottom:1px solid #eee; font-size:12px'><b>🏫 {s['name']}</b><div style='font-size:10px; color:#64748b'>{s['code']} | {stype}</div></td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📧 {s['email']}<div style='color:#64748b'>📱 {phone}</div></td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📍 {s['location']}<div style='color:#64748b'>👨‍💼 {principal}</div></td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'><a href='/schools/edit/{s['id']}' style='background:#e0f2fe; color:#0369a1; padding:5px 10px; border-radius:6px; text-decoration:none; margin-right:4px'>✏️ Edit</a><a href='/schools/delete/{s['id']}' onclick=\"return confirm('Delete {s['name']}?')\" style='background:#fee2e2; color:#dc2626; padding:5px 10px; border-radius:6px; text-decoration:none'>🗑️ Delete</a></td></tr>"
-    if not rows:
-        rows = "<tr><td colspan=4 style='padding:20px; text-align:center; color:#999; font-size:12px'>No schools yet</td></tr>"
-    hl = "border:2px solid #0f172a; box-shadow:0 0 0 3px #e0f2fe" if show=="add" else "border:1px solid #e2e8f0"
-    return HTMLResponse(f"""
-<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; background:#f8fafc; margin:0'>
-<div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center'><b>🏫 Davischool - Schools Management</b><a href='/dashboard' style='text-decoration:none; border:1px solid #e2e8f0; padding:6px 12px; border-radius:6px; font-size:12px'>⬅️ Back to Dashboard</a></div>
-<div style='padding:20px; display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start'>
-<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; overflow:auto'>
-<div style='display:flex; justify-content:space-between'><b>📚 Registered Schools ({len(schools)})</b><span style='font-size:11px; color:#64748b'>✏️ Edit / 🗑️ Delete enabled</span></div>
-<table style='width:100%; margin-top:12px; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px; text-align:left'><th style='padding:10px'>School</th><th style='padding:10px'>Contact</th><th style='padding:10px'>Location</th><th style='padding:10px'>Actions</th></tr>{rows}</table>
-</div>
-<div style='background:white; {hl}; border-radius:12px; padding:20px; position:sticky; top:20px'>
-<b style='font-size:15px'>➕ Register New School</b><p style='font-size:11px; color:#64748b; margin:4px 0 12px'>Fill all basic registration features</p>
-<form method='post' action='/register-school' style='display:flex; flex-direction:column; gap:10px'>
-<input name='school_name' placeholder='🏫 School Name * e.g. Busia Academy' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<input name='school_email' placeholder='📧 School Admin Email *' required type='email' style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<input name='location' placeholder='📍 Location / County *' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<input name='phone' placeholder='📱 Phone * e.g. 0748588874' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<input name='principal' placeholder='👨‍💼 Principal Name *' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<select name='school_type' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<option value=''>🎓 Select School Type *</option>
-<option value='Primary'>📚 Primary School</option>
-<option value='Secondary'>🏫 Secondary School</option>
-<option value='Junior Secondary'>🎒 Junior Secondary</option>
-<option value='Mixed'>🏫 Mixed</option>
-<option value='Private Academy'>🎓 Private Academy</option>
-</select>
-<button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; margin-top:6px; font-weight:600; cursor:pointer'>✅ Create School + Auto Code</button>
-<a href='/schools/manage' style='width:100%; background:white; border:1px solid #e2e8f0; color:#64748b; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-size:13px; font-weight:600; display:block; box-sizing:border-box'>❌ Cancel</a>
-<a href='/dashboard' style='width:100%; background:#f8fafc; border:1px dashed #cbd5e1; color:#0f172a; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; display:block; box-sizing:border-box'>⬅️ Back to Dashboard</a>
-<div style='font-size:10px; color:#64748b; margin-top:2px'>System will auto-generate School Code + Admin Login: School@2026!</div>
-</form>
-</div>
-</div>
-</body></html>
-""")
 
-@app.get("/schools/edit/{school_id}", response_class=HTMLResponse)
-def edit_school_form(school_id: int, request: Request):
-    if request.session.get("role")!= "super_admin":
-        return RedirectResponse("/")
-    con = get_db()
-    cur = con.cursor()
-    cur.execute("SELECT * FROM schools WHERE id=?", (school_id,))
-    s = cur.fetchone()
-    con.close()
-    if not s:
-        return HTMLResponse("School not found <a href='/schools/manage'>Back</a>")
+    success_banner = ""
+    if success == "added":
+        success_banner = "<div id='successBanner' style='background:#dcfce7; border:1px solid #86efac; color:#166534; padding:12px 16px; border-radius:10px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center'><div>✅ <b>Success!</b> School registered successfully. Code generated & login created.</div><span onclick=\"this.parentElement.style.display='none'\" style='cursor:pointer; font-weight:700'>✖</span></div>"
+    elif success == "updated":
+        success_banner = "<div id='successBanner' style='background:#e0f2fe; border:1px solid #7dd3fc; color:#0c4a6e; padding:12px 16px; border-radius:10px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center'><div>✅ <b>Updated!</b> School information updated successfully.</div><span onclick=\"this.parentElement.style.display='none'\" style='cursor:pointer; font-weight:700'>✖</span></div>"
+    elif success == "deleted":
+        success_banner = "<div id='successBanner' style='background:#fee2e2; border:1px solid #fca5a5; color:#991b1b; padding:12px 16px; border-radius:10px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center'><div>🗑️ <b>Deleted!</b> School removed successfully.</div><span onclick=\"this.parentElement.style.display='none'\" style='cursor:pointer; font-weight:700'>✖</span></div>"
+
+    rows_html = ""
+    schools_json = {}
+    for s in schools:
+        sid = s["id"]
+        schools_json[sid] = {
+            "id": sid,
+            "name": s["name"],
+            "email": s["email"],
+            "code": s["code"],
+            "location": s["location"],
+            "phone": s["phone"] if s["phone"] else "",
+            "principal": s["principal"] if s["principal"] else "",
+            "school_type": s["school_type"] if s["school_type"] else ""
+        }
+        phone = s["phone"] or "-"
+        principal = s["principal"] or "-"
+        stype = s["school_type"] or "-"
+        rows_html += f"""
+        <tr id='row-{sid}' onclick='selectSchool({sid})' style='cursor:pointer; transition:0.15s'>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:12px'><b>🏫 {s['name']}</b><div style='font-size:10px; color:#64748b'>{s['code']} | {stype}</div></td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📧 {s['email']}<div style='color:#64748b'>📱 {phone}</div></td>
+            <td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>📍 {s['location']}<div style='color:#64748b'>👨‍💼 {principal}</div></td>
+        </tr>
+        """
+    if not rows_html:
+        rows_html = "<tr><td colspan=3 style='padding:24px; text-align:center; color:#999'>No schools yet — add first school on the right</td></tr>"
+
+    import json
+    schools_data = json.dumps(schools_json)
+
+    highlight = "border:2px solid #0f172a; box-shadow:0 0 0 3px #e0f2fe" if show=="add" else "border:1px solid #e2e8f0"
+
     return HTMLResponse(f"""
-<html><body style='font-family:Arial; background:#f8fafc; margin:0; padding:20px; display:flex; justify-content:center'>
-<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:24px; width:480px'>
-<h3>✏️ Edit School - {s['name']}</h3><p style='font-size:11px; color:#64748b'>Code: {s['code']}</p>
-<form method='post' action='/schools/update/{s['id']}' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'>
-<label style='font-size:12px'>🏫 School Name</label><input name='school_name' value="{s['name']}" required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<label style='font-size:12px'>📧 Admin Email</label><input name='school_email' value="{s['email']}" required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<label style='font-size:12px'>📍 Location</label><input name='location' value="{s['location']}" required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<label style='font-size:12px'>📱 Phone</label><input name='phone' value="{s['phone'] if s['phone'] else ''}" style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<label style='font-size:12px'>👨‍💼 Principal</label><input name='principal' value="{s['principal'] if s['principal'] else ''}" style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<label style='font-size:12px'>🎓 Type</label>
-<select name='school_type' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
-<option {'selected' if s['school_type']=='Primary' else ''}>Primary</option>
-<option {'selected' if s['school_type']=='Secondary' else ''}>Secondary</option>
-<option {'selected' if s['school_type']=='Junior Secondary' else ''}>Junior Secondary</option>
-<option {'selected' if s['school_type']=='Mixed' else ''}>Mixed</option>
-<option {'selected' if s['school_type']=='Private Academy' else ''}>Private Academy</option>
+<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head>
+<body style='font-family:Arial; background:#f8fafc; margin:0'>
+<div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center'>
+<b>🏫 Davischool - Schools Management</b>
+<a href='/dashboard' style='text-decoration:none; border:1px solid #e2e8f0; padding:6px 12px; border-radius:6px; font-size:12px'>⬅️ Dashboard</a>
+</div>
+
+<div style='padding:20px; display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start'>
+<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px'>
+{success_banner}
+<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px'>
+    <div><b>📚 Registered Schools ({len(schools)})</b><div style='font-size:11px; color:#64748b'>Click a row to select — highlighted in blue</div></div>
+    <div style='display:flex; gap:8px'>
+        <button id='editBtn' disabled onclick='openEditModal()' style='background:#e5e7eb; color:#9ca3af; padding:8px 14px; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:not-allowed'>✏️ Edit</button>
+        <button id='deleteBtn' disabled onclick='openDeleteModal()' style='background:#e5e7eb; color:#9ca3af; padding:8px 14px; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:not-allowed'>🗑️ Delete</button>
+    </div>
+</div>
+
+<table style='width:100%; border-collapse:collapse'>
+<tr style='background:#f8fafc; font-size:11px; text-align:left; color:#64748b'><th style='padding:10px'>School</th><th style='padding:10px'>Contact</th><th style='padding:10px'>Location</th></tr>
+{rows_html}
+</table>
+<div id='selectionInfo' style='margin-top:12px; padding:10px; background:#f8fafc; border-radius:8px; font-size:11px; color:#64748b; text-align:center'>👆 Select a school row above to enable Edit / Delete buttons</div>
+</div>
+
+<div style='background:white; {highlight}; border-radius:12px; padding:20px; position:sticky; top:20px'>
+<b style='font-size:15px'>➕ Register New School</b><p style='font-size:11px; color:#64748b; margin:4px 0 12px'>All basic registration features</p>
+<form method='post' action='/register-school' style='display:flex; flex-direction:column; gap:10px'>
+<input name='school_name' placeholder='🏫 School Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='school_email' placeholder='📧 Admin Email *' required type='email' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='location' placeholder='📍 Location *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='phone' placeholder='📱 Phone *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='principal' placeholder='👨‍💼 Principal Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<select name='school_type' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<option value=''>🎓 Select Type *</option><option>Primary</option><option>Secondary</option><option>Junior Secondary</option><option>Mixed</option><option>Private Academy</option>
 </select>
-<button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; margin-top:8px'>💾 Save Changes</button>
-<a href='/schools/manage' style='text-align:center; padding:10px; border:1px solid #e2e8f0; border-radius:8px; text-decoration:none; color:#64748b; font-size:12px'>❌ Cancel</a>
+<button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; font-weight:600; cursor:pointer'>✅ Create School + Auto Code</button>
+<a href='/schools/manage' style='background:white; border:1px solid #e2e8f0; color:#64748b; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-size:13px; display:block'>❌ Cancel</a>
+<a href='/dashboard' style='background:#f8fafc; border:1px dashed #cbd5e1; color:#0f172a; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; display:block'>⬅️ Back to Dashboard</a>
 </form>
 </div>
+</div>
+
+<!-- EDIT MODAL - Same as Register Window -->
+<div id='editModal' style='display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; justify-content:center; align-items:center; padding:20px'>
+<div style='background:white; border-radius:16px; width:100%; max-width:480px; max-height:90vh; overflow:auto; padding:24px'>
+<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'><b style='font-size:16px'>✏️ Edit School</b><span onclick='closeEditModal()' style='cursor:pointer; font-size:20px'>✖</span></div>
+<p id='editCodeInfo' style='font-size:11px; color:#64748b; margin-bottom:12px'></p>
+<form method='post' id='editForm' style='display:flex; flex-direction:column; gap:10px'>
+<input name='school_name' id='edit_name' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='school_email' id='edit_email' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='location' id='edit_location' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='phone' id='edit_phone' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<input name='principal' id='edit_principal' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'>
+<select name='school_type' id='edit_type' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Primary</option><option>Secondary</option><option>Junior Secondary</option><option>Mixed</option><option>Private Academy</option></select>
+<button type='submit' style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; font-weight:600; margin-top:6px'>💾 Save Changes</button>
+<div onclick='closeEditModal()' style='background:white; border:1px solid #e2e8f0; color:#64748b; padding:11px; border-radius:8px; text-align:center; cursor:pointer'>❌ Cancel</div>
+</form>
+</div>
+</div>
+
+<!-- DELETE CONFIRMATION MODAL -->
+<div id='deleteModal' style='display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; justify-content:center; align-items:center; padding:20px'>
+<div style='background:white; border-radius:16px; width:100%; max-width:380px; padding:24px; text-align:center'>
+<div style='width:56px; height:56px; background:#fee2e2; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 12px'>⚠️</div>
+<h3 style='margin:0'>Delete School?</h3>
+<p id='deleteInfo' style='font-size:13px; color:#64748b; margin:8px 0 16px'>Are you sure you want to delete this school? This action cannot be undone and will also delete its admin login.</p>
+<div style='display:grid; grid-template-columns:1fr 1fr; gap:10px'>
+<div onclick='closeDeleteModal()' style='background:white; border:1px solid #e2e8f0; color:#0f172a; padding:11px; border-radius:8px; text-align:center; cursor:pointer; font-weight:600'>❌ Cancel</div>
+<a id='confirmDeleteBtn' href='#' style='background:#dc2626; color:white; padding:11px; border-radius:8px; text-align:center; text-decoration:none; font-weight:600'>🗑️ Yes, Delete</a>
+</div>
+</div>
+</div>
+
+<script>
+let selectedId = null;
+let schools = {schools_data};
+
+function selectSchool(id) {{
+    // remove old highlight
+    document.querySelectorAll('tr[id^="row-"]').forEach(r => {{
+        r.style.background = 'white';
+        r.style.borderLeft = 'none';
+    }});
+    // highlight new - BLUE
+    let row = document.getElementById('row-'+id);
+    if(row) {{
+        row.style.background = '#dbeafe';
+        row.style.borderLeft = '4px solid #2563eb';
+    }}
+    selectedId = id;
+    // enable buttons - REAL BUTTONS now
+    let editBtn = document.getElementById('editBtn');
+    let deleteBtn = document.getElementById('deleteBtn');
+    editBtn.disabled = false;
+    deleteBtn.disabled = false;
+    editBtn.style.background = '#0f172a';
+    editBtn.style.color = 'white';
+    editBtn.style.cursor = 'pointer';
+    deleteBtn.style.background = '#dc2626';
+    deleteBtn.style.color = 'white';
+    deleteBtn.style.cursor = 'pointer';
+    document.getElementById('selectionInfo').innerHTML = '✅ Selected: <b>' + schools[id].name + '</b> (' + schools[id].code + ') — Now click ✏️ Edit or 🗑️ Delete';
+    document.getElementById('selectionInfo').style.background = '#dbeafe';
+    document.getElementById('selectionInfo').style.color = '#1e40af';
+}}
+
+function openEditModal() {{
+    if(!selectedId) return;
+    let s = schools[selectedId];
+    document.getElementById('edit_name').value = s.name;
+    document.getElementById('edit_email').value = s.email;
+    document.getElementById('edit_location').value = s.location;
+    document.getElementById('edit_phone').value = s.phone;
+    document.getElementById('edit_principal').value = s.principal;
+    document.getElementById('edit_type').value = s.school_type;
+    document.getElementById('editCodeInfo').innerText = 'Code: ' + s.code + ' (cannot be changed)';
+    document.getElementById('editForm').action = '/schools/update/' + selectedId;
+    document.getElementById('editModal').style.display = 'flex';
+}}
+
+function closeEditModal() {{
+    document.getElementById('editModal').style.display = 'none';
+}}
+
+function openDeleteModal() {{
+    if(!selectedId) return;
+    let s = schools[selectedId];
+    document.getElementById('deleteInfo').innerHTML = 'Are you sure you want to delete <b>' + s.name + '</b> (Code: ' + s.code + ')?<br><br>This will also delete its admin login. This cannot be undone.';
+    document.getElementById('confirmDeleteBtn').href = '/schools/delete/' + selectedId;
+    document.getElementById('deleteModal').style.display = 'flex';
+}}
+
+function closeDeleteModal() {{
+    document.getElementById('deleteModal').style.display = 'none';
+}}
+
+// auto hide success after 5 sec
+setTimeout(() => {{
+    let b = document.getElementById('successBanner');
+    if(b) b.style.display='none';
+}}, 5000);
+</script>
+
 </body></html>
 """)
 
@@ -282,10 +364,10 @@ def update_school(school_id: int, school_name: str = Form(...), school_email: st
     con = get_db()
     cur = con.cursor()
     cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=?, school_type=? WHERE id=?", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, school_id))
-    cur.execute("UPDATE users SET email=? WHERE school_id=?", (school_email.strip(), school_id))
+    cur.execute("UPDATE users SET email=?, full_name=? WHERE school_id=?", (school_email.strip(), principal.strip(), school_id))
     con.commit()
     con.close()
-    return RedirectResponse("/schools/manage", status_code=303)
+    return RedirectResponse("/schools/manage?success=updated", status_code=303)
 
 @app.get("/schools/delete/{school_id}")
 def delete_school(school_id: int, request: Request):
@@ -297,7 +379,7 @@ def delete_school(school_id: int, request: Request):
     cur.execute("DELETE FROM users WHERE school_id=?", (school_id,))
     con.commit()
     con.close()
-    return RedirectResponse("/schools/manage", status_code=303)
+    return RedirectResponse("/schools/manage?success=deleted", status_code=303)
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -309,7 +391,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (school_email.strip(), "School@2026!", "school_admin", f"{principal.strip() or 'School Admin'}", sid))
     con.commit()
     con.close()
-    return HTMLResponse(f"<h3>✅ School {school_name} Created - Code {code}</h3><p>Login: {school_email} / School@2026!</p><a href='/schools/manage'>Back</a>")
+    return RedirectResponse("/schools/manage?success=added", status_code=303)
 
 @app.get("/logout")
 def logout(request: Request):
