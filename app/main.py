@@ -4,9 +4,10 @@ import sqlite3
 from starlette.middleware.sessions import SessionMiddleware
 import random, json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-activity-auto-v14")
+app.add_middleware(SessionMiddleware, secret_key="davischool-activity-auto-v14-kenya-time-fixed")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -37,7 +38,8 @@ def log_activity(email, action, details=""):
     try:
         con = get_db()
         cur = con.cursor()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # FIXED: Kenya Time Africa/Nairobi EAT UTC+3 - Matches your laptop 7:47 PM
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("INSERT INTO activity_log (email, action, details, timestamp) VALUES (?,?,?,?)", (email, action, details, ts))
         con.commit()
         con.close()
@@ -178,7 +180,8 @@ def profile(request: Request, tab: str = "personal"):
                     break
             time_str = log["timestamp"]
             try:
-                dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                # FIXED: Show Kenya time correctly
+                dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Africa/Nairobi"))
                 time_display = dt.strftime("%b %d, %I:%M %p")
             except:
                 time_display = time_str
@@ -205,11 +208,11 @@ def profile(request: Request, tab: str = "personal"):
 
         right = f"""
         <div>
-            <div style='display:flex; justify-content:space-between; align-items:center'><div><b style='font-size:15px'>📜 Activity Log</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Live auto-updating — {len(logs)} events for {email}</p></div><a href='/clear-activity' onclick="return confirm('Clear all activity log?')" style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>Clear Log</a></div>
+            <div style='display:flex; justify-content:space-between; align-items:center'><div><b style='font-size:15px'>📜 Activity Log</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Live auto-updating — {len(logs)} events for {email} — Kenya Time (EAT)</p></div><a href='/clear-activity' onclick="return confirm('Clear all activity log?')" style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>Clear Log</a></div>
             <div style='border:1px solid #e2e8f0; border-radius:10px; margin-top:16px; overflow:hidden; max-height:500px; overflow-y:auto'>
                 {log_rows}
             </div>
-            <div style='margin-top:10px; font-size:10px; color:#94a3b8; text-align:center'>🔄 Automatically records every login, school add/edit/delete, profile view, password change</div>
+            <div style='margin-top:10px; font-size:10px; color:#94a3b8; text-align:center'>🔄 Automatically records every login, school add/edit/delete, profile view, password change — Timezone: Africa/Nairobi</div>
         </div>
         """
     else:
@@ -397,8 +400,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (school_email.strip(), "School@2026!", "school_admin", f"{principal.strip() or 'School Admin'}", sid))
     con.commit()
     con.close()
-    email = request.session.get("email","") if request else SUPER_ADMIN
-    # need to get from request session manually
+    email = SUPER_ADMIN
     try:
         if request:
             email = request.session.get("email", SUPER_ADMIN)
