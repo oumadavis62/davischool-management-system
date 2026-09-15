@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-activity-auto-v14-kenya-time-fixed")
+app.add_middleware(SessionMiddleware, secret_key="davischool-do-cursor-hover-dark-v15")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -38,7 +38,6 @@ def log_activity(email, action, details=""):
     try:
         con = get_db()
         cur = con.cursor()
-        # FIXED: Kenya Time Africa/Nairobi EAT UTC+3 - Matches your laptop 7:47 PM
         ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("INSERT INTO activity_log (email, action, details, timestamp) VALUES (?,?,?,?)", (email, action, details, ts))
         con.commit()
@@ -59,20 +58,38 @@ def get_school_obj(req):
 
 def header_html(initials, name, email):
     return f"""
+    <style>
+   .do-avatar {{
+        width:36px; height:36px; background:#dbeafe; color:#1e40af; border-radius:50%;
+        display:flex; align-items:center; justify-content:center; font-weight:800;
+        cursor:pointer; border:2px solid #e2e8f0;
+        user-select:none; -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none;
+        caret-color:transparent; outline:none;
+    }}
+   .do-avatar:focus {{ outline:none; caret-color:transparent; }}
+   .dropdown-item {{
+        display:flex; align-items:center; gap:10px; padding:11px 14px;
+        text-decoration:none; font-size:13px; transition:0.2s; cursor:pointer;
+    }}
+   .dropdown-item-profile {{ color:#0f172a; border-bottom:1px solid #f8fafc; }}
+   .dropdown-item-profile:hover {{ background:#0f172a; color:white; }}
+   .dropdown-item-logout {{ color:#dc2626; }}
+   .dropdown-item-logout:hover {{ background:#0f172a; color:white; }}
+    </style>
     <div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; position:relative'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px; color:#64748b'>{name} • Super Admin</div></div>
         <div style='position:relative'>
-            <div onclick='toggleProfileMenu()' style='width:36px; height:36px; background:#dbeafe; color:#1e40af; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; cursor:pointer; border:2px solid #e2e8f0'>{initials}</div>
+            <div onclick='toggleProfileMenu()' class='do-avatar' tabindex='-1'>{initials}</div>
             <div id='profileDropdown' style='display:none; position:absolute; right:0; top:44px; background:white; border:1px solid #e2e8f0; border-radius:12px; width:220px; box-shadow:0 10px 25px rgba(0,0,0,0.12); z-index:1000; overflow:hidden'>
                 <div style='padding:14px; border-bottom:1px solid #f1f5f9; background:#f8fafc'><div style='font-weight:700; font-size:13px'>{name}</div><div style='font-size:11px; color:#64748b'>{email}</div><div style='margin-top:6px'><span style='background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:20px; font-size:10px'>Super Admin</span></div></div>
-                <a href='/profile?tab=personal' style='display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; color:#0f172a; font-size:13px; border-bottom:1px solid #f8fafc'>👤 Profile</a>
-                <a href='/logout' style='display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; color:#dc2626; font-size:13px'>🚪 Logout</a>
+                <a href='/profile?tab=personal' class='dropdown-item dropdown-item-profile'><span>👤</span> Profile</a>
+                <a href='/logout' class='dropdown-item dropdown-item-logout'><span>🚪</span> Logout</a>
             </div>
         </div>
     </div>
     <script>
     function toggleProfileMenu(){{ let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none'; }}
-    document.addEventListener('click', function(e){{ let b=e.target.closest('[onclick="toggleProfileMenu()"]'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{ menu.style.display='none'; }} }});
+    document.addEventListener('click', function(e){{ let b=e.target.closest('.do-avatar'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{ menu.style.display='none'; }} }});
     </script>
     """
 
@@ -167,10 +184,7 @@ def profile(request: Request, tab: str = "personal"):
         logs = cur.fetchall()
         con.close()
         log_rows = ""
-        icon_map = {
-            "Logged in": "🔓", "dashboard": "📊", "profile": "👀", "Registered": "🏫",
-            "Edited": "✏️", "Deleted": "🗑️", "Password": "🔑", "Updated profile": "👤"
-        }
+        icon_map = {"Logged in": "🔓", "dashboard": "📊", "profile": "👀", "Registered": "🏫", "Edited": "✏️", "Deleted": "🗑️", "Password": "🔑", "Updated profile": "👤"}
         for log in logs:
             action = log["action"]
             icon = "📌"
@@ -180,7 +194,6 @@ def profile(request: Request, tab: str = "personal"):
                     break
             time_str = log["timestamp"]
             try:
-                # FIXED: Show Kenya time correctly
                 dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Africa/Nairobi"))
                 time_display = dt.strftime("%b %d, %I:%M %p")
             except:
@@ -193,26 +206,17 @@ def profile(request: Request, tab: str = "personal"):
             elif "Password" in action: bg = "#f3e8ff"
             log_rows += f"""
             <div style='padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'>
-                <div style='display:flex; align-items:center; gap:10px'>
-                    <span style='width:32px; height:32px; background:{bg}; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px'>{icon}</span>
-                    <div>
-                        <div style='font-size:12px; font-weight:600'>{action}</div>
-                        <div style='font-size:11px; color:#64748b'>{log["details"]}</div>
-                    </div>
-                </div>
+                <div style='display:flex; align-items:center; gap:10px'><span style='width:32px; height:32px; background:{bg}; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px'>{icon}</span><div><div style='font-size:12px; font-weight:600'>{action}</div><div style='font-size:11px; color:#64748b'>{log["details"]}</div></div></div>
                 <span style='font-size:10px; color:#94a3b8; white-space:nowrap'>{time_display}</span>
             </div>
             """
         if not log_rows:
-            log_rows = "<div style='padding:24px; text-align:center; color:#999; font-size:12px'>No activity yet — actions will appear here automatically</div>"
-
+            log_rows = "<div style='padding:24px; text-align:center; color:#999; font-size:12px'>No activity yet</div>"
         right = f"""
         <div>
-            <div style='display:flex; justify-content:space-between; align-items:center'><div><b style='font-size:15px'>📜 Activity Log</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Live auto-updating — {len(logs)} events for {email} — Kenya Time (EAT)</p></div><a href='/clear-activity' onclick="return confirm('Clear all activity log?')" style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>Clear Log</a></div>
-            <div style='border:1px solid #e2e8f0; border-radius:10px; margin-top:16px; overflow:hidden; max-height:500px; overflow-y:auto'>
-                {log_rows}
-            </div>
-            <div style='margin-top:10px; font-size:10px; color:#94a3b8; text-align:center'>🔄 Automatically records every login, school add/edit/delete, profile view, password change — Timezone: Africa/Nairobi</div>
+            <div style='display:flex; justify-content:space-between; align-items:center'><div><b style='font-size:15px'>📜 Activity Log</b><p style='font-size:11px; color:#64748b; margin-top:4px'>Live auto-updating — {len(logs)} events — Kenya Time (EAT)</p></div><a href='/clear-activity' onclick="return confirm('Clear all activity log?')" style='font-size:11px; color:#dc2626; border:1px solid #fecaca; padding:6px 10px; border-radius:6px; text-decoration:none'>Clear Log</a></div>
+            <div style='border:1px solid #e2e8f0; border-radius:10px; margin-top:16px; overflow:hidden; max-height:500px; overflow-y:auto'>{log_rows}</div>
+            <div style='margin-top:10px; font-size:10px; color:#94a3b8; text-align:center'>🔄 Auto records login, add/edit/delete, profile view, password change — Timezone: Africa/Nairobi</div>
         </div>
         """
     else:
@@ -231,11 +235,9 @@ def profile(request: Request, tab: str = "personal"):
         </form>
         </div>
         """
-
     ap = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="personal" else "color:#64748b; border-bottom:2px solid transparent"
     ase = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="security" else "color:#64748b; border-bottom:2px solid transparent"
     aa = "border-bottom:2px solid #0f172a; color:#0f172a; font-weight:700" if tab=="activity" else "color:#64748b; border-bottom:2px solid transparent"
-
     html = f"""
     <html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='margin:0; font-family:Arial; background:#f8fafc'>
     {header_html(initials, name, email)}
@@ -252,15 +254,9 @@ def profile(request: Request, tab: str = "personal"):
                 <div style='font-weight:700; margin-top:14px; font-size:16px'>{name}</div>
                 <div style='margin-top:8px'><span style='background:#e0f2fe; color:#0369a1; padding:5px 12px; border-radius:20px; font-size:11px; font-weight:600'>{badge}</span></div>
                 <div style='margin-top:12px; font-size:12px; color:#0f172a'>{email}</div>
-                <div style='margin-top:16px; border-top:1px solid #f1f5f9; padding-top:16px; text-align:left'>
-                    <div style='font-size:12px; font-weight:700'>{sname}</div>
-                    <div style='font-size:11px; color:#64748b; margin-top:2px'>{sloc}</div>
-                    <div style='font-size:10px; color:#94a3b8; margin-top:6px; background:#f8fafc; padding:6px 8px; border-radius:6px'>Code: {scode}</div>
-                </div>
+                <div style='margin-top:16px; border-top:1px solid #f1f5f9; padding-top:16px; text-align:left'><div style='font-size:12px; font-weight:700'>{sname}</div><div style='font-size:11px; color:#64748b; margin-top:2px'>{sloc}</div><div style='font-size:10px; color:#94a3b8; margin-top:6px; background:#f8fafc; padding:6px 8px; border-radius:6px'>Code: {scode}</div></div>
             </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:24px; min-height:400px'>
-                {right}
-            </div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:24px; min-height:400px'>{right}</div>
         </div>
     </div>
     </body></html>
