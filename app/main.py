@@ -5,11 +5,10 @@ from starlette.middleware.sessions import SessionMiddleware
 import random, json, smtplib, ssl
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from email.message import EmailMessage
 import os
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v27-auto-pass")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v28-asc-timetable")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -19,11 +18,11 @@ SMTP_PORT = 587
 ROLE_PERMISSIONS = {
     "school_admin": ["dashboard","students","classes","subjects","exams","marks","marksheets","ranking","analysis","reports","timetable","fees","sms","staff","profile"],
     "deputy_principal": ["dashboard","students","classes","subjects","exams","marks","marksheets","ranking","analysis","reports","timetable","fees","sms","profile"],
-    "dos": ["dashboard","students","exams","marks","marksheets","ranking","analysis","reports","profile"],
-    "hod": ["dashboard","students","marks","marksheets","analysis","reports","profile"],
-    "teacher": ["dashboard","students","marks","marksheets","profile"],
+    "dos": ["dashboard","students","exams","marks","marksheets","ranking","analysis","reports","timetable","profile"],
+    "hod": ["dashboard","students","marks","marksheets","analysis","reports","timetable","profile"],
+    "teacher": ["dashboard","students","marks","marksheets","timetable","profile"],
     "bursar": ["dashboard","students","fees","profile"],
-    "class_teacher": ["dashboard","students","marks","marksheets","profile"],
+    "class_teacher": ["dashboard","students","marks","marksheets","timetable","profile"],
 }
 ROLE_LABELS = {
     "school_admin": "Principal - Full Control",
@@ -35,13 +34,11 @@ ROLE_LABELS = {
     "class_teacher": "Class Teacher"
 }
 ROLE_PASSWORD_PREFIX = {
-    "deputy_principal": "DEPUTY",
-    "dos": "DOS",
-    "hod": "HOD",
-    "teacher": "TEACH",
-    "class_teacher": "CTEACH",
-    "bursar": "BURSAR",
+    "deputy_principal": "DEPUTY", "dos": "DOS", "hod": "HOD", "teacher": "TEACH", "class_teacher": "CTEACH", "bursar": "BURSAR",
 }
+
+PERIODS = ["8:00-8:40","8:40-9:20","9:20-10:00","10:00-10:30 BREAK","10:30-11:10","11:10-11:50","11:50-12:30","12:30-13:00 LUNCH","14:00-14:40","14:40-15:20","15:20-16:00"]
+DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"]
 
 def has_permission(role, page):
     if role == "super_admin": return True
@@ -78,7 +75,9 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, exam_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, exam_id INTEGER, student_id INTEGER, subject_id INTEGER, score INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, term TEXT, total INTEGER, paid INTEGER, balance INTEGER)")
-    cur.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER, day TEXT, period TEXT, subject TEXT, teacher TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER, day TEXT, period TEXT, subject TEXT, teacher TEXT, teacher_id INTEGER)")
+    try: cur.execute("ALTER TABLE timetable ADD COLUMN teacher_id INTEGER")
+    except: pass
     cur.execute("CREATE TABLE IF NOT EXISTS sms_logs (id INTEGER PRIMARY KEY, school_id INTEGER, recipient TEXT, message TEXT, timestamp TEXT)")
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
@@ -98,6 +97,7 @@ def generate_unique_password(school_name):
 def send_email(to_email, subject, body):
     if not EMAIL_PASSWORD: return False
     try:
+        from email.message import EmailMessage
         msg = EmailMessage(); msg["From"] = EMAIL_SENDER; msg["To"] = to_email; msg["Subject"] = subject; msg.set_content(body)
         context = ssl.create_default_context()
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
@@ -119,12 +119,7 @@ def get_school_obj(req):
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close(); return s
 
 def header_html(initials, name, email):
-    return f"""
-    <style>.do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}.dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item-profile{{color:#0f172a;border-bottom:1px solid #f8fafc}}.dropdown-item-profile:hover{{background:#0f172a;color:white}}.dropdown-item-logout{{color:#dc2626}}.dropdown-item-logout:hover{{background:#0f172a;color:white}}</style>
-    <div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div>
-    <div style='position:relative'><div onclick='toggleProfileMenu()' class='do-avatar'>{initials}</div>
-    <div id='profileDropdown' style='display:none;position:absolute;right:0;top:44px;background:white;border:1px solid #e2e8f0;border-radius:12px;width:220px;box-shadow:0 10px 25px rgba(0,0,0,0.12);z-index:1000;overflow:hidden'><div style='padding:14px;border-bottom:1px solid #f1f5f9;background:#f8fafc'><div style='font-weight:700;font-size:13px'>{name}</div><div style='font-size:11px;color:#64748b'>{email}</div></div><a href='/profile?tab=personal' class='dropdown-item dropdown-item-profile'>👤 Profile</a><a href='/logout' class='dropdown-item dropdown-item-logout'>🚪 Logout</a></div></div></div>
-    <script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown');m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}}document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar');let menu=document.getElementById('profileDropdown');if(!b&&menu&&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>"""
+    return f"""<style>.do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}.dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item-profile{{color:#0f172a;border-bottom:1px solid #f8fafc}}.dropdown-item-profile:hover{{background:#0f172a;color:white}}.dropdown-item-logout{{color:#dc2626}}.dropdown-item-logout:hover{{background:#0f172a;color:white}}</style><div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div><div style='position:relative'><div onclick='toggleProfileMenu()' class='do-avatar'>{initials}</div><div id='profileDropdown' style='display:none;position:absolute;right:0;top:44px;background:white;border:1px solid #e2e8f0;border-radius:12px;width:220px;box-shadow:0 10px 25px rgba(0,0,0,0.12);z-index:1000;overflow:hidden'><div style='padding:14px;border-bottom:1px solid #f1f5f9;background:#f8fafc'><div style='font-weight:700;font-size:13px'>{name}</div><div style='font-size:11px;color:#64748b'>{email}</div></div><a href='/profile?tab=personal' class='dropdown-item dropdown-item-profile'>👤 Profile</a><a href='/logout' class='dropdown-item dropdown-item-logout'>🚪 Logout</a></div></div></div><script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown');m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}}document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar');let menu=document.getElementById('profileDropdown');if(!b&&menu&&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>"""
 
 def school_header(school, name, active="dashboard", role="school_admin"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
@@ -137,13 +132,7 @@ def school_header(school, name, active="dashboard", role="school_admin"):
     if role == "school_admin":
         sa = "background:#0f172a;color:white;font-weight:700" if active=="staff" else "color:#7c3aed;"
         staff_link = f"<a href='/school/staff' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{sa}'>👥 Staff & Roles</a>"
-    return f"""
-    <div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
-    <div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20]}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {role_label}</div></div></div></div>
-    {nav('dashboard','📊','Dashboard')}{nav('students','🎓','Students')}{nav('classes','🏫','Classes & Streams')}{nav('subjects','📚','Subjects')}{nav('exams','📝','Exams')}{nav('marks','✍️','Enter Marks')}{nav('marksheets','📄','MarkSheets')}{nav('ranking','🏆','Ranking')}{nav('analysis','📈','Exam Analysis')}{nav('reports','📑','Student Reports')}{nav('timetable','🗓️','Smart Timetable')}{nav('fees','💰','Fees & Finance')}{nav('sms','💬','Bulk SMS Parents')}{staff_link}
-    <div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/profile?tab=personal' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#475569'>👤 My Profile ({role_label})</a><a href='/logout' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div>
-    <div style='margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px'><div style='font-size:10px;font-weight:700;color:#166534'>✅ DaviSchool - {role_label}</div></div></div>
-    <div style='flex:1;background:#f8fafc'><div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:14px'>DaviSchool Analytics 🚀 - {role_label}</b><div style='font-size:11px;color:#64748b'>{name} • {school['name']}</div></div><div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#ede9fe;color:#5b21b6;padding:6px 10px;border-radius:20px'>{role_label}</span><div style='width:36px;height:36px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800'>{initials}</div></div></div>"""
+    return f"""<div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20]}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {role_label}</div></div></div></div>{nav('dashboard','📊','Dashboard')}{nav('students','🎓','Students')}{nav('classes','🏫','Classes & Streams')}{nav('subjects','📚','Subjects')}{nav('exams','📝','Exams')}{nav('marks','✍️','Enter Marks')}{nav('marksheets','📄','MarkSheets')}{nav('ranking','🏆','Ranking')}{nav('analysis','📈','Exam Analysis')}{nav('reports','📑','Student Reports')}{nav('timetable','🗓️','Smart Timetable ASC')}{nav('fees','💰','Fees & Finance')}{nav('sms','💬','Bulk SMS Parents')}{staff_link}<div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/profile?tab=personal' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#475569'>👤 My Profile ({role_label})</a><a href='/logout' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div><div style='margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px'><div style='font-size:10px;font-weight:700;color:#166534'>✅ DaviSchool ASC Timetable</div></div></div><div style='flex:1;background:#f8fafc'><div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:14px'>DaviSchool Analytics 🚀 - {role_label}</b><div style='font-size:11px;color:#64748b'>{name} • {school['name']}</div></div><div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#ede9fe;color:#5b21b6;padding:6px 10px;border-radius:20px'>{role_label}</span><div style='width:36px;height:36px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800'>{initials}</div></div></div>"""
 
 @app.get("/health")
 def health(): return PlainTextResponse("OK")
@@ -189,105 +178,74 @@ def school_dashboard(request: Request):
     if not school:
         if request.session.get("role")=="super_admin": return RedirectResponse("/dashboard")
         return RedirectResponse("/")
-    name = request.session.get("name",""); role = request.session.get("role","school_admin")
+    name = request.session.get("name",""); role = request.session.get("role","school_admin"); email = request.session.get("email","")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
+    # TODAY'S LESSONS FOR TEACHER
+    today = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%A")
+    cur.execute("SELECT t.*, c.name as cname FROM timetable t LEFT JOIN classes c ON t.class_id=c.id WHERE t.school_id=? AND t.day=? AND (t.teacher_id=? OR t.teacher=? OR?='school_admin') ORDER BY t.period", (school["id"], today, request.session.get("user_id",0), name, role))
+    # fallback search by teacher name
+    cur.execute("SELECT t.*, c.name as cname FROM timetable t LEFT JOIN classes c ON t.class_id=c.id WHERE t.school_id=? AND t.day=? AND (t.teacher LIKE? OR t.teacher_id IN (SELECT id FROM users WHERE full_name=? AND school_id=?)) ORDER BY t.period", (school["id"], today, f"%{name}%", name, school["id"]))
+    todays = cur.fetchall()
     con.close()
+    todays_html = "".join([f"<div style='background:white;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between'><div><b style='font-size:12px'>{t['period']}</b><div style='font-size:11px;color:#64748b'>{t['cname']} - {t['subject']}</div></div><div style='font-size:11px;background:#dbeafe;color:#1e40af;padding:4px 8px;border-radius:12px;height:fit-content'>📍 {t['cname']}</div></div>" for t in todays]) or f"<div style='padding:12px;text-align:center;color:#999;font-size:12px'>No lessons today ({today}) - Enjoy! 🎉</div>"
     html = school_header(school, name, "dashboard", role)
-    html += f"<div style='padding:20px'><div style='background:linear-gradient(135deg,#0f172a,#1e40af);border-radius:16px;padding:20px;color:white'><h2 style='margin:0'>DaviSchool - {ROLE_LABELS.get(role, role)} 🚀</h2><p style='font-size:13px;color:#bfdbfe;margin-top:6px'>Permissions: {', '.join(ROLE_PERMISSIONS.get(role, []))}</p></div><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><div style='font-size:11px'>🎓 Students</div><div style='font-size:24px;font-weight:800'>{sc}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><div style='font-size:11px'>🏫 Classes</div><div style='font-size:24px;font-weight:800'>{cc}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><div style='font-size:11px'>📝 Exams</div><div style='font-size:24px;font-weight:800'>{ec}</div></div></div></div></div></div>"
+    html += f"<div style='padding:20px'><div style='background:linear-gradient(135deg,#0f172a,#1e40af);border-radius:16px;padding:20px;color:white;display:flex;justify-content:space-between'><div><h2 style='margin:0'>DaviSchool ASC Timetable 🚀</h2><p style='font-size:13px;color:#bfdbfe;margin-top:6px'>{ROLE_LABELS.get(role, role)} | Today is {today} | {len(todays)} lessons today</p></div><div style='text-align:right'><div style='font-size:24px;font-weight:800'>{sc} Students</div><div style='font-size:11px;color:#bfdbfe'>{cc} Classes | {ec} Exams</div></div></div><div style='display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px'><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px'><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px'><div style='font-size:11px'>🎓 Students</div><div style='font-size:24px;font-weight:800'>{sc}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px'><div style='font-size:11px'>🏫 Classes</div><div style='font-size:24px;font-weight:800'>{cc}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px'><div style='font-size:11px'>📝 Exams</div><div style='font-size:24px;font-weight:800'>{ec}</div></div><div style='grid-column:span 3;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-top:8px'><b>📊 Your Access - Zeraki Style</b><div style='margin-top:8px;display:flex;flex-wrap:wrap;gap:6px'>{''.join([f'<span style=background:#f1f5f9;border:1px solid #e2e8f0;padding:4px 8px;border-radius:20px;font-size:10px>{p}</span>' for p in ROLE_PERMISSIONS.get(role,[])])}</div></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'><b>🗓️ Today's Lessons - {today}</b><a href='/school/timetable' style='font-size:11px;color:#2563eb;text-decoration:none'>Full Timetable →</a></div><div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px;margin-bottom:12px'><div style='font-size:11px;font-weight:700;color:#166534'>🔔 Lesson Alerts for {name}</div><div style='font-size:10px;color:#15803d'>ASC-style teacher alerts - Don't miss!</div></div>{todays_html}</div></div></div></div></div>"
     return HTMLResponse(f"<html><body style='margin:0;font-family:Arial'>{html}</body></html>")
 
-# ========== STAFF PAGE - AUTO PASSWORD ==========
+# STAFF
 @app.get("/school/staff", response_class=HTMLResponse)
 def school_staff(request: Request, success: str = "", new_email: str = "", new_pass: str = "", new_name: str = "", new_role: str = ""):
     if "email" not in request.session: return RedirectResponse("/")
     role = request.session.get("role","")
     if role!= "school_admin": return HTMLResponse(f"<html><body style='font-family:Arial;text-align:center;padding:40px'><h2>🚫 Only Principal</h2><a href='/school/dashboard'>Back</a></body></html>")
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM users WHERE school_id=? ORDER BY role, full_name", (school["id"],)); staff = cur.fetchall()
-    con.close()
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE school_id=? ORDER BY role, full_name", (school["id"],)); staff = cur.fetchall(); con.close()
     success_banner = ""
     if success=="added":
-        success_banner = f"""<div id='successBanner' style='background:#dcfce7;border:2px solid #16a34a;color:#166534;padding:16px;border-radius:12px;margin-bottom:16px'><b>✅ Staff Added & Activated! 🎉</b><div style='background:white;border:1px dashed #16a34a;border-radius:8px;padding:12px;margin-top:10px'><div style='font-size:11px;color:#64748b'>👤 Name: <b>{new_name}</b> | Role: {ROLE_LABELS.get(new_role, new_role)}</div><div style='margin-top:8px'><div style='font-size:11px;color:#64748b'>📧 Username (Email):</div><div style='font-weight:800;font-size:14px'>{new_email}</div></div><div style='margin-top:8px'><div style='font-size:11px;color:#64748b'>🔑 Auto-Generated Password:</div><div style='font-weight:800;font-size:20px;letter-spacing:1px'>{new_pass}</div></div></div><div style='margin-top:10px;font-size:11px'>✅ Share these credentials with {new_name} - Can login now immediately!</div><div style='text-align:right;margin-top:12px'><button onclick="document.getElementById('successBanner').style.display='none'" style='background:#0f172a;color:white;padding:8px 18px;border:none;border-radius:8px;font-weight:600'>OK Got it ✅</button></div></div>"""
-    rows = ""
-    for s in staff:
-        is_principal = s["role"] == "school_admin"
-        badge_color = "#ede9fe" if not is_principal else "#dcfce7"
-        text_color = "#5b21b6" if not is_principal else "#166534"
-        del_btn = "" if is_principal else f"<a href='/school/staff/delete/{s['id']}' onclick=\"return confirm('Delete {s['full_name']}?')\" style='color:#dc2626;font-size:11px'>🗑️ Delete</a>"
-        rows += f"<tr><td style='padding:10px;border-bottom:1px solid #eee;font-size:12px'><b>{s['full_name']}</b><div style='font-size:10px;color:#64748b'>{s['email']}</div></td><td style='padding:10px;border-bottom:1px solid #eee'><span style='background:{badge_color};color:{text_color};padding:4px 8px;border-radius:20px;font-size:10px'>{ROLE_LABELS.get(s['role'], s['role'])}</span></td><td style='padding:10px;border-bottom:1px solid #eee;font-size:11px;font-family:monospace'>{s['password']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{del_btn}</td></tr>"
-    table = f"{success_banner}<b>👥 Staff & Roles ({len(staff)}) - Principal Control</b><div style='font-size:11px;color:#64748b;margin-top:4px'>Auto password generation enabled ✅</div><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:10px;text-align:left'>Name / Username</th><th style='padding:10px;text-align:left'>Role</th><th style='padding:10px;text-align:left'>Password</th><th>Action</th></tr>{rows}</table>"
-    form = """
-    <form method='post' action='/school/staff/add' style='display:flex;flex-direction:column;gap:12px;margin-top:12px'>
-        <div><label style='font-size:11px;font-weight:600'>👤 Full Name *</label><input name='full_name' placeholder='e.g. John Otieno' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div>
-        <div><label style='font-size:11px;font-weight:600'>📧 Email (Will be Username) *</label><input name='email' type='email' placeholder='teacher@school.com' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div>
-        <div><label style='font-size:11px;font-weight:600'>🎭 Role *</label><select name='role' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'>
-            <option value=''>Select Role *</option>
-            <option value='deputy_principal'>Deputy Principal - Almost Full</option>
-            <option value='dos'>Director of Studies (DOS)</option>
-            <option value='hod'>HOD - Department</option>
-            <option value='teacher'>Teacher - Limited (Zeraki style)</option>
-            <option value='class_teacher'>Class Teacher</option>
-            <option value='bursar'>Bursar - Fees Only</option>
-        </select></div>
-        <div style='background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px'><div style='font-size:11px;font-weight:700;color:#5b21b6'>🔐 Auto Generation Enabled</div><div style='font-size:10px;color:#6d28d9;margin-top:4px'>Password auto-created like TEACH@4521! <br>Username = Email you entered <br>✅ Activated instantly</div></div>
-        <button style='background:#7c3aed;color:white;padding:13px;border:none;border-radius:10px;font-weight:700'>➕ Add Staff & Auto-Generate Login</button>
-    </form>
-    """
+        success_banner = f"""<div id='successBanner' style='background:#dcfce7;border:2px solid #16a34a;color:#166534;padding:16px;border-radius:12px;margin-bottom:16px'><b>✅ Staff Added & Activated!</b><div style='background:white;border:1px dashed #16a34a;border-radius:8px;padding:12px;margin-top:10px'><div style='font-size:11px'>👤 {new_name} | {ROLE_LABELS.get(new_role, new_role)}</div><div style='margin-top:8px'><div style='font-size:11px;color:#64748b'>📧 Username:</div><div style='font-weight:800'>{new_email}</div></div><div style='margin-top:8px'><div style='font-size:11px;color:#64748b'>🔑 Password:</div><div style='font-weight:800;font-size:20px'>{new_pass}</div></div></div><div style='text-align:right;margin-top:12px'><button onclick="document.getElementById('successBanner').style.display='none'" style='background:#0f172a;color:white;padding:8px 18px;border:none;border-radius:8px'>OK ✅</button></div></div>"""
+    rows = "".join([f"<tr><td style='padding:10px;border-bottom:1px solid #eee'><b>{s['full_name']}</b><div style='font-size:10px;color:#64748b'>{s['email']}</div></td><td style='padding:10px;border-bottom:1px solid #eee'><span style='background:#ede9fe;color:#5b21b6;padding:4px 8px;border-radius:20px;font-size:10px'>{ROLE_LABELS.get(s['role'], s['role'])}</span></td><td style='padding:10px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px'>{s['password']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{'<span style=font-size:10px;color:#999>Principal</span>' if s['role']=='school_admin' else f'<a href=/school/staff/delete/{s[\"id\"]} style=color:#dc2626;font-size:11px>🗑️</a>'}</td></tr>" for s in staff])
+    table = f"{success_banner}<b>👥 Staff & Roles ({len(staff)})</b><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:10px;text-align:left'>Name / Username</th><th>Role</th><th>Password</th><th>Action</th></tr>{rows}</table>"
+    form = """<form method='post' action='/school/staff/add' style='display:flex;flex-direction:column;gap:12px;margin-top:12px'><div><label style='font-size:11px;font-weight:600'>👤 Full Name *</label><input name='full_name' placeholder='John Otieno' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>📧 Email (Username) *</label><input name='email' type='email' placeholder='teacher@school.com' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>🎭 Role *</label><select name='role' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'><option value=''>Select Role *</option><option value='deputy_principal'>Deputy Principal</option><option value='dos'>DOS</option><option value='hod'>HOD</option><option value='teacher'>Teacher - Limited</option><option value='class_teacher'>Class Teacher</option><option value='bursar'>Bursar</option></select></div><div style='background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px'><div style='font-size:11px;font-weight:700;color:#5b21b6'>🔐 Auto Generation</div><div style='font-size:10px;color:#6d28d9'>Password auto like TEACH@4521! - Activated instantly</div></div><button style='background:#7c3aed;color:white;padding:13px;border:none;border-radius:10px;font-weight:700'>➕ Add & Auto-Generate</button></form>"""
     return school_list_page(request, "👥 Add Staff - Auto Password", "staff", table, form)
 
 @app.post("/school/staff/add")
 def add_staff(request: Request, full_name: str = Form(...), email: str = Form(...), role: str = Form(...)):
     if request.session.get("role")!= "school_admin": return RedirectResponse("/school/dashboard")
-    school = get_school_obj(request)
-    auto_pass = generate_staff_password(role)
-    con = get_db(); cur = con.cursor()
-    # Check duplicate
-    cur.execute("SELECT * FROM users WHERE email=?", (email.strip(),))
-    if cur.fetchone():
-        con.close()
-        return HTMLResponse(f"<h3>❌ Email {email} already exists</h3><a href='/school/staff'>Back</a>")
-    cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), auto_pass, role, full_name.strip(), school["id"]))
-    con.commit(); con.close()
-    log_activity(request.session.get("email",""), f"👥 Principal auto-added staff: {full_name} as {role} - Pass {auto_pass}", "")
+    school = get_school_obj(request); auto_pass = generate_staff_password(role)
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=?", (email.strip(),))
+    if cur.fetchone(): con.close(); return HTMLResponse(f"<h3>❌ Email exists</h3><a href='/school/staff'>Back</a>")
+    cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), auto_pass, role, full_name.strip(), school["id"])); con.commit(); con.close()
     return RedirectResponse(f"/school/staff?success=added&new_email={email.strip()}&new_pass={auto_pass}&new_name={full_name.strip()}&new_role={role}", status_code=303)
 
 @app.get("/school/staff/delete/{uid}")
 def del_staff(uid: int, request: Request):
     if request.session.get("role")!= "school_admin": return RedirectResponse("/school/dashboard")
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM users WHERE id=? AND school_id=?", (uid, school["id"])); u = cur.fetchone()
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE id=? AND school_id=?", (uid, school["id"])); u = cur.fetchone()
     if u and u["role"]!= "school_admin": cur.execute("DELETE FROM users WHERE id=? AND school_id=?", (uid, school["id"]))
-    con.commit(); con.close()
-    return RedirectResponse("/school/staff", status_code=303)
+    con.commit(); con.close(); return RedirectResponse("/school/staff", status_code=303)
 
-# ========== CLASSES ==========
+# CLASSES
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    role = request.session.get("role","")
-    if not has_permission(role, "classes"): return RedirectResponse("/school/dashboard")
+    if not has_permission(request.session.get("role",""), "classes"): return RedirectResponse("/school/dashboard")
     school = get_school_obj(request); con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY id DESC", (school["id"],)); classes = cur.fetchall()
     cur.execute("SELECT id, full_name, role FROM users WHERE school_id=? AND role IN ('teacher','class_teacher','hod','deputy_principal','dos') ORDER BY full_name", (school["id"],)); teachers = cur.fetchall()
     cur.execute("SELECT id, full_name FROM users WHERE school_id=? ORDER BY full_name", (school["id"],)); all_staff = cur.fetchall()
     cur.execute("SELECT c.id, COUNT(s.id) cnt FROM classes c LEFT JOIN students s ON s.class_id=c.id AND s.school_id=? WHERE c.school_id=? GROUP BY c.id", (school["id"], school["id"])); counts = {r[0]: r[1] for r in cur.fetchall()}
     con.close()
-    if teachers:
-        teacher_options = "".join([f"<option value='{t['id']}|{t['full_name']}'>👨‍🏫 {t['full_name']} ({ROLE_LABELS.get(t['role'], t['role'])})</option>" for t in teachers])
-    else:
-        teacher_options = "".join([f"<option value='{s['id']}|{s['full_name']}'>👨‍🏫 {s['full_name']}</option>" for s in all_staff]) or "<option value=''>⚠️ No teachers yet - Add in Staff & Roles first</option>"
+    if teachers: teacher_options = "".join([f"<option value='{t['id']}|{t['full_name']}'>👨‍🏫 {t['full_name']} ({ROLE_LABELS.get(t['role'], t['role'])})</option>" for t in teachers])
+    else: teacher_options = "".join([f"<option value='{s['id']}|{s['full_name']}'>👨‍🏫 {s['full_name']}</option>" for s in all_staff]) or "<option value=''>⚠️ No teachers yet - Add in Staff first</option>"
     rows = ""
     for c in classes:
-        ct = c["class_teacher_name"] or "Not Assigned"
-        cname = c["class_name"] or c["name"]
-        stream = c["stream"] or "-"
+        ct = c["class_teacher_name"] or "Not Assigned"; cname = c["class_name"] or c["name"]; stream = c["stream"] or "-"
         rows += f"<tr><td style='padding:10px;border-bottom:1px solid #eee'><b>{cname}</b></td><td style='padding:10px;border-bottom:1px solid #eee'>{stream}</td><td style='padding:10px;border-bottom:1px solid #eee;font-size:11px'>👨‍🏫 {ct}</td><td style='padding:10px;border-bottom:1px solid #eee'>{c['level']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{counts.get(c['id'],0)}</td><td style='padding:10px;border-bottom:1px solid #eee'><a href='/school/class/delete/{c['id']}' style='color:#dc2626'>🗑️</a></td></tr>"
     if not rows: rows = "<tr><td colspan=6 style='padding:20px;text-align:center;color:#999'>No classes yet</td></tr>"
-    table = f"<b>🏫 Classes & Streams ({len(classes)})</b><div style='font-size:11px;color:#64748b'>Class Teacher from dropdown of teachers you added</div><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:10px;text-align:left'>Class</th><th style='padding:10px;text-align:left'>Stream</th><th style='padding:10px;text-align:left'>Class Teacher</th><th style='padding:10px;text-align:left'>Level</th><th>Students</th><th>Action</th></tr>{rows}</table>"
-    form = f"""<form method='post' action='/school/classes/add' style='display:flex;flex-direction:column;gap:12px;margin-top:12px'><div><label style='font-size:11px;font-weight:600'>🏫 Class *</label><input name='class_name' placeholder='e.g. Class 8, Form 2' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>🔀 Stream *</label><input name='stream' placeholder='e.g. East, West' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>👨‍🏫 Class Teacher *</label><select name='class_teacher' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'><option value=''>Select Teacher *</option>{teacher_options}</select><div style='font-size:10px;color:#64748b;margin-top:4px'>From Staff list - automated</div></div><div><label style='font-size:11px;font-weight:600'>🎓 Level *</label><select name='level' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'><option value=''>Select Level *</option><option>Pre-Primary</option><option>Primary</option><option>Junior School</option><option>Senior School</option><option>8-4-4</option></select></div><button style='background:#0f172a;color:white;padding:13px;border:none;border-radius:10px;font-weight:700'>➕ Add Class</button></form>"""
+    table = f"<b>🏫 Classes & Streams ({len(classes)})</b><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:10px;text-align:left'>Class</th><th>Stream</th><th>Class Teacher</th><th>Level</th><th>Students</th><th>Action</th></tr>{rows}</table>"
+    form = f"""<form method='post' action='/school/classes/add' style='display:flex;flex-direction:column;gap:12px;margin-top:12px'><div><label style='font-size:11px;font-weight:600'>🏫 Class *</label><input name='class_name' placeholder='e.g. Class 8' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>🔀 Stream *</label><input name='stream' placeholder='e.g. East' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px'></div><div><label style='font-size:11px;font-weight:600'>👨‍🏫 Class Teacher *</label><select name='class_teacher' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'><option value=''>Select Teacher *</option>{teacher_options}</select></div><div><label style='font-size:11px;font-weight:600'>🎓 Level *</label><select name='level' required style='width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:10px;margin-top:4px;background:white'><option value=''>Select Level *</option><option>Pre-Primary</option><option>Primary</option><option>Junior School</option><option>Senior School</option><option>8-4-4</option></select></div><button style='background:#0f172a;color:white;padding:13px;border:none;border-radius:10px;font-weight:700'>➕ Add Class</button></form>"""
     return school_list_page(request, "➕ Add Class/Stream", "classes", table, form)
 
 @app.post("/school/classes/add")
@@ -303,6 +261,197 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
 def del_class(cid: int, request: Request):
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
 
+# ========== ADVANCED ASC TIMETABLE ==========
+@app.get("/school/timetable", response_class=HTMLResponse)
+def school_timetable(request: Request, view: str = "class", class_id: str = "", teacher_id: str = "", error: str = ""):
+    if "email" not in request.session: return RedirectResponse("/")
+    if not has_permission(request.session.get("role",""), "timetable"): return RedirectResponse("/school/dashboard")
+    school = get_school_obj(request); con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
+    cur.execute("SELECT id, full_name, role FROM users WHERE school_id=? AND role!='school_admin' ORDER BY full_name", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT t.*, c.name as cname, c.class_name, c.stream FROM timetable t LEFT JOIN classes c ON t.class_id=c.id WHERE t.school_id=? ORDER BY t.day, t.period", (school["id"],)); all_tt = cur.fetchall()
+    cur.execute("SELECT id, name FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
+    con.close()
+
+    # Conflict error banner
+    error_banner = f"<div style='background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:12px;border-radius:10px;margin-bottom:12px'>⚠️ {error}</div>" if error else ""
+
+    # Build dropdowns
+    class_opts = "".join([f"<option value='{c['id']}' {'selected' if str(c['id'])==class_id else ''}>{c['name']} ({c['level']})</option>" for c in classes])
+    teacher_opts = "".join([f"<option value='{t['id']}' {'selected' if str(t['id'])==teacher_id else ''}>{t['full_name']} - {ROLE_LABELS.get(t['role'], t['role'])}</option>" for t in teachers])
+    subject_opts = "".join([f"<option value='{s['name']}'>{s['name']}</option>" for s in subjects])
+    period_opts = "".join([f"<option value='{p}'>{p}</option>" for p in PERIODS])
+
+    # CLASS WALLMASTER GRID
+    selected_class = None
+    if class_id:
+        selected_class = next((c for c in classes if str(c["id"])==class_id), None)
+    else:
+        selected_class = classes[0] if classes else None
+        if selected_class: class_id = str(selected_class["id"])
+
+    # Build timetable map: day -> period -> entry
+    tt_map = {}
+    for entry in all_tt:
+        if str(entry["class_id"]) == str(class_id):
+            tt_map[(entry["day"], entry["period"])] = entry
+
+    wallmaster_rows = ""
+    for period in PERIODS:
+        if "BREAK" in period or "LUNCH" in period:
+            wallmaster_rows += f"<tr style='background:#fef3c7'><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700;font-size:10px'>{period}</td>" + "".join([f"<td style='padding:8px;border:1px solid #e2e8f0;text-align:center;font-size:10px;color:#92400e'>☕ {period.split()[-1]}</td>" for _ in DAYS]) + "</tr>"
+        else:
+            cells = ""
+            for day in DAYS:
+                entry = tt_map.get((day, period))
+                if entry:
+                    cells += f"<td style='padding:6px;border:1px solid #e2e8f0;background:#dbeafe;text-align:center'><div style='font-size:11px;font-weight:700'>{entry['subject']}</div><div style='font-size:9px;color:#1e40af'>👨‍🏫 {entry['teacher'][:12]}</div><a href='/school/timetable/delete/{entry['id']}' style='font-size:9px;color:#dc2626;text-decoration:none'>🗑️</a></td>"
+                else:
+                    cells += f"<td style='padding:8px;border:1px solid #f1f5f9;text-align:center;color:#cbd5e1;font-size:10px'>-</td>"
+            wallmaster_rows += f"<tr><td style='padding:8px;border:1px solid #e2e8f0;font-size:10px;font-weight:600;background:#f8fafc'>{period}</td>{cells}</tr>"
+
+    # TEACHER TIMETABLE GRID
+    selected_teacher = None
+    if teacher_id:
+        selected_teacher = next((t for t in teachers if str(t["id"])==teacher_id), None)
+    else:
+        selected_teacher = teachers[0] if teachers else None
+        if selected_teacher: teacher_id = str(selected_teacher["id"])
+
+    teacher_map = {}
+    for entry in all_tt:
+        if str(entry["teacher_id"]) == str(teacher_id) or (selected_teacher and entry["teacher"] == selected_teacher["full_name"]):
+            teacher_map[(entry["day"], entry["period"])] = entry
+
+    teacher_rows = ""
+    for period in PERIODS:
+        if "BREAK" in period or "LUNCH" in period:
+            teacher_rows += f"<tr style='background:#fef3c7'><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700;font-size:10px'>{period}</td>" + "".join([f"<td style='padding:8px;border:1px solid #e2e8f0;text-align:center;font-size:10px;color:#92400e'>☕ {period.split()[-1]}</td>" for _ in DAYS]) + "</tr>"
+        else:
+            cells = ""
+            for day in DAYS:
+                entry = teacher_map.get((day, period))
+                if entry:
+                    cells += f"<td style='padding:6px;border:1px solid #e2e8f0;background:#ede9fe;text-align:center'><div style='font-size:11px;font-weight:700'>{entry['subject']}</div><div style='font-size:9px;color:#5b21b6'>🏫 {entry['cname'] or entry['class_name'] or ''}</div></td>"
+                else:
+                    cells += f"<td style='padding:8px;border:1px solid #f1f5f9;text-align:center;color:#cbd5e1;font-size:10px'>-</td>"
+            teacher_rows += f"<tr><td style='padding:8px;border:1px solid #e2e8f0;font-size:10px;font-weight:600;background:#f8fafc'>{period}</td>{cells}</tr>"
+
+    # LIST VIEW
+    list_rows = "".join([f"<tr><td style='padding:8px;border-bottom:1px solid #eee;font-size:11px'>{t['day']}</td><td style='padding:8px;border-bottom:1px solid #eee;font-size:11px'>{t['period']}</td><td style='padding:8px;border-bottom:1px solid #eee;font-size:11px'>{t['cname']}</td><td style='padding:8px;border-bottom:1px solid #eee;font-size:11px'>{t['subject']}</td><td style='padding:8px;border-bottom:1px solid #eee;font-size:11px'>👨‍🏫 {t['teacher']}</td><td style='padding:8px;border-bottom:1px solid #eee'><a href='/school/timetable/delete/{t['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for t in all_tt]) or "<tr><td colspan=6 style='padding:20px;text-align:center;color:#999'>No lessons yet - Add first lesson</td></tr>"
+
+    html = school_header(school, request.session.get("name",""), "timetable", request.session.get("role",""))
+    html += f"""
+    <div style='padding:20px'>
+        {error_banner}
+        <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'>
+            <div><h2 style='margin:0'>🗓️ ASC Smart Timetable - DaviSchool</h2><p style='font-size:11px;color:#64748b;margin:4px 0 0'>Class WallMaster + Teacher Timetable + Conflict Checker + Print</p></div>
+            <div style='display:flex;gap:8px'>
+                <a href='/school/timetable/print?class_id={class_id}' target='_blank' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px'>🖨️ Print WallMaster</a>
+                <a href='/school/timetable?view=list' style='background:white;border:1px solid #e2e8f0;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px;color:#0f172a'>📋 List View</a>
+            </div>
+        </div>
+
+        <div style='display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start'>
+            <div>
+                <!-- VIEW TABS -->
+                <div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:4px;display:flex;gap:4px;width:fit-content;margin-bottom:12px'>
+                    <a href='/school/timetable?view=class&class_id={class_id}' style='padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;{"background:#0f172a;color:white;font-weight:700" if view=="class" else "color:#64748b"}'>🏫 Class WallMaster</a>
+                    <a href='/school/timetable?view=teacher&teacher_id={teacher_id}' style='padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;{"background:#0f172a;color:white;font-weight:700" if view=="teacher" else "color:#64748b"}'>👨‍🏫 Teacher Timetable</a>
+                    <a href='/school/timetable?view=list' style='padding:8px 16px;border-radius:8px;text-decoration:none;font-size:12px;{"background:#0f172a;color:white;font-weight:700" if view=="list" else "color:#64748b"}'>📋 All Lessons List</a>
+                </div>
+
+                {"".join([
+                    f"<div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'><div><b>🏫 WallMaster: {selected_class['name'] if selected_class else 'No Class'}</b><div style='font-size:11px;color:#64748b'>Level: {selected_class['level'] if selected_class else ''} | Class Teacher: {selected_class['class_teacher_name'] if selected_class and selected_class['class_teacher_name'] else 'Not assigned'}</div></div><div style='display:flex;gap:8px;align-items:center'><form method='get' action='/school/timetable' style='display:flex;gap:6px'><input type='hidden' name='view' value='class'><select name='class_id' onchange='this.form.submit()' style='padding:8px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px'><option value=''>Select Class</option>{class_opts}</select></form></div></div><table style='width:100%;border-collapse:collapse;min-width:700px'><tr style='background:#0f172a;color:white'><th style='padding:10px;border:1px solid #1e293b;text-align:left;font-size:11px'>Period / Day</th>" + "".join([f"<th style='padding:10px;border:1px solid #1e293b;text-align:center;font-size:11px'>{d}</th>" for d in DAYS]) + f"</tr>{wallmaster_rows}</table></div>" if view=="class" else "",
+                    f"<div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'><div><b>👨‍🏫 Teacher Timetable: {selected_teacher['full_name'] if selected_teacher else 'No Teacher'}</b><div style='font-size:11px;color:#64748b'>{ROLE_LABELS.get(selected_teacher['role'], '') if selected_teacher else ''} | {len([v for v in teacher_map.values()])} lessons/week</div></div><div><form method='get' action='/school/timetable' style='display:flex;gap:6px'><input type='hidden' name='view' value='teacher'><select name='teacher_id' onchange='this.form.submit()' style='padding:8px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px'><option value=''>Select Teacher</option>{teacher_opts}</select></form></div></div><table style='width:100%;border-collapse:collapse;min-width:700px'><tr style='background:#5b21b6;color:white'><th style='padding:10px;border:1px solid #4c1d95;text-align:left;font-size:11px'>Period / Day</th>" + "".join([f"<th style='padding:10px;border:1px solid #4c1d95;text-align:center;font-size:11px'>{d}</th>" for d in DAYS]) + f"</tr>{teacher_rows}</table></div>" if view=="teacher" else "",
+                    f"<div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>📋 All Lessons ({len(all_tt)})</b><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th style='padding:10px;text-align:left'>Day</th><th>Period</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Action</th></tr>{list_rows}</table></div>" if view=="list" else ""
+                ])}
+
+            </div>
+
+            <!-- ADD FORM WITH CONFLICT CHECKER -->
+            <div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;position:sticky;top:20px'>
+                <b>➕ Add Lesson - ASC Conflict Checker</b>
+                <div style='font-size:10px;color:#64748b;margin-top:4px'>System checks: No teacher double-book, No class double-book</div>
+                <form method='post' action='/school/timetable/add' style='display:flex;flex-direction:column;gap:10px;margin-top:12px'>
+                    <div><label style='font-size:11px;font-weight:600'>🏫 Class *</label><select name='class_id' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;background:white'><option value=''>Select Class *</option>{class_opts}</select></div>
+                    <div><label style='font-size:11px;font-weight:600'>📅 Day *</label><select name='day' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;background:white'><option value=''>Select Day *</option>{"".join([f"<option>{d}</option>" for d in DAYS])}</select></div>
+                    <div><label style='font-size:11px;font-weight:600'>⏰ Period *</label><select name='period' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;background:white'><option value=''>Select Period *</option>{period_opts}</select></div>
+                    <div><label style='font-size:11px;font-weight:600'>📚 Subject *</label><select name='subject' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;background:white'><option value=''>Select Subject *</option>{subject_opts}</select></div>
+                    <div><label style='font-size:11px;font-weight:600'>👨‍🏫 Teacher *</label><select name='teacher_id' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:4px;background:white'><option value=''>Select Teacher *</option>{teacher_opts}</select></div>
+                    <button style='background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;margin-top:4px'>➕ Add Lesson - Check Conflict</button>
+                </form>
+                <div style='margin-top:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px'>
+                    <div style='font-size:11px;font-weight:700;color:#166534'>✅ ASC Features Enabled</div>
+                    <div style='font-size:10px;color:#15803d;margin-top:4px'>✓ Teacher-wise & Class-wise view<br>✓ Conflict checker<br>✓ WallMaster print<br>✓ Lesson alerts on dashboard</div>
+                </div>
+            </div>
+        </div>
+    </div></div></div>
+    """
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='margin:0;font-family:Arial;background:#f8fafc'>{html}</body></html>")
+
+@app.get("/school/timetable/print")
+def print_timetable(request: Request, class_id: str = ""):
+    school = get_school_obj(request)
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, school["id"])); cls = cur.fetchone()
+    if not cls:
+        cur.execute("SELECT * FROM classes WHERE school_id=? LIMIT 1", (school["id"],)); cls = cur.fetchone()
+        if cls: class_id = cls["id"]
+    cur.execute("SELECT * FROM timetable WHERE class_id=? AND school_id=?", (class_id, school["id"])); entries = cur.fetchall()
+    con.close()
+    if not cls:
+        return HTMLResponse("<h3>No class found</h3><a href='/school/timetable'>Back</a>")
+    tt_map = {(e["day"], e["period"]): e for e in entries}
+    rows = ""
+    for period in PERIODS:
+        if "BREAK" in period or "LUNCH" in period:
+            rows += f"<tr style='background:#fef3c7'><td style='padding:12px;border:2px solid #000;font-weight:800'>{period}</td>" + "".join([f"<td style='padding:12px;border:2px solid #000;text-align:center;font-weight:700'>☕ {period.split()[-1]}</td>" for _ in DAYS]) + "</tr>"
+        else:
+            cells = ""
+            for day in DAYS:
+                e = tt_map.get((day, period))
+                if e:
+                    cells += f"<td style='padding:10px;border:2px solid #000;text-align:center'><div style='font-weight:800;font-size:14px'>{e['subject']}</div><div style='font-size:11px;margin-top:4px'>👨‍🏫 {e['teacher']}</div></td>"
+                else:
+                    cells += f"<td style='padding:10px;border:2px solid #000;text-align:center;color:#ccc'>-</td>"
+            rows += f"<tr><td style='padding:12px;border:2px solid #000;font-weight:700;background:#f1f5f9'>{period}</td>{cells}</tr>"
+    html = f"""<html><head><title>WallMaster - {cls['name']} - DaviSchool</title><style>@media print {{ body {{ -webkit-print-color-adjust: exact; }} }}</style></head><body style='font-family:Arial;margin:0;padding:20px'><div style='text-align:center;border-bottom:3px solid #000;padding-bottom:12px;margin-bottom:16px'><h1 style='margin:0'>🏫 {school['name']} - DaviSchool Analytics</h1><h2 style='margin:6px 0'>🗓️ CLASS WALLMASTER TIMETABLE</h2><h3 style='margin:0;color:#334155'>Class: {cls['name']} | Stream: {cls['stream'] or '-'} | Level: {cls['level']} | Class Teacher: {cls['class_teacher_name'] or 'Not assigned'}</h3></div><table style='width:100%;border-collapse:collapse;border:3px solid #000'><tr style='background:#000;color:white'><th style='padding:14px;border:2px solid #000;text-align:left'>Period / Day</th>{"".join([f"<th style='padding:14px;border:2px solid #000;text-align:center'>{d.upper()}</th>" for d in DAYS])}</tr>{rows}</table><div style='margin-top:16px;display:flex;justify-content:space-between;font-size:12px'><div>Generated: {datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M")} EAT | DaviSchool ASC Timetable</div><div><button onclick='window.print()' style='background:#000;color:white;padding:10px 20px;border:none;border-radius:8px;cursor:pointer'>🖨️ Print WallMaster</button></div></div></body></html>"""
+    return HTMLResponse(html)
+
+@app.post("/school/timetable/add")
+def add_tt(request: Request, class_id: int = Form(...), day: str = Form(...), period: str = Form(...), subject: str = Form(...), teacher_id: int = Form(...)):
+    school = get_school_obj(request)
+    con = get_db(); cur = con.cursor()
+    # Get teacher name
+    cur.execute("SELECT full_name FROM users WHERE id=? AND school_id=?", (teacher_id, school["id"])); t = cur.fetchone()
+    teacher_name = t["full_name"] if t else f"Teacher {teacher_id}"
+    # CONFLICT CHECKER
+    # 1. Same class same day period?
+    cur.execute("SELECT * FROM timetable WHERE school_id=? AND class_id=? AND day=? AND period=?", (school["id"], class_id, day, period))
+    if cur.fetchone():
+        con.close()
+        return RedirectResponse(f"/school/timetable?error=❌ Conflict: Class already has a lesson on {day} {period} - Choose another period&view=class&class_id={class_id}", status_code=303)
+    # 2. Same teacher same day period?
+    cur.execute("SELECT * FROM timetable WHERE school_id=? AND day=? AND period=? AND (teacher_id=? OR teacher=?)", (school["id"], day, period, teacher_id, teacher_name))
+    conflict = cur.fetchone()
+    if conflict:
+        cur.execute("SELECT name FROM classes WHERE id=?", (conflict["class_id"],)); cname = cur.fetchone()
+        cname_str = cname["name"] if cname else "Another class"
+        con.close()
+        return RedirectResponse(f"/school/timetable?error=❌ Conflict: Teacher {teacher_name} already teaching {cname_str} on {day} {period}&view=teacher&teacher_id={teacher_id}", status_code=303)
+
+    cur.execute("INSERT INTO timetable (school_id, class_id, day, period, subject, teacher, teacher_id) VALUES (?,?,?,?,?,?,?)", (school["id"], class_id, day, period, subject, teacher_name, teacher_id))
+    con.commit(); con.close()
+    return RedirectResponse(f"/school/timetable?view=class&class_id={class_id}", status_code=303)
+
+@app.get("/school/timetable/delete/{tid}")
+def del_tt(tid: int, request: Request):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM timetable WHERE id=? AND school_id=?", (tid, school["id"])); con.commit(); con.close()
+    return RedirectResponse("/school/timetable", status_code=303)
+
+# OTHER SCHOOL PAGES - KEEP SAME AS BEFORE (students, subjects, exams, marks, fees, sms, etc with permission check)
 @app.get("/school/students", response_class=HTMLResponse)
 def school_students(request: Request):
     if not has_permission(request.session.get("role",""), "students"): return RedirectResponse("/school/dashboard")
@@ -374,7 +523,7 @@ def school_marksheets(request: Request):
     if not has_permission(request.session.get("role",""), "marksheets"): return RedirectResponse("/school/dashboard")
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall(); con.close()
     cards = "".join([f"<div style='background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>{e['name']}</b><div style='font-size:11px'>{e['term']}</div><a href='/school/marksheets/{e['id']}' style='display:block;margin-top:10px;background:#0f172a;color:white;padding:8px;border-radius:8px;text-align:center;text-decoration:none'>View</a></div>" for e in exams]) or "No exams"
-    html = school_header(school, request.session.get("name",""), "marksheets", request.session.get("role","")) + f"<div style='padding:20px'><h3>📄 MarkSheets</h3><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px'>{cards}</div></div></div></div>"
+    html = school_header(school, request.session.get("name",""), "marksheets", request.session.get("role","")) + f"<div style='padding:20px'><h3>📄 MarkSheets - DaviSchool</h3><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px'>{cards}</div></div></div></div>"
     return HTMLResponse(f"<html><body style='margin:0;font-family:Arial;background:#f8fafc'>{html}</body></html>")
 
 @app.get("/school/marksheets/{exam_id}", response_class=HTMLResponse)
@@ -442,24 +591,6 @@ def school_fees(request: Request):
 def add_fees(request: Request, student_id: int = Form(...), term: str = Form(...), total: int = Form(...), paid: int = Form(...)):
     school = get_school_obj(request); balance = total - paid; con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO fees (school_id, student_id, term, total, paid, balance) VALUES (?,?,?,?,?,?)", (school["id"], student_id, term, total, paid, balance)); con.commit(); con.close(); return RedirectResponse("/school/fees", status_code=303)
 
-@app.get("/school/timetable", response_class=HTMLResponse)
-def school_timetable(request: Request):
-    if not has_permission(request.session.get("role",""), "timetable"): return RedirectResponse("/school/dashboard")
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT t.*, c.name as cname FROM timetable t LEFT JOIN classes c ON t.class_id=c.id WHERE t.school_id=?", (school["id"],)); tt = cur.fetchall(); cur.execute("SELECT id, name FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall(); con.close()
-    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
-    rows = "".join([f"<tr><td style='padding:10px;border-bottom:1px solid #eee'>{t['day']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{t['period']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{t['cname']}</td><td style='padding:10px;border-bottom:1px solid #eee'>{t['subject']}</td><td>{t['teacher']}</td><td><a href='/school/timetable/delete/{t['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for t in tt]) or "<tr><td colspan=6 style='padding:20px;text-align:center'>No timetable</td></tr>"
-    table = f"<b>🗓️ Timetable</b><table style='width:100%;margin-top:12px;border-collapse:collapse'><tr style='background:#f8fafc;font-size:11px'><th>Day</th><th>Period</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Action</th></tr>{rows}</table>"
-    form = f"<form method='post' action='/school/timetable/add' style='display:flex;flex-direction:column;gap:10px;margin-top:12px'><select name='class_id' required style='padding:11px;border:1px solid #e2e8f0;border-radius:8px'><option value=''>Class *</option>{c_opts}</select><select name='day' required style='padding:11px;border:1px solid #e2e8f0;border-radius:8px'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select><input name='period' placeholder='Period *' required style='padding:11px;border:1px solid #e2e8f0;border-radius:8px'><input name='subject' placeholder='Subject *' required style='padding:11px;border:1px solid #e2e8f0;border-radius:8px'><input name='teacher' placeholder='Teacher *' required style='padding:11px;border:1px solid #e2e8f0;border-radius:8px'><button style='background:#0f172a;color:white;padding:12px;border:none;border-radius:8px'>Add</button></form>"
-    return school_list_page(request, "Add Lesson", "timetable", table, form)
-
-@app.post("/school/timetable/add")
-def add_tt(request: Request, class_id: int = Form(...), day: str = Form(...), period: str = Form(...), subject: str = Form(...), teacher: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO timetable (school_id, class_id, day, period, subject, teacher) VALUES (?,?,?,?,?,?)", (school["id"], class_id, day, period, subject, teacher)); con.commit(); con.close(); return RedirectResponse("/school/timetable", status_code=303)
-
-@app.get("/school/timetable/delete/{tid}")
-def del_tt(tid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM timetable WHERE id=? AND school_id=?", (tid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/timetable", status_code=303)
-
 @app.get("/school/sms", response_class=HTMLResponse)
 def school_sms(request: Request):
     if not has_permission(request.session.get("role",""), "sms"): return RedirectResponse("/school/dashboard")
@@ -489,7 +620,7 @@ def profile(request: Request, tab: str = "personal"):
         log_rows = "".join([f"<div style='padding:12px;border-bottom:1px solid #f1f5f9'><div style='font-size:12px;font-weight:600'>{l['action']}</div><div style='font-size:10px;color:#94a3b8'>{l['timestamp']}</div></div>" for l in logs]) or "No activity"
         right = f"<div><b>📜 Activity - {ROLE_LABELS.get(role, role)}</b><div style='border:1px solid #e2e8f0;border-radius:10px;margin-top:12px'>{log_rows}</div></div>"
     else:
-        right = f"<div><b>👤 Personal - {ROLE_LABELS.get(role, role)}</b><div style='font-size:11px;color:#64748b;margin-top:4px'>Principal Profile - Full Control to manage staff</div><form method='post' action='/update-profile' style='margin-top:18px'><input name='full_name' value='{name}' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px'><input name='email_new' value='{email}' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:8px'><button style='margin-top:12px;background:#0f172a;color:white;padding:11px 18px;border:none;border-radius:8px'>Save</button></form></div>"
+        right = f"<div><b>👤 Personal - {ROLE_LABELS.get(role, role)}</b><form method='post' action='/update-profile' style='margin-top:18px'><input name='full_name' value='{name}' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px'><input name='email_new' value='{email}' required style='width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:8px;margin-top:8px'><button style='margin-top:12px;background:#0f172a;color:white;padding:11px 18px;border:none;border-radius:8px'>Save</button></form></div>"
     ap = "border-bottom:2px solid #0f172a;color:#0f172a;font-weight:700" if tab=="personal" else "color:#64748b"
     ase = "border-bottom:2px solid #0f172a;color:#0f172a;font-weight:700" if tab=="security" else "color:#64748b"
     aa = "border-bottom:2px solid #0f172a;color:#0f172a;font-weight:700" if tab=="activity" else "color:#64748b"
