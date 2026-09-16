@@ -24,7 +24,6 @@ def get_db():
 def init_db():
     con = get_db()
     cur = con.cursor()
-    # SUPER ADMIN TABLES - DONT TOUCH
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, action TEXT, details TEXT, timestamp TEXT)")
@@ -35,7 +34,6 @@ def init_db():
     except: pass
     try: cur.execute("ALTER TABLE schools ADD COLUMN school_type TEXT")
     except: pass
-    # SCHOOL SIDE ZERAKI TABLES
     cur.execute("CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, level TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, admission_no TEXT, name TEXT, class_id INTEGER, gender TEXT, parent_name TEXT, parent_phone TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, code TEXT)")
@@ -51,25 +49,6 @@ def init_db():
     con.close()
 init_db()
 
-def generate_unique_password(school_name):
-    prefix = "".join([c for c in school_name.upper() if c.isalpha()])[:4]
-    if len(prefix) < 3: prefix = "SCH"
-    num = random.randint(1000, 9999)
-    return f"{prefix}@{num}!"
-
-def send_email(to_email, subject, body):
-    if not EMAIL_PASSWORD: return False
-    try:
-        msg = EmailMessage()
-        msg["From"] = EMAIL_SENDER; msg["To"] = to_email; msg["Subject"] = subject
-        msg.set_content(body)
-        msg.add_alternative(f"<div style='font-family:Arial; padding:20px'><h3>{subject}</h3><pre style='background:#f8fafc; padding:16px; border-radius:8px'>{body}</pre></div>", subtype="html")
-        context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls(context=context); server.login(EMAIL_SENDER, EMAIL_PASSWORD); server.send_message(msg)
-        return True
-    except: return False
-
 def log_activity(email, action, details=""):
     try:
         con = get_db(); cur = con.cursor()
@@ -83,23 +62,22 @@ def get_school_obj(req):
     if sid==0 or req.session.get("role")=="super_admin": return None
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close(); return s
 
-# SUPER ADMIN HEADER - UNTOUCHED
 def header_html(initials, name, email):
     return f"""
     <style>
-.do-avatar {{ width:36px; height:36px; background:#dbeafe; color:#1e40af; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; cursor:pointer; border:2px solid #e2e8f0; user-select:none; caret-color:transparent; outline:none; }}
-.dropdown-item {{ display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; font-size:13px; transition:0.2s; cursor:pointer; }}
+.do-avatar {{ width:36px; height:36px; background:#dbeafe; color:#1e40af; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; cursor:pointer; border:2px solid #e2e8f0; }}
+.dropdown-item {{ display:flex; align-items:center; gap:10px; padding:11px 14px; text-decoration:none; font-size:13px; }}
 .dropdown-item-profile {{ color:#0f172a; border-bottom:1px solid #f8fafc; }}
 .dropdown-item-profile:hover {{ background:#0f172a; color:white; }}
 .dropdown-item-logout {{ color:#dc2626; }}
 .dropdown-item-logout:hover {{ background:#0f172a; color:white; }}
     </style>
     <div style='background:white; border-bottom:1px solid #e2e8f0; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; position:relative'>
-        <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px; color:#64748b'>{name} • Super Admin</div></div>
+        <div><b>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px; color:#64748b'>{name} • Super Admin</div></div>
         <div style='position:relative'>
-            <div onclick='toggleProfileMenu()' class='do-avatar' tabindex='-1'>{initials}</div>
+            <div onclick='toggleProfileMenu()' class='do-avatar'>{initials}</div>
             <div id='profileDropdown' style='display:none; position:absolute; right:0; top:44px; background:white; border:1px solid #e2e8f0; border-radius:12px; width:220px; box-shadow:0 10px 25px rgba(0,0,0,0.12); z-index:1000; overflow:hidden'>
-                <div style='padding:14px; border-bottom:1px solid #f1f5f9; background:#f8fafc'><div style='font-weight:700; font-size:13px'>{name}</div><div style='font-size:11px; color:#64748b'>{email}</div><div style='margin-top:6px'><span style='background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:20px; font-size:10px'>Super Admin</span></div></div>
+                <div style='padding:14px; border-bottom:1px solid #f1f5f9; background:#f8fafc'><div style='font-weight:700; font-size:13px'>{name}</div><div style='font-size:11px; color:#64748b'>{email}</div></div>
                 <a href='/profile?tab=personal' class='dropdown-item dropdown-item-profile'>👤 Profile</a>
                 <a href='/logout' class='dropdown-item dropdown-item-logout'>🚪 Logout</a>
             </div>
@@ -111,7 +89,6 @@ def header_html(initials, name, email):
     </script>
     """
 
-# SCHOOL SIDE HEADER - ZERAKI STYLE
 def school_header(school, name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
     def nav(link, icon, label):
@@ -138,23 +115,20 @@ def school_header(school, name, active="dashboard"):
         <a href='/profile?tab=personal' style='display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; text-decoration:none; font-size:13px; color:#475569;'>👤 My Profile</a>
         <a href='/logout' style='display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; text-decoration:none; font-size:13px; color:#dc2626;'>🚪 Logout</a>
         </div>
-        <div style='margin-top:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px'><div style='font-size:10px; font-weight:700; color:#166534'>✅ DaviSchool ANALYTICS</div><div style='font-size:9px; color:#15803d; margin-top:4px'>Works for ALL LEVELS: Pre-Primary, Primary, Junior, Senior | 8-4-4 Supported</div></div>
     </div>
     <div style='flex:1; background:#f8fafc'>
         <div style='background:white; border-bottom:1px solid #e2e8f0; padding:12px 20px; display:flex; justify-content:space-between; align-items:center'>
-            <div><b style='font-size:14px'>DaviSchool ANALYTICS 🚀</b><div style='font-size:11px; color:#64748b'>{name} • {school['name']} | Revolutionize Your School's Management!</div></div>
+            <div><b style='font-size:14px'>MATOKEO ANALYTICS 🚀</b><div style='font-size:11px; color:#64748b'>{name} • {school['name']}</div></div>
             <div style='display:flex; align-items:center; gap:10px'><span style='font-size:11px; background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:20px'>{school['name']}</span><div style='width:36px; height:36px; background:#dcfce7; color:#166534; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800'>{initials}</div></div>
         </div>
     """
 
 @app.get("/health")
 def health(): return PlainTextResponse("OK")
-@app.get("/ping")
-def ping(): return PlainTextResponse("pong")
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f8fafc; margin:0'><div style='background:white; padding:36px 32px; border-radius:16px; border:1px solid #e2e8f0; width:400px'><div style='text-align:center; margin-bottom:24px'><div style='width:52px; height:52px; background:#0f172a; color:white; border-radius:14px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px; margin:0 auto'>D</div><h2 style='margin:12px 0 4px'>Davischool</h2><p style='font-size:11px; color:#64748b'>ONE LOGIN FOR ALL ROLES 🔐</p></div><form method='post' action='/login'><input name='email' placeholder='📧 Email (super admin or school)' required style='width:100%; padding:12px; margin:6px 0 12px; border:1px solid #e2e8f0; border-radius:10px'><input name='password' type='password' placeholder='🔑 Password' required style='width:100%; padding:12px; margin:6px 0 20px; border:1px solid #e2e8f0; border-radius:10px'><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px'>Sign In → Auto Redirect by Role</button></form></div></body></html>"""
+    return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; display:flex; justify-content:center; align-items:center; min-height:100vh; background:#f8fafc; margin:0'><div style='background:white; padding:36px 32px; border-radius:16px; border:1px solid #e2e8f0; width:400px'><div style='text-align:center; margin-bottom:24px'><div style='width:52px; height:52px; background:#0f172a; color:white; border-radius:14px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px; margin:0 auto'>D</div><h2 style='margin:12px 0 4px'>Davischool</h2></div><form method='post' action='/login'><input name='email' placeholder='📧 Email' required style='width:100%; padding:12px; margin:6px 0 12px; border:1px solid #e2e8f0; border-radius:10px'><input name='password' type='password' placeholder='🔑 Password' required style='width:100%; padding:12px; margin:6px 0 20px; border:1px solid #e2e8f0; border-radius:10px'><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px'>Sign In</button></form></div></body></html>"""
 
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
@@ -167,12 +141,9 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if not u: return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
     request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0
     if u["role"]!= "super_admin" and school_info:
-        log_activity(u["email"], f"🏫 School login: {school_info['name']}", "")
         return RedirectResponse("/school/dashboard", status_code=303)
-    log_activity(u["email"], "🔓 Super Admin Logged in", "")
     return RedirectResponse("/dashboard", status_code=303)
 
-# SUPER ADMIN DASHBOARD - UNTOUCHED ORIGINAL
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -182,27 +153,9 @@ def dashboard(request: Request):
     cur.execute("SELECT * FROM schools ORDER BY id DESC LIMIT 5"); recent = cur.fetchall(); con.close()
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","")
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
-    log_activity(email, "📊 Viewed dashboard", "School Overview")
-    rows = ""
-    for s in recent:
-        rows += f"<tr><td style='padding:12px; border-bottom:1px solid #f1f5f9'>🏫 {s['name']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>📍 {s['location']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>✅ Active</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>Today</td></tr>"
-    if not rows: rows = "<tr><td colspan=4 style='padding:20px; text-align:center; color:#999'>No schools yet</td></tr>"
-    content = f"""
-    <style>.quick-btn{{display:block; background:white; border:1px solid #e2e8f0; color:#0f172a; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600;}}.quick-btn:hover{{background:#0f172a; color:white;}}.quick-btn-light{{display:block; background:white; border:1px solid #e2e8f0; color:#64748b; padding:10px; border-radius:8px; text-align:center; text-decoration:none; font-size:12px; font-weight:600;}}.quick-btn-light:hover{{background:#0f172a; color:white;}}</style>
-    <div style='padding:24px'><div style='margin-bottom:20px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='color:#64748b; font-size:13px'>Welcome {name}</p></div>
-    <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px'>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total}</div><div style='font-size:11px; color:#16a34a; margin-top:6px'>📈 Up 12% from last month</div></div>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total}</div><div style='font-size:11px; color:#16a34a; margin-top:6px'>🟢 100% operational</div></div>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>💰 TOTAL REVENUE</div><div style='font-size:28px; font-weight:800; margin-top:8px'>KES {total*15000:,}</div><div style='font-size:11px; color:#16a34a; margin-top:6px'>💹 +8% monthly growth</div></div>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:28px; font-weight:800; margin-top:8px'>{total*350:,}</div><div style='font-size:11px; color:#64748b; margin-top:6px'>👥 Avg 350 per school</div></div>
-    </div>
-    <div style='display:grid; grid-template-columns:2fr 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Recently Added Schools</b><a href='/schools/manage' style='font-size:12px; color:#2563eb; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px; color:#64748b'><th style='padding:10px; text-align:left'>Name</th><th style='padding:10px; text-align:left'>Location</th><th style='padding:10px; text-align:left'>Status</th><th style='padding:10px; text-align:left'>Date</th></tr>{rows}</table></div>
-    <div style='display:flex; flex-direction:column; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><b>⚡ Quick Actions</b><div style='margin-top:12px; display:flex; flex-direction:column; gap:8px'><a href='/schools/manage' class='quick-btn'>🏫 Manage Schools</a><a href='/schools/manage?show=add' class='quick-btn-light'>➕ Register New School</a></div></div>
-    <div style='background:#0f172a; border-radius:14px; padding:18px; color:white'><div style='font-size:13px; font-weight:700'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-top:6px'>🛠️ All {total} schools are active</div><div style='margin-top:12px; background:#1e293b; border-radius:8px; padding:10px'><div style='font-size:10px; color:#94a3b8'>🔧 PLATFORM HEALTH</div><div style='font-size:18px; font-weight:700; color:#4ade80; margin-top:4px'>✅ 99.9% Uptime</div><div style='font-size:10px; color:#64748b; margin-top:4px'>⚡ System running smoothly</div></div></div></div></div></div>
-    """
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial; margin:0; background:#f8fafc'>{header_html(initials, name, email)}{content}</body></html>")
-
-# ==================== SCHOOL SIDE - FULL ZERAKI MATOKEO ANALYTICS ====================
+    rows = "".join([f"<tr><td style='padding:12px; border-bottom:1px solid #f1f5f9'>🏫 {s['name']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>📍 {s['location']}</td><td style='padding:12px; border-bottom:1px solid #f1f5f9'>✅ Active</td><td>Today</td></tr>" for s in recent]) or "<tr><td colspan=4 style='padding:20px; text-align:center'>No schools</td></tr>"
+    content = f"<div style='padding:24px'><h2>📊 School Overview - {total} schools</h2><table style='width:100%; border-collapse:collapse'><tr style='background:#f8fafc'><th>Name</th><th>Location</th><th>Status</th><th>Date</th></tr>{rows}</table><br><a href='/schools/manage'>Manage Schools</a></div>"
+    return HTMLResponse(f"<html><body style='margin:0; font-family:Arial; background:#f8fafc'>{header_html(initials, name, email)}{content}</body></html>")
 
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
@@ -214,33 +167,19 @@ def school_dashboard(request: Request):
     cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
-    cur.execute("SELECT SUM(paid) s FROM fees WHERE school_id=?", (school["id"],)); fees_paid = cur.fetchone()["s"] or 0
-    cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 4", (school["id"],)); recent_students = cur.fetchall()
     con.close()
-    students_rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #f1f5f9'>🎓 {s['name']}</td><td style='padding:10px; border-bottom:1px solid #f1f5f9'>{s['admission_no']}</td><td style='padding:10px; border-bottom:1px solid #f1f5f9'>{s['gender']}</td><td style='padding:10px; border-bottom:1px solid #f1f5f9'>Class {s['class_id']}</td></tr>" for s in recent_students]) or "<tr><td colspan=4 style='padding:16px; text-align:center; color:#999'>No students yet - Add students to start</td></tr>"
     html = school_header(school, name, "dashboard")
     html += f"""
         <div style='padding:20px'>
-            <div style='background:linear-gradient(135deg,#0f172a,#1e40af); border-radius:16px; padding:20px; color:white; display:flex; justify-content:space-between; align-items:center'>
-                <div><h2 style='margin:0'>DaviSchool ANALYTICS 🚀</h2><p style='margin:6px 0 0; font-size:13px; color:#bfdbfe'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</p><div style='margin-top:10px; font-size:11px; background:rgba(255,255,255,0.15); padding:6px 10px; border-radius:20px; display:inline-block'>WORKS FOR ALL LEVELS: PRE-PRIMARY, PRIMARY, JUNIOR, SENIOR | 8-4-4 SUPPORTED</div></div>
-                <div style='text-align:right'><div style='font-size:28px; font-weight:800'>{sc}</div><div style='font-size:11px'>Total Students</div><div style='margin-top:8px; font-size:12px; background:#16a34a; padding:6px 12px; border-radius:20px'>✅ GET EVERYTHING DONE IN MINUTES!</div></div>
+            <div style='background:linear-gradient(135deg,#0f172a,#1e40af); border-radius:16px; padding:20px; color:white'><h2 style='margin:0'>MATOKEO ANALYTICS 🚀</h2><p>Works for all levels</p></div>
+            <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px'>
+                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'>🎓 Students: {sc}</div>
+                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'>🏫 Classes: {cc}</div>
+                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'>📝 Exams: {ec}</div>
             </div>
-            <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:16px'>
-                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:24px; font-weight:800; margin-top:6px'>{sc}</div><div style='font-size:11px; color:#16a34a; margin-top:4px'>📈 Active</div></div>
-                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-size:11px; color:#64748b'>🏫 CLASSES</div><div style='font-size:24px; font-weight:800; margin-top:6px'>{cc}</div><div style='font-size:11px; color:#64748b; margin-top:4px'>Streams & Levels</div></div>
-                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-size:11px; color:#64748b'>📝 EXAMS</div><div style='font-size:24px; font-weight:800; margin-top:6px'>{ec}</div><div style='font-size:11px; color:#2563eb; margin-top:4px'>Deep Insights</div></div>
-                <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-size:11px; color:#64748b'>💰 FEES COLLECTED</div><div style='font-size:24px; font-weight:800; margin-top:6px'>KES {fees_paid:,}</div><div style='font-size:11px; color:#16a34a; margin-top:4px'>💹 Managed</div></div>
-            </div>
-            <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:16px'>
-                <a href='/school/analysis' style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-decoration:none; color:#0f172a'><div style='font-size:22px'>📊</div><b style='font-size:12px'>EXAM MARKS ANALYSIS</b><div style='font-size:10px; color:#64748b; margin-top:4px'>DEEP PERFORMANCE INSIGHTS</div></a>
-                <a href='/school/ranking' style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-decoration:none; color:#0f172a'><div style='font-size:22px'>🏆</div><b style='font-size:12px'>ACCURATE RANKING</b><div style='font-size:10px; color:#64748b; margin-top:4px'>INSTANT CLASS & LEVEL RANKING</div></a>
-                <a href='/school/marksheets' style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-decoration:none; color:#0f172a'><div style='font-size:22px'>📄</div><b style='font-size:12px'>GENERATES MARKSHEETS</b><div style='font-size:10px; color:#64748b; margin-top:4px'>CREATE RECORD SHEETS QUICKLY</div></a>
-                <a href='/school/reports' style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-decoration:none; color:#0f172a'><div style='font-size:22px'>📑</div><b style='font-size:12px'>STUDENT REPORTS</b><div style='font-size:10px; color:#64748b; margin-top:4px'>AUTOMATED REPORT CARD GENERATION</div></a>
-            </div>
-        </div>
-    </div></div>
+        </div></div></div>
     """
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='margin:0; font-family:Arial'>{html}</body></html>")
+    return HTMLResponse(f"<html><body style='margin:0; font-family:Arial'>{html}</body></html>")
 
 def school_list_page(request, title, active, table_html, form_html):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -248,114 +187,86 @@ def school_list_page(request, title, active, table_html, form_html):
     if not school: return RedirectResponse("/")
     name = request.session.get("name","")
     html = school_header(school, name, active)
-    html += f"<div style='padding:20px; display:grid; grid-template-columns:1fr 360px; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px'>{table_html}</div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; position:sticky; top:20px'><b>{title}</b>{form_html}</div></div></div></div>"
+    html += f"<div style='padding:20px; display:grid; grid-template-columns:1fr 360px; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px'>{table_html}</div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px'><b>{title}</b>{form_html}</div></div></div></div>"
     return HTMLResponse(f"<html><body style='margin:0; font-family:Arial; background:#f8fafc'>{html}</body></html>")
 
 @app.get("/school/students", response_class=HTMLResponse)
 def school_students(request: Request):
-    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request)
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT s.*, c.name as cname FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],))
-    students = cur.fetchall()
-    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],))
-    classes = cur.fetchall()
-    con.close()
-    opts = "".join([f"<option value='{c['id']}'>{c['name']} - {c['level']}</option>" for c in classes])
-    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee; font-size:12px'>{s['name']}</td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>{s['admission_no']}</td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>{s['cname'] or s['class_id']}</td><td style='padding:10px; border-bottom:1px solid #eee; font-size:11px'>{s['parent_phone']}</td><td style='padding:10px; border-bottom:1px solid #eee'><a href='/school/student/delete/{s['id']}' onclick=\"return confirm('🗑️ Delete {s['name']}?')\" style='color:#dc2626; font-size:11px'>🗑️</a></td></tr>" for s in students]) or "<tr><td colspan=5 style='padding:20px; text-align:center; color:#999'>No students yet</td></tr>"
-    table = f"<b>🎓 Students ({len(students)})</b><table style='width:100%; margin-top:12px; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px'><th style='padding:10px; text-align:left'>Name</th><th style='padding:10px; text-align:left'>Adm</th><th style='padding:10px; text-align:left'>Class</th><th style='padding:10px; text-align:left'>Parent Phone</th><th>Action</th></tr>{rows}</table>"
-    form = f"<form method='post' action='/school/students/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='admission_no' placeholder='🎫 Admission No *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='student_name' placeholder='👤 Student Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='class_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>🏫 Select Class *</option>{opts}</select><select name='gender' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Male</option><option>Female</option></select><input name='parent_name' placeholder='👨‍👩‍👧 Parent Name' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='parent_phone' placeholder='📱 Parent Phone *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px; font-weight:600'>➕ Add Student</button></form>"
-    return school_list_page(request, "➕ Add New Student", "students", table, form)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor()
+    cur.execute("SELECT s.*, c.name as cname FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
+    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall(); con.close()
+    opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
+    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{s['name']}</td><td>{s['admission_no']}</td><td>{s['cname'] or ''}</td><td><a href='/school/student/delete/{s['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for s in students]) or "<tr><td colspan=4 style='padding:20px; text-align:center'>No students</td></tr>"
+    table = f"<b>Students ({len(students)})</b><table style='width:100%; margin-top:12px'><tr style='background:#f8fafc'><th>Name</th><th>Adm</th><th>Class</th><th>Action</th></tr>{rows}</table>"
+    form = f"<form method='post' action='/school/students/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='admission_no' placeholder='Adm *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='student_name' placeholder='Name *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='class_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>Class</option>{opts}</select><select name='gender' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Male</option><option>Female</option></select><input name='parent_name' placeholder='Parent' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='parent_phone' placeholder='Phone *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Add Student</button></form>"
+    return school_list_page(request, "Add Student", "students", table, form)
 
 @app.post("/school/students/add")
 def add_student(request: Request, admission_no: str = Form(...), student_name: str = Form(...), class_id: int = Form(...), gender: str = Form(...), parent_name: str = Form(...), parent_phone: str = Form(...)):
-    school = get_school_obj(request)
-    con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO students (school_id, admission_no, name, class_id, gender, parent_name, parent_phone) VALUES (?,?,?,?,?,?,?)", (school["id"], admission_no.strip(), student_name.strip(), class_id, gender, parent_name, parent_phone))
-    con.commit(); con.close()
-    return RedirectResponse("/school/students", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO students (school_id, admission_no, name, class_id, gender, parent_name, parent_phone) VALUES (?,?,?,?,?,?,?)", (school["id"], admission_no.strip(), student_name.strip(), class_id, gender, parent_name, parent_phone)); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
 
 @app.get("/school/student/delete/{sid}")
 def del_student(sid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close()
-    return RedirectResponse("/school/students", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
 
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY id DESC", (school["id"],)); classes = cur.fetchall()
-    cur.execute("SELECT c.id, COUNT(s.id) cnt FROM classes c LEFT JOIN students s ON s.class_id=c.id AND s.school_id=? WHERE c.school_id=? GROUP BY c.id", (school["id"], school["id"])); counts = {r[0]: r[1] for r in cur.fetchall()}
-    con.close()
-    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{c['name']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{c['level']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{counts.get(c['id'],0)} students</td><td style='padding:10px; border-bottom:1px solid #eee'><a href='/school/class/delete/{c['id']}' onclick=\"return confirm('Delete?')\" style='color:#dc2626'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan=4 style='padding:20px; text-align:center; color:#999'>No classes yet</td></tr>"
-    table = f"<b>🏫 Classes ({len(classes)})</b><table style='width:100%; margin-top:12px; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px'><th style='padding:10px; text-align:left'>Class Name</th><th style='padding:10px; text-align:left'>Level</th><th style='padding:10px; text-align:left'>Students</th><th>Action</th></tr>{rows}</table>"
-    form = "<form method='post' action='/school/classes/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='class_name' placeholder='🏫 Class Name e.g. Class 8 East *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='level' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>🎓 Level *</option><option>Pre-Primary</option><option>Primary</option><option>Junior School</option><option>Senior School</option><option>8-4-4</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>➕ Add Class</button></form>"
-    return school_list_page(request, "➕ Add Class/Stream", "classes", table, form)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY id DESC", (school["id"],)); classes = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{c['name']}</td><td>{c['level']}</td><td><a href='/school/class/delete/{c['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan=3 style='padding:20px; text-align:center'>No classes</td></tr>"
+    table = f"<b>Classes ({len(classes)})</b><table style='width:100%; margin-top:12px'><tr style='background:#f8fafc'><th>Class</th><th>Level</th><th>Action</th></tr>{rows}</table>"
+    form = "<form method='post' action='/school/classes/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='class_name' placeholder='Class *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='level' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Primary</option><option>Junior School</option><option>Senior School</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Add Class</button></form>"
+    return school_list_page(request, "Add Class", "classes", table, form)
 
 @app.post("/school/classes/add")
 def add_class(request: Request, class_name: str = Form(...), level: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level) VALUES (?,?,?)", (school["id"], class_name.strip(), level)); con.commit(); con.close()
-    return RedirectResponse("/school/classes", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level) VALUES (?,?,?)", (school["id"], class_name.strip(), level)); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
 
 @app.get("/school/class/delete/{cid}")
 def del_class(cid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"])); con.commit(); con.close()
-    return RedirectResponse("/school/classes", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
 
-# --- keep rest exactly as you gave (unchanged) ---
 @app.get("/school/subjects", response_class=HTMLResponse)
 def school_subjects(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY id DESC", (school["id"],)); subs = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{s['name']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{s['code']}</td><td style='padding:10px; border-bottom:1px solid #eee'><a href='/school/subject/delete/{s['id']}' onclick=\"return confirm('Delete?')\" style='color:#dc2626'>🗑️</a></td></tr>" for s in subs]) or "<tr><td colspan=3 style='padding:20px; text-align:center; color:#999'>No subjects yet</td></tr>"
-    table = f"<b>📚 Subjects ({len(subs)})</b><table style='width:100%; margin-top:12px; border-collapse:collapse'><tr style='background:#f8fafc'><th style='padding:10px; text-align:left'>Subject</th><th style='padding:10px; text-align:left'>Code</th><th>Action</th></tr>{rows}</table>"
-    form = "<form method='post' action='/school/subjects/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='subject_name' placeholder='📚 Subject e.g. Mathematics *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='subject_code' placeholder='🔢 Code e.g. MATH' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>➕ Add Subject</button></form>"
-    return school_list_page(request, "➕ Add Subject", "subjects", table, form)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subs = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{s['name']}</td><td>{s['code']}</td><td><a href='/school/subject/delete/{s['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for s in subs]) or "<tr><td colspan=3 style='padding:20px; text-align:center'>No subjects</td></tr>"
+    table = f"<b>Subjects ({len(subs)})</b><table style='width:100%; margin-top:12px'><tr style='background:#f8fafc'><th>Subject</th><th>Code</th><th>Action</th></tr>{rows}</table>"
+    form = "<form method='post' action='/school/subjects/add' style='display:flex; flex-direction:column; gap:10px'><input name='subject_name' placeholder='Subject *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><input name='subject_code' placeholder='Code' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Add</button></form>"
+    return school_list_page(request, "Add Subject", "subjects", table, form)
 
 @app.post("/school/subjects/add")
 def add_subject(request: Request, subject_name: str = Form(...), subject_code: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code) VALUES (?,?,?)", (school["id"], subject_name.strip(), subject_code.strip())); con.commit(); con.close()
-    return RedirectResponse("/school/subjects", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code) VALUES (?,?,?)", (school["id"], subject_name.strip(), subject_code.strip())); con.commit(); con.close(); return RedirectResponse("/school/subjects", status_code=303)
 
 @app.get("/school/subject/delete/{sid}")
 def del_sub(sid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close()
-    return RedirectResponse("/school/subjects", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/subjects", status_code=303)
 
 @app.get("/school/exams", response_class=HTMLResponse)
 def school_exams(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (school["id"],)); exams = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{e['name']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{e['term']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{e['year']}</td><td style='padding:10px; border-bottom:1px solid #eee'>{e['exam_type']}</td><td style='padding:10px; border-bottom:1px solid #eee'><a href='/school/exam/delete/{e['id']}' onclick=\"return confirm('Delete?')\" style='color:#dc2626'>🗑️</a></td></tr>" for e in exams]) or "<tr><td colspan=5 style='padding:20px; text-align:center; color:#999'>No exams yet</td></tr>"
-    table = f"<b>📝 Exams ({len(exams)})</b><table style='width:100%; margin-top:12px; border-collapse:collapse'><tr style='background:#f8fafc; font-size:11px'><th style='padding:10px; text-align:left'>Exam</th><th style='padding:10px; text-align:left'>Term</th><th style='padding:10px; text-align:left'>Year</th><th style='padding:10px; text-align:left'>Type</th><th>Action</th></tr>{rows}</table>"
-    form = "<form method='post' action='/school/exams/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><input name='exam_name' placeholder='📝 Exam Name e.g. End Term 2 *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='term' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' placeholder='📅 Year e.g. 2026' value='2026' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='exam_type' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Main Exam</option><option>CAT</option><option>Opener</option><option>Mid-Term</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>➕ Add Exam</button></form>"
-    return school_list_page(request, "➕ Add Exam", "exams", table, form)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px; border-bottom:1px solid #eee'>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td><a href='/school/exam/delete/{e['id']}' style='color:#dc2626'>🗑️</a></td></tr>" for e in exams]) or "<tr><td colspan=4 style='padding:20px; text-align:center'>No exams</td></tr>"
+    table = f"<b>Exams ({len(exams)})</b><table style='width:100%; margin-top:12px'><tr style='background:#f8fafc'><th>Exam</th><th>Term</th><th>Year</th><th>Action</th></tr>{rows}</table>"
+    form = "<form method='post' action='/school/exams/add' style='display:flex; flex-direction:column; gap:10px'><input name='exam_name' placeholder='Exam *' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='term' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' value='2026' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><select name='exam_type' style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option>Main Exam</option><option>CAT</option></select><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Add</button></form>"
+    return school_list_page(request, "Add Exam", "exams", table, form)
 
 @app.post("/school/exams/add")
 def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip(), term, year, exam_type)); con.commit(); con.close()
-    return RedirectResponse("/school/exams", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip(), term, year, exam_type)); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
 
 @app.get("/school/exam/delete/{eid}")
 def del_exam(eid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=? AND school_id=?", (eid, school["id"])); con.commit(); con.close()
-    return RedirectResponse("/school/exams", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=? AND school_id=?", (eid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
 
 @app.get("/school/marks", response_class=HTMLResponse)
 def school_marks(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall()
-    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT s.id, s.name, s.admission_no, c.name as cname FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? LIMIT 20", (school["id"],)); students = cur.fetchall()
-    con.close()
-    e_opts = "".join([f"<option value='{e['id']}'>{e['name']}</option>" for e in exams])
-    sub_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    st_opts = "".join([f"<option value='{st['id']}'>{st['name']}</option>" for st in students])
-    table = "<b>Marks Entry</b>"
-    form = f"<form method='post' action='/school/marks/add' style='display:flex; flex-direction:column; gap:10px; margin-top:12px'><select name='exam_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>📝 Exam</option>{e_opts}</select><select name='subject_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>📚 Subject</option>{sub_opts}</select><select name='student_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>🎓 Student</option>{st_opts}</select><input name='score' type='number' placeholder='Score' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Save</button></form>"
-    return school_list_page(request, "Enter Marks", "marks", table, form)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall(); cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall(); cur.execute("SELECT id, name FROM students WHERE school_id=? LIMIT 50", (school["id"],)); students = cur.fetchall(); con.close()
+    e_opts = "".join([f"<option value='{e['id']}'>{e['name']}</option>" for e in exams]); sub_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects]); st_opts = "".join([f"<option value='{st['id']}'>{st['name']}</option>" for st in students])
+    form = f"<form method='post' action='/school/marks/add' style='display:flex; flex-direction:column; gap:10px'><select name='exam_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>Exam</option>{e_opts}</select><select name='subject_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>Subject</option>{sub_opts}</select><select name='student_id' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><option value=''>Student</option>{st_opts}</select><input name='score' type='number' placeholder='Score' required style='padding:11px; border:1px solid #e2e8f0; border-radius:8px'><button style='background:#0f172a; color:white; padding:12px; border:none; border-radius:8px'>Save</button></form>"
+    return school_list_page(request, "Enter Marks", "marks", "<b>Marks Entry</b>", form)
 
 @app.post("/school/marks/add")
 def add_marks(request: Request, exam_id: int = Form(...), subject_id: int = Form(...), student_id: int = Form(...), score: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO marks (school_id, exam_id, student_id, subject_id, score) VALUES (?,?,?,?,?)", (school["id"], exam_id, student_id, subject_id, score)); con.commit(); con.close()
-    return RedirectResponse("/school/marks", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO marks (school_id, exam_id, student_id, subject_id, score) VALUES (?,?,?,?,?)", (school["id"], exam_id, student_id, subject_id, score)); con.commit(); con.close(); return RedirectResponse("/school/marks", status_code=303)
 
 @app.get("/school/marksheets", response_class=HTMLResponse)
 def school_marksheets(request: Request):
