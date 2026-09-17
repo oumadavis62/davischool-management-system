@@ -9,7 +9,7 @@ from email.message import EmailMessage
 import os
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v24-zeraki-true-copy")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v24-hover-dark-blue-fixed")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -50,7 +50,7 @@ def send_email(to_email, subject, body):
     if not EMAIL_PASSWORD: return False
     try:
         msg = EmailMessage(); msg["From"]=EMAIL_SENDER; msg["To"]=to_email; msg["Subject"]=subject; msg.set_content(body)
-        msg.add_alternative(f"<div style='font-family:Arial; padding:20px'><h3>{subject}</h3><pre style='background:#f8fafc; padding:16px; border-radius:8px'>{body}</pre></div>", subtype="html")
+        msg.add_alternative(f"<div style='font-family:Arial;padding:20px'><h3>{subject}</h3><pre style='background:#f8fafc;padding:16px;border-radius:8px'>{body}</pre></div>", subtype="html")
         context = ssl.create_default_context()
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls(context=context); server.login(EMAIL_SENDER, EMAIL_PASSWORD); server.send_message(msg)
@@ -110,7 +110,6 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if u["role"]!= "super_admin" and school_info: log_activity(u["email"], f"🏫 School login: {school_info['name']}", ""); return RedirectResponse("/school/dashboard", status_code=303)
     log_activity(u["email"], "🔓 Super Admin Logged in", ""); return RedirectResponse("/dashboard", status_code=303)
 
-# ===== RESTORED DASHBOARD - EXACT SCREENSHOT WINDOW =====
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -127,6 +126,11 @@ def dashboard(request: Request):
         rows += f"<tr><td style='padding:12px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600'>🏫 {s['name']}</td><td style='padding:12px;border-bottom:1px solid #f1f5f9;font-size:13px'>📍 {s['location']}</td><td style='padding:12px;border-bottom:1px solid #f1f5f9'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:20px;font-size:11px'>✅ Active</span></td><td style='padding:12px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b'>Today</td></tr>"
     if not rows: rows = "<tr><td colspan='4' style='padding:40px;text-align:center;color:#94a3b8;font-size:14px'>No schools yet</td></tr>"
     content = f"""
+    <style>
+   .quick-btn{{display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:12px;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:600;font-size:13px;margin-bottom:10px;transition:all 0.2s ease;cursor:pointer}}
+   .quick-btn:hover{{background:#0f172a!important;color:white!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,0.2)}}
+   .quick-btn-purple{{color:#6366f1}}
+    </style>
     <div style='padding:24px;max-width:1400px;margin:auto'>
         <div style='margin-bottom:20px'><div style='display:flex;align-items:center;gap:10px;margin-bottom:6px'><div style='width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#6366f1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px'>📊</div><h2 style='margin:0;font-size:22px;font-weight:800'>School Overview</h2></div><p style='margin:0;color:#64748b;font-size:13px'>Welcome {name}</p></div>
         <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px'>
@@ -137,13 +141,15 @@ def dashboard(request: Request):
         </div>
         <div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:16px'>
             <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:16px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='font-weight:800;display:flex;align-items:center;gap:8px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 18px'>Name</th><th style='padding:10px'>Location</th><th style='padding:10px'>Status</th><th style='padding:10px'>Date</th></tr></thead><tbody>{rows}</tbody></table></div>
-            <div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;margin-bottom:16px'><div style='font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:12px;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:600;font-size:13px;margin-bottom:10px'>🏫 Manage Schools</a><a href='/schools/manage' style='display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:12px;border-radius:10px;text-decoration:none;color:#6366f1;font-weight:600;font-size:13px'>➕ Register New School</a></div><div style='background:#0f172a;border-radius:16px;padding:16px;color:white'><div style='font-weight:800;display:flex;align-items:center;gap:8px;margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px;color:#94a3b8;margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b;border-radius:10px;padding:12px'><div style='font-size:10px;color:#94a3b8;letter-spacing:0.5px;margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e;font-weight:800'>✅ 99.9% Uptime</div><div style='height:4px;background:#334155;border-radius:10px;margin-top:8px'><div style='width:99%;height:100%;background:#22c55e;border-radius:10px'></div></div></div></div></div>
+            <div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;margin-bottom:16px'><div style='font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px'>⚡ Quick Actions</div>
+                <a href='/schools/manage' class='quick-btn'>🏫 Manage Schools</a>
+                <a href='/schools/manage' class='quick-btn quick-btn-purple'>➕ Register New School</a>
+            </div><div style='background:#0f172a;border-radius:16px;padding:16px;color:white'><div style='font-weight:800;display:flex;align-items:center;gap:8px;margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px;color:#94a3b8;margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b;border-radius:10px;padding:12px'><div style='font-size:10px;color:#94a3b8;letter-spacing:0.5px;margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e;font-weight:800'>✅ 99.9% Uptime</div><div style='height:4px;background:#334155;border-radius:10px;margin-top:8px'><div style='width:99%;height:100%;background:#22c55e;border-radius:10px'></div></div></div></div></div>
         </div>
     </div>
     """
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Inter,Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
 
-# ===== RESTORED MANAGE SCHOOLS - EXACT SCREENSHOT + 6-DIGIT + EYE + OK/CANCEL =====
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
@@ -286,46 +292,6 @@ def school_marks(request: Request):
 @app.post("/school/marks/add")
 def add_marks(request: Request, exam_id: int = Form(...), subject_id: int = Form(...), student_id: int = Form(...), score: int = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO marks (school_id, exam_id, student_id, subject_id, score) VALUES (?,?,?,?,?)", (school["id"], exam_id, student_id, subject_id, score)); con.commit(); con.close(); return RedirectResponse("/school/marks", status_code=303)
-
-@app.get("/school/marksheets", response_class=HTMLResponse)
-def school_marksheets(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall(); con.close()
-    html = school_header(school, request.session.get("name",""), "marksheets")
-    content = "".join([f"<div style='background:white;padding:14px;border-radius:12px'><b>{e['name']}</b></div>" for e in exams]) or "No exams"
-    html += f"<div style='padding:20px'><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px'>{content}</div></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/ranking", response_class=HTMLResponse)
-def school_ranking(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "ranking"); html += f"<div style='padding:20px'>Ranking</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/analysis", response_class=HTMLResponse)
-def school_analysis(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "analysis"); html += f"<div style='padding:20px'>Analysis</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/reports", response_class=HTMLResponse)
-def school_reports(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "reports"); html += f"<div style='padding:20px'>Reports</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/fees", response_class=HTMLResponse)
-def school_fees(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "fees"); html += f"<div style='padding:20px'>Fees</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/timetable", response_class=HTMLResponse)
-def school_timetable(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "timetable"); html += f"<div style='padding:20px'>Timetable</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/sms", response_class=HTMLResponse)
-def school_sms(request: Request):
-    school = get_school_obj(request); html = school_header(school, request.session.get("name",""), "sms"); html += f"<div style='padding:20px'>Bulk SMS</div></div></div>"; return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/student/delete/{sid}")
-def del_student(sid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
-
-@app.get("/school/class/delete/{cid}")
-def del_class(cid: int, request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
 
 @app.get("/logout")
 def logout(request: Request):
