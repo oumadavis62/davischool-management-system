@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v28-hover-back-overview-true-copy")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v29-primary-junior-secondary")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -67,12 +67,11 @@ def get_school_obj(req):
 def header_html(initials, name, email):
     return f"""
     <style>
-     .do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
-     .dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}
-     .dropdown-item:hover{{background:#0f172a;color:white}}
-      /* BACK BUTTON HOVER DARK BLUE FOR ALL SYSTEM */
-     .back-btn{{display:inline-flex; align-items:center; gap:6px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; text-align:center; transition:all 0.2s ease; cursor:pointer}}
-     .back-btn:hover{{background:#0f172a!important; color:white!important; border-color:#0f172a!important; transform:translateY(-1px); box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
+    .do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
+    .dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}
+    .dropdown-item:hover{{background:#0f172a;color:white}}
+    .back-btn{{display:inline-flex; align-items:center; gap:6px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; text-align:center; transition:all 0.2s ease; cursor:pointer}}
+    .back-btn:hover{{background:#0f172a!important; color:white!important; border-color:#0f172a!important; transform:translateY(-1px); box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
     </style>
     <div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div>
@@ -100,7 +99,6 @@ def profile_page(request: Request, tab: str = "personal"):
     active_personal = "border-bottom:3px solid #0f172a; color:#0f172a; font-weight:800" if tab=="personal" else "color:#64748b"
     active_security = "border-bottom:3px solid #0f172a; color:#0f172a; font-weight:800" if tab=="security" else "color:#64748b"
     active_log = "border-bottom:3px solid #0f172a; color:#0f172a; font-weight:800" if tab=="activity" else "color:#64748b"
-
     left_card = f"""
     <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; text-align:center; height:fit-content; display:flex; flex-direction:column'>
       <div>
@@ -117,7 +115,6 @@ def profile_page(request: Request, tab: str = "personal"):
       <a href='/dashboard' class='back-btn' style='margin-top:20px; justify-content:center'>⬅️ Back to Dashboard</a>
     </div>
     """
-
     if tab == "personal":
         right_card = f"""
         <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'>
@@ -155,21 +152,7 @@ def profile_page(request: Request, tab: str = "personal"):
             log_rows_html += f"""<div style='padding:12px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; gap:12px'><div style='flex:1'><div style='font-weight:700; font-size:12px'>{icon} {l['action']}</div><div style='font-size:11px; color:#64748b'>{l['details']}</div></div><div style='font-size:10px; color:#64748b; white-space:nowrap'>{l['timestamp']}</div></div>"""
         if not log_rows_html: log_rows_html = "<div style='padding:30px; text-align:center; color:#94a3b8'>No activity yet 📭</div>"
         right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px'><div style='font-weight:800; font-size:14px'>📜 Activity Log</div><a href='/profile/clear-logs' onclick="return confirm('Clear all logs?')" style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:8px; font-size:11px; text-decoration:none; color:#475569'>🧹 Clear</a></div><div style='font-size:11px; color:#64748b; margin-bottom:14px'>{total_events} events — EAT</div><div style='border-top:1px solid #f1f5f9; padding-top:8px; max-height:65vh; overflow:auto'>{log_rows_html}</div></div>"""
-
-    return HTMLResponse(f"""
-    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head>
-    <body>{header_html(initials, name, email)}
-      <div style='padding:20px; max-width:1100px; margin:auto'>
-        <div style='margin-bottom:16px'><h2 style='margin:0; font-size:20px'>👤 My Profile</h2></div>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:0 16px; display:flex; gap:20px; margin-bottom:16px'>
-          <a href='/profile?tab=personal' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_personal}'>👤 Personal</a>
-          <a href='/profile?tab=security' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_security}'>🔒 Security</a>
-          <a href='/profile?tab=activity' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_log}'>📜 Activity Log</a>
-        </div>
-        <div style='display:grid; grid-template-columns:300px 1fr; gap:20px'>{left_card}{right_card}</div>
-      </div>
-    </body></html>
-    """)
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}<div style='padding:20px; max-width:1100px; margin:auto'><div style='margin-bottom:16px'><h2 style='margin:0; font-size:20px'>👤 My Profile</h2></div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:0 16px; display:flex; gap:20px; margin-bottom:16px'><a href='/profile?tab=personal' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_personal}'>👤 Personal</a><a href='/profile?tab=security' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_security}'>🔒 Security</a><a href='/profile?tab=activity' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_log}'>📜 Activity Log</a></div><div style='display:grid; grid-template-columns:300px 1fr; gap:20px'>{left_card}{right_card}</div></div></body></html>""")
 
 @app.get("/profile/clear-logs")
 def clear_logs(request: Request):
@@ -216,7 +199,6 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if u["role"]!= "super_admin" and school_info: log_activity(u["email"], f"🏫 School login: {school_info['name']}", ""); return RedirectResponse("/school/dashboard", status_code=303)
     log_activity(u["email"], "🔓 Super Admin Logged in", "Viewed dashboard"); return RedirectResponse("/dashboard", status_code=303)
 
-# === RESTORED SCHOOL OVERVIEW WINDOW EXACT TO YOUR SCREENSHOT ===
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -227,62 +209,34 @@ def dashboard(request: Request):
     con.close()
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
-
     rows = ""
     for s in recent:
         rows += f"<tr><td style='padding:10px 14px; font-size:12px; font-weight:600'>{s['name']}</td><td style='padding:10px 14px; font-size:12px'>{s['location']}</td><td style='padding:10px 14px'><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Active</span></td><td style='padding:10px 14px; font-size:11px; color:#64748b'>Today</td></tr>"
     if not rows:
         rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8; font-size:13px'>No schools yet</td></tr>"
-
     content = f"""
     <div style='padding:20px; max-width:1400px; margin:auto'>
         <div style='margin-bottom:18px'>
             <h2 style='margin:0; font-size:22px; font-weight:800; display:flex; align-items:center; gap:8px'>📊 School Overview</h2>
             <p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name}</p>
         </div>
-
         <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px'>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'>
-                <div style='font-size:11px; color:#64748b; display:flex; align-items:center; gap:4px'>🏫 TOTAL SCHOOLS</div>
-                <div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div>
-                <div style='font-size:11px; color:#16a34a; display:flex; align-items:center; gap:4px'>📈 Up 12% from last month</div>
-            </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'>
-                <div style='font-size:11px; color:#64748b; display:flex; align-items:center; gap:4px'>✅ ACTIVE SCHOOLS</div>
-                <div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div>
-                <div style='font-size:11px; color:#16a34a; display:flex; align-items:center; gap:4px'>🟢 100% operational</div>
-            </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'>
-                <div style='font-size:11px; color:#64748b; display:flex; align-items:center; gap:4px'>🔥 TOTAL REVENUE</div>
-                <div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div>
-                <div style='font-size:11px; color:#16a34a; display:flex; align-items:center; gap:4px'>💹 +8% monthly growth</div>
-            </div>
-            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'>
-                <div style='font-size:11px; color:#64748b; display:flex; align-items:center; gap:4px'>🎓 TOTAL STUDENTS</div>
-                <div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div>
-                <div style='font-size:11px; color:#64748b; display:flex; align-items:center; gap:4px'>👥 Avg 350 per school</div>
-            </div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12% from last month</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>🟢 100% operational</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div><div style='font-size:11px; color:#16a34a'>💹 +8% monthly growth</div></div>
+            <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div><div style='font-size:11px; color:#64748b'>👥 Avg 350 per school</div></div>
         </div>
-
         <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:16px'>
             <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-                <div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'>
-                    <div style='font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px'>🏫 Recently Added Schools</div>
-                    <a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a>
-                </div>
-                <table style='width:100%; border-collapse:collapse'>
-                    <thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead>
-                    <tbody>{rows}</tbody>
-                </table>
+                <div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a></div>
+                <table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead><tbody>{rows}</tbody></table>
             </div>
-
             <div>
                 <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'>
-                    <div style='font-weight:800; font-size:14px; margin-bottom:12px; display:flex; align-items:center; gap:6px'>⚡ Quick Actions</div>
+                    <div style='font-weight:800; font-size:14px; margin-bottom:12px'>⚡ Quick Actions</div>
                     <a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:13px; margin-bottom:10px; transition:all 0.2s' onmouseover="this.style.background='#0f172a'; this.style.color='white'" onmouseout="this.style.background='white'; this.style.color='#0f172a'">🏫 Manage Schools</a>
                     <a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px; transition:all 0.2s' onmouseover="this.style.background='#0f172a'; this.style.color='white'" onmouseout="this.style.background='white'; this.style.color='#6366f1'">➕ Register New School</a>
                 </div>
-
                 <div style='background:#0f172a; border-radius:14px; padding:16px; color:white'>
                     <div style='font-weight:800; font-size:14px; margin-bottom:4px'>📊 Davischool Analytics</div>
                     <div style='font-size:11px; color:#94a3b8; margin-bottom:14px'>🛠️ All {total} schools are active</div>
@@ -335,7 +289,32 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
             <td style='padding:12px 10px; user-select:none'><span id='actions-{sid}' style='display:none; gap:6px'><a href='/schools/edit/{sid}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>🗑️ Delete</a></span><span id='hint-{sid}' style='font-size:10px; color:#94a3b8'>Click to activate</span></td>
         </tr>"""
     if not rows_html: rows_html = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc;caret-color:transparent}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}.highlight{{background:#e0f2fe!important;border-left:4px solid #0ea5e9!important}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}table{{user-select:none}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'><div><div class='card'>{popup_html}<div style='font-weight:800; font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='font-size:11px; color:#64748b; margin-bottom:8px'>👉 Click row to highlight 💙</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; color:#475569; font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📞 Contact</th><th style='padding:10px'>📧 Email</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div><div class='card' style='height:fit-content; position:sticky; top:16px'><div style='font-weight:800'>➕ Register New School 🏫</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Secondary</option></select><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button></form></div></div><script>let lastRow=null; function highlightRow(row,id){{if(lastRow) lastRow.classList.remove('highlight'); row.classList.add('highlight'); lastRow=row; document.querySelectorAll('[id^=actions-]').forEach(el=>el.style.display='none'); document.querySelectorAll('[id^=hint-]').forEach(el=>el.style.display='inline'); let act=document.getElementById('actions-'+id); let hint=document.getElementById('hint-'+id); if(act) act.style.display='flex'; if(hint) hint.style.display='none'; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}} function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}}}</script></body></html>""")
+    return HTMLResponse(f"""
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc;caret-color:transparent}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}.highlight{{background:#e0f2fe!important;border-left:4px solid #0ea5e9!important}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}table{{user-select:none}}</style></head>
+    <body>{header_html(initials, name, email)}
+    <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'>
+      <div><div class='card'>{popup_html}<div style='font-weight:800; font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='font-size:11px; color:#64748b; margin-bottom:8px'>👉 Click row to highlight 💙</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; color:#475569; font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📞 Contact</th><th style='padding:10px'>📧 Email</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div>
+      <div class='card' style='height:fit-content; position:sticky; top:16px'>
+        <div style='font-weight:800'>➕ Register New School 🏫</div>
+        <form method='post' action='/register-school'>
+          <input name='school_name' required placeholder='🏫 School Name *'>
+          <input name='school_email' required type='email' placeholder='📧 Admin Email *'>
+          <input name='location' required placeholder='📍 Location *'>
+          <input name='phone' required placeholder='📱 Phone *'>
+          <input name='principal' required placeholder='👤 Principal *'>
+          <select name='school_type' required>
+            <option value=''>🎓 Type *</option>
+            <option>Primary</option>
+            <option>Secondary</option>
+            <option>Primary & Junior Secondary</option>
+          </select>
+          <button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button>
+        </form>
+      </div>
+    </div>
+    <script>let lastRow=null; function highlightRow(row,id){{if(lastRow) lastRow.classList.remove('highlight'); row.classList.add('highlight'); lastRow=row; document.querySelectorAll('[id^=actions-]').forEach(el=>el.style.display='none'); document.querySelectorAll('[id^=hint-]').forEach(el=>el.style.display='inline'); let act=document.getElementById('actions-'+id); let hint=document.getElementById('hint-'+id); if(act) act.style.display='flex'; if(hint) hint.style.display='none'; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}} function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}}}</script>
+    </body></html>
+    """)
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -379,7 +358,34 @@ def edit_school_page(sid: int, request: Request):
     if not s: return RedirectResponse("/schools/manage")
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
     initials = "".join([p[0] for p in name.split()][:2]).upper()
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style></head><body>{header_html(initials, name, email)}<div class='card'><h3>✏️ Edit School - {s['name']}</h3><form method='post' action='/schools/edit/{sid}'><input name='school_name' value="{s['name']}" required><input name='school_email' value="{s['email']}" required><input name='location' value="{s['location']}" required><input name='phone' value="{s['phone']}" required><input name='principal' value="{s['principal']}" required><select name='school_type' required><option {"selected" if s['school_type']=="Primary" else ""}>Primary</option><option {"selected" if s['school_type']=="Secondary" else ""}>Secondary</option><option {"selected" if s['school_type']=="Primary & Secondary" else ""}>Primary & Secondary</option></select><input name='new_password' placeholder='New Password (blank keep old)'><div style='display:flex;gap:10px;margin-top:12px'><button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save Changes</button><a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div><a href='/dashboard' class='back-btn' style='margin-top:14px; width:100%; justify-content:center; box-sizing:border-box'>⬅️ Back to Dashboard</a></div></body></html>""")
+    # For edit page - handle old value "Primary & Secondary" as well
+    stype = s['school_type']
+    return HTMLResponse(f"""
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style>
+    </head><body>{header_html(initials, name, email)}
+    <div class='card'>
+      <h3>✏️ Edit School - {s['name']}</h3>
+      <form method='post' action='/schools/edit/{sid}'>
+        <input name='school_name' value="{s['name']}" required>
+        <input name='school_email' value="{s['email']}" required>
+        <input name='location' value="{s['location']}" required>
+        <input name='phone' value="{s['phone']}" required>
+        <input name='principal' value="{s['principal']}" required>
+        <select name='school_type' required>
+          <option {"selected" if stype=="Primary" else ""}>Primary</option>
+          <option {"selected" if stype=="Secondary" else ""}>Secondary</option>
+          <option {"selected" if stype in ["Primary & Secondary", "Primary & Junior Secondary"] else ""}>Primary & Junior Secondary</option>
+        </select>
+        <input name='new_password' placeholder='New Password (blank keep old)'>
+        <div style='display:flex;gap:10px;margin-top:12px'>
+          <button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save Changes</button>
+          <a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a>
+        </div>
+        <a href='/dashboard' class='back-btn' style='margin-top:14px; width:100%; justify-content:center; box-sizing:border-box'>⬅️ Back to Dashboard</a>
+      </form>
+    </div></body></html>
+    """)
 
 @app.post("/schools/edit/{sid}")
 def edit_school_save(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...), new_password: str = Form("")):
