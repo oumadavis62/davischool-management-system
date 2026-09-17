@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v36-1-davischool-brand-final")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v37-subjects-initial-full")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -37,6 +37,8 @@ def init_db():
     try: cur.execute("ALTER TABLE students ADD COLUMN stream TEXT")
     except: pass
     try: cur.execute("ALTER TABLE students ADD COLUMN assessment_no TEXT")
+    except: pass
+    try: cur.execute("ALTER TABLE subjects ADD COLUMN initial TEXT")
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
@@ -613,10 +615,153 @@ def edit_student_save(sid: int, request: Request, assessment_no: str = Form(...)
     con.commit(); con.close()
     return RedirectResponse(f"/school/students?success=updated&student_name={student_name.strip().upper()}", status_code=303)
 
+# ===== SUBJECTS - NEW WITH INITIAL COLUMN, EDIT/DELETE, CONFIRMATION, BLUE HIGHLIGHT, SUCCESS =====
+@app.get("/school/subjects", response_class=HTMLResponse)
+def school_subjects(request: Request, success: str = "", subject_name: str = ""):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    name = request.session.get("name","")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY id DESC", (school["id"],)); subjects = cur.fetchall()
+    con.close()
+
+    success_html = ""
+    if success == "added" and subject_name:
+        success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dcfce7; border:1.5px solid #16a34a; color:#166534; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999; box-shadow:0 10px 25px rgba(0,0,0,0.15)'>✅ {subject_name} Added Successfully! 📚</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
+    elif success == "updated" and subject_name:
+        success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dbeafe; border:1.5px solid #1d4ed8; color:#1e40af; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999;'>✏️ {subject_name} Updated! ✅</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
+    elif success == "deleted":
+        success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#fee2e2; border:1.5px solid #dc2626; color:#991b1b; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999;'>🗑️ Subject Deleted! ✅</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3000);</script>"""
+
+    rows = ""
+    for sub in subjects:
+        initial = sub['initial'] or ''
+        rows += f"""<tr onclick='highlightSubjectRow(this)' style='cursor:pointer; border-bottom:1px solid #f1f5f9; user-select:none; caret-color:transparent'>
+            <td style='padding:10px 12px; font-size:12px; font-weight:600; user-select:none'>📚 {sub['name']}</td>
+            <td style='padding:10px 12px; font-size:12px; font-weight:700; color:#1e40af; user-select:none'>{initial}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{sub['code']}</td>
+            <td style='padding:10px 12px; user-select:none; display:flex; gap:6px'>
+                <a href='#' onclick='event.stopPropagation(); openSubjectConfirm("edit", "{sub["id"]}", "{sub["name"]}"); return false;' style='background:#dbeafe; color:#1e40af; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700'>✏️</a>
+                <a href='#' onclick='event.stopPropagation(); openSubjectConfirm("delete", "{sub["id"]}", "{sub["name"]}"); return false;' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700'>🗑️</a>
+            </td></tr>"""
+    if not rows:
+        rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No subjects yet</td></tr>"
+
+    header = school_header(school, name, "subjects")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <script>
+    let lastRow=null;
+    function highlightSubjectRow(row){{if(lastRow) lastRow.classList.remove('highlight-row'); row.classList.add('highlight-row'); lastRow=row; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}}
+    let pendingAction=null; let pendingId=null;
+    function openSubjectConfirm(action, id, name) {{
+        pendingAction=action; pendingId=id;
+        let title=document.getElementById('confirmTitle');
+        let msg=document.getElementById('confirmMsg');
+        let proceedBtn=document.getElementById('confirmProceed');
+        if(action=='edit'){{title.innerHTML='✏️ Edit Subject?'; msg.innerHTML='Are you sure you want to edit <b>'+name+'</b>?<br>Click Proceed to continue.'; proceedBtn.style.background='#0f172a'; proceedBtn.innerText='✏️ Yes, Edit';}}
+        else{{title.innerHTML='🗑️ Delete Subject?'; msg.innerHTML='Are you sure you want to delete <b>'+name+'</b>?<br>This cannot be undone.'; proceedBtn.style.background='#dc2626'; proceedBtn.innerText='🗑️ Yes, Delete';}}
+        document.getElementById('confirmOverlay').style.display='flex';
+    }}
+    function closeConfirm(){{document.getElementById('confirmOverlay').style.display='none'; pendingAction=null; pendingId=null;}}
+    function proceedConfirm(){{
+        if(!pendingId) return;
+        if(pendingAction=='edit') window.location.href='/school/subjects/edit/'+pendingId;
+        else window.location.href='/school/subjects/delete/'+pendingId;
+    }}
+    </script></head><body>{header}{success_html}
+    <div id='confirmOverlay' class='confirm-overlay'>
+      <div class='confirm-box'>
+        <div id='confirmTitle' style='font-weight:900; font-size:16px; margin-bottom:8px'>Confirm?</div>
+        <div id='confirmMsg' style='font-size:12px; color:#475569; margin-bottom:18px; line-height:1.4'>Are you sure?</div>
+        <div style='display:flex; gap:10px; justify-content:center'>
+          <button onclick='closeConfirm()' style='background:white; border:1px solid #e2e8f0; color:#0f172a; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>❌ Cancel</button>
+          <button id='confirmProceed' onclick='proceedConfirm()' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>✅ Proceed</button>
+        </div>
+      </div>
+    </div>
+    <div style='padding:18px; max-width:1300px; margin:auto'>
+      <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
+          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'><b>📚 Subjects ({len(subjects)})</b><span style='font-size:11px; color:#64748b'>Click row = blue highlight | ✏️🗑️ = confirmation</span></div>
+          <div style='overflow:auto; max-height:75vh'>
+            <table style='width:100%; border-collapse:collapse; user-select:none; caret-color:transparent'>
+              <thead style='position:sticky; top:0; background:#f0f9ff; text-align:left; font-size:11px; color:#475569'><tr><th style='padding:10px 12px'>Subject</th><th style='padding:10px 12px'>Initial</th><th style='padding:10px 12px'>Code</th><th style='padding:10px 12px'>Action</th></tr></thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>
+          <div style='padding:12px; border-top:1px solid #f1f5f9'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div>
+        </div>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:18px'>
+          <div style='font-weight:800; margin-bottom:12px'>➕ Add Subject</div>
+          <form method='post' action='/school/subjects/add'>
+            <input name='subject_name' required placeholder='📚 Subject e.g. Mathematics *' class='input-field'>
+            <input name='subject_initial' required placeholder='🔤 Initial e.g. MAT, ENG, KIS *' class='input-field' maxlength='6'>
+            <input name='subject_code' required placeholder='🔢 Code e.g. MATH *' class='input-field'>
+            <button class='add-btn' style='margin-top:8px'>➕ Add Subject</button>
+          </form>
+          <div style='font-size:10px; color:#64748b; margin-top:10px'>Initial appears between Subject and Code columns.</div>
+        </div>
+      </div>
+    </div></div></div></body></html>""")
+
+@app.post("/school/subjects/add")
+def add_subject(request: Request, subject_name: str = Form(...), subject_initial: str = Form(...), subject_code: str = Form(...)):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("INSERT INTO subjects (school_id, name, code, initial) VALUES (?,?,?,?)", (school["id"], subject_name.strip().upper(), subject_code.strip().upper(), subject_initial.strip().upper()))
+    con.commit(); con.close()
+    return RedirectResponse(f"/school/subjects?success=added&subject_name={subject_name.strip().upper()}", status_code=303)
+
+@app.get("/school/subjects/delete/{sid}")
+def delete_subject(sid: int, request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?", (sid, school["id"],)); con.commit(); con.close()
+    return RedirectResponse("/school/subjects?success=deleted", status_code=303)
+
+@app.get("/school/subjects/edit/{sid}", response_class=HTMLResponse)
+def edit_subject_page(sid: int, request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM subjects WHERE id=? AND school_id=?", (sid, school["id"],)); sub = cur.fetchone()
+    con.close()
+    if not sub: return RedirectResponse("/school/subjects")
+    name = request.session.get("name","")
+    header = school_header(school, name, "subjects")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700}}</style></head><body>{header}
+    <div style='padding:20px; max-width:600px; margin:auto'>
+      <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:20px'>
+        <h3>✏️ Edit Subject - {sub['name']}</h3>
+        <form method='post' action='/school/subjects/edit/{sid}'>
+          <label style='font-size:11px; font-weight:700'>📚 Subject Name</label><input name='subject_name' value="{sub['name']}" required class='input-field'>
+          <label style='font-size:11px; font-weight:700'>🔤 Initial</label><input name='subject_initial' value="{sub['initial'] or ''}" required class='input-field' maxlength='6'>
+          <label style='font-size:11px; font-weight:700'>🔢 Code</label><input name='subject_code' value="{sub['code']}" required class='input-field'>
+          <div style='display:flex; gap:10px; margin-top:12px'><button class='add-btn' style='flex:1'>💾 Save Changes</button><a href='/school/subjects' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div>
+        </form>
+        <div style='margin-top:14px'><a href='/school/dashboard' class='back-btn' style='width:100%; justify-content:center; box-sizing:border-box'>⬅️ Back to Overview</a></div>
+      </div>
+    </div></div></div></body></html>""")
+
+@app.post("/school/subjects/edit/{sid}")
+def edit_subject_save(sid: int, request: Request, subject_name: str = Form(...), subject_initial: str = Form(...), subject_code: str = Form(...)):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("UPDATE subjects SET name=?, code=?, initial=? WHERE id=? AND school_id=?", (subject_name.strip().upper(), subject_code.strip().upper(), subject_initial.strip().upper(), sid, school["id"]))
+    con.commit(); con.close()
+    return RedirectResponse(f"/school/subjects?success=updated&subject_name={subject_name.strip().upper()}", status_code=303)
+
 @app.get("/school/{page}", response_class=HTMLResponse)
 def school_generic(page: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    if page in ["students","classes","dashboard"]: return RedirectResponse(f"/school/{page}")
+    if page in ["students","classes","dashboard","subjects"]: return RedirectResponse(f"/school/{page}")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/")
     name = request.session.get("name","")
