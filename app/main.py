@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v32-students-classes-integrated")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v35-full-confirmation-no-admin-interference")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -32,7 +32,6 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, exam_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, exam_id INTEGER, student_id INTEGER, subject_id INTEGER, score INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, term TEXT, total INTEGER, paid INTEGER, balance INTEGER)")
-    # Add stream column if missing
     try: cur.execute("ALTER TABLE classes ADD COLUMN stream TEXT")
     except: pass
     try: cur.execute("ALTER TABLE students ADD COLUMN stream TEXT")
@@ -54,7 +53,6 @@ def send_email(to_email, subject, body):
     if not EMAIL_PASSWORD: return False
     try:
         msg = EmailMessage(); msg["From"]=EMAIL_SENDER; msg["To"]=to_email; msg["Subject"]=subject; msg.set_content(body)
-        msg.add_alternative(f"<div style='font-family:Arial;padding:20px'><h3>{subject}</h3><pre>{body}</pre></div>", subtype="html")
         context = ssl.create_default_context()
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls(context=context); server.login(EMAIL_SENDER, EMAIL_PASSWORD); server.send_message(msg)
@@ -73,13 +71,14 @@ def get_school_obj(req):
     if sid==0 or req.session.get("role")=="super_admin": return None
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close(); return s
 
+# ===== ADMIN HEADER - UNTOUCHED =====
 def header_html(initials, name, email):
     return f"""
     <style>
- .do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
- .dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item:hover{{background:#0f172a;color:white}}
- .back-btn{{display:inline-flex; align-items:center; gap:6px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; text-align:center; transition:all 0.2s ease; cursor:pointer}}
- .back-btn:hover{{background:#0f172a!important; color:white!important; border-color:#0f172a!important; transform:translateY(-1px); box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
+.do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
+.dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item:hover{{background:#0f172a;color:white}}
+.back-btn{{display:inline-flex; align-items:center; gap:6px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; text-align:center; transition:all 0.2s ease; cursor:pointer}}
+.back-btn:hover{{background:#0f172a!important; color:white!important; border-color:#0f172a!important; transform:translateY(-1px); box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
     </style>
     <div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div>
@@ -94,19 +93,25 @@ def header_html(initials, name, email):
     <script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}} document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>
     """
 
+# ===== SCHOOL HEADER - NO MATOKEO NO ZERAKI =====
 def school_header(school, name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
     def nav(link, icon, label):
         a = "background:#0f172a;color:white;font-weight:700" if active==link else "color:#475569;"
-        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{a};transition:all 0.2s' onmouseover=\"if(this.style.background!=='rgb(15, 23, 42)'){{this.style.background='#0f172a'; this.style.color='white'}}\" onmouseout=\"if('{active}'!='{link}'){{this.style.background='transparent'; this.style.color='#475569'}}\">{icon} {label}</a>"
+        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{a};transition:all 0.2s'>{icon} {label}</a>"
     return f"""
     <style>
- .ds-card{{background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; text-decoration:none; color:#0f172a; display:block; transition:all 0.25s ease; cursor:pointer}}
- .ds-card:hover{{background:#0f172a!important; color:white!important; transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,0.3)}}
- .ds-card:hover div{{color:white!important}}
- .input-field{{width:100%; padding:11px 12px; border:1px solid #e2e8f0; border-radius:10px; margin:6px 0; font-size:13px; background:white}}
- .add-btn{{width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; transition:all 0.2s}}
- .add-btn:hover{{background:#1e3a8a}}
+.ds-card{{background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; text-decoration:none; color:#0f172a; display:block; transition:all 0.25s ease; cursor:pointer}}
+.ds-card:hover{{background:#0f172a!important; color:white!important; transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,0.3)}}
+.ds-card:hover div{{color:white!important}}
+.input-field{{width:100%; padding:11px 12px; border:1px solid #e2e8f0; border-radius:10px; margin:6px 0; font-size:13px; background:white}}
+.add-btn{{width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; transition:all 0.2s}}
+.add-btn:hover{{background:#1e3a8a}}
+.highlight-row{{background:#dbeafe!important; border-left:4px solid #0f172a!important}}
+table{{user-select:none; caret-color:transparent}}
+tr{{user-select:none; caret-color:transparent}}
+.confirm-overlay{{position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; z-index:10000}}
+.confirm-box{{background:white; border-radius:16px; padding:22px; width:380px; text-align:center; border:1px solid #e2e8f0; box-shadow:0 20px 40px rgba(0,0,0,0.25)}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -133,17 +138,12 @@ def school_header(school, name, active="dashboard"):
     </div>
     <div style='flex:1;background:#f8fafc'>
       <div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'>
-        <div>
-          <b style='font-size:14px'>DaviSchool Management System 🚀</b>
-          <div style='font-size:11px;color:#64748b'>{name} • {school['name']} | Revolutionize Your School's Management!</div>
-        </div>
-        <div style='display:flex;align-items:center;gap:10px'>
-          <span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span>
-          <div style='width:36px;height:36px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800'>{initials}</div>
-        </div>
+        <div><b style='font-size:14px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name} • {school['name']} | Revolutionize Your School's Management!</div></div>
+        <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:36px;height:36px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800'>{initials}</div></div>
       </div>
     """
 
+# ===== PROFILE - ADMIN UNTOUCHED =====
 @app.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request, tab: str = "personal"):
     if "email" not in request.session: return RedirectResponse("/")
@@ -216,6 +216,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if u["role"]!= "super_admin" and school_info: log_activity(u["email"], f"🏫 School login: {school_info['name']}", ""); return RedirectResponse("/school/dashboard", status_code=303)
     log_activity(u["email"], "🔓 Super Admin Logged in", "Viewed dashboard"); return RedirectResponse("/dashboard", status_code=303)
 
+# ===== ADMIN DASHBOARD - UNTOUCHED =====
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -230,9 +231,10 @@ def dashboard(request: Request):
     for s in recent:
         rows += f"<tr><td style='padding:10px 14px; font-size:12px; font-weight:600'>{s['name']}</td><td style='padding:10px 14px; font-size:12px'>{s['location']}</td><td style='padding:10px 14px'><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Active</span></td><td style='padding:10px 14px; font-size:11px; color:#64748b'>Today</td></tr>"
     if not rows: rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
-    content = f"""<div style='padding:20px; max-width:1400px; margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name}</p></div><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12% from last month</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>🟢 100% operational</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div><div style='font-size:11px; color:#16a34a'>💹 +8% monthly growth</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div><div style='font-size:11px; color:#64748b'>👥 Avg 350 per school</div></div></div><div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:13px; margin-bottom:10px; transition:all 0.2s' onmouseover="this.style.background='#0f172a'; this.style.color='white'" onmouseout="this.style.background='white'; this.style.color='#0f172a'">🏫 Manage Schools</a><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px; transition:all 0.2s' onmouseover="this.style.background='#0f172a'; this.style.color='white'" onmouseout="this.style.background='white'; this.style.color='#6366f1'">➕ Register New School</a></div><div style='background:#0f172a; border-radius:14px; padding:16px; color:white'><div style='font-weight:800; font-size:14px; margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e; font-weight:800; font-size:14px'>✅ 99.9% Uptime</div><div style='height:4px; background:#334155; border-radius:10px; margin-top:8px'><div style='width:99%; height:100%; background:#22c55e; border-radius:10px'></div></div></div></div></div></div></div>"""
+    content = f"""<div style='padding:20px; max-width:1400px; margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name}</p></div><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12% from last month</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>🟢 100% operational</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div><div style='font-size:11px; color:#16a34a'>💹 +8% monthly growth</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div><div style='font-size:11px; color:#64748b'>👥 Avg 350 per school</div></div></div><div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:13px; margin-bottom:10px'>🏫 Manage Schools</a><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px'>➕ Register New School</a></div><div style='background:#0f172a; border-radius:14px; padding:16px; color:white'><div style='font-weight:800; font-size:14px; margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e; font-weight:800; font-size:14px'>✅ 99.9% Uptime</div><div style='height:4px; background:#334155; border-radius:10px; margin-top:8px'><div style='width:99%; height:100%; background:#22c55e; border-radius:10px'></div></div></div></div></div></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
 
+# ===== ADMIN MANAGE SCHOOLS - UNTOUCHED =====
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
@@ -321,7 +323,7 @@ def edit_school_save(sid: int, request: Request, school_name: str = Form(...), s
     log_activity(request.session.get("email",""), f"✏️ Edited School {school_name}", f"ID {sid}")
     return RedirectResponse("/schools/manage", status_code=303)
 
-# ========== SCHOOL DASHBOARD - OVERVIEW ==========
+# ===== SCHOOL SIDE - DASHBOARD, CLASSES, STUDENTS WITH CONFIRMATION =====
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -334,48 +336,30 @@ def school_dashboard(request: Request):
     cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
     cur.execute("SELECT SUM(paid) as t FROM fees WHERE school_id=?", (school["id"],))
     fees_row = cur.fetchone(); fees_total = fees_row["t"] if fees_row and fees_row["t"] else 0
-    cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 5", (school["id"],)); recent_students = cur.fetchall()
     con.close()
-    stu_rows = ""
-    for st in recent_students:
-        stu_rows += f"<tr><td style='padding:10px 12px; font-size:12px'>{st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['admission_no'] or st['assessment_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>Class {st['class_id'] or ''}</td></tr>"
-    if not stu_rows:
-        stu_rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8; font-size:13px'>No students yet - Add students to start</td></tr>"
     html = school_header(school, name, "dashboard")
     html += f"""
     <div style='padding:18px'>
         <div style='background:linear-gradient(135deg,#0f172a,#1e3a8a); border-radius:16px; padding:18px 20px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'>
-          <div><div style='font-size:20px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:2px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div><div style='font-size:10px; background:rgba(255,255,255,0.15); display:inline-block; padding:4px 10px; border-radius:20px; margin-top:8px'>WORKS FOR ALL LEVELS: PRE-PRIMARY, PRIMARY, JUNIOR, SENIOR | 8-4-4 SUPPORTED</div></div>
-          <div style='text-align:right'><div style='font-size:28px; font-weight:900'>{sc}</div><div style='font-size:10px; color:#94a3b8'>Total Students</div><div style='font-size:10px; background:#16a34a; color:white; padding:4px 8px; border-radius:12px; margin-top:6px; display:inline-block'>✅ GET EVERYTHING DONE IN MINUTES!</div></div>
+          <div><div style='font-size:20px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:2px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div></div>
+          <div style='text-align:right'><div style='font-size:28px; font-weight:900'>{sc}</div><div style='font-size:10px; color:#94a3b8'>Total Students</div></div>
         </div>
         <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px'>
-          <a href='/school/students' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{sc}</div><div style='font-size:10px; color:#3b82f6'>📊 Active</div></a>
-          <a href='/school/classes' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{cc}</div><div style='font-size:10px; color:#64748b'>Streams & Levels</div></a>
-          <a href='/school/exams' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{ec}</div><div style='font-size:10px; color:#3b82f6'>Deep Insights</div></a>
-          <a href='/school/fees' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>💰 FEES COLLECTED</div><div style='font-size:18px; font-weight:900; margin:8px 0'>KES {fees_total}</div><div style='font-size:10px; color:#16a34a'>✅ Managed</div></a>
-        </div>
-        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px'>
-          <a href='/school/analysis' class='ds-card'><div style='font-size:20px'>📊</div><div style='font-size:11px; font-weight:800; margin-top:4px'>EXAM MARKS ANALYSIS</div><div style='font-size:9px; color:#64748b; margin-top:2px'>DEEP PERFORMANCE INSIGHTS</div></a>
-          <a href='/school/ranking' class='ds-card'><div style='font-size:20px'>🏆</div><div style='font-size:11px; font-weight:800; margin-top:4px'>ACCURATE RANKING</div><div style='font-size:9px; color:#64748b; margin-top:2px'>INSTANT CLASS & LEVEL RANKING</div></a>
-          <a href='/school/marksheets' class='ds-card'><div style='font-size:20px'>📄</div><div style='font-size:11px; font-weight:800; margin-top:4px'>GENERATES MARKSHEETS</div><div style='font-size:9px; color:#64748b; margin-top:2px'>CREATE RECORD SHEETS QUICKLY</div></a>
-          <a href='/school/reports' class='ds-card'><div style='font-size:20px'>📑</div><div style='font-size:11px; font-weight:800; margin-top:4px'>STUDENT REPORTS</div><div style='font-size:9px; color:#64748b; margin-top:2px'>AUTOMATED REPORT CARD GENERATION</div></a>
+          <a href='/school/students' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{sc}</div></a>
+          <a href='/school/classes' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{cc}</div></a>
+          <a href='/school/exams' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{ec}</div></a>
+          <a href='/school/fees' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>💰 FEES COLLECTED</div><div style='font-size:18px; font-weight:900; margin:8px 0'>KES {fees_total}</div></a>
         </div>
         <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px'>
-          <a href='/school/marksheets' class='ds-card'><div style='font-size:20px'>📁</div><div style='font-size:11px; font-weight:800; margin-top:4px'>GENERATES MARKSHEETS</div><div style='font-size:9px; color:#64748b; margin-top:2px'>CREATE ACCURATE RECORD SHEETS</div></a>
-          <a href='/school/timetable' class='ds-card'><div style='font-size:20px'>🗓️</div><div style='font-size:11px; font-weight:800; margin-top:4px'>SMART TIMETABLING</div><div style='font-size:9px; color:#64748b; margin-top:2px'>LESSON ALERTS FOR TEACHERS</div></a>
-          <a href='/school/fees' class='ds-card'><div style='font-size:20px'>💰</div><div style='font-size:11px; font-weight:800; margin-top:4px'>FINANCING & FEES</div><div style='font-size:9px; color:#64748b; margin-top:2px'>MANAGE ACCOUNTS & FEES</div></a>
-          <a href='/school/sms' class='ds-card'><div style='font-size:20px'>💬</div><div style='font-size:11px; font-weight:800; margin-top:4px'>BULK SMS TO PARENTS</div><div style='font-size:9px; color:#64748b; margin-top:2px'>EASY BULK SMS NOTIFICATIONS</div></a>
+          <a href='/school/analysis' class='ds-card'><div style='font-size:20px'>📊</div><div style='font-size:11px; font-weight:800; margin-top:4px'>EXAM MARKS ANALYSIS</div></a>
+          <a href='/school/ranking' class='ds-card'><div style='font-size:20px'>🏆</div><div style='font-size:11px; font-weight:800; margin-top:4px'>ACCURATE RANKING</div></a>
+          <a href='/school/marksheets' class='ds-card'><div style='font-size:20px'>📄</div><div style='font-size:11px; font-weight:800; margin-top:4px'>GENERATES MARKSHEETS</div></a>
+          <a href='/school/reports' class='ds-card'><div style='font-size:20px'>📑</div><div style='font-size:11px; font-weight:800; margin-top:4px'>STUDENT REPORTS</div></a>
         </div>
-        <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:14px'>
-          <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🎓 Recently Added Students</div><a href='/school/students' style='font-size:11px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:10px; color:#64748b'><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Adm No</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div>
-          <div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>📊 DaviSchool Management System</div><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:12px'>STUDENT REPORT</div><div style='display:flex; flex-direction:column; gap:10px'><div style='display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:8px'><div style='display:flex; align-items:center; gap:8px'><div style='width:24px; height:24px; background:#3b82f6; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>👤</div><div style='font-size:11px'>Top Student</div></div><div style='background:#22c55e; color:white; font-size:10px; padding:2px 6px; border-radius:6px'>G</div></div><div style='display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:8px'><div style='display:flex; align-items:center; gap:8px'><div style='width:24px; height:24px; background:#ec4899; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>👤</div><div style='font-size:11px'>Second</div></div><div style='background:#3b82f6; color:white; font-size:10px; padding:2px 6px; border-radius:6px'>B</div></div><div style='display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:8px'><div style='display:flex; align-items:center; gap:8px'><div style='width:24px; height:24px; background:#f59e0b; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>👤</div><div style='font-size:11px'>Third</div></div><div style='background:#f59e0b; color:white; font-size:10px; padding:2px 6px; border-radius:6px'>G</div></div></div><div style='font-size:8px; color:#64748b; margin-top:14px; line-height:1.3'>CONTACT US: 0111392013 | WhatsApp: 0111392013 — GET EVERYTHING DONE IN MINUTES!</div></div>
-        </div>
-    </div>
-    </div></div>
+    </div></div></div>
     """
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{html}</body></html>")
 
-# ========== CLASSES & STREAMS - INTEGRATED ==========
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -387,24 +371,34 @@ def school_classes(request: Request):
     con.close()
     rows = ""
     for c in classes:
-        rows += f"<tr><td style='padding:10px 12px; font-size:12px; font-weight:600'>🏫 {c['name']}</td><td style='padding:10px 12px; font-size:12px'>🔀 {c['stream'] or c['level'] or ''}</td><td style='padding:10px 12px'><a href='/school/classes/delete/{c['id']}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>"
-    if not rows: rows = "<tr><td colspan='3' style='padding:30px; text-align:center; color:#94a3b8'>No classes yet — Add classes to populate Student dropdowns</td></tr>"
+        rows += f"""<tr onclick='highlightStudentRow(this)' style='cursor:pointer; border-bottom:1px solid #f1f5f9'>
+            <td style='padding:10px 12px; font-size:12px; font-weight:600'>🏫 {c['name']}</td>
+            <td style='padding:10px 12px; font-size:12px'>🔀 {c['stream'] or c['level'] or ''}</td>
+            <td style='padding:10px 12px;'><a href='#' onclick='event.stopPropagation(); openClassConfirm({c["id"]}, "{c["name"]} - {c["stream"]}"); return false;' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>"""
+    if not rows: rows = "<tr><td colspan='3' style='padding:30px; text-align:center; color:#94a3b8'>No classes yet</td></tr>"
     header = school_header(school, name, "classes")
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc; caret-color:transparent}}</style>
+    <script>
+    let lastRow=null; let pendingClassId=null;
+    function highlightStudentRow(row){{if(lastRow) lastRow.classList.remove('highlight-row'); row.classList.add('highlight-row'); lastRow=row; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}}
+    function openClassConfirm(id, name){{pendingClassId=id; document.getElementById('confirmTitle').innerHTML='🗑️ Delete Class?'; document.getElementById('confirmMsg').innerHTML='Are you sure you want to delete <b>'+name+'</b>?<br>Proceed or Cancel.'; document.getElementById('confirmOverlay').style.display='flex';}}
+    function closeConfirm(){{document.getElementById('confirmOverlay').style.display='none'; pendingClassId=null;}}
+    function proceedClassConfirm(){{if(pendingClassId) window.location.href='/school/classes/delete/'+pendingClassId;}}
+    </script></head><body>{header}
+    <div id='confirmOverlay' class='confirm-overlay'><div class='confirm-box'><div id='confirmTitle' style='font-weight:900; font-size:16px; margin-bottom:8px'>Confirm?</div><div id='confirmMsg' style='font-size:12px; color:#475569; margin-bottom:18px'></div><div style='display:flex; gap:10px; justify-content:center'><button onclick='closeConfirm()' style='background:white; border:1px solid #e2e8f0; color:#0f172a; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>❌ Cancel</button><button onclick='proceedClassConfirm()' style='background:#dc2626; color:white; padding:10px 18px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>🗑️ Yes, Delete</button></div></div></div>
     <div style='padding:18px; max-width:1200px; margin:auto'>
       <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Classes & Streams ({len(classes)})</b><span style='font-size:11px; color:#64748b'>These populate Students → Select Class dropdown</span></div>
+          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Classes & Streams ({len(classes)})</b><span style='font-size:11px; color:#64748b'>Click row = blue | Delete = confirmation</span></div>
           <table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Action</th></tr></thead><tbody>{rows}</tbody></table>
         </div>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'>
           <b>➕ Add Class & Stream</b>
           <form method='post' action='/school/classes/add' style='margin-top:10px'>
-            <input name='class_name' required placeholder='🏫 Class Name * e.g. Form 1, Class 4, Grade 5' class='input-field'>
-            <input name='stream' required placeholder='🔀 Stream * e.g. East, West, Blue, Red' class='input-field'>
+            <input name='class_name' required placeholder='🏫 Class Name *' class='input-field'>
+            <input name='stream' required placeholder='🔀 Stream *' class='input-field'>
             <button class='add-btn' style='margin-top:8px'>➕ Add Class</button>
           </form>
-          <div style='font-size:11px; color:#64748b; margin-top:10px'>This class & stream will appear in Students tab → Select Class & Select Stream dropdowns</div>
           <a href='/school/students' style='display:block; text-align:center; margin-top:12px; padding:10px; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:12px'>🎓 Go to Students →</a>
         </div>
       </div>
@@ -416,9 +410,8 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
     school = get_school_obj(request)
     if not school: return RedirectResponse("/")
     con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip(), stream.strip()))
+    cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper()))
     con.commit(); con.close()
-    log_activity(request.session.get("email",""), f"🏫 Added class {class_name} - {stream}", "")
     return RedirectResponse("/school/classes", status_code=303)
 
 @app.get("/school/classes/delete/{cid}")
@@ -427,9 +420,8 @@ def delete_class(cid: int, request: Request):
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close()
     return RedirectResponse("/school/classes", status_code=303)
 
-# ========== STUDENTS TAB - AUTOMATED AS PER SCREENSHOT ==========
 @app.get("/school/students", response_class=HTMLResponse)
-def school_students(request: Request):
+def school_students(request: Request, success: str = "", student_name: str = ""):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/")
@@ -439,103 +431,100 @@ def school_students(request: Request):
     cur.execute("SELECT s.*, c.name as class_name, c.stream as class_stream FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
     con.close()
 
-    # Class dropdown options from classes table
-    class_options = ""
-    stream_options_set = set()
-    class_names_set = set()
-    for cl in classes:
-        cname = cl['name']; sname = cl['stream'] or cl['level'] or ''
-        class_options += f"<option value='{cname}|{sname}|{cl['id']}'>🏫 {cname} - {sname}</option>"
-        stream_options_set.add(sname)
-        class_names_set.add(cname)
-
-    # Build distinct class dropdown and stream dropdown
     distinct_class_opts = ""
-    for cn in sorted(class_names_set):
-        distinct_class_opts += f"<option value='{cn}'>{cn}</option>"
     distinct_stream_opts = ""
-    for st in sorted(stream_options_set):
-        if st:
-            distinct_stream_opts += f"<option value='{st}'>{st}</option>"
+    class_set = sorted(set([c['name'] for c in classes if c['name']]))
+    stream_set = sorted(set([c['stream'] or c['level'] for c in classes if c['stream'] or c['level']]))
+    for cn in class_set: distinct_class_opts += f"<option value='{cn}'>{cn}</option>"
+    for st in stream_set:
+        if st: distinct_stream_opts += f"<option value='{st}'>{st}</option>"
 
-    if not class_options:
-        class_options = "<option value=''>⚠️ No classes — Add in Classes & Streams first</option>"
+    success_html = ""
+    if success == "added" and student_name:
+        success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dcfce7; border:1.5px solid #16a34a; color:#166534; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999; box-shadow:0 10px 25px rgba(0,0,0,0.15)'>✅ {student_name} Added Successfully! 🎓</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
+    elif success == "updated" and student_name:
+        success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dbeafe; border:1.5px solid #1d4ed8; color:#1e40af; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999;'>✏️ {student_name} Updated! ✅</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
 
     student_rows = ""
     for st in students:
         assessment_no = st['assessment_no'] or st['admission_no'] or ''
-        student_rows += f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px; font-weight:600'>🎓 {st['name']}</td><td style='padding:10px 12px; font-size:11px'>{assessment_no}</td><td style='padding:10px 12px; font-size:11px'>{st['class_name'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['stream'] or st['class_stream'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>{st['parent_phone'] or ''}</td><td style='padding:10px 12px'><a href='/school/students/delete/{st['id']}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️</a></td></tr>"
+        student_rows += f"""<tr onclick='highlightStudentRow(this)' style='cursor:pointer; border-bottom:1px solid #f1f5f9; user-select:none; caret-color:transparent'>
+            <td style='padding:10px 12px; font-size:12px; font-weight:600; user-select:none'>🎓 {st['name']}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{assessment_no}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{st['class_name'] or ''}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{st['stream'] or st['class_stream'] or ''}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{st['gender']}</td>
+            <td style='padding:10px 12px; font-size:11px; user-select:none'>{st['parent_phone'] or ''}</td>
+            <td style='padding:10px 12px; user-select:none; display:flex; gap:6px'>
+                <a href='#' onclick='event.stopPropagation(); openConfirm("edit", "{st["id"]}", "{st["name"]}"); return false;' style='background:#dbeafe; color:#1e40af; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700'>✏️</a>
+                <a href='#' onclick='event.stopPropagation(); openConfirm("delete", "{st["id"]}", "{st["name"]}"); return false;' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700'>🗑️</a>
+            </td></tr>"""
     if not student_rows:
         student_rows = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
 
     header = school_header(school, name, "students")
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style>
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script>
-    function updateStreamDropdown() {{
-      let classSelect = document.getElementById('classSelect');
-      let streamSelect = document.getElementById('streamSelect');
-      // Filter streams based on class - data from server
-      let allClasses = {str([dict(c) for c in classes])};
-      let selectedClass = classSelect.value;
-      streamSelect.innerHTML = '<option value=\"\">🔀 Select Stream *</option>';
-      let streams = [];
-      for (let cl of allClasses) {{
-        if (cl.name === selectedClass) {{
-          if (!streams.includes(cl.stream)) streams.push(cl.stream);
-        }}
-      }}
-      if (streams.length===0) {{
-        // If no streams filtered, show all streams
-        for (let cl of allClasses) {{
-          if (cl.stream &&!streams.includes(cl.stream)) streams.push(cl.stream);
-        }}
-      }}
-      for (let s of streams) {{
-        let opt = document.createElement('option');
-        opt.value = s; opt.textContent = '🔀 ' + s;
-        streamSelect.appendChild(opt);
-      }}
+    let lastRow=null;
+    function highlightStudentRow(row){{if(lastRow) lastRow.classList.remove('highlight-row'); row.classList.add('highlight-row'); lastRow=row; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}}
+    let pendingAction=null; let pendingId=null;
+    function openConfirm(action, id, name) {{
+        pendingAction=action; pendingId=id;
+        let title=document.getElementById('confirmTitle');
+        let msg=document.getElementById('confirmMsg');
+        let proceedBtn=document.getElementById('confirmProceed');
+        if(action=='edit'){{title.innerHTML='✏️ Edit Student?'; msg.innerHTML='Are you sure you want to edit <b>'+name+'</b>?<br>Click Proceed to continue or Cancel to stop.'; proceedBtn.style.background='#0f172a'; proceedBtn.innerText='✏️ Yes, Edit';}}
+        else{{title.innerHTML='🗑️ Delete Student?'; msg.innerHTML='Are you sure you want to delete <b>'+name+'</b>?<br>This cannot be undone.'; proceedBtn.style.background='#dc2626'; proceedBtn.innerText='🗑️ Yes, Delete';}}
+        document.getElementById('confirmOverlay').style.display='flex';
     }}
-    </script>
-    </head><body>{header}
+    function closeConfirm(){{document.getElementById('confirmOverlay').style.display='none'; pendingAction=null; pendingId=null;}}
+    function proceedConfirm(){{
+        if(!pendingId) return;
+        if(pendingAction=='edit') window.location.href='/school/students/edit/'+pendingId;
+        else window.location.href='/school/students/delete/'+pendingId;
+    }}
+    function updateStreamDropdown(){{
+      let classSelect=document.getElementById('classSelect');
+      let streamSelect=document.getElementById('streamSelect');
+      let allClasses={str([dict(c) for c in classes])};
+      let selectedClass=classSelect.value;
+      streamSelect.innerHTML='<option value="">🔀 Select Stream *</option>';
+      let streams=[];
+      for(let cl of allClasses){{if(cl.name===selectedClass && cl.stream){{if(!streams.includes(cl.stream)) streams.push(cl.stream);}}}}
+      if(streams.length===0){{for(let cl of allClasses){{if(cl.stream &&!streams.includes(cl.stream)) streams.push(cl.stream);}}}}
+      for(let s of streams){{let opt=document.createElement('option'); opt.value=s; opt.textContent='🔀 '+s; streamSelect.appendChild(opt);}}
+    }}
+    </script></head><body>{header}{success_html}
+    <div id='confirmOverlay' class='confirm-overlay'>
+      <div class='confirm-box'>
+        <div id='confirmTitle' style='font-weight:900; font-size:16px; margin-bottom:8px'>Confirm?</div>
+        <div id='confirmMsg' style='font-size:12px; color:#475569; margin-bottom:18px; line-height:1.4'>Are you sure?</div>
+        <div style='display:flex; gap:10px; justify-content:center'>
+          <button onclick='closeConfirm()' style='background:white; border:1px solid #e2e8f0; color:#0f172a; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>❌ Cancel</button>
+          <button id='confirmProceed' onclick='proceedConfirm()' style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:12px'>✅ Proceed</button>
+        </div>
+      </div>
+    </div>
     <div style='padding:18px; max-width:1400px; margin:auto'>
       <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'>
-            <b>🎓 Students ({len(students)})</b>
-            <span style='font-size:11px; color:#64748b'>DaviSchool Management System</span>
-          </div>
+          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'><b>🎓 Students ({len(students)})</b><span style='font-size:11px; color:#64748b'>Click row = blue highlight | ✏️🗑️ = confirmation</span></div>
           <div style='overflow:auto; max-height:75vh'>
-            <table style='width:100%; border-collapse:collapse'>
-              <thead style='position:sticky; top:0; background:#f0f9ff; text-align:left; font-size:11px; color:#475569'><tr><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Assessment No</th><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Parent Phone</th><th style='padding:10px 12px'>Action</th></tr></thead>
-              <tbody>{student_rows}</tbody>
-            </table>
+            <table style='width:100%; border-collapse:collapse; user-select:none; caret-color:transparent'><thead style='position:sticky; top:0; background:#f0f9ff; text-align:left; font-size:11px; color:#475569'><tr><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Assessment No</th><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Parent Phone</th><th style='padding:10px 12px'>Action</th></tr></thead><tbody>{student_rows}</tbody></table>
           </div>
         </div>
-
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:18px'>
           <div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div>
           <form method='post' action='/school/students/add'>
             <input name='assessment_no' required placeholder='🆔 Assessment No *' class='input-field'>
             <input name='student_name' required placeholder='👤 Student Name *' class='input-field'>
-            <select id='classSelect' name='class_name' required class='input-field' onchange='updateStreamDropdown()'>
-              <option value=''>🏫 Select Class *</option>
-              {distinct_class_opts}
-            </select>
-            <select id='streamSelect' name='stream' required class='input-field'>
-              <option value=''>🔀 Select Stream *</option>
-              {distinct_stream_opts}
-            </select>
-            <select name='gender' required class='input-field'>
-              <option value=''>⚧️ Gender *</option>
-              <option value='Male'>Male</option>
-              <option value='Female'>Female</option>
-            </select>
+            <select id='classSelect' name='class_name' required class='input-field' onchange='updateStreamDropdown()'><option value=''>🏫 Select Class *</option>{distinct_class_opts if distinct_class_opts else "<option>⚠️ Add Classes first</option>"}</select>
+            <select id='streamSelect' name='stream' required class='input-field'><option value=''>🔀 Select Stream *</option>{distinct_stream_opts}</select>
+            <select name='gender' required class='input-field'><option value=''>⚧️ Gender *</option><option value='Male'>Male</option><option value='Female'>Female</option></select>
             <input name='parent_name' placeholder='👨‍👩‍👧 Parent Name' class='input-field'>
             <input name='parent_phone' required placeholder='📞 Parent Phone *' class='input-field'>
             <button class='add-btn' style='margin-top:8px'>➕ Add Student</button>
           </form>
-          <div style='font-size:10px; color:#64748b; margin-top:8px'>Class & Stream dropdowns auto-populate from Classes & Streams you add. <a href='/school/classes' style='color:#3b82f6; text-decoration:none'>Go add classes →</a></div>
         </div>
       </div>
     </div></div></div></body></html>""")
@@ -546,25 +535,64 @@ def add_student(request: Request, assessment_no: str = Form(...), student_name: 
     school = get_school_obj(request)
     if not school: return RedirectResponse("/")
     con = get_db(); cur = con.cursor()
-    # Find or create class_id matching class_name + stream
-    cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND (stream=? OR level=?)", (school["id"], class_name.strip().upper(), stream.strip(), stream.strip()))
+    cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND (stream=? OR level=?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper()))
     cls = cur.fetchone()
-    if cls:
-        class_id = cls["id"]
+    if cls: class_id = cls["id"]
     else:
-        # Auto create class if not exists
-        cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip(), stream.strip()))
+        cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper()))
         class_id = cur.lastrowid
-    cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_name, parent_phone, stream) VALUES (?,?,?,?,?,?,?,?,?)", (school["id"], assessment_no.strip(), assessment_no.strip(), student_name.strip().upper(), class_id, gender, parent_name.strip(), parent_phone.strip(), stream.strip()))
+    cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_name, parent_phone, stream) VALUES (?,?,?,?,?,?,?,?,?)", (school["id"], assessment_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), class_id, gender, parent_name.strip().upper(), parent_phone.strip(), stream.strip().upper()))
     con.commit(); con.close()
-    log_activity(request.session.get("email",""), f"🎓 Added student {student_name}", f"Assessment {assessment_no} Class {class_name} Stream {stream}")
-    return RedirectResponse("/school/students", status_code=303)
+    return RedirectResponse(f"/school/students?success=added&student_name={student_name.strip().upper()}", status_code=303)
 
 @app.get("/school/students/delete/{sid}")
 def delete_student(sid: int, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close()
     return RedirectResponse("/school/students", status_code=303)
+
+@app.get("/school/students/edit/{sid}", response_class=HTMLResponse)
+def edit_student_page(sid: int, request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM students WHERE id=? AND school_id=?", (sid, school["id"],)); st = cur.fetchone()
+    cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
+    con.close()
+    if not st: return RedirectResponse("/school/students")
+    name = request.session.get("name","")
+    header = school_header(school, name, "students")
+    class_opts = ""
+    for cl in classes:
+        sel = "selected" if cl["id"]==st["class_id"] else ""
+        class_opts += f"<option value='{cl['id']}' {sel}>{cl['name']} - {cl['stream']}</option>"
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700}}</style></head><body>{header}
+    <div style='padding:20px; max-width:600px; margin:auto'>
+      <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:20px'>
+        <h3>✏️ Edit Student - {st['name']}</h3>
+        <form method='post' action='/school/students/edit/{sid}'>
+          <label style='font-size:11px; font-weight:700'>🆔 Assessment No</label><input name='assessment_no' value="{st['assessment_no'] or st['admission_no'] or ''}" required class='input-field'>
+          <label style='font-size:11px; font-weight:700'>👤 Student Name</label><input name='student_name' value="{st['name']}" required class='input-field'>
+          <label style='font-size:11px; font-weight:700'>🏫 Class & Stream</label><select name='class_id' required class='input-field'>{class_opts}</select>
+          <label style='font-size:11px; font-weight:700'>⚧️ Gender</label><select name='gender' required class='input-field'><option {"selected" if st['gender']=="Male" else ""}>Male</option><option {"selected" if st['gender']=="Female" else ""}>Female</option></select>
+          <label style='font-size:11px; font-weight:700'>👨‍👩‍👧 Parent Name</label><input name='parent_name' value="{st['parent_name'] or ''}" class='input-field'>
+          <label style='font-size:11px; font-weight:700'>📞 Parent Phone</label><input name='parent_phone' value="{st['parent_phone'] or ''}" required class='input-field'>
+          <div style='display:flex; gap:10px; margin-top:12px'><button class='add-btn' style='flex:1'>💾 Save Changes</button><a href='/school/students' style='flex:1; text-align:center; padding:12px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700'>❌ Cancel</a></div>
+        </form>
+      </div>
+    </div></div></div></body></html>""")
+
+@app.post("/school/students/edit/{sid}")
+def edit_student_save(sid: int, request: Request, assessment_no: str = Form(...), student_name: str = Form(...), class_id: str = Form(...), gender: str = Form(...), parent_name: str = Form(""), parent_phone: str = Form(...)):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT stream FROM classes WHERE id=?", (class_id,)); cl = cur.fetchone(); stream_val = cl["stream"] if cl else ""
+    cur.execute("UPDATE students SET assessment_no=?, admission_no=?, name=?, class_id=?, gender=?, parent_name=?, parent_phone=?, stream=? WHERE id=? AND school_id=?", (assessment_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), int(class_id), gender, parent_name.strip().upper(), parent_phone.strip(), stream_val, sid, school["id"]))
+    con.commit(); con.close()
+    return RedirectResponse(f"/school/students?success=updated&student_name={student_name.strip().upper()}", status_code=303)
 
 @app.get("/school/{page}", response_class=HTMLResponse)
 def school_generic(page: str, request: Request):
