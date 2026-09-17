@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v24-final-smart-popup")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v24-final-full-true-copy")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -127,8 +127,8 @@ def dashboard(request: Request):
     if not rows: rows = "<tr><td colspan='4' style='padding:40px;text-align:center;color:#94a3b8;font-size:14px'>No schools yet</td></tr>"
     content = f"""
     <style>
-  .quick-btn{{display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:12px;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:600;font-size:13px;margin-bottom:10px;transition:all 0.2s ease;cursor:pointer}}
-  .quick-btn:hover{{background:#0f172a!important;color:white!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,0.2)}}
+   .quick-btn{{display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:12px;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:600;font-size:13px;margin-bottom:10px;transition:all 0.2s ease;cursor:pointer}}
+   .quick-btn:hover{{background:#0f172a!important;color:white!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,0.2)}}
     </style>
     <div style='padding:24px;max-width:1400px;margin:auto'>
         <div style='margin-bottom:20px'><div style='display:flex;align-items:center;gap:10px;margin-bottom:6px'><div style='width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#6366f1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px'>📊</div><h2 style='margin:0;font-size:22px;font-weight:800'>School Overview</h2></div><p style='margin:0;color:#64748b;font-size:13px'>Welcome {name}</p></div>
@@ -163,18 +163,113 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     if success == "code_sent" and pending:
         email_active = bool(os.getenv("EMAIL_PASSWORD"))
         if email_active:
-            popup_html = f"""<div style='margin-bottom:16px'><div style='background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px'>📧 Code sent to oumadavis62@gmail.com! 🔐 Check inbox (Code hidden for security)</div><div style='background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>🔓 Enter Code for 🏫 {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin-bottom:12px'><div style='font-size:11px;color:#92400e;margin-bottom:6px'>🔐 Your code:</div><div style='font-size:16px;font-weight:700;color:#92400e'>📧 Sent to email — Check inbox</div><div style='font-size:11px;color:#b45309;margin-top:6px'>Code expires in 10 minutes</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px;align-items:center'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='Enter 6-digit code from email' required maxlength='6' style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;font-size:18px;letter-spacing:6px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px;font-weight:700;cursor:pointer'>✅ Verify & Create Login</button></form><div style='margin-top:10px;display:flex;gap:12px;font-size:12px'><a href='/resend-code/{pending_id}' style='color:#3b82f6;text-decoration:none'>🔄 Resend</a><a href='/schools/manage' style='color:#ec4899;text-decoration:none'>❌ Cancel</a></div></div></div>"""
+            popup_html = f"""<div style='margin-bottom:16px'><div style='background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px'>📧 Code sent to oumadavis62@gmail.com! 🔐 Check inbox (Code hidden for security)</div><div style='background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>🔓 Enter Code for 🏫 {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin-bottom:12px'><div style='font-size:11px;color:#92400e'>🔐 Your code:</div><div style='font-size:16px;font-weight:700;color:#92400e;margin-top:6px'>📧 Sent to email — Check inbox</div><div style='font-size:11px;color:#b45309;margin-top:6px'>Expires in 10 min</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' placeholder='Enter 6-digit code from email' required maxlength='6' style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;font-size:18px;letter-spacing:6px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px;font-weight:700'>✅ Verify & Create Login</button></form><div style='margin-top:10px;display:flex;gap:12px;font-size:12px'><a href='/resend-code/{pending_id}' style='color:#3b82f6;text-decoration:none'>🔄 Resend</a><a href='/schools/manage' style='color:#ec4899;text-decoration:none'>❌ Cancel</a></div></div></div>"""
         else:
             code_display = " ".join(list(pending["auth_code"]))
-            popup_html = f"""<div style='margin-bottom:16px'><div style='background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px'>📧 Code sent to oumadavis62@gmail.com! 🔐 Check inbox (Testing mode — code displayed)</div><div style='background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>🔓 Enter Code for 🏫 {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin-bottom:12px'><div style='font-size:11px;color:#92400e;margin-bottom:6px'>🔐 Your code:</div><div style='font-size:28px;font-weight:900;letter-spacing:10px;display:flex;align-items:center;justify-content:center;gap:12px'>🔑 {code_display}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px;align-items:center'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required maxlength='6' style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;font-size:18px;letter-spacing:6px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px;font-weight:700;cursor:pointer'>✅ Verify & Create Login</button></form><div style='margin-top:10px;display:flex;gap:12px;font-size:12px'><a href='/resend-code/{pending_id}' style='color:#3b82f6;text-decoration:none'>🔄 Resend</a><a href='/schools/manage' style='color:#ec4899;text-decoration:none'>❌ Cancel</a></div></div></div>"""
+            popup_html = f"""<div style='margin-bottom:16px'><div style='background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;color:#92400e;margin-bottom:12px'>📧 Code sent to oumadavis62@gmail.com! 🔐 Check inbox (Testing mode — code displayed)</div><div style='background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>🔓 Enter Code for 🏫 {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin-bottom:12px'><div style='font-size:11px;color:#92400e'>🔐 Your code:</div><div style='font-size:28px;font-weight:900;letter-spacing:10px'>🔑 {code_display}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required maxlength='6' style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;font-size:18px;letter-spacing:6px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px;font-weight:700'>✅ Verify & Create Login</button></form><div style='margin-top:10px;display:flex;gap:12px;font-size:12px'><a href='/resend-code/{pending_id}' style='color:#3b82f6;text-decoration:none'>🔄 Resend</a><a href='/schools/manage' style='color:#ec4899;text-decoration:none'>❌ Cancel</a></div></div></div>"""
     elif success == "added" and new_pass:
         popup_html = f"""<div id='successModal' style='position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999'><div style='background:white;padding:24px;border-radius:16px;width:420px'><div style='font-size:18px;font-weight:800;margin-bottom:8px'>✅ {school_name} Added!</div><div style='background:#f8fafc;padding:12px;border-radius:10px;font-size:13px;border:1px solid #e2e8f0'><div>🏫 <b>{school_name}</b></div><div>👤 Username: <b>{school_email}</b></div><div>🔑 Password: <b>{new_pass}</b></div></div><div style='display:flex;gap:10px;margin-top:16px'><button onclick="document.getElementById('successModal').style.display='none'" style='flex:1;background:#0f172a;color:white;padding:10px;border:none;border-radius:10px'>OK ✅</button><button onclick="document.getElementById('successModal').style.display='none'" style='flex:1;background:#f1f5f9;color:#475569;padding:10px;border:none;border-radius:10px'>Cancel ❌</button></div></div></div>"""
+
     rows_html = ""
     for s in schools:
         sid = s["id"]; u = users_by_school.get(sid); upass = u["password"] if u else "—"; uemail = u["email"] if u else s["email"]
-        rows_html += f"""<tr onclick="highlightRow(this, {sid})" style='cursor:pointer;border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 Code: <b>{s['code']}</b></div></td><td style='padding:12px 10px;font-size:12px'>📧 {s['phone'] or ''} {s['email'][:15]}</td><td style='padding:12px 10px;font-size:12px'>📍 {s['location']}</td><td style='padding:12px 10px;font-size:12px'>👤 {uemail[:20]}</td><td style='padding:12px 10px;font-size:12px'><span id='pwd-dot-{sid}'>••••••••</span><span id='pwd-real-{sid}' style='display:none;font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer'>👁️</span></td><td style='padding:12px 10px'><span id='actions-{sid}' style='display:none;gap:6px'><a href='/schools/delete/{sid}' style='background:#fee2e2;padding:6px 8px;border-radius:6px;text-decoration:none;font-size:12px'>🗑️ Delete</a></span><span id='hint-{sid}' style='font-size:10px;color:#94a3b8'>Click to activate</span></td></tr>"""
-    if not rows_html: rows_html = "<tr><td colspan='6' style='padding:40px;text-align:center;color:#94a3b8'>No schools yet 🏫</td></tr>"
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}.highlight{{background:#eff6ff!important;border-left:3px solid #3b82f6}} input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1400px;margin:auto'><div><div class='card' style='margin-bottom:16px'>{popup_html}<div style='font-weight:800;font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='font-size:11px;color:#64748b;margin-bottom:8px'>👉 Click row to highlight 💙 → then Edit / Delete becomes active</div><div style='overflow:auto;max-height:60vh;border:1px solid #f1f5f9;border-radius:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;color:#475569;font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📧 Contact</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div></div></div><div class='card' style='height:fit-content;position:sticky;top:16px'><div style='font-weight:800'>➕ Register New School 🏫</div><div style='font-size:11px;color:#64748b;margin-bottom:10px'>Unique password auto-created 🔑</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Secondary</option></select><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code & Create Login</button><a href='/dashboard' style='display:block;text-align:center;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin-top:8px;text-decoration:none;color:#64748b'>❌ Cancel</a></form></div></div><script>let lastRow=null; function highlightRow(row,id){{if(lastRow) lastRow.classList.remove('highlight'); row.classList.add('highlight'); lastRow=row; document.querySelectorAll('[id^=actions-]').forEach(el=>el.style.display='none'); document.querySelectorAll('[id^=hint-]').forEach(el=>el.style.display='inline'); document.getElementById('actions-'+id).style.display='flex'; document.getElementById('hint-'+id).style.display='none';}} function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}} }}</script></body></html>""")
+        rows_html += f"""
+        <tr onclick="highlightRow(this, {sid})" style='cursor:pointer; border-bottom:1px solid #f1f5f9; user-select:none; -webkit-user-select:none; caret-color:transparent'>
+            <td style='padding:12px 10px; user-select:none'><div style='font-weight:700; user-select:none'>🏫 {s['name']}</div><div style='font-size:10px; color:#64748b; user-select:none'>🔑 Code: <b>{s['code']}</b></div></td>
+            <td style='padding:12px 10px; font-size:12px; user-select:none'>📞 {s['phone'] or ''}</td>
+            <td style='padding:12px 10px; font-size:11px; user-select:none; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap'>📧 {s['email']}</td>
+            <td style='padding:12px 10px; font-size:12px; user-select:none'>📍 {s['location']}</td>
+            <td style='padding:12px 10px; font-size:11px; user-select:none; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap'>👤 {uemail}</td>
+            <td style='padding:12px 10px; font-size:12px; user-select:none'><span id='pwd-dot-{sid}'>••••••••</span><span id='pwd-real-{sid}' style='display:none; font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer; user-select:none'>👁️</span></td>
+            <td style='padding:12px 10px; user-select:none'>
+              <span id='actions-{sid}' style='display:none; gap:6px; align-items:center; flex-wrap:wrap'>
+                <a href='/schools/edit/{sid}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700; border:1px solid #bfdbfe'>✏️ Edit</a>
+                <a href='/schools/delete/{sid}' onclick="return confirm('Delete {s['name']}?')" style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700; border:1px solid #fecaca'>🗑️ Delete</a>
+              </span>
+              <span id='hint-{sid}' style='font-size:10px; color:#94a3b8; user-select:none'>Click to activate</span>
+            </td>
+        </tr>"""
+    if not rows_html: rows_html = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8; user-select:none'>No schools yet 🏫</td></tr>"
+
+    return HTMLResponse(f"""
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+      body{{margin:0; font-family:Arial; background:#f8fafc; caret-color:transparent}}
+     .card{{background:white; border:1px solid #e2e8f0; border-radius:16px; padding:18px}}
+     .highlight{{background:#e0f2fe!important; border-left:4px solid #0ea5e9!important}}
+      input,select{{width:100%; padding:11px 12px; border:1px solid #e2e8f0; border-radius:10px; margin:6px 0; font-size:13px; caret-color:auto}}
+      table{{user-select:none; -webkit-user-select:none;}}
+      tr, td, th{{user-select:none; -webkit-user-select:none; outline:none}}
+      tr:focus, td:focus{{outline:none; caret-color:transparent}}
+      ::selection{{background:transparent}}
+      input::selection, textarea::selection{{background:#bfdbfe}}
+    </style>
+    </head><body>{header_html(initials, name, email)}
+    <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'>
+      <div>
+        <div class='card' style='margin-bottom:16px'>
+          {popup_html}
+          <div style='font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px'>📚 Registered Schools ({len(schools)})</div>
+          <div style='font-size:11px; color:#64748b; margin-bottom:8px'>👉 Click row to highlight 💙 → then ✏️ Edit / 🗑️ Delete becomes active (No blinking cursor)</div>
+          <div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px'>
+            <table style='width:100%; border-collapse:collapse; font-size:13px; user-select:none'>
+              <thead style='position:sticky; top:0; background:#f8fafc; user-select:none'>
+                <tr style='text-align:left; color:#475569; font-size:11px; user-select:none'>
+                  <th style='padding:10px'>🏫 School</th>
+                  <th style='padding:10px'>📞 Contact</th>
+                  <th style='padding:10px'>📧 Email</th>
+                  <th style='padding:10px'>📍 Location</th>
+                  <th style='padding:10px'>👤 Username</th>
+                  <th style='padding:10px'>🔑 Password</th>
+                  <th style='padding:10px'>⚙️ Action</th>
+                </tr>
+              </thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+          </div>
+          <a href='/dashboard' style='display:inline-flex; align-items:center; gap:6px; margin-top:14px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; transition:all 0.2s'>
+            ⬅️ Back to Dashboard
+          </a>
+        </div>
+      </div>
+      <div class='card' style='height:fit-content; position:sticky; top:16px'>
+        <div style='font-weight:800'>➕ Register New School 🏫</div>
+        <div style='font-size:11px; color:#64748b; margin-bottom:10px'>Unique password auto-created 🔑</div>
+        <form method='post' action='/register-school'>
+          <input name='school_name' required placeholder='🏫 School Name *'>
+          <input name='school_email' required type='email' placeholder='📧 Admin Email *'>
+          <input name='location' required placeholder='📍 Location *'>
+          <input name='phone' required placeholder='📱 Phone *'>
+          <input name='principal' required placeholder='👤 Principal *'>
+          <select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Secondary</option></select>
+          <button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button>
+          <a href='/dashboard' style='display:block; text-align:center; padding:10px; border:1px solid #e2e8f0; border-radius:10px; margin-top:8px; text-decoration:none; color:#64748b'>❌ Cancel</a>
+        </form>
+      </div>
+    </div>
+    <script>
+      let lastRow=null;
+      function highlightRow(row,id){{
+        if(lastRow) lastRow.classList.remove('highlight');
+        row.classList.add('highlight');
+        lastRow=row;
+        document.querySelectorAll('[id^=actions-]').forEach(el=>el.style.display='none');
+        document.querySelectorAll('[id^=hint-]').forEach(el=>el.style.display='inline');
+        let act = document.getElementById('actions-'+id);
+        let hint = document.getElementById('hint-'+id);
+        if(act) act.style.display='flex';
+        if(hint) hint.style.display='none';
+        window.getSelection().removeAllRanges();
+        if(document.activeElement) document.activeElement.blur();
+      }}
+      function togglePwd(id){{
+        let d=document.getElementById('pwd-dot-'+id);
+        let r=document.getElementById('pwd-real-'+id);
+        if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}
+      }}
+    </script>
+    </body></html>
+    """)
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -209,6 +304,54 @@ def delete_school(sid: int, request: Request):
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM schools WHERE id=?", (sid,)); cur.execute("DELETE FROM users WHERE school_id=?", (sid,)); con.commit(); con.close()
     return RedirectResponse("/schools/manage", status_code=303)
 
+@app.get("/schools/edit/{sid}", response_class=HTMLResponse)
+def edit_school_page(sid: int, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone()
+    cur.execute("SELECT * FROM users WHERE school_id=? AND role='school_admin'", (sid,)); u = cur.fetchone()
+    con.close()
+    if not s: return RedirectResponse("/schools/manage")
+    name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
+    initials = "".join([p[0] for p in name.split()][:2]).upper()
+    return HTMLResponse(f"""
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style></head>
+    <body>{header_html(initials, name, email)}
+    <div class='card'>
+      <h3 style='margin:0 0 12px'>✏️ Edit School - {s['name']}</h3>
+      <form method='post' action='/schools/edit/{sid}'>
+        <input name='school_name' value="{s['name']}" required placeholder='🏫 School Name'>
+        <input name='school_email' value="{s['email']}" required placeholder='📧 Email'>
+        <input name='location' value="{s['location']}" required placeholder='📍 Location'>
+        <input name='phone' value="{s['phone']}" required placeholder='📱 Phone'>
+        <input name='principal' value="{s['principal']}" required placeholder='👤 Principal'>
+        <select name='school_type' required>
+          <option {"selected" if s['school_type']=="Primary" else ""}>Primary</option>
+          <option {"selected" if s['school_type']=="Secondary" else ""}>Secondary</option>
+          <option {"selected" if s['school_type']=="Primary & Secondary" else ""}>Primary & Secondary</option>
+        </select>
+        <input name='new_password' placeholder='🔑 New Password (leave blank to keep old: {u["password"] if u else ""})'>
+        <div style='display:flex;gap:10px;margin-top:12px'>
+          <button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save Changes</button>
+          <a href='/schools/manage' style='flex:1;background:#f1f5f9;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:#475569'>❌ Cancel</a>
+        </div>
+      </form>
+    </div></body></html>
+    """)
+
+@app.post("/schools/edit/{sid}")
+def edit_school_save(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...), new_password: str = Form("")):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=?, school_type=? WHERE id=?", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, sid))
+    if new_password.strip():
+        cur.execute("UPDATE users SET email=?, full_name=?, password=? WHERE school_id=? AND role='school_admin'", (school_email.strip(), principal.strip(), new_password.strip(), sid))
+    else:
+        cur.execute("UPDATE users SET email=?, full_name=? WHERE school_id=? AND role='school_admin'", (school_email.strip(), principal.strip(), sid))
+    con.commit(); con.close()
+    log_activity(request.session.get("email",""), f"✏️ Edited School {school_name}", f"ID {sid}")
+    return RedirectResponse("/schools/manage", status_code=303)
+
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -222,82 +365,6 @@ def school_dashboard(request: Request):
     html = school_header(school, name, "dashboard")
     html += f"<div style='padding:20px'><h2>MATOKEO ANALYTICS 🚀</h2><p>Students {sc} | Classes {cc} | Exams {ec}</p></div></div></div>"
     return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.get("/school/students", response_class=HTMLResponse)
-def school_students(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT s.*, c.name as cname FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
-    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall(); con.close()
-    opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
-    rows = "".join([f"<tr><td>{s['name']}</td><td>{s['admission_no']}</td><td>{s['cname']}</td><td>{s['parent_phone']}</td><td><a href='/school/student/delete/{s['id']}'>🗑️</a></td></tr>" for s in students]) or "<tr><td colspan=5>No students</td></tr>"
-    html = school_header(school, request.session.get("name",""), "students")
-    html += f"<div style='padding:20px'><b>🎓 Students ({len(students)})</b><table style='width:100%'><tr><th>Name</th><th>Adm</th><th>Class</th><th>Phone</th><th>Action</th></tr>{rows}</table><form method='post' action='/school/students/add'><input name='admission_no' required placeholder='Adm'><input name='student_name' required placeholder='Name'><select name='class_id'>{opts}</select><select name='gender'><option>Male</option><option>Female</option></select><input name='parent_name' placeholder='Parent'><input name='parent_phone' required placeholder='Phone'><button>Add</button></form></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.post("/school/students/add")
-def add_student(request: Request, admission_no: str = Form(...), student_name: str = Form(...), class_id: int = Form(...), gender: str = Form(...), parent_name: str = Form(...), parent_phone: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO students (school_id, admission_no, name, class_id, gender, parent_name, parent_phone) VALUES (?,?,?,?,?,?,?)", (school["id"], admission_no, student_name, class_id, gender, parent_name, parent_phone)); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
-
-@app.get("/school/classes", response_class=HTMLResponse)
-def school_classes(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td>{c['name']}</td><td>{c['level']}</td><td><a href='/school/class/delete/{c['id']}'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan=3>No classes</td></tr>"
-    html = school_header(school, request.session.get("name",""), "classes")
-    html += f"<div style='padding:20px'><table><tr><th>Class</th><th>Level</th><th>Action</th></tr>{rows}</table><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class'><select name='level'><option>Primary</option><option>Junior School</option><option>Senior School</option></select><button>Add</button></form></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.post("/school/classes/add")
-def add_class(request: Request, class_name: str = Form(...), level: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level) VALUES (?,?,?)", (school["id"], class_name, level)); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
-
-@app.get("/school/subjects", response_class=HTMLResponse)
-def school_subjects(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subs = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td>{s['name']}</td><td>{s['code']}</td><td><a href='/school/subject/delete/{s['id']}'>🗑️</a></td></tr>" for s in subs]) or "<tr><td colspan=3>No subjects</td></tr>"
-    html = school_header(school, request.session.get("name",""), "subjects")
-    html += f"<div style='padding:20px'><table><tr><th>Subject</th><th>Code</th><th>Action</th></tr>{rows}</table><form method='post' action='/school/subjects/add'><input name='subject_name' required placeholder='Subject'><input name='subject_code' placeholder='Code'><button>Add</button></form></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.post("/school/subjects/add")
-def add_subject(request: Request, subject_name: str = Form(...), subject_code: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code) VALUES (?,?,?)", (school["id"], subject_name.strip(), subject_code.strip())); con.commit(); con.close(); return RedirectResponse("/school/subjects", status_code=303)
-
-@app.get("/school/subject/delete/{sid}")
-def del_sub(sid: int, request: Request): school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?", (sid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/subjects", status_code=303)
-
-@app.get("/school/exams", response_class=HTMLResponse)
-def school_exams(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td><a href='/school/exam/delete/{e['id']}'>🗑️</a></td></tr>" for e in exams]) or "<tr><td colspan=4>No exams</td></tr>"
-    html = school_header(school, request.session.get("name",""), "exams")
-    html += f"<div style='padding:20px'><table><tr><th>Exam</th><th>Term</th><th>Year</th><th>Action</th></tr>{rows}</table><form method='post' action='/school/exams/add'><input name='exam_name' required placeholder='Exam'><select name='term'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' value='2026'><select name='exam_type'><option>Main Exam</option><option>CAT</option></select><button>Add</button></form></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.post("/school/exams/add")
-def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip(), term, year, exam_type)); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
-
-@app.get("/school/exam/delete/{eid}")
-def del_exam(eid: int, request: Request): school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=? AND school_id=?", (eid, school["id"])); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
-
-@app.get("/school/marks", response_class=HTMLResponse)
-def school_marks(request: Request):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM exams WHERE school_id=?", (school["id"],)); exams = cur.fetchall()
-    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT s.id, s.name FROM students s WHERE s.school_id=? LIMIT 50", (school["id"],)); students = cur.fetchall()
-    cur.execute("SELECT m.*, s.name as sname, sub.name as subname FROM marks m JOIN students s ON m.student_id=s.id JOIN subjects sub ON m.subject_id=sub.id WHERE m.school_id=? ORDER BY m.id DESC LIMIT 15", (school["id"],)); recent = cur.fetchall(); con.close()
-    e_opts = "".join([f"<option value='{e['id']}'>{e['name']}</option>" for e in exams])
-    sub_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    st_opts = "".join([f"<option value='{st['id']}'>{st['name']}</option>" for st in students])
-    rows = "".join([f"<tr><td>{r['sname']}</td><td>{r['subname']}</td><td><b>{r['score']}</b></td></tr>" for r in recent]) or "<tr><td colspan=3>No marks</td></tr>"
-    html = school_header(school, request.session.get("name",""), "marks")
-    html += f"<div style='padding:20px'><table><tr><th>Student</th><th>Subject</th><th>Score</th></tr>{rows}</table><form method='post' action='/school/marks/add'><select name='exam_id'>{e_opts}</select><select name='subject_id'>{sub_opts}</select><select name='student_id'>{st_opts}</select><input name='score' type='number' min='0' max='100' required placeholder='Score'><button>Save</button></form></div></div></div>"
-    return HTMLResponse(f"<html><body>{html}</body></html>")
-
-@app.post("/school/marks/add")
-def add_marks(request: Request, exam_id: int = Form(...), subject_id: int = Form(...), student_id: int = Form(...), score: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO marks (school_id, exam_id, student_id, subject_id, score) VALUES (?,?,?,?,?)", (school["id"], exam_id, student_id, subject_id, score)); con.commit(); con.close(); return RedirectResponse("/school/marks", status_code=303)
 
 @app.get("/logout")
 def logout(request: Request):
