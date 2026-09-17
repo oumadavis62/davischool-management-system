@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v35-full-confirmation-no-admin-interference")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v36-1-davischool-brand-final")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 EMAIL_SENDER = SUPER_ADMIN
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
@@ -71,7 +71,6 @@ def get_school_obj(req):
     if sid==0 or req.session.get("role")=="super_admin": return None
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close(); return s
 
-# ===== ADMIN HEADER - UNTOUCHED =====
 def header_html(initials, name, email):
     return f"""
     <style>
@@ -93,25 +92,26 @@ def header_html(initials, name, email):
     <script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}} document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>
     """
 
-# ===== SCHOOL HEADER - NO MATOKEO NO ZERAKI =====
 def school_header(school, name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
     def nav(link, icon, label):
-        a = "background:#0f172a;color:white;font-weight:700" if active==link else "color:#475569;"
-        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{a};transition:all 0.2s'>{icon} {label}</a>"
+        is_active = "background:#0f172a;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
+        return f"<a href='/school/{link}' id='nav-{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active};transition:all 0.2s ease' onmouseover=\"if('{active}'!='{link}'){{this.style.background='#0f172a'; this.style.color='white'; this.style.transform='translateX(4px)'}} \" onmouseout=\"if('{active}'!='{link}'){{this.style.background='transparent'; this.style.color='#475569'; this.style.transform='translateX(0)'}} \">{icon} {label}</a>"
     return f"""
     <style>
 .ds-card{{background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; text-decoration:none; color:#0f172a; display:block; transition:all 0.25s ease; cursor:pointer}}
-.ds-card:hover{{background:#0f172a!important; color:white!important; transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,42,0.3)}}
+.ds-card:hover{{background:#0f172a!important; color:white!important; transform:translateY(-3px); box-shadow:0 12px 24px rgba(15,23,42,0.35)}}
 .ds-card:hover div{{color:white!important}}
 .input-field{{width:100%; padding:11px 12px; border:1px solid #e2e8f0; border-radius:10px; margin:6px 0; font-size:13px; background:white}}
 .add-btn{{width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; transition:all 0.2s}}
-.add-btn:hover{{background:#1e3a8a}}
+.add-btn:hover{{background:#1e3a8a; transform:translateY(-1px)}}
 .highlight-row{{background:#dbeafe!important; border-left:4px solid #0f172a!important}}
 table{{user-select:none; caret-color:transparent}}
 tr{{user-select:none; caret-color:transparent}}
 .confirm-overlay{{position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; z-index:10000}}
 .confirm-box{{background:white; border-radius:16px; padding:22px; width:380px; text-align:center; border:1px solid #e2e8f0; box-shadow:0 20px 40px rgba(0,0,0,0.25)}}
+.back-btn{{display:inline-flex; align-items:center; gap:6px; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px; text-align:center; transition:all 0.25s ease; cursor:pointer}}
+.back-btn:hover{{background:#0f172a!important; color:white!important; border-color:#0f172a!important; transform:translateY(-1px); box-shadow:0 6px 16px rgba(15,23,42,0.3)}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -134,16 +134,15 @@ tr{{user-select:none; caret-color:transparent}}
       {nav('timetable','🗓️','Smart Timetable')}
       {nav('fees','💰','Fees & Finance')}
       {nav('sms','💬','Bulk SMS Parents')}
-      <div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div>
+      <div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626;transition:all 0.2s' onmouseover="this.style.background='#0f172a'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#dc2626'">🚪 Logout</a></div>
     </div>
     <div style='flex:1;background:#f8fafc'>
       <div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'>
-        <div><b style='font-size:14px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name} • {school['name']} | Revolutionize Your School's Management!</div></div>
-        <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:36px;height:36px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800'>{initials}</div></div>
+        <div><b style='font-size:13px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name.upper()} • {school['name']} | Revolutionize Your School's Management!</div></div>
+        <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:32px;height:32px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px'>{initials}</div></div>
       </div>
     """
 
-# ===== PROFILE - ADMIN UNTOUCHED =====
 @app.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request, tab: str = "personal"):
     if "email" not in request.session: return RedirectResponse("/")
@@ -216,7 +215,6 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if u["role"]!= "super_admin" and school_info: log_activity(u["email"], f"🏫 School login: {school_info['name']}", ""); return RedirectResponse("/school/dashboard", status_code=303)
     log_activity(u["email"], "🔓 Super Admin Logged in", "Viewed dashboard"); return RedirectResponse("/dashboard", status_code=303)
 
-# ===== ADMIN DASHBOARD - UNTOUCHED =====
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -234,7 +232,6 @@ def dashboard(request: Request):
     content = f"""<div style='padding:20px; max-width:1400px; margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name}</p></div><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12% from last month</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>🟢 100% operational</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div><div style='font-size:11px; color:#16a34a'>💹 +8% monthly growth</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div><div style='font-size:11px; color:#64748b'>👥 Avg 350 per school</div></div></div><div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:13px; margin-bottom:10px'>🏫 Manage Schools</a><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px'>➕ Register New School</a></div><div style='background:#0f172a; border-radius:14px; padding:16px; color:white'><div style='font-weight:800; font-size:14px; margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e; font-weight:800; font-size:14px'>✅ 99.9% Uptime</div><div style='height:4px; background:#334155; border-radius:10px; margin-top:8px'><div style='width:99%; height:100%; background:#22c55e; border-radius:10px'></div></div></div></div></div></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
 
-# ===== ADMIN MANAGE SCHOOLS - UNTOUCHED =====
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
@@ -323,42 +320,65 @@ def edit_school_save(sid: int, request: Request, school_name: str = Form(...), s
     log_activity(request.session.get("email",""), f"✏️ Edited School {school_name}", f"ID {sid}")
     return RedirectResponse("/schools/manage", status_code=303)
 
-# ===== SCHOOL SIDE - DASHBOARD, CLASSES, STUDENTS WITH CONFIRMATION =====
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/")
-    name = request.session.get("name","")
+    name = request.session.get("name","JOHN DOE")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
     cur.execute("SELECT SUM(paid) as t FROM fees WHERE school_id=?", (school["id"],))
     fees_row = cur.fetchone(); fees_total = fees_row["t"] if fees_row and fees_row["t"] else 0
+    cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 5", (school["id"],)); recent_students = cur.fetchall()
     con.close()
-    html = school_header(school, name, "dashboard")
-    html += f"""
-    <div style='padding:18px'>
-        <div style='background:linear-gradient(135deg,#0f172a,#1e3a8a); border-radius:16px; padding:18px 20px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'>
-          <div><div style='font-size:20px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:2px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div></div>
-          <div style='text-align:right'><div style='font-size:28px; font-weight:900'>{sc}</div><div style='font-size:10px; color:#94a3b8'>Total Students</div></div>
+    stu_rows = ""
+    for st in recent_students:
+        stu_rows += f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px'>{st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['admission_no'] or st['assessment_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>Class {st['class_id'] or ''}</td></tr>"
+    if not stu_rows:
+        stu_rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8; font-size:13px'>No students yet</td></tr>"
+    header = school_header(school, name, "dashboard")
+    html = f"""
+    <div style='padding:18px; max-width:1400px; margin:auto'>
+        <div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%); border-radius:18px; padding:22px 24px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; box-shadow:0 10px 30px rgba(15,23,42,0.3)'>
+          <div>
+            <div style='font-size:22px; font-weight:900; letter-spacing:0.5px'>DaviSchool Management System 🚀</div>
+            <div style='font-size:12px; color:#bfdbfe; margin-top:4px; letter-spacing:0.3px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div>
+            <div style='font-size:11px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.2); display:inline-block; padding:6px 14px; border-radius:20px; margin-top:10px'>WORKS FOR ALL LEVELS: PRE-PRIMARY, PRIMARY, JUNIOR, SENIOR | 8-4-4 SUPPORTED</div>
+          </div>
+          <div style='text-align:right'>
+            <div style='font-size:34px; font-weight:900'>{sc}</div>
+            <div style='font-size:11px; color:#cbd5e1'>Total Students</div>
+            <div style='font-size:11px; background:#16a34a; color:white; padding:7px 14px; border-radius:20px; margin-top:10px; display:inline-block; font-weight:700'>✅ GET EVERYTHING DONE IN MINUTES!</div>
+          </div>
         </div>
-        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px'>
-          <a href='/school/students' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{sc}</div></a>
-          <a href='/school/classes' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{cc}</div></a>
-          <a href='/school/exams' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:26px; font-weight:900; margin:8px 0'>{ec}</div></a>
-          <a href='/school/fees' class='ds-card'><div style='font-size:10px; color:#64748b; font-weight:700'>💰 FEES COLLECTED</div><div style='font-size:18px; font-weight:900; margin:8px 0'>KES {fees_total}</div></a>
+        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'>
+          <a href='/school/students' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{sc}</div><div style='font-size:11px; color:#16a34a'>📊 Active</div></a>
+          <a href='/school/classes' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{cc}</div><div style='font-size:11px; color:#64748b'>Streams & Levels</div></a>
+          <a href='/school/exams' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{ec}</div><div style='font-size:11px; color:#3b82f6'>Deep Insights</div></a>
+          <a href='/school/fees' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>💰 FEES COLLECTED</div><div style='font-size:22px; font-weight:900; margin:10px 0'>KES {fees_total}</div><div style='font-size:11px; color:#16a34a'>✅ Managed</div></a>
         </div>
-        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px'>
-          <a href='/school/analysis' class='ds-card'><div style='font-size:20px'>📊</div><div style='font-size:11px; font-weight:800; margin-top:4px'>EXAM MARKS ANALYSIS</div></a>
-          <a href='/school/ranking' class='ds-card'><div style='font-size:20px'>🏆</div><div style='font-size:11px; font-weight:800; margin-top:4px'>ACCURATE RANKING</div></a>
-          <a href='/school/marksheets' class='ds-card'><div style='font-size:20px'>📄</div><div style='font-size:11px; font-weight:800; margin-top:4px'>GENERATES MARKSHEETS</div></a>
-          <a href='/school/reports' class='ds-card'><div style='font-size:20px'>📑</div><div style='font-size:11px; font-weight:800; margin-top:4px'>STUDENT REPORTS</div></a>
+        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'>
+          <a href='/school/analysis' class='ds-card'><div style='font-size:22px'>📊</div><div style='font-size:12px; font-weight:800; margin-top:6px'>EXAM MARKS ANALYSIS</div><div style='font-size:10px; color:#64748b; margin-top:3px'>DEEP PERFORMANCE INSIGHTS</div></a>
+          <a href='/school/ranking' class='ds-card'><div style='font-size:22px'>🏆</div><div style='font-size:12px; font-weight:800; margin-top:6px'>ACCURATE RANKING</div><div style='font-size:10px; color:#64748b; margin-top:3px'>INSTANT CLASS & LEVEL RANKING</div></a>
+          <a href='/school/marksheets' class='ds-card'><div style='font-size:22px'>📄</div><div style='font-size:12px; font-weight:800; margin-top:6px'>GENERATES MARKSHEETS</div><div style='font-size:10px; color:#64748b; margin-top:3px'>CREATE RECORD SHEETS QUICKLY</div></a>
+          <a href='/school/reports' class='ds-card'><div style='font-size:22px'>📑</div><div style='font-size:12px; font-weight:800; margin-top:6px'>STUDENT REPORTS</div><div style='font-size:10px; color:#64748b; margin-top:3px'>AUTOMATED REPORT CARD GENERATION</div></a>
         </div>
-    </div></div></div>
+        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px'>
+          <a href='/school/marksheets' class='ds-card'><div style='font-size:22px'>📁</div><div style='font-size:12px; font-weight:800; margin-top:6px'>GENERATES MARKSHEETS</div><div style='font-size:10px; color:#64748b; margin-top:3px'>CREATE ACCURATE RECORD SHEETS</div></a>
+          <a href='/school/timetable' class='ds-card'><div style='font-size:22px'>🗓️</div><div style='font-size:12px; font-weight:800; margin-top:6px'>SMART TIMETABLING</div><div style='font-size:10px; color:#64748b; margin-top:3px'>LESSON ALERTS FOR TEACHERS</div></a>
+          <a href='/school/fees' class='ds-card'><div style='font-size:22px'>💰</div><div style='font-size:12px; font-weight:800; margin-top:6px'>FINANCING & FEES</div><div style='font-size:10px; color:#64748b; margin-top:3px'>MANAGE ACCOUNTS & FEES</div></a>
+          <a href='/school/sms' class='ds-card'><div style='font-size:22px'>💬</div><div style='font-size:12px; font-weight:800; margin-top:6px'>BULK SMS TO PARENTS</div><div style='font-size:10px; color:#64748b; margin-top:3px'>EASY BULK SMS NOTIFICATIONS</div></a>
+        </div>
+        <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:14px'>
+          <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🎓 Recently Added Students</div><a href='/school/students' style='font-size:11px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:10px; color:#64748b'><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Adm No</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div>
+          <div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>📊 DaviSchool Management System</div><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:12px'>STUDENT REPORT</div><div style='display:flex; flex-direction:column; gap:10px'><div style='display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:8px'><div style='display:flex; align-items:center; gap:8px'><div style='width:24px; height:24px; background:#3b82f6; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px'>👤</div><div style='font-size:11px'>Top Student</div></div><div style='background:#22c55e; color:white; font-size:10px; padding:2px 6px; border-radius:6px'>G</div></div></div><div style='font-size:8px; color:#64748b; margin-top:14px; line-height:1.3'>CONTACT US: 0111392013 | WhatsApp: 0111392013 — GET EVERYTHING DONE IN MINUTES!</div></div>
+        </div>
+    </div>
     """
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{html}</body></html>")
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
@@ -391,6 +411,7 @@ def school_classes(request: Request):
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
           <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><b>🏫 Classes & Streams ({len(classes)})</b><span style='font-size:11px; color:#64748b'>Click row = blue | Delete = confirmation</span></div>
           <table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Action</th></tr></thead><tbody>{rows}</tbody></table>
+          <div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div>
         </div>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'>
           <b>➕ Add Class & Stream</b>
@@ -430,7 +451,6 @@ def school_students(request: Request, success: str = "", student_name: str = "")
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
     cur.execute("SELECT s.*, c.name as class_name, c.stream as class_stream FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
     con.close()
-
     distinct_class_opts = ""
     distinct_stream_opts = ""
     class_set = sorted(set([c['name'] for c in classes if c['name']]))
@@ -438,13 +458,11 @@ def school_students(request: Request, success: str = "", student_name: str = "")
     for cn in class_set: distinct_class_opts += f"<option value='{cn}'>{cn}</option>"
     for st in stream_set:
         if st: distinct_stream_opts += f"<option value='{st}'>{st}</option>"
-
     success_html = ""
     if success == "added" and student_name:
         success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dcfce7; border:1.5px solid #16a34a; color:#166534; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999; box-shadow:0 10px 25px rgba(0,0,0,0.15)'>✅ {student_name} Added Successfully! 🎓</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
     elif success == "updated" and student_name:
         success_html = f"""<div id='successToast' style='position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#dbeafe; border:1.5px solid #1d4ed8; color:#1e40af; padding:14px 20px; border-radius:12px; font-weight:800; font-size:13px; z-index:9999;'>✏️ {student_name} Updated! ✅</div><script>setTimeout(()=>{{let t=document.getElementById('successToast'); if(t) t.style.display='none';}}, 3500);</script>"""
-
     student_rows = ""
     for st in students:
         assessment_no = st['assessment_no'] or st['admission_no'] or ''
@@ -461,7 +479,6 @@ def school_students(request: Request, success: str = "", student_name: str = "")
             </td></tr>"""
     if not student_rows:
         student_rows = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
-
     header = school_header(school, name, "students")
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
     <script>
@@ -508,10 +525,11 @@ def school_students(request: Request, success: str = "", student_name: str = "")
     <div style='padding:18px; max-width:1400px; margin:auto'>
       <div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'><b>🎓 Students ({len(students)})</b><span style='font-size:11px; color:#64748b'>Click row = blue highlight | ✏️🗑️ = confirmation</span></div>
+          <div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center'><b>🎓 Students ({len(students)})</b><span style='font-size:11px; color:#64748b'>Click row = blue | ✏️🗑️ = confirmation</span></div>
           <div style='overflow:auto; max-height:75vh'>
             <table style='width:100%; border-collapse:collapse; user-select:none; caret-color:transparent'><thead style='position:sticky; top:0; background:#f0f9ff; text-align:left; font-size:11px; color:#475569'><tr><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Assessment No</th><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Parent Phone</th><th style='padding:10px 12px'>Action</th></tr></thead><tbody>{student_rows}</tbody></table>
           </div>
+          <div style='padding:12px; border-top:1px solid #f1f5f9'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div>
         </div>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:18px'>
           <div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div>
@@ -567,7 +585,7 @@ def edit_student_page(sid: int, request: Request):
     for cl in classes:
         sel = "selected" if cl["id"]==st["class_id"] else ""
         class_opts += f"<option value='{cl['id']}' {sel}>{cl['name']} - {cl['stream']}</option>"
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700}}</style></head><body>{header}
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700}}.back-btn:hover{{background:#0f172a!important; color:white!important}}</style></head><body>{header}
     <div style='padding:20px; max-width:600px; margin:auto'>
       <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:20px'>
         <h3>✏️ Edit Student - {st['name']}</h3>
@@ -578,8 +596,9 @@ def edit_student_page(sid: int, request: Request):
           <label style='font-size:11px; font-weight:700'>⚧️ Gender</label><select name='gender' required class='input-field'><option {"selected" if st['gender']=="Male" else ""}>Male</option><option {"selected" if st['gender']=="Female" else ""}>Female</option></select>
           <label style='font-size:11px; font-weight:700'>👨‍👩‍👧 Parent Name</label><input name='parent_name' value="{st['parent_name'] or ''}" class='input-field'>
           <label style='font-size:11px; font-weight:700'>📞 Parent Phone</label><input name='parent_phone' value="{st['parent_phone'] or ''}" required class='input-field'>
-          <div style='display:flex; gap:10px; margin-top:12px'><button class='add-btn' style='flex:1'>💾 Save Changes</button><a href='/school/students' style='flex:1; text-align:center; padding:12px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700'>❌ Cancel</a></div>
+          <div style='display:flex; gap:10px; margin-top:12px'><button class='add-btn' style='flex:1'>💾 Save Changes</button><a href='/school/students' style='flex:1; text-align:center; padding:12px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700' class='back-btn'>❌ Cancel</a></div>
         </form>
+        <div style='margin-top:14px'><a href='/school/dashboard' class='back-btn' style='width:100%; justify-content:center; box-sizing:border-box'>⬅️ Back to Overview</a></div>
       </div>
     </div></div></div></body></html>""")
 
@@ -602,7 +621,7 @@ def school_generic(page: str, request: Request):
     if not school: return RedirectResponse("/")
     name = request.session.get("name","")
     header = school_header(school, name, page)
-    return HTMLResponse(f"<html><head><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.back-btn{{display:inline-flex; padding:10px 16px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:700; font-size:12px}}.back-btn:hover{{background:#0f172a!important; color:white!important}}</style></head><body>{header}<div style='padding:20px'><h2>{page.title()} — {school['name']}</h2><p style='color:#64748b'>This module is part of DaviSchool Management System</p><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div></body></html>")
+    return HTMLResponse(f"<html><head><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}<div style='padding:20px'><h2>{page.title()} — {school['name']}</h2><p style='color:#64748b'>This module is part of DaviSchool Management System</p><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div></div></body></html>")
 
 @app.get("/logout")
 def logout(request: Request):
