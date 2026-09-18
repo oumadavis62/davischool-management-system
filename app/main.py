@@ -206,9 +206,75 @@ def change_password(request: Request, current_pass: str = Form(...), new_pass: s
 
 @app.get("/health")
 def health(): return PlainTextResponse("OK")
+
+# === NEW WELCOME SCREEN EXACT LIKE SCREENSHOT ===
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8fafc;margin:0'><div style='background:white;padding:36px 32px;border-radius:16px;border:1px solid #e2e8f0;width:400px'><div style='text-align:center;margin-bottom:24px'><div style='width:52px;height:52px;background:#0f172a;color:white;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;margin:0 auto'>D</div><h2 style='margin:12px 0 4px'>Davischool</h2><p style='font-size:11px;color:#64748b'>ONE LOGIN FOR ALL ROLES 🔐</p></div><form method='post' action='/login'><input name='email' placeholder='📧 Email' required style='width:100%;padding:12px;margin:6px 0 12px;border:1px solid #e2e8f0;border-radius:10px'><input name='password' type='password' placeholder='🔑 Password' required style='width:100%;padding:12px;margin:6px 0 20px;border:1px solid #e2e8f0;border-radius:10px'><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>Sign In → Auto Redirect by Role</button></form></div></body></html>"""
+    return """
+<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f8fafc;height:100vh;overflow:hidden}
+.left-blue{position:absolute;left:0;top:0;bottom:0;width:28px;background:#1e90ff}
+.form-wrap{margin-left:28px; display:flex; justify-content:center; align-items:center; min-height:100vh; padding:20px}
+.login-card{background:white; width:520px; max-width:90%; padding:48px 42px 36px; border-radius:0; position:relative}
+.logo-d{width:52px;height:52px;background:#0f172a;color:white;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px}
+.input-box{width:100%;padding:14px 16px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;font-size:14px;outline:none}
+.input-box:focus{border-color:#0f172a;background:white}
+.pw-wrap{position:relative}
+.eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;color:#94a3b8;font-size:18px;user-select:none}
+.help-btn{position:fixed;right:0;top:50%;transform:translateY(-50%) rotate(0);background:#0d7a4a;color:white;padding:12px 10px;border-radius:12px 0 0 12px;font-weight:700;font-size:13px;writing-mode:vertical-lr;transform-origin:right;cursor:pointer;display:flex;align-items:center;gap:6px;z-index:10}
+.ask-btn{position:fixed;right:20px;bottom:80px;background:#1e90ff;color:white;padding:12px 18px;border-radius:24px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 8px 20px rgba(30,144,255,0.4);z-index:10;transition:all 0.2s}
+.ask-btn:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(30,144,255,0.5)}
+.sign-btn{width:100%;background:#1e90ff;color:white;padding:14px;border:none;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;transition:all 0.2s}
+.sign-btn:hover{background:#0f172a}
+</style>
+</head>
+<body>
+<div class="left-blue"></div>
+<div class="form-wrap">
+  <div class="login-card">
+    <div style="margin-bottom:28px">
+      <h1 style="margin:0;font-size:38px;font-weight:900;letter-spacing:-1px;color:#0f172a">DaviSchool</h1>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+        <div class="logo-d">D</div>
+        <div><div style="font-weight:800;font-size:14px;color:#0f172a">Davischool Platform</div><div style="font-size:11px;color:#64748b">School Management System</div></div>
+      </div>
+      <div style="margin-top:18px;font-size:15px;color:#475569">Sign in to your Davischool account</div>
+    </div>
+    <form method="post" action="/login">
+      <label style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;display:block">Username or Email</label>
+      <input name="email" class="input-box" placeholder="Enter your username or email" required style="margin-bottom:18px">
+
+      <label style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;display:block">Password</label>
+      <div class="pw-wrap" style="margin-bottom:18px">
+        <input id="pwd" name="password" type="password" class="input-box" placeholder="Enter your password" required style="padding-right:44px">
+        <span class="eye" onclick="togglePwd()">👁️</span>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer"><input type="checkbox" style="width:16px;height:16px"> Remember me</label>
+        <a href="#" style="font-size:13px;color:#0d7a4a;text-decoration:none;font-weight:600">Forgot Password?</a>
+      </div>
+
+      <button class="sign-btn">Sign In</button>
+    </form>
+  </div>
+</div>
+
+<div class="help-btn">💬 Help</div>
+<div class="ask-btn" onclick="alert('Hi! I am Davis Assistant 🤖')">💬 Ask Davis</div>
+
+<script>
+function togglePwd(){
+  let p=document.getElementById('pwd');
+  let e=document.querySelector('.eye');
+  if(p.type==='password'){p.type='text'; e.textContent='🙈';}
+  else {p.type='password'; e.textContent='👁️';}
+}
+</script>
+</body></html>
+    """
+
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u = cur.fetchone()
@@ -484,7 +550,6 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
-# === DEAN SETTINGS EXACT LIKE SCREENSHOT ===
 @app.get("/school/dean-settings", response_class=HTMLResponse)
 def dean_settings(request: Request, tab: str = "terms"):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -494,104 +559,89 @@ def dean_settings(request: Request, tab: str = "terms"):
     cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
     cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
     con.close()
-
-    # Tabs styles
     def tab_btn(key, icon, label):
         active = tab==key
-        style = "background:white; border:1px solid #e2e8f0; border-radius:8px; font-weight:800; color:#0f172a; box-shadow:0 1px 2px rgba(0,0,0,0.05)" if active else "color:#64748b; background:transparent"
+        style = "background:white; border:1px solid #e2e8f0; border-radius:8px; font-weight:800; color:#0f172a" if active else "color:#64748b"
         return f"<a href='/school/dean-settings?tab={key}' style='display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;{style};transition:all 0.2s' onmouseover=\"this.style.background='#0f172a';this.style.color='white'\" onmouseout=\"this.style.background='{ 'white' if active else 'transparent' }';this.style.color='{ '#0f172a' if active else '#64748b' }'\">{icon} {label}</a>"
-
-    # Content per tab
     if tab == "terms":
         rows = ""
         for i, t in enumerate(terms, 1):
-            rows += f"""<tr class='term-row' data-name="{t['term_name'].lower()} {t['year']}" style='border-bottom:1px solid #f1f5f9; transition:all 0.15s' onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
-            <td style='padding:14px'><input type='checkbox'></td>
-            <td style='padding:14px; font-size:13px; color:#64748b'>{i}</td>
-            <td style='padding:14px; font-size:13px; font-weight:600'>{t['term_name']}</td>
-            <td style='padding:14px; font-size:13px'>{t['year']}</td>
-            <td style='padding:14px; font-size:13px'>{t['start_date']}</td>
-            <td style='padding:14px; font-size:13px'>{t['end_date']}</td>
-            <td style='padding:14px; display:flex; gap:12px'><a href='#' style='text-decoration:none; font-size:14px'>✏️</a><a href='/school/dean-settings/delete-term/{t['id']}' style='text-decoration:none; font-size:14px'>🗑️</a></td>
-            </tr>"""
-        if not rows: rows = f"""<tr><td colspan='7' style='padding:30px; text-align:center; color:#94a3b8'>No terms yet — sample from screenshot: Term 3 2026 2026-08-24 to 2026-10-23<br><br><button onclick="document.getElementById('addTermBox').style.display='block'" style='background:#0f172a;color:white;padding:8px 14px;border:none;border-radius:8px'>+ Add Term</button></td></tr>"""
-        # Add one sample row if empty to match screenshot exactly
-        if len(terms)==0:
-            rows = f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:14px'><input type='checkbox'></td><td style='padding:14px; font-size:13px'>1</td><td style='padding:14px; font-size:13px; font-weight:600'>Term 3</td><td style='padding:14px; font-size:13px'>2026</td><td style='padding:14px; font-size:13px'>2026-08-24</td><td style='padding:14px; font-size:13px'>2026-10-23</td><td style='padding:14px; display:flex; gap:12px'>✏️ 🗑️</td></tr>"""
-
-        inner = f"""
-        <div style='display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:14px'>
-          <div style='display:flex; gap:10px; align-items:center'>
-            <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchTerm' onkeyup='searchTerms()' placeholder='Search terms...' style='padding:10px 12px 10px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
-            <select id='yearFilter' onchange='filterYear()' style='padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white; font-size:13px'><option value='all'>All Years</option><option>2026</option><option>2025</option><option>2024</option></select>
+            rows += f"""<tr class='term-row' data-name="{t['term_name'].lower()} {t['year']}" style='border-bottom:1px solid #f1f5f9'><td style='padding:14px'><input type='checkbox'></td><td style='padding:14px; font-size:13px; color:#64748b'>{i}</td><td style='padding:14px; font-size:13px; font-weight:600'>{t['term_name']}</td><td style='padding:14px; font-size:13px'>{t['year']}</td><td style='padding:14px; font-size:13px'>{t['start_date']}</td><td style='padding:14px; font-size:13px'>{t['end_date']}</td><td style='padding:14px; display:flex; gap:12px'><span>✏️</span><a href='/school/dean-settings/delete-term/{t['id']}' style='text-decoration:none'>🗑️</a></td></tr>"""
+        if not rows: rows = "<tr><td colspan='7' style='padding:30px; text-align:center; color:#94a3b8'>No terms yet — Add Term 3 2026 2026-08-24 to 2026-10-23 like screenshot</td></tr>"
+        content = f"""
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:16px'>
+          <div style='display:flex; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:12px; margin-bottom:14px'>
+            {tab_btn('terms','📅','Terms')}
+            {tab_btn('subjects','📚','Subjects')}
+            {tab_btn('teacher-allocation','👥','Teacher Allocation')}
+            {tab_btn('promote','↗️','Promote')}
           </div>
-          <div style='display:flex; gap:10px'>
-            <button style='padding:9px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.2s' onmouseover="this.style.background='#0f172a';this.style.color='white'" onmouseout="this.style.background='white';this.style.color='#0f172a'">⬇️ Download</button>
-            <button onclick="document.getElementById('addTermBox').style.display='block'" style='padding:9px 16px; background:#0f172a; color:white; border:none; border-radius:10px; font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.2s' onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">+ Add Term</button>
+          <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px'>
+            <div style='display:flex; gap:10px'>
+              <div style='position:relative'><span style='position:absolute; left:10px; top:10px'>🔍</span><input id='searchTerm' onkeyup="filterTerms()" placeholder='Search terms...' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
+              <select style='padding:9px 12px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px'><option>All Years</option><option>2026</option><option>2025</option></select>
+            </div>
+            <div style='display:flex; gap:8px'>
+              <button style='padding:8px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; font-size:13px; font-weight:600'>⬇️ Download</button>
+              <button onclick="document.getElementById('addTermBox').style.display='block'" style='padding:8px 14px; background:#0f172a; color:white; border:none; border-radius:10px; font-weight:700; font-size:13px'>+ Add Term</button>
+            </div>
           </div>
-        </div>
-
-        <div id='addTermBox' style='display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:14px'>
-          <div style='font-weight:800; margin-bottom:10px'>➕ Add Term</div>
-          <form method='post' action='/school/dean-settings/add-term' style='display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto; gap:10px; align-items:end'>
-            <div><label style='font-size:11px; font-weight:700'>TERM</label><select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select></div>
-            <div><label style='font-size:11px; font-weight:700'>YEAR</label><input name='year' required placeholder='2026' class='input-field'></div>
-            <div><label style='font-size:11px; font-weight:700'>START DATE</label><input name='start_date' type='date' required class='input-field'></div>
-            <div><label style='font-size:11px; font-weight:700'>END DATE</label><input name='end_date' type='date' required class='input-field'></div>
-            <div><button class='add-btn' style='padding:11px 16px'>Add</button></div>
-          </form>
-        </div>
-
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden'>
-          <table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b; text-transform:uppercase'><th style='padding:14px'><input type='checkbox'></th><th style='padding:14px'>#</th><th style='padding:14px'>TERM ↕</th><th style='padding:14px'>YEAR ↕</th><th style='padding:14px'>START DATE ↕</th><th style='padding:14px'>END DATE ↕</th><th style='padding:14px'>ACTIONS</th></tr></thead><tbody id='termBody'>{rows}</tbody></table>
-          <div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-top:1px solid #f1f5f9; font-size:13px; color:#64748b'>
-            <div style='display:flex; align-items:center; gap:8px'>Show <select style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px'><option>10</option><option>25</option></select> items per page</div>
-            <div>Showing 1–1 of {len(terms) if len(terms)>0 else 1}</div>
-            <div style='display:flex; gap:6px; align-items:center'><button style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:white; cursor:pointer'>‹ Previous</button><span style='padding:6px 10px'>Page 1 of 1</span><button style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:white; cursor:pointer'>Next ›</button></div>
+          <div id='addTermBox' style='display:none; background:#f8fafc; padding:14px; border-radius:10px; border:1px solid #e2e8f0; margin-bottom:14px'>
+            <form method='post' action='/school/dean-settings/add-term' style='display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto; gap:10px; align-items:end'>
+              <div><label style='font-size:11px'>Term</label><select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select></div>
+              <div><label style='font-size:11px'>Year</label><input name='year' required placeholder='2026' class='input-field'></div>
+              <div><label style='font-size:11px'>Start Date</label><input name='start_date' type='date' required class='input-field'></div>
+              <div><label style='font-size:11px'>End Date</label><input name='end_date' type='date' required class='input-field'></div>
+              <button class='add-btn' style='padding:11px 16px'>Add</button>
+            </form>
+          </div>
+          <div style='overflow:auto'><table style='width:100%; border-collapse:collapse'><thead style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'><input type='checkbox'></th><th>#</th><th>TERM ↕️</th><th>YEAR ↕️</th><th>START DATE ↕️</th><th>END DATE ↕️</th><th>ACTIONS</th></tr></thead><tbody id='termBody'>{rows}</tbody></table></div>
+          <div style='display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:12px; color:#64748b'>
+            <div style='display:flex; align-items:center; gap:8px'>Show <select style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px'><option>10</option></select> items per page</div>
+            <div>Showing 1–{len(terms) or 1} of {len(terms) or 1}</div>
+            <div style='display:flex; gap:12px'><span>‹ Previous</span><span>Page 1 of 1</span><span>Next ›</span></div>
           </div>
         </div>
+        <script>function filterTerms(){{let q=document.getElementById('searchTerm').value.toLowerCase(); document.querySelectorAll('.term-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}</script>
         """
-    elif tab == "subjects":
-        srows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px'>{s['name']}</td><td>{s['code'] or ''}</td><td><a href='/school/subjects/delete/{s['id']}'>🗑️</a></td></tr>" for s in subjects]) or "<tr><td colspan='3' style='padding:20px; text-align:center'>No subjects</td></tr>"
-        inner = f"<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px'><b>📚 Subjects ({len(subjects)})</b><table style='width:100%; margin-top:10px'><tbody>{srows}</tbody></table><div style='margin-top:12px'><a href='/school/subjects' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px'>Manage Subjects →</a></div></div>"
-    elif tab == "teacher-allocation":
-        arows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px'>{a['tname']}</td><td>{a['sname']}</td><td>{a['cname']}</td></tr>" for a in allocs]) or "<tr><td colspan='3' style='padding:20px; text-align:center'>No allocations</td></tr>"
-        inner = f"<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px'><b>Teacher Allocation ({len(allocs)})</b><table style='width:100%; margin-top:10px'><tbody>{arows}</tbody></table><div style='margin-top:12px'><a href='/school/subject-allocation' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px'>Manage Allocation →</a></div></div>"
-    else: # Promote
-        inner = "<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:40px; text-align:center'><h3>🎓 Promote Students</h3><p style='color:#64748b'>Promote students to next class/year</p><button style='background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:10px'>Promote Now</button></div>"
+    else:
+        content = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:16px'><div style='display:flex; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:12px; margin-bottom:14px'>{tab_btn('terms','📅','Terms')}{tab_btn('subjects','📚','Subjects')}{tab_btn('teacher-allocation','👥','Teacher Allocation')}{tab_btn('promote','↗️','Promote')}</div><div style='padding:30px; text-align:center; color:#94a3b8'>{tab.upper()} tab — clickable + hover — coming soon, original school side intact</div></div>"""
 
     header = school_header(school, name, "dean-settings")
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
-    body{{margin:0;font-family:Arial;background:#f8fafc}}
-   .tab-hover:hover{{background:#0f172a!important;color:white!important}}
-    </style></head><body>{header}
-    <div style='padding:20px; max-width:1300px; margin:auto'>
-      <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Dean Settings</h2><p style='margin:4px 0 0; color:#64748b; font-size:14px'>Manage terms, subjects, teacher allocation & promotions</p></div>
-
-      <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:16px'>
-        <div style='display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px'>
-          {tab_btn('terms','📅','Terms')}
-          {tab_btn('subjects','📖','Subjects')}
-          {tab_btn('teacher-allocation','👥','Teacher Allocation')}
-          {tab_btn('promote','↗️','Promote')}
-        </div>
-        {inner}
-      </div>
-    </div>
-    <script>
-    function searchTerms(){{let q=document.getElementById('searchTerm').value.toLowerCase(); document.querySelectorAll('.term-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
-    function filterYear(){{let y=document.getElementById('yearFilter').value; document.querySelectorAll('.term-row').forEach(r=>{{r.style.display=(y==='all'||r.dataset.name.includes(y))?'':'none';}});}}
-    </script>
-    </div></div></body></html>""")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}
+    <div style='padding:18px; max-width:1400px; margin:auto'>
+      <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Dean Settings</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Manage terms, subjects, teacher allocation & promotions</p></div>
+      {content}
+    </div></div></div></body></html>""")
 
 @app.post("/school/dean-settings/add-term")
 def add_term(request: Request, term_name: str = Form(...), year: str = Form(...), start_date: str = Form(...), end_date: str = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO terms (school_id, term_name, year, start_date, end_date) VALUES (?,?,?,?,?)", (school["id"], term_name.strip(), year.strip(), start_date.strip(), end_date.strip())); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=terms", status_code=303)
-
 @app.get("/school/dean-settings/delete-term/{tid}")
 def delete_term(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM terms WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=terms", status_code=303)
 
-# ===== OTHER PAGES (UNCHANGED) =====
+@app.get("/school/subject-allocation", response_class=HTMLResponse)
+def subject_allocation_page(request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request); name = request.session.get("name","")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM teachers WHERE school_id=?", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
+    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
+    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
+    con.close()
+    t_opts = "".join([f"<option value='{t['id']}'>{t['name']}</option>" for t in teachers])
+    s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
+    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
+    rows = "".join([f"<tr><td style='padding:10px'>{a['tname'] or ''}</td><td>{a['sname'] or ''}</td><td>{a['cname'] or ''}</td><td><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No allocations</td></tr>"
+    header = school_header(school, name, "subject-allocation")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>📌 Allocation</b><form method='post' action='/school/subject-allocation/add'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px'><b>Allocations ({len(allocs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
+@app.post("/school/subject-allocation/add")
+def add_alloc(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
+@app.get("/school/subject-allocation/delete/{aid}")
+def del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
+
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -634,31 +684,9 @@ def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...)
 @app.get("/school/exams/delete/{eid}")
 def del_exam(eid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 
-@app.get("/school/subject-allocation", response_class=HTMLResponse)
-def subject_allocation_page(request: Request):
-    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name","")
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM teachers WHERE school_id=?", (school["id"],)); teachers = cur.fetchall()
-    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
-    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
-    con.close()
-    t_opts = "".join([f"<option value='{t['id']}'>{t['name']}</option>" for t in teachers])
-    s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
-    rows = "".join([f"<tr><td style='padding:10px'>{a['tname'] or ''}</td><td>{a['sname'] or ''}</td><td>{a['cname'] or ''}</td><td><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No allocations</td></tr>"
-    header = school_header(school, name, "subject-allocation")
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>📌 Allocation</b><form method='post' action='/school/subject-allocation/add'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px'><b>Allocations ({len(allocs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
-@app.post("/school/subject-allocation/add")
-def add_alloc(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
-@app.get("/school/subject-allocation/delete/{aid}")
-def del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
-
 @app.get("/school/{path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     header = school_header(school, name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — coming soon</h3><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — placeholder</h3><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div></div></div></body></html>")
