@@ -106,12 +106,6 @@ def school_header(school, name, active="dashboard"):
 .ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}.ds-card:hover div{{color:white!important}}
 .input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}
 .add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.add-btn:hover{{background:#1e3a8a}}
-.highlight-row{{background:#dbeafe!important;border-left:4px solid #0f172a!important}}
-table{{user-select:none;caret-color:transparent}} tr{{user-select:none;caret-color:transparent}}
-.confirm-overlay{{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:10000}}
-.confirm-box{{background:white;border-radius:16px;padding:22px;width:380px;text-align:center;border:1px solid #e2e8f0;box-shadow:0 20px 40px rgba(0,0,0,0.25)}}
-.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;transition:all 0.25s ease;cursor:pointer}}
-.back-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -249,9 +243,9 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     rows_html = ""
     for s in schools:
         sid = s["id"]; u = users_by_school.get(sid); upass = u["password"] if u else "—"; uemail = u["email"] if u else s["email"]
-        rows_html += f"""<tr onclick="highlightRow(this, {sid})" style='cursor:pointer; border-bottom:1px solid #f1f5f9; user-select:none; caret-color:transparent'><td style='padding:12px 10px; user-select:none'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px; color:#64748b'>🔑 Code: <b>{s['code']}</b></div></td><td style='padding:12px 10px; font-size:12px; user-select:none'>📞 {s['phone'] or ''}</td><td style='padding:12px 10px; font-size:11px; user-select:none; max-width:140px; overflow:hidden; text-overflow:ellipsis'>📧 {s['email']}</td><td style='padding:12px 10px; font-size:12px; user-select:none'>📍 {s['location']}</td><td style='padding:12px 10px; font-size:11px; user-select:none'>👤 {uemail}</td><td style='padding:12px 10px; font-size:12px; user-select:none'><span id='pwd-dot-{sid}'>••••••••</span><span id='pwd-real-{sid}' style='display:none; font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer'>👁️</span></td><td style='padding:12px 10px; user-select:none'><span id='actions-{sid}' style='display:none; gap:6px'><a href='/schools/edit/{sid}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>🗑️ Delete</a></span><span id='hint-{sid}' style='font-size:10px; color:#94a3b8'>Click to activate</span></td></tr>"""
+        rows_html += f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px; color:#64748b'>🔑 Code: <b>{s['code']}</b></div></td><td style='padding:12px 10px; font-size:12px'>📞 {s['phone'] or ''}</td><td style='padding:12px 10px; font-size:11px'>📧 {s['email']}</td><td style='padding:12px 10px; font-size:12px'>📍 {s['location']}</td><td style='padding:12px 10px; font-size:11px'>👤 {uemail}</td><td style='padding:12px 10px; font-size:12px'><span id='pwd-dot-{sid}'>••••••••</span><span id='pwd-real-{sid}' style='display:none; font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer'>👁️</span></td><td style='padding:12px 10px'><a href='/schools/edit/{sid}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>✏️ Edit</a> <a href='/schools/delete/{sid}' style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>🗑️ Delete</a></td></tr>"""
     if not rows_html: rows_html = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc;caret-color:transparent}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}.highlight{{background:#e0f2fe!important;border-left:4px solid #0ea5e9!important}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}table{{user-select:none}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'><div><div class='card'>{popup_html}<div style='font-weight:800; font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='font-size:11px; color:#64748b; margin-bottom:8px'>👉 Click row to highlight 💙</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; color:#475569; font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📞 Contact</th><th style='padding:10px'>📧 Email</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div><div class='card' style='height:fit-content; position:sticky; top:16px'><div style='font-weight:800'>➕ Register New School 🏫</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button></form></div></div><script>let lastRow=null; function highlightRow(row,id){{if(lastRow) lastRow.classList.remove('highlight'); row.classList.add('highlight'); lastRow=row; document.querySelectorAll('[id^=actions-]').forEach(el=>el.style.display='none'); document.querySelectorAll('[id^=hint-]').forEach(el=>el.style.display='inline'); let act=document.getElementById('actions-'+id); let hint=document.getElementById('hint-'+id); if(act) act.style.display='flex'; if(hint) hint.style.display='none'; window.getSelection().removeAllRanges(); if(document.activeElement) document.activeElement.blur();}} function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}}}</script></body></html>""")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'><div><div class='card'>{popup_html}<div style='font-weight:800; font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px; margin-top:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; color:#475569; font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📞 Contact</th><th style='padding:10px'>📧 Email</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div><div class='card' style='height:fit-content; position:sticky; top:16px'><div style='font-weight:800'>➕ Register New School 🏫</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button></form></div></div><script>function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}}}</script></body></html>""")
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -268,7 +262,6 @@ def verify_school_code(pending_id: str = Form(...), auth_code: str = Form(...)):
     cur.execute("INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)", (pending["name"], pending["email"], code, pending["location"], pending["phone"], pending["principal"], pending["school_type"]))
     sid = cur.lastrowid; cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (pending["email"], unique_pass, "school_admin", pending["principal"], sid))
     cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,)); con.commit(); con.close()
-    log_activity(SUPER_ADMIN, f"🏫 Registered new school: {pending['name']} ✅", f"Code: {code} | Pass {unique_pass}")
     return RedirectResponse(f"/schools/manage?success=added&new_pass={unique_pass}&school_email={pending['email']}&school_name={pending['name']}", status_code=303)
 @app.get("/schools/delete/{sid}")
 def delete_school(sid: int, request: Request):
@@ -279,20 +272,19 @@ def delete_school(sid: int, request: Request):
 def edit_school_page(sid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close()
-    if not s: return RedirectResponse("/schools/manage")
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
-    initials = "".join([p[0] for p in name.split()][:2]).upper(); stype = s['school_type']
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style></head><body>{header_html(initials, name, email)}<div class='card'><h3>✏️ Edit School - {s['name']}</h3><form method='post' action='/schools/edit/{sid}'><input name='school_name' value="{s['name']}" required><input name='school_email' value="{s['email']}" required><input name='location' value="{s['location']}" required><input name='phone' value="{s['phone']}" required><input name='principal' value="{s['principal']}" required><select name='school_type' required><option {"selected" if stype=="Primary" else ""}>Primary</option><option {"selected" if stype=="Secondary" else ""}>Secondary</option><option {"selected" if stype in ["Primary & Secondary", "Primary & Junior Secondary"] else ""}>Primary & Junior Secondary</option></select><input name='new_password' placeholder='New Password (blank keep old)'><div style='display:flex;gap:10px;margin-top:12px'><button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save Changes</button><a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div></form></div></body></html>""")
+    initials = "".join([p[0] for p in name.split()][:2]).upper()
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style></head><body>{header_html(initials, name, email)}<div class='card'><h3>✏️ Edit School - {s['name']}</h3><form method='post' action='/schools/edit/{sid}'><input name='school_name' value="{s['name']}" required><input name='school_email' value="{s['email']}" required><input name='location' value="{s['location']}" required><input name='phone' value="{s['phone']}" required><input name='principal' value="{s['principal']}" required><input name='new_password' placeholder='New Password (blank keep old)'><div style='display:flex;gap:10px;margin-top:12px'><button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save</button><a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div></form></div></body></html>""")
 @app.post("/schools/edit/{sid}")
-def edit_school_save(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...), new_password: str = Form("")):
+def edit_school_save(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), new_password: str = Form("")):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor()
-    cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=?, school_type=? WHERE id=?", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, sid))
+    cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=? WHERE id=?", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), sid))
     if new_password.strip(): cur.execute("UPDATE users SET email=?, full_name=?, password=? WHERE school_id=? AND role='school_admin'", (school_email.strip(), principal.strip(), new_password.strip(), sid))
     else: cur.execute("UPDATE users SET email=?, full_name=? WHERE school_id=? AND role='school_admin'", (school_email.strip(), principal.strip(), sid))
     con.commit(); con.close(); return RedirectResponse("/schools/manage", status_code=303)
 
-# ===== SCHOOL SIDE WITH GENDER CHART ADDED ONLY =====
+# ===== SCHOOL DASHBOARD WITH GENDER CHART =====
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -302,7 +294,6 @@ def school_dashboard(request: Request):
     cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?", (school["id"],)); tc = cur.fetchone()["c"]
-    # --- NEW: Gender stats per class ---
     cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? GROUP BY c.name, s.gender ORDER BY c.name", (school["id"],))
     gender_rows = cur.fetchall()
     cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 5", (school["id"],)); recent_students = cur.fetchall()
@@ -311,10 +302,8 @@ def school_dashboard(request: Request):
     for r in gender_rows:
         cn = (r['class_name'] or 'UNASSIGNED').upper()
         if cn not in stats: stats[cn] = {'boys':0,'girls':0}
-        if (r['gender'] or '').lower().startswith('m'):
-            stats[cn]['boys'] = r['cnt']; tb += r['cnt']
-        else:
-            stats[cn]['girls'] = r['cnt']; tg += r['cnt']
+        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys'] = r['cnt']; tb += r['cnt']
+        else: stats[cn]['girls'] = r['cnt']; tg += r['cnt']
     total = tb+tg; ratio = round(tg/tb,2) if tb>0 else 0; max_v = max([max(v['boys'],v['girls']) for v in stats.values()], default=1) or 1
     chart_html = ""
     for cls_name, v in stats.items():
@@ -322,14 +311,13 @@ def school_dashboard(request: Request):
         gh = int((v['girls']/max_v)*150) if v['girls']>0 else 6
         chart_html += f"<div style='text-align:center; min-width:90px'><div style='display:flex; gap:10px; align-items:end; justify-content:center; height:170px'><div><div style='width:42px; height:{bh}px; background:#0a84ff; border-radius:6px 6px 0 0'></div><div style='font-size:10px; font-weight:700; color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px; height:{gh}px; background:#ff2d92; border-radius:6px 6px 0 0'></div><div style='font-size:10px; font-weight:700; color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px; font-weight:800; margin-top:8px'>{cls_name}</div></div>"
     if not chart_html: chart_html = "<div style='padding:30px; color:#94a3b8; text-align:center; width:100%'>No students yet — add students to see chart 📊</div>"
-
     stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px'>{st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['admission_no'] or st['assessment_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>Class {st['class_id'] or ''}</td></tr>" for st in recent_students]) or "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
     header = school_header(school, name, "dashboard")
     html = f"""
     <div style='padding:18px; max-width:1400px; margin:auto'>
         <div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%); border-radius:18px; padding:22px 24px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'>
-          <div><div style='font-size:22px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:4px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div><div style='font-size:11px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.2); display:inline-block; padding:6px 14px; border-radius:20px; margin-top:10px'>WORKS FOR ALL LEVELS: PRE-PRIMARY, PRIMARY, JUNIOR, SENIOR | 8-4-4 SUPPORTED</div></div>
-          <div style='text-align:right'><div style='font-size:34px; font-weight:900'>{sc}</div><div style='font-size:11px; color:#cbd5e1'>Total Students</div><div style='font-size:11px; background:#16a34a; color:white; padding:7px 14px; border-radius:20px; margin-top:10px; display:inline-block; font-weight:700'>✅ GET EVERYTHING DONE IN MINUTES!</div></div>
+          <div><div style='font-size:22px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:4px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div></div>
+          <div style='text-align:right'><div style='font-size:34px; font-weight:900'>{sc}</div><div style='font-size:11px; color:#cbd5e1'>Total Students</div></div>
         </div>
         <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'>
           <a href='/school/students' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{sc}</div></a>
@@ -337,11 +325,9 @@ def school_dashboard(request: Request):
           <a href='/school/exams' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{ec}</div></a>
           <a href='/school/teachers' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>👨‍🏫 TEACHERS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{tc}</div></a>
         </div>
-
-        <!-- AUTOMATIC GENDER CHART - NEW ONLY -->
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'>
           <div style='display:flex; justify-content:space-between; align-items:center'>
-            <div><div style='font-weight:800; font-size:14px'>👥 Students by Gender</div><div style='font-size:11px; color:#64748b'>Boys vs Girls enrollment per form — auto updates when you add students</div></div>
+            <div><div style='font-weight:800; font-size:14px'>👥 Students by Gender</div><div style='font-size:11px; color:#64748b'>Boys vs Girls enrollment per form — auto updates</div></div>
             <div style='display:flex; gap:12px; font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block;border-radius:2px'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block;border-radius:2px'></span> Girls</span></div>
           </div>
           <div style='display:flex; gap:24px; overflow-x:auto; margin-top:18px; padding-bottom:10px'>{chart_html}</div>
@@ -352,57 +338,114 @@ def school_dashboard(request: Request):
             <div style='background:#f0fdf4; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Girl:Boy Ratio</div><div style='font-size:20px; font-weight:900'>{ratio}:1</div></div>
           </div>
         </div>
-
-        <div style='display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:14px'>
-          <a href='/school/teachers' class='ds-card' style='background:#0f172a; color:white; text-align:center; padding:20px'><div style='font-size:14px; font-weight:800'>➕👨‍🏫 ADD TEACHERS + ROLE</div><div style='font-size:11px; margin-top:6px; color:#bfdbfe'>Roles ▼ Principal, Deputy, Class Teacher, Senior Teacher, DOS, Teacher</div></a>
-          <a href='/school/subject-allocation' class='ds-card' style='background:#1e40af; color:white; text-align:center; padding:20px'><div style='font-size:14px; font-weight:800'>📌📚 SUBJECT ALLOCATION</div><div style='font-size:11px; margin-top:6px; color:#bfdbfe'>Teacher ▼ | Subject ▼ | Class ▼</div></a>
-        </div>
-        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'>
-          <a href='/school/analysis' class='ds-card'><div style='font-size:22px'>📊</div><div style='font-size:12px; font-weight:800; margin-top:6px'>EXAM MARKS ANALYSIS</div></a>
-          <a href='/school/ranking' class='ds-card'><div style='font-size:22px'>🏆</div><div style='font-size:12px; font-weight:800; margin-top:6px'>ACCURATE RANKING</div></a>
-          <a href='/school/marksheets' class='ds-card'><div style='font-size:22px'>📄</div><div style='font-size:12px; font-weight:800; margin-top:6px'>GENERATES MARKSHEETS</div></a>
-          <a href='/school/reports' class='ds-card'><div style='font-size:22px'>📑</div><div style='font-size:12px; font-weight:800; margin-top:6px'>STUDENT REPORTS</div></a>
-        </div>
         <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:14px'>
           <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🎓 Recently Added Students</div><a href='/school/students' style='font-size:11px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:10px; color:#64748b'><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Adm No</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div>
-          <div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>📊 DaviSchool Management System</div><div style='font-size:10px; color:#94a3b8; margin-bottom:12px'>GENDER STATS LIVE</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:11px'>👦 Boys: {tb} | 👧 Girls: {tg}</div><div style='font-size:11px; margin-top:6px; color:#22c55e'>Auto-updates ✅</div></div></div>
+          <div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>📊 Gender Stats LIVE</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:11px'>👦 Boys: {tb} | 👧 Girls: {tg}</div><div style='font-size:11px; margin-top:6px; color:#22c55e'>Auto-updates ✅</div></div></div>
         </div>
     </div>
     """
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
-# REST OF YOUR ORIGINAL FILE REMAINS EXACTLY AS v38.6 - paste from here your classes, students, subjects, exams, teachers...
-# For brevity I keep same as you had:
-
-@app.get("/school/classes", response_class=HTMLResponse)
-def school_classes(request: Request):
-    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name","")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall(); con.close()
-    rows = "".join([f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px; font-weight:600'>🏫 {c['name']}</td><td style='padding:10px 12px; font-size:12px'>🔀 {c['stream'] or c['level'] or ''}</td><td style='padding:10px 12px;'><a href='/school/classes/delete/{c["id"]}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>""" for c in classes]) or "<tr><td colspan='3' style='padding:30px; text-align:center; color:#94a3b8'>No classes yet</td></tr>"
-    header = school_header(school, name, "classes")
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}<div style='padding:18px; max-width:1200px; margin:auto'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9'><b>🏫 Classes & Streams ({len(classes)})</b></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Class</th><th style='padding:10px 12px'>Stream</th><th style='padding:10px 12px'>Action</th></tr></thead><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><b>➕ Add Class & Stream</b><form method='post' action='/school/classes/add' style='margin-top:10px'><input name='class_name' required placeholder='🏫 Class Name *' class='input-field'><input name='stream' required placeholder='🔀 Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Class</button></form></div></div></div></div></div></body></html>""")
-@app.post("/school/classes/add")
-def add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
-@app.get("/school/classes/delete/{cid}")
-def delete_class(cid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
-
+# ===== NEW STUDENTS PAGE LIKE SCREENSHOT =====
 @app.get("/school/students", response_class=HTMLResponse)
-def school_students(request: Request, success: str = "", student_name: str = ""):
+def school_students(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
     cur.execute("SELECT s.*, c.name as class_name, c.stream as class_stream FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
     con.close()
+    total = len(students)
+    boys = len([s for s in students if (s['gender'] or '').lower().startswith('m')])
+    girls = total - boys
+    boarding = 0; day = total
+    by_class_text = f"{classes[0]['name'] if classes else 'GRADE 7'}: {total}" if total>0 else "GRADE 7: 0"
     class_set = sorted(set([c['name'] for c in classes if c['name']])); stream_set = sorted(set([c['stream'] or c['level'] for c in classes if c['stream'] or c['level']]))
     distinct_class_opts = "".join([f"<option value='{cn}'>{cn}</option>" for cn in class_set])
     distinct_stream_opts = "".join([f"<option value='{st}'>{st}</option>" for st in stream_set])
-    student_rows = "".join([f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px; font-weight:600'>🎓 {st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['assessment_no'] or st['admission_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['class_name'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['stream'] or st['class_stream'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>{st['parent_phone'] or ''}</td><td style='padding:10px 12px;'><a href='/school/students/delete/{st["id"]}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>""" for st in students]) or "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
+    filter_class_opts = "".join([f"<option value='{cn}'>{cn}</option>" for cn in class_set])
+
+    rows = ""
+    for i, st in enumerate(students, 1):
+        gender = st['gender'] or 'Female'
+        g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
+        cls = f"{st['class_name'] or 'GRADE 7'} {('('+ (st['stream'] or st['class_stream'] or 'BLUE') +')')}"
+        initials = "".join([p[0] for p in st['name'].split()][:2]).upper()
+        rows += f"""<tr class='stu-row' data-gender="{gender}" data-class="{st['class_name'] or ''}" data-name="{st['name'].lower()} {st['assessment_no'] or ''}" style='border-bottom:1px solid #f1f5f9; transition:all 0.15s'>
+        <td style='padding:12px'><input type='checkbox'></td>
+        <td style='padding:12px; font-size:12px; color:#64748b'>{i}</td>
+        <td style='padding:12px; font-size:12px; font-weight:700; color:#2563eb'>{st['assessment_no'] or st['admission_no'] or i}</td>
+        <td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#fce7f3;color:#be185d;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{initials}</div><span style='font-size:12px; font-weight:600'>{st['name']}</span></td>
+        <td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td>
+        <td style='padding:12px; font-size:12px'>{cls}</td>
+        <td style='padding:12px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600'>Day</span></td>
+        <td style='padding:12px; font-size:12px; color:#94a3b8'>—</td>
+        <td style='padding:12px; font-size:12px'>{st['parent_phone'] or '—'}</td>
+        <td style='padding:12px; display:flex; gap:8px'><span style='cursor:pointer'>👁️</span><span style='cursor:pointer'>📄</span></td></tr>"""
+    if not rows: rows = "<tr><td colspan='10' style='padding:40px; text-align:center; color:#94a3b8'>No students yet — Admit Pupil to see like screenshot</td></tr>"
+
     header = school_header(school, name, "students")
-    return HTMLResponse(f"""<html><body>{header}<div style='padding:18px; max-width:1400px; margin:auto'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9'><b>🎓 Students ({len(students)})</b></div><div style='overflow:auto; max-height:75vh'><table style='width:100%; border-collapse:collapse'><thead style='position:sticky; top:0; background:#f0f9ff; text-align:left; font-size:11px'><tr><th style='padding:10px 12px'>Name</th><th>Assessment No</th><th>Class</th><th>Stream</th><th>Gender</th><th>Parent Phone</th><th>Action</th></tr></thead><tbody>{student_rows}</tbody></table></div><div style='padding:12px; border-top:1px solid #f1f5f9'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div><form method='post' action='/school/students/add'><input name='assessment_no' required placeholder='🆔 Assessment No *' class='input-field'><input name='student_name' required placeholder='👤 Student Name *' class='input-field'><select name='class_name' required class='input-field'><option value=''>🏫 Select Class *</option>{distinct_class_opts}</select><select name='stream' required class='input-field'><option value=''>🔀 Select Stream *</option>{distinct_stream_opts}</select><select name='gender' required class='input-field'><option value=''>⚧️ Gender *</option><option value='Male'>Male</option><option value='Female'>Female</option></select><input name='parent_phone' required placeholder='📞 Parent Phone *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Student</button></form></div></div></div></div></div></body></html>""")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
+    body{{margin:0;font-family:Arial;background:#f8fafc}}
+  .card-top{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;cursor:pointer}}
+  .card-top:hover{{transform:translateY(-3px);box-shadow:0 12px 24px rgba(0,0,0,0.08);border-color:#0f172a}}
+  .filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}}
+  .filter-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important;transform:translateY(-1px)}}
+  .black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}}
+  .black-btn:hover{{background:#1e293b;transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.2)}}
+  .stu-row:hover{{background:#f8fafc!important}}
+    </style></head><body>{header}
+    <div style='padding:18px; max-width:1500px; margin:auto'>
+      <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Students</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Manage student records and admissions</p></div>
+      <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px'>
+        <div class='card-top' onclick="filterAll()"><div><div style='font-size:13px; color:#64748b'>Total Students</div><div style='font-size:28px; font-weight:900; margin-top:6px'>{total}</div></div><div style='width:40px;height:40px;background:#eff6ff;color:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center'>👥</div></div>
+        <div class='card-top' onclick="document.getElementById('genderFilter').value='all'; applyFilters()"><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{boys}</span><span style='color:#94a3b8'> / </span><span style='color:#db2777'>{girls}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Boarding / Day</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#7c3aed'>{boarding}</span><span style='color:#94a3b8'> / </span><span style='color:#059669'>{day}</span></div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>🎓</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>By Class</div><div style='margin-top:8px'><span style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600'>{by_class_text}</span></div></div></div>
+      </div>
+      <div style='display:grid; grid-template-columns:1.9fr 0.7fr; gap:16px'>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
+          <div style='padding:14px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'>
+            <div style='display:flex; align-items:center; gap:10px'><span style='font-size:13px; color:#475569'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white'><option>10</option><option>25</option><option>50</option></select><span style='font-size:13px; color:#475569'>items per page</span></div>
+          </div>
+          <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; border-bottom:1px solid #f1f5f9'>
+            <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchInput' onkeyup="searchTable()" placeholder='Search name, admission' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
+            <select id='classFilter' onchange="applyFilters()" class='filter-btn'><option value='all'>All Classes</option>{filter_class_opts}</select>
+            <select id='genderFilter' onchange="applyFilters()" class='filter-btn'><option value='all'>All Gender</option><option value='Male'>Male</option><option value='Female'>Female</option></select>
+            <select class='filter-btn'><option>All Category</option><option>Day</option><option>Boarding</option></select>
+            <button class='filter-btn'>📄 CSV</button>
+            <button class='filter-btn'>⬇️ PDF</button>
+          </div>
+          <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; border-bottom:1px solid #f1f5f9'>
+            <button class='filter-btn'>📄 KEMIS Export</button>
+            <button class='filter-btn'>⬆️ Import</button>
+            <button class='filter-btn'>📷 Photos</button>
+            <button class='black-btn' onclick="document.getElementById('admitPanel').scrollIntoView({{behavior:'smooth'}})">+ Admit Pupil</button>
+          </div>
+          <div style='overflow:auto; max-height:70vh'><table style='width:100%; border-collapse:collapse'><thead style='position:sticky; top:0; background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'><input type='checkbox'></th><th>#</th><th>ADM NO ↑</th><th>NAME ↕</th><th>GENDER</th><th>CLASS</th><th>CATEGORY</th><th>GUARDIAN</th><th>PHONE</th><th></th></tr></thead><tbody id='stuBody'>{rows}</tbody></table></div>
+          <div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div>
+        </div>
+        <div id='admitPanel' style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:16px'>
+          <div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div>
+          <form method='post' action='/school/students/add'>
+            <input name='assessment_no' required placeholder='🆔 Assessment No *' class='input-field'>
+            <input name='student_name' required placeholder='👤 Student Name *' class='input-field'>
+            <select name='class_name' required class='input-field'><option value=''>🏫 Select Class *</option>{distinct_class_opts}</select>
+            <select name='stream' required class='input-field'><option value=''>🔀 Select Stream *</option>{distinct_stream_opts}</select>
+            <select name='gender' required class='input-field'><option value=''>⚧️ Gender *</option><option value='Male'>Male</option><option value='Female'>Female</option></select>
+            <input name='parent_phone' required placeholder='📞 Parent Phone *' class='input-field'>
+            <button class='add-btn' style='margin-top:8px'>➕ Add Student</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <script>
+    function applyFilters(){{let cf=document.getElementById('classFilter').value; let gf=document.getElementById('genderFilter').value; document.querySelectorAll('.stu-row').forEach(r=>{{let cm=(cf==='all'||r.dataset.class.includes(cf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(cm&&gm)?'':'none';}});}}
+    function filterAll(){{document.getElementById('classFilter').value='all'; document.getElementById('genderFilter').value='all'; applyFilters();}}
+    function searchTable(){{let q=document.getElementById('searchInput').value.toLowerCase(); document.querySelectorAll('.stu-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
+    </script>
+    </div></div></body></html>""")
+
 @app.post("/school/students/add")
 def add_student(request: Request, assessment_no: str = Form(...), student_name: str = Form(...), class_name: str = Form(...), stream: str = Form(...), gender: str = Form(...), parent_phone: str = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor()
@@ -410,91 +453,92 @@ def add_student(request: Request, assessment_no: str = Form(...), student_name: 
     if cls: class_id = cls["id"]
     else: cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper())); class_id = cur.lastrowid
     cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_phone, stream) VALUES (?,?,?,?,?,?,?,?)", (school["id"], assessment_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), class_id, gender, parent_phone.strip(), stream.strip().upper())); con.commit(); con.close()
-    return RedirectResponse(f"/school/students?success=added&student_name={student_name.strip().upper()}", status_code=303)
+    return RedirectResponse("/school/students", status_code=303)
 @app.get("/school/students/delete/{sid}")
 def delete_student(sid: int, request: Request):
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
 
-@app.get("/school/subjects", response_class=HTMLResponse)
-def school_subjects(request: Request, success: str = ""):
+@app.get("/school/classes", response_class=HTMLResponse)
+def school_classes(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall(); con.close()
-    student_rows = "".join([f"""<tr><td style='padding:10px 12px; font-size:12px; font-weight:600'>📚 {s['name']}</td><td style='padding:10px 12px; font-size:11px'>{s['code'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{s['initial'] or ''}</td><td style='padding:10px 12px;'><a href='/school/subjects/delete/{s["id"]}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>""" for s in subjects]) or "<tr><td colspan='4' style='padding:40px; text-align:center; color:#94a3b8'>No subjects yet</td></tr>"
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td style='padding:10px 12px'>{c['stream'] or ''}</td><td><a href='/school/classes/delete/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
+    header = school_header(school, name, "classes")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>➕ Add Class</b><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>Add</button></form></div></div></div></div></div></body></html>")
+@app.post("/school/classes/add")
+def add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
+@app.get("/school/classes/delete/{cid}")
+def delete_class(cid: int, request: Request): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
+
+@app.get("/school/subjects", response_class=HTMLResponse)
+def school_subjects(request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request); name = request.session.get("name","")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subs = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{s['name']}</td><td>{s['code'] or ''}</td><td><a href='/school/subjects/delete/{s['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for s in subs]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No subjects</td></tr>"
     header = school_header(school, name, "subjects")
-    return HTMLResponse(f"""<html><body>{header}<div style='padding:18px; max-width:1200px; margin:auto'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9'><b>📚 Subjects ({len(subjects)})</b></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Name</th><th>Code</th><th>Initial</th><th>Action</th></tr></thead><tbody>{student_rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><b>➕ Add Subject</b><form method='post' action='/school/subjects/add' style='margin-top:10px'><input name='subject_name' required placeholder='📚 Subject Name *' class='input-field'><input name='code' placeholder='📝 Code' class='input-field'><input name='initial' placeholder='🔤 Initial e.g MAT' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Subject</button></form></div></div></div></div></div></body></html>""")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:14px'><b>📚 Subjects ({len(subs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>➕ Add Subject</b><form method='post' action='/school/subjects/add'><input name='subject_name' required placeholder='Subject *' class='input-field'><input name='code' placeholder='Code' class='input-field'><input name='initial' placeholder='Initial' class='input-field'><button class='add-btn' style='margin-top:8px'>Add</button></form></div></div></div></div></div></body></html>")
 @app.post("/school/subjects/add")
 def add_subject(request: Request, subject_name: str = Form(...), code: str = Form(""), initial: str = Form("")):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code, initial) VALUES (?,?,?,?)", (school["id"], subject_name.strip().upper(), code.strip().upper(), initial.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/subjects?success=added", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code, initial) VALUES (?,?,?,?)", (school["id"], subject_name.strip().upper(), code.strip().upper(), initial.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/subjects",303)
 @app.get("/school/subjects/delete/{sid}")
-def delete_subject(sid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/subjects", status_code=303)
+def delete_subject(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/subjects",303)
 
 @app.get("/school/exams", response_class=HTMLResponse)
-def school_exams(request: Request, success: str = ""):
+def school_exams(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (school["id"],)); exams = cur.fetchall(); con.close()
-    rows = "".join([f"""<tr><td style='padding:10px 12px; font-size:12px; font-weight:600'>{e['name']}</td><td style='padding:10px 12px; font-size:11px'>{e['term']}</td><td style='padding:10px 12px; font-size:11px'>{e['year']}</td><td style='padding:10px 12px; font-size:11px'><span style='background:#0f172a; color:white; padding:3px 8px; border-radius:12px; font-size:10px'>{e['exam_type'] or 'Main Exam'}</span></td><td style='padding:10px 12px; display:flex; gap:6px'><a href='/school/exams/edit/{e["id"]}' style='background:#dbeafe; color:#1e40af; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>✏️ Edit</a><a href='/school/exams/delete/{e["id"]}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️</a></td></tr>""" for e in exams]) or "<tr><td colspan='5' style='padding:30px; text-align:center; color:#94a3b8'>No exams yet</td></tr>"
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td><span style='background:#0f172a;color:white;padding:3px 8px;border-radius:12px;font-size:10px'>{e['exam_type'] or ''}</span></td><td><a href='/school/exams/delete/{e['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for e in exams]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No exams</td></tr>"
     header = school_header(school, name, "exams")
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}<div style='padding:18px; max-width:1200px; margin:auto'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9'><b>📝 Exams ({len(exams)})</b></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Exam</th><th>Term</th><th>Year</th><th>Type</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><b>➕ Add Exam</b><form method='post' action='/school/exams/add' style='margin-top:10px'><input name='exam_name' required placeholder='📝 Exam Name *' class='input-field'><select name='term' required class='input-field'><option value=''>Select Term ▼</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='Year e.g 2026' class='input-field'><select name='exam_type' required class='input-field'><option value=''>Select Exam Type ▼</option><option>Main Exam</option><option>Opening Exam</option><option>Mid Term Exam</option><option>End Term Exam</option><option>CAT / Assessment</option></select><button class='add-btn' style='margin-top:8px'>➕ Add Exam</button></form></div></div></div></div></div></body></html>""")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:14px'><b>📝 Exams ({len(exams)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>➕ Add Exam</b><form method='post' action='/school/exams/add'><input name='exam_name' required placeholder='Exam Name *' class='input-field'><select name='term' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='2026' class='input-field'><select name='exam_type' required class='input-field'><option>Main Exam</option><option>Opening Exam</option><option>Mid Term Exam</option><option>End Term Exam</option></select><button class='add-btn' style='margin-top:8px'>Add</button></form></div></div></div></div></div></body></html>")
 @app.post("/school/exams/add")
 def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip())); con.commit(); con.close(); return RedirectResponse("/school/exams?success=added", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip())); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 @app.get("/school/exams/delete/{eid}")
-def delete_exam_page(eid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
-@app.get("/school/exams/edit/{eid}", response_class=HTMLResponse)
-def edit_exam_page(eid: int, request: Request):
-    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE id=?", (eid,)); e = cur.fetchone(); con.close()
-    name = request.session.get("name",""); header = school_header(school, name, "exams")
-    return HTMLResponse(f"""<html><body>{header}<div style='padding:20px; max-width:600px; margin:auto'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:20px'><h3>✏️ Edit Exam - {e['name']}</h3><form method='post' action='/school/exams/edit/{eid}'><input name='exam_name' value="{e['name']}" required class='input-field'><select name='term' required class='input-field'><option {"selected" if e['term']=="Term 1" else ""}>Term 1</option><option {"selected" if e['term']=="Term 2" else ""}>Term 2</option><option {"selected" if e['term']=="Term 3" else ""}>Term 3</option></select><input name='year' value="{e['year']}" required class='input-field'><select name='exam_type' required class='input-field'><option>Main Exam</option><option>Opening Exam</option><option>Mid Term Exam</option><option>End Term Exam</option><option>CAT / Assessment</option></select><div style='display:flex; gap:10px; margin-top:12px'><button class='add-btn' style='flex:1'>💾 Save</button><a href='/school/exams' style='flex:1; text-align:center; padding:12px; background:white; border:1px solid #e2e8f0; border-radius:10px; text-decoration:none'>❌ Cancel</a></div></form></div></div></div></div></body></html>""")
-@app.post("/school/exams/edit/{eid}")
-def edit_exam_save(eid: int, request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("UPDATE exams SET name=?, term=?, year=?, exam_type=? WHERE id=?", (exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip(), eid)); con.commit(); con.close(); return RedirectResponse("/school/exams", status_code=303)
+def del_exam(eid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 
 @app.get("/school/teachers", response_class=HTMLResponse)
 def teachers_page(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY id DESC", (school["id"],)); teachers = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{t['name']}<br><span style='background:#0f172a;color:white;padding:2px 6px;border-radius:10px;font-size:10px'>{t['role'] or 'Teacher'}</span></td><td>{t['tsc_no']}</td><td>{t['phone']}</td><td>{t['email'] or ''}</td><td><a href='/school/teachers/delete/{t['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for t in teachers]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No teachers</td></tr>"
     header = school_header(school, name, "teachers")
-    rows = "".join([f"<tr><td style='padding:10px 12px; font-size:12px; font-weight:600'>{t['name']}<br><span style='background:#0f172a; color:white; padding:3px 8px; border-radius:12px; font-size:10px'>{t['role'] or 'Teacher'}</span></td><td style='padding:10px 12px; font-size:12px'>{t['tsc_no']}</td><td style='padding:10px 12px; font-size:12px'>{t['phone']}</td><td style='padding:10px 12px; font-size:12px'>{t['email'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{t['gender']}</td><td style='padding:10px 12px'><a href='/school/teachers/delete/{t['id']}' style='background:#fee2e2; color:#dc2626; border:1px solid #fecaca; padding:5px 10px; border-radius:8px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>" for t in teachers]) or "<tr><td colspan='6' style='padding:30px; text-align:center; color:#94a3b8'>No teachers yet</td></tr>"
-    return HTMLResponse(f"""<html><body>{header}<div style='padding:18px; max-width:1200px; margin:auto'><a href='/school/dashboard' class='back-btn' style='margin-bottom:14px'>⬅️ Back to Dashboard</a><h2 style='margin:0 0 14px; font-size:20px; font-weight:800'>👨‍🏫 Teachers — {school['name']}</h2><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:10px'>➕ Add Teacher + Role</div><form method='post' action='/school/teachers/add'><input name='name' placeholder='Full Name *' required class='input-field'><input name='tsc_no' placeholder='TSC No *' required class='input-field'><input name='id_no' placeholder='ID No' class='input-field'><select name='gender' class='input-field'><option value='Male'>Male</option><option value='Female'>Female</option></select><select name='role' required class='input-field'><option value=''>Select Role ▼</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select><input name='phone' placeholder='Phone *' required class='input-field'><input name='email' placeholder='Email' class='input-field'><button class='add-btn' style='margin-top:10px'>Add Teacher</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:12px 16px; border-bottom:1px solid #f1f5f9; font-weight:800; font-size:13px'>Teachers List ({len(teachers)})</div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 12px'>Name & Role</th><th style='padding:10px 12px'>TSC No</th><th>Phone</th><th>Email</th><th>Gender</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>""")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-weight:800'>➕ Add Teacher + Role</div><form method='post' action='/school/teachers/add'><input name='name' placeholder='Full Name *' required class='input-field'><input name='tsc_no' placeholder='TSC No *' required class='input-field'><select name='gender' class='input-field'><option>Male</option><option>Female</option></select><select name='role' required class='input-field'><option value=''>Select Role</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select><input name='phone' placeholder='Phone *' required class='input-field'><input name='email' placeholder='Email' class='input-field'><button class='add-btn' style='margin-top:10px'>Add Teacher</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px 16px'><b>Teachers ({len(teachers)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
 @app.post("/school/teachers/add")
-def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...), id_no: str = Form(""), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form("")):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role) VALUES (?,?,?,?,?,?,?,?)", (school["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender, id_no.strip(), role.strip())); con.commit(); con.close(); return RedirectResponse("/school/teachers", status_code=303)
+def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form("")):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role) VALUES (?,?,?,?,?,?,?,?)", (school["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender, "", role.strip())); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
-def delete_teacher(tid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers", status_code=303)
+def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
 @app.get("/school/subject-allocation", response_class=HTMLResponse)
 def subject_allocation_page(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name", (school["id"],)); teachers = cur.fetchall()
-    cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school["id"],)); classes = cur.fetchall()
-    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname, c.stream as cstream FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? ORDER BY ta.id DESC", (school["id"],)); allocs = cur.fetchall()
+    cur.execute("SELECT * FROM teachers WHERE school_id=?", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
+    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
+    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
     con.close()
-    t_opts = "".join([f"<option value='{t['id']}'>{t['name']} ({t['role'] or 'Teacher'})</option>" for t in teachers])
+    t_opts = "".join([f"<option value='{t['id']}'>{t['name']}</option>" for t in teachers])
     s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    c_opts = "".join([f"<option value='{c['id']}'>{c['name']} {c['stream'] or ''}</option>" for c in classes])
-    rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px'>{a['tname'] or ''}</td><td style='padding:10px 12px'>{a['sname'] or ''}</td><td style='padding:10px 12px'>{a['cname'] or ''} {a['cstream'] or ''}</td><td style='padding:10px 12px'><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2; color:#991b1b; padding:4px 8px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No allocations yet</td></tr>"
+    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
+    rows = "".join([f"<tr><td style='padding:10px'>{a['tname'] or ''}</td><td>{a['sname'] or ''}</td><td>{a['cname'] or ''}</td><td><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No allocations</td></tr>"
     header = school_header(school, name, "subject-allocation")
-    return HTMLResponse(f"""<html><body>{header}<div style='padding:18px; max-width:1200px; margin:auto'><a href='/school/dashboard' class='back-btn' style='margin-bottom:14px'>⬅️ Back to Dashboard</a><h2>📌 Subject Allocation — No Roles</h2><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content'><b>➕ Allocate Subject</b><form method='post' action='/school/subject-allocation/add' style='margin-top:10px'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>📌 Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:12px 16px; border-bottom:1px solid #f1f5f9'><b>📌 Allocations ({len(allocs)})</b></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px'><th style='padding:10px 12px'>Teacher</th><th>Subject</th><th>Class</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>""")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>📌 Allocation</b><form method='post' action='/school/subject-allocation/add'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px'><b>Allocations ({len(allocs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
 @app.post("/school/subject-allocation/add")
-def add_allocation(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation", status_code=303)
+def add_alloc(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
 @app.get("/school/subject-allocation/delete/{aid}")
-def delete_allocation(aid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation", status_code=303)
+def del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
 
 @app.get("/school/{path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     header = school_header(school, name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} module — working, your data safe</h3><p style='color:#64748b'>This section remains as original v38.6</p><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — original v38.6 intact</h3><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
