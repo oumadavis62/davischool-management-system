@@ -74,7 +74,6 @@ def get_school_obj(req):
     if sid==0 or req.session.get("role")=="super_admin": return None
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close(); return s
 
-# === ORIGINAL ADMIN HEADER v38.6 ===
 def header_html(initials, name, email):
     return f"""
     <style>
@@ -96,17 +95,24 @@ def header_html(initials, name, email):
     <script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}} document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>
     """
 
+# === NEW SCHOOL HEADER WITH ACADEMIC MANAGER DROPDOWN ===
 def school_header(school, name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
     def nav(link, icon, label):
         is_active = "background:#0f172a;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
         return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
+    def sub_nav(link, icon, label):
+        is_active = "background:#f1f5f9;color:#0f172a;font-weight:800" if active==link else "color:#475569"
+        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:2px;{is_active}'>{icon} {label}</a>"
+    academic_active = active in ["exams","marks","marksheets","analysis","dean-settings","exam-settings","set-marks","record-marks","edit-marks","marks-status","spreadsheet","sba","subject-allocation"]
     return f"""
     <style>
 .ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block;transition:all 0.25s ease;cursor:pointer}}
 .ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}.ds-card:hover div{{color:white!important}}
 .input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}
 .add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.add-btn:hover{{background:#1e3a8a}}
+.academic-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;background:#f8fafc;color:#0f172a;transition:all 0.2s}}
+.academic-header:hover{{background:#0f172a;color:white}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -120,14 +126,29 @@ def school_header(school, name, active="dashboard"):
       {nav('students','🎓','Students')}
       {nav('classes','🏫','Classes & Streams')}
       {nav('subjects','📚','Subjects')}
-      {nav('exams','📝','Exams')}
-      {nav('marks','✍️','Enter Marks')}
-      {nav('marksheets','📄','MarkSheets')}
+
+      <div style='margin-bottom:4px'>
+        <div class='academic-header' onclick='toggleAcademic()' id='academicHeader'>
+          <span style='display:flex;align-items:center;gap:10px'>📖 Academic Manager</span>
+          <span id='academicArrow' style='font-size:14px'>⌃</span>
+        </div>
+        <div id='academicDropdown' style='display:block;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>
+          {sub_nav('dean-settings','⚙️','Dean Settings')}
+          {sub_nav('exams','🔧','Exam Settings')}
+          {sub_nav('marks','📄','Set Marks')}
+          {sub_nav('subject-allocation','📋','Subject Allocation')}
+          {sub_nav('marks','✏️','Record Marks')}
+          {sub_nav('marks','📄','Edit Marks')}
+          {sub_nav('marksheets','☰','Marks Status')}
+          {sub_nav('analysis','📊','Exam Analysis')}
+          {sub_nav('spreadsheet','📄','Spreadsheet')}
+          {sub_nav('sba','📋','SBA (KNEC CBA)')}
+        </div>
+      </div>
+
       {nav('ranking','🏆','Ranking')}
-      {nav('analysis','📈','Exam Analysis')}
       {nav('reports','📑','Student Reports')}
       {nav('teachers','👨‍🏫','Staff Manager')}
-      {nav('subject-allocation','📌','Subject Allocation')}
       {nav('timetable','🗓️','Smart Timetable')}
       {nav('fees','💰','Fees & Finance')}
       {nav('sms','💬','Bulk SMS Parents')}
@@ -138,9 +159,16 @@ def school_header(school, name, active="dashboard"):
         <div><b style='font-size:13px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name.upper()} • {school['name']} | Revolutionize Your School's Management!</div></div>
         <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:32px;height:32px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px'>{initials}</div></div>
       </div>
+      <script>
+      function toggleAcademic(){{
+        let d=document.getElementById('academicDropdown');
+        let a=document.getElementById('academicArrow');
+        if(d.style.display==='none'){{d.style.display='block'; a.innerText='⌃';}}
+        else {{d.style.display='none'; a.innerText='⌄';}}
+      }}
+      </script>
     """
 
-# === ORIGINAL PROFILE v38.6 FULL RESTORE ===
 @app.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request, tab: str = "personal"):
     if "email" not in request.session: return RedirectResponse("/")
@@ -206,7 +234,6 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
 def logout(request: Request):
     request.session.clear(); return RedirectResponse("/")
 
-# === ORIGINAL ADMIN OVERVIEW v38.6 FULL ===
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -287,7 +314,6 @@ def edit_school_save(sid: int, request: Request, school_name: str = Form(...), s
     else: cur.execute("UPDATE users SET email=?, full_name=? WHERE school_id=? AND role='school_admin'", (school_email.strip(), principal.strip(), sid))
     con.commit(); con.close(); return RedirectResponse("/schools/manage", status_code=303)
 
-# ===== SCHOOL DASHBOARD WITH GENDER CHART (KEPT) =====
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -349,7 +375,6 @@ def school_dashboard(request: Request):
     """
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
-# ===== STUDENTS PAGE LIKE SCREENSHOT (KEPT) =====
 @app.get("/school/students", response_class=HTMLResponse)
 def school_students(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -417,7 +442,6 @@ def add_student(request: Request, assessment_no: str = Form(...), student_name: 
 @app.get("/school/students/delete/{sid}")
 def delete_student(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/students",303)
 
-# ===== STAFF MANAGER LIKE SCREENSHOT (KEPT) =====
 @app.get("/school/teachers", response_class=HTMLResponse)
 def teachers_page(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -578,4 +602,4 @@ def school_other(path: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     header = school_header(school, name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — original intact</h3><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — coming soon (original placeholder)</h3><p style='color:#64748b; font-size:13px'>This is inside Academic Manager dropdown</p><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
