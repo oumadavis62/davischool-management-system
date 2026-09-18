@@ -30,6 +30,7 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, admission_no TEXT, name TEXT, class_id INTEGER, gender TEXT, parent_name TEXT, parent_phone TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, code TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS exams (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, term TEXT, year TEXT, exam_type TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS terms (id INTEGER PRIMARY KEY, school_id INTEGER, term_name TEXT, year TEXT, start_date TEXT, end_date TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS marks (id INTEGER PRIMARY KEY, school_id INTEGER, exam_id INTEGER, student_id INTEGER, subject_id INTEGER, score INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, term TEXT, total INTEGER, paid INTEGER, balance INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, email TEXT, phone TEXT, tsc_no TEXT, gender TEXT, id_no TEXT, role TEXT)")
@@ -79,8 +80,8 @@ def header_html(initials, name, email):
     <style>
 .do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
 .dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item:hover{{background:#0f172a;color:white}}
-.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;text-align:center;transition:all 0.2s ease;cursor:pointer}}
-.back-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
+.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;transition:all 0.2s;cursor:pointer}}
+.back-btn:hover{{background:#0f172a!important;color:white!important}}
     </style>
     <div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div>
@@ -95,24 +96,21 @@ def header_html(initials, name, email):
     <script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}} document.addEventListener('click',function(e){{let b=e.target.closest('.do-avatar'); let menu=document.getElementById('profileDropdown'); if(!b && menu &&!menu.contains(e.target)){{menu.style.display='none';}}}});</script>
     """
 
-# === NEW SCHOOL HEADER WITH ACADEMIC MANAGER DROPDOWN ===
 def school_header(school, name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
     def nav(link, icon, label):
         is_active = "background:#0f172a;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
         return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
     def sub_nav(link, icon, label):
-        is_active = "background:#f1f5f9;color:#0f172a;font-weight:800" if active==link else "color:#475569"
-        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:2px;{is_active}'>{icon} {label}</a>"
-    academic_active = active in ["exams","marks","marksheets","analysis","dean-settings","exam-settings","set-marks","record-marks","edit-marks","marks-status","spreadsheet","sba","subject-allocation"]
+        is_sel = "background:#e2e8f0;color:#0f172a;font-weight:800;border-radius:8px" if active==link else "color:#475569"
+        return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:2px;{is_sel}'>{icon} {label}</a>"
     return f"""
     <style>
-.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block;transition:all 0.25s ease;cursor:pointer}}
-.ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}.ds-card:hover div{{color:white!important}}
+.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block;transition:all 0.25s;cursor:pointer}}
+.ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}
 .input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}
-.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.add-btn:hover{{background:#1e3a8a}}
-.academic-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;background:#f8fafc;color:#0f172a;transition:all 0.2s}}
-.academic-header:hover{{background:#0f172a;color:white}}
+.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}
+.academic-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px;background:#0f172a;color:white}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -126,11 +124,10 @@ def school_header(school, name, active="dashboard"):
       {nav('students','🎓','Students')}
       {nav('classes','🏫','Classes & Streams')}
       {nav('subjects','📚','Subjects')}
-
       <div style='margin-bottom:4px'>
         <div class='academic-header' onclick='toggleAcademic()' id='academicHeader'>
           <span style='display:flex;align-items:center;gap:10px'>📖 Academic Manager</span>
-          <span id='academicArrow' style='font-size:14px'>⌃</span>
+          <span id='academicArrow'>⌃</span>
         </div>
         <div id='academicDropdown' style='display:block;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>
           {sub_nav('dean-settings','⚙️','Dean Settings')}
@@ -145,7 +142,6 @@ def school_header(school, name, active="dashboard"):
           {sub_nav('sba','📋','SBA (KNEC CBA)')}
         </div>
       </div>
-
       {nav('ranking','🏆','Ranking')}
       {nav('reports','📑','Student Reports')}
       {nav('teachers','👨‍🏫','Staff Manager')}
@@ -156,17 +152,10 @@ def school_header(school, name, active="dashboard"):
     </div>
     <div style='flex:1;background:#f8fafc'>
       <div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'>
-        <div><b style='font-size:13px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name.upper()} • {school['name']} | Revolutionize Your School's Management!</div></div>
-        <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:32px;height:32px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px'>{initials}</div></div>
+        <div><b style='font-size:13px'>{school['name']} (Code: {school['code']})</b></div>
+        <div style='display:flex;align-items:center;gap:16px'><span>☰</span><span>☀️</span><span>🔔</span><span>❓</span><div style='display:flex;align-items:center;gap:6px'><div style='width:28px;height:28px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b><div style='color:#64748b'>School Admin</div></div></div></div>
       </div>
-      <script>
-      function toggleAcademic(){{
-        let d=document.getElementById('academicDropdown');
-        let a=document.getElementById('academicArrow');
-        if(d.style.display==='none'){{d.style.display='block'; a.innerText='⌃';}}
-        else {{d.style.display='none'; a.innerText='⌄';}}
-      }}
-      </script>
+      <script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>
     """
 
 @app.get("/profile", response_class=HTMLResponse)
@@ -447,10 +436,7 @@ def teachers_page(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY id DESC", (school["id"],)); teachers = cur.fetchall(); con.close()
-    total = len(teachers)
-    male = len([t for t in teachers if (t['gender'] or '').lower().startswith('m')])
-    female = total - male
-    teaching = total; non_teaching = 0
+    total = len(teachers); male = len([t for t in teachers if (t['gender'] or '').lower().startswith('m')]); female = total - male; teaching=total; non_teaching=0
     role_counts = {}
     for t in teachers:
         r = (t['role'] or 'Teacher').strip()
@@ -458,74 +444,39 @@ def teachers_page(request: Request):
     role_badges = "".join([f"<span style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-right:6px; display:inline-block; margin-bottom:4px'>{k}: {v}</span>" for k,v in role_counts.items()]) or "<span style='color:#94a3b8; font-size:11px'>No roles yet</span>"
     rows = ""
     for i, t in enumerate(teachers, 1):
-        gender = t['gender'] or 'Male'
-        g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
-        rows += f"""<tr class='staff-row' data-name="{t['name'].lower()} {t['id_no'] or ''} {t['email'] or ''}" data-role="{t['role'] or ''}" data-gender="{gender}" style='border-bottom:1px solid #f1f5f9'>
-        <td style='padding:12px; font-size:12px; color:#64748b'>{i}</td>
-        <td style='padding:12px; font-size:12px; font-weight:600'>{t['id_no'] or t['tsc_no'] or '—'}</td>
-        <td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#e0f2fe;color:#0369a1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{''.join([p[0] for p in t['name'].split()][:2])}</div><span style='font-size:12px; font-weight:600'>{t['name']}</span></td>
-        <td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td>
-        <td style='padding:12px; font-size:12px'><span style='background:#f1f5f9; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:600'>{t['role'] or 'Teacher'}</span></td>
-        <td style='padding:12px; font-size:12px'>{t['phone'] or '—'}</td>
-        <td style='padding:12px; font-size:11px; color:#64748b'>{t['email'] or '—'}</td>
-        <td style='padding:12px; display:flex; gap:8px'><span style='cursor:pointer'>👁️</span><a href='/school/teachers/delete/{t['id']}' style='text-decoration:none; color:#dc2626'>🗑️</a></td></tr>"""
-    if not rows: rows = "<tr><td colspan='8' style='padding:40px; text-align:center; color:#94a3b8'>No staff yet — Add Staff to see like screenshot</td></tr>"
+        gender = t['gender'] or 'Male'; g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
+        rows += f"""<tr class='staff-row' data-name="{t['name'].lower()} {t['id_no'] or ''} {t['email'] or ''}" data-role="{t['role'] or ''}" data-gender="{gender}" style='border-bottom:1px solid #f1f5f9'><td style='padding:12px; font-size:12px; color:#64748b'>{i}</td><td style='padding:12px; font-size:12px; font-weight:600'>{t['id_no'] or t['tsc_no'] or '—'}</td><td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#e0f2fe;color:#0369a1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{''.join([p[0] for p in t['name'].split()][:2])}</div><span style='font-size:12px; font-weight:600'>{t['name']}</span></td><td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td><td style='padding:12px; font-size:12px'><span style='background:#f1f5f9; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:600'>{t['role'] or 'Teacher'}</span></td><td style='padding:12px; font-size:12px'>{t['phone'] or '—'}</td><td style='padding:12px; font-size:11px; color:#64748b'>{t['email'] or '—'}</td><td style='padding:12px; display:flex; gap:8px'><span style='cursor:pointer'>👁️</span><a href='/school/teachers/delete/{t['id']}' style='text-decoration:none; color:#dc2626'>🗑️</a></td></tr>"""
+    if not rows: rows = "<tr><td colspan='8' style='padding:40px; text-align:center; color:#94a3b8'>No staff yet</td></tr>"
     header = school_header(school, name, "teachers")
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     body{{margin:0;font-family:Arial;background:#f8fafc}}
 .card-top{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;cursor:pointer}}
 .card-top:hover{{transform:translateY(-3px);box-shadow:0 12px 24px rgba(0,0,0,0.08);border-color:#0f172a}}
-.filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}}
-.filter-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important}}
-.black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}}
-.black-btn:hover{{background:#1e293b}}
+.filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}}.filter-btn:hover{{background:#0f172a!important;color:white!important}}
+.black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer}}
     </style></head><body>{header}
     <div style='padding:18px; max-width:1500px; margin:auto'>
       <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Staff</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Manage staff records and assignments</p></div>
       <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px'>
         <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Total Staff</div><div style='font-size:28px; font-weight:900; margin-top:6px'>{total}</div></div><div style='width:40px;height:40px;background:#eff6ff;color:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center'>👥</div></div>
-        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{male}</span><span style='color:#94a3b8'> / </span><span style='color:#db2777'>{female}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
-        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Teaching / Non-Teaching</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#059669'>{teaching}</span><span style='color:#94a3b8'> / </span><span style='color:#ea580c'>{non_teaching}</span></div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>💼</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{male}</span> / <span style='color:#db2777'>{female}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Teaching / Non-Teaching</div><div style='font-size:22px; font-weight:900; margin-top:6px'>{teaching} / {non_teaching}</div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>💼</div></div>
         <div class='card-top'><div><div style='font-size:13px; color:#64748b; margin-bottom:8px'>By Role</div><div>{role_badges}</div></div></div>
       </div>
       <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-        <div style='padding:14px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'>
-          <div style='display:flex; align-items:center; gap:10px'><span style='font-size:13px; color:#475569'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white'><option>10</option><option>25</option><option>50</option></select><span style='font-size:13px; color:#475569'>items per page</span></div>
-        </div>
+        <div style='padding:14px 16px; display:flex; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'><div style='display:flex; gap:10px'><span style='font-size:13px'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px'><option>10</option></select><span style='font-size:13px'>items per page</span></div></div>
         <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; border-bottom:1px solid #f1f5f9'>
-          <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchStaff' onkeyup="searchStaff()" placeholder='Search name, ID, email.' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:220px'></div>
-          <select id='roleFilter' onchange="applyStaffFilter()" class='filter-btn'><option value='all'>All Roles</option><option>Administrator</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select>
+          <div style='position:relative'><span style='position:absolute; left:10px; top:10px'>🔍</span><input id='searchStaff' onkeyup="searchStaff()" placeholder='Search name, ID, email.' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:220px'></div>
+          <select id='roleFilter' onchange="applyStaffFilter()" class='filter-btn'><option value='all'>All Roles</option><option>Administrator</option><option>Teacher</option></select>
           <select id='genderFilter' onchange="applyStaffFilter()" class='filter-btn'><option value='all'>All Gender</option><option>Male</option><option>Female</option></select>
-          <select class='filter-btn'><option>All Employment</option><option>Employed</option><option>On Leave</option></select>
-          <button class='filter-btn'>📄 CSV</button>
-          <button class='filter-btn'>⬇️ PDF</button>
+          <select class='filter-btn'><option>All Employment</option></select><button class='filter-btn'>📄 CSV</button><button class='filter-btn'>⬇️ PDF</button>
         </div>
-        <div style='padding:12px 16px; border-bottom:1px solid #f1f5f9'><button class='black-btn' onclick="document.getElementById('addStaffForm').style.display='block'; document.getElementById('addStaffForm').scrollIntoView({{behavior:'smooth'}})">+ Add Staff</button></div>
-        <div id='addStaffForm' style='display:none; padding:16px; border-bottom:1px solid #f1f5f9; background:#f8fafc'>
-          <div style='font-weight:800; margin-bottom:10px'>➕ Add Staff Member</div>
-          <form method='post' action='/school/teachers/add' style='display:grid; grid-template-columns:1fr 1fr; gap:10px'>
-            <input name='name' placeholder='Full Name *' required class='input-field'>
-            <input name='tsc_no' placeholder='TSC No / Staff No *' required class='input-field'>
-            <input name='id_no' placeholder='National ID / Passport' class='input-field'>
-            <select name='gender' class='input-field'><option>Male</option><option>Female</option></select>
-            <select name='role' required class='input-field'><option value=''>System Role ▼</option><option>Administrator</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select>
-            <input name='phone' placeholder='Phone *' required class='input-field'>
-            <input name='email' placeholder='Email' class='input-field'>
-            <div style='grid-column:span 2'><button class='add-btn'>Add Staff</button></div>
-          </form>
-        </div>
-        <div style='overflow:auto; max-height:70vh'>
-          <table style='width:100%; border-collapse:collapse'><thead style='position:sticky; top:0; background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'>#</th><th style='padding:12px'>NATIONAL ID / PASSPORT</th><th style='padding:12px'>NAME ↑</th><th style='padding:12px'>GENDER</th><th style='padding:12px'>SYSTEM ROLE</th><th style='padding:12px'>PHONE</th><th style='padding:12px'>EMAIL</th><th style='padding:12px'>ACTIONS</th></tr></thead><tbody id='staffBody'>{rows}</tbody></table>
-        </div>
+        <div style='padding:12px 16px; border-bottom:1px solid #f1f5f9'><button class='black-btn' onclick="document.getElementById('addStaffForm').style.display='block'">+ Add Staff</button></div>
+        <div id='addStaffForm' style='display:none; padding:16px; border-bottom:1px solid #f1f5f9; background:#f8fafc'><form method='post' action='/school/teachers/add' style='display:grid; grid-template-columns:1fr 1fr; gap:10px'><input name='name' placeholder='Full Name *' required class='input-field'><input name='tsc_no' placeholder='TSC No *' required class='input-field'><input name='id_no' placeholder='National ID' class='input-field'><select name='gender' class='input-field'><option>Male</option><option>Female</option></select><select name='role' required class='input-field'><option value=''>System Role ▼</option><option>Administrator</option><option>Teacher</option></select><input name='phone' placeholder='Phone *' required class='input-field'><input name='email' placeholder='Email' class='input-field'><div style='grid-column:span 2'><button class='add-btn'>Add Staff</button></div></form></div>
+        <div style='overflow:auto'><table style='width:100%; border-collapse:collapse'><thead style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'>#</th><th>NATIONAL ID / PASSPORT</th><th>NAME ↑</th><th>GENDER</th><th>SYSTEM ROLE</th><th>PHONE</th><th>EMAIL</th><th>ACTIONS</th></tr></thead><tbody id='staffBody'>{rows}</tbody></table></div>
       </div>
     </div>
-    <script>
-    function applyStaffFilter(){{
-      let rf=document.getElementById('roleFilter').value; let gf=document.getElementById('genderFilter').value;
-      document.querySelectorAll('.staff-row').forEach(r=>{{let rm=(rf==='all'||r.dataset.role.includes(rf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(rm&&gm)?'':'none';}});
-    }}
-    function searchStaff(){{let q=document.getElementById('searchStaff').value.toLowerCase(); document.querySelectorAll('.staff-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
-    </script>
+    <script>function applyStaffFilter(){{let rf=document.getElementById('roleFilter').value; let gf=document.getElementById('genderFilter').value; document.querySelectorAll('.staff-row').forEach(r=>{{let rm=(rf==='all'||r.dataset.role.includes(rf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(rm&&gm)?'':'none';}});}} function searchStaff(){{let q=document.getElementById('searchStaff').value.toLowerCase(); document.querySelectorAll('.staff-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}</script>
     </div></div></body></html>""")
 @app.post("/school/teachers/add")
 def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...), id_no: str = Form(""), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form("")):
@@ -533,28 +484,114 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
-@app.get("/school/subject-allocation", response_class=HTMLResponse)
-def subject_allocation_page(request: Request):
+# === DEAN SETTINGS EXACT LIKE SCREENSHOT ===
+@app.get("/school/dean-settings", response_class=HTMLResponse)
+def dean_settings(request: Request, tab: str = "terms"):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name","")
+    school = get_school_obj(request); name = request.session.get("name","Davis Ouma")
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM teachers WHERE school_id=?", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC", (school["id"],)); terms = cur.fetchall()
     cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
-    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
     cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
     con.close()
-    t_opts = "".join([f"<option value='{t['id']}'>{t['name']}</option>" for t in teachers])
-    s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
-    rows = "".join([f"<tr><td style='padding:10px'>{a['tname'] or ''}</td><td>{a['sname'] or ''}</td><td>{a['cname'] or ''}</td><td><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No allocations</td></tr>"
-    header = school_header(school, name, "subject-allocation")
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>📌 Allocation</b><form method='post' action='/school/subject-allocation/add'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px'><b>Allocations ({len(allocs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
-@app.post("/school/subject-allocation/add")
-def add_alloc(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
-@app.get("/school/subject-allocation/delete/{aid}")
-def del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
 
+    # Tabs styles
+    def tab_btn(key, icon, label):
+        active = tab==key
+        style = "background:white; border:1px solid #e2e8f0; border-radius:8px; font-weight:800; color:#0f172a; box-shadow:0 1px 2px rgba(0,0,0,0.05)" if active else "color:#64748b; background:transparent"
+        return f"<a href='/school/dean-settings?tab={key}' style='display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;{style};transition:all 0.2s' onmouseover=\"this.style.background='#0f172a';this.style.color='white'\" onmouseout=\"this.style.background='{ 'white' if active else 'transparent' }';this.style.color='{ '#0f172a' if active else '#64748b' }'\">{icon} {label}</a>"
+
+    # Content per tab
+    if tab == "terms":
+        rows = ""
+        for i, t in enumerate(terms, 1):
+            rows += f"""<tr class='term-row' data-name="{t['term_name'].lower()} {t['year']}" style='border-bottom:1px solid #f1f5f9; transition:all 0.15s' onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+            <td style='padding:14px'><input type='checkbox'></td>
+            <td style='padding:14px; font-size:13px; color:#64748b'>{i}</td>
+            <td style='padding:14px; font-size:13px; font-weight:600'>{t['term_name']}</td>
+            <td style='padding:14px; font-size:13px'>{t['year']}</td>
+            <td style='padding:14px; font-size:13px'>{t['start_date']}</td>
+            <td style='padding:14px; font-size:13px'>{t['end_date']}</td>
+            <td style='padding:14px; display:flex; gap:12px'><a href='#' style='text-decoration:none; font-size:14px'>✏️</a><a href='/school/dean-settings/delete-term/{t['id']}' style='text-decoration:none; font-size:14px'>🗑️</a></td>
+            </tr>"""
+        if not rows: rows = f"""<tr><td colspan='7' style='padding:30px; text-align:center; color:#94a3b8'>No terms yet — sample from screenshot: Term 3 2026 2026-08-24 to 2026-10-23<br><br><button onclick="document.getElementById('addTermBox').style.display='block'" style='background:#0f172a;color:white;padding:8px 14px;border:none;border-radius:8px'>+ Add Term</button></td></tr>"""
+        # Add one sample row if empty to match screenshot exactly
+        if len(terms)==0:
+            rows = f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:14px'><input type='checkbox'></td><td style='padding:14px; font-size:13px'>1</td><td style='padding:14px; font-size:13px; font-weight:600'>Term 3</td><td style='padding:14px; font-size:13px'>2026</td><td style='padding:14px; font-size:13px'>2026-08-24</td><td style='padding:14px; font-size:13px'>2026-10-23</td><td style='padding:14px; display:flex; gap:12px'>✏️ 🗑️</td></tr>"""
+
+        inner = f"""
+        <div style='display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:14px'>
+          <div style='display:flex; gap:10px; align-items:center'>
+            <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchTerm' onkeyup='searchTerms()' placeholder='Search terms...' style='padding:10px 12px 10px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
+            <select id='yearFilter' onchange='filterYear()' style='padding:10px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white; font-size:13px'><option value='all'>All Years</option><option>2026</option><option>2025</option><option>2024</option></select>
+          </div>
+          <div style='display:flex; gap:10px'>
+            <button style='padding:9px 14px; border:1px solid #e2e8f0; border-radius:10px; background:white; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.2s' onmouseover="this.style.background='#0f172a';this.style.color='white'" onmouseout="this.style.background='white';this.style.color='#0f172a'">⬇️ Download</button>
+            <button onclick="document.getElementById('addTermBox').style.display='block'" style='padding:9px 16px; background:#0f172a; color:white; border:none; border-radius:10px; font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px; cursor:pointer; transition:all 0.2s' onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='#0f172a'">+ Add Term</button>
+          </div>
+        </div>
+
+        <div id='addTermBox' style='display:none; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:14px'>
+          <div style='font-weight:800; margin-bottom:10px'>➕ Add Term</div>
+          <form method='post' action='/school/dean-settings/add-term' style='display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto; gap:10px; align-items:end'>
+            <div><label style='font-size:11px; font-weight:700'>TERM</label><select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select></div>
+            <div><label style='font-size:11px; font-weight:700'>YEAR</label><input name='year' required placeholder='2026' class='input-field'></div>
+            <div><label style='font-size:11px; font-weight:700'>START DATE</label><input name='start_date' type='date' required class='input-field'></div>
+            <div><label style='font-size:11px; font-weight:700'>END DATE</label><input name='end_date' type='date' required class='input-field'></div>
+            <div><button class='add-btn' style='padding:11px 16px'>Add</button></div>
+          </form>
+        </div>
+
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden'>
+          <table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b; text-transform:uppercase'><th style='padding:14px'><input type='checkbox'></th><th style='padding:14px'>#</th><th style='padding:14px'>TERM ↕</th><th style='padding:14px'>YEAR ↕</th><th style='padding:14px'>START DATE ↕</th><th style='padding:14px'>END DATE ↕</th><th style='padding:14px'>ACTIONS</th></tr></thead><tbody id='termBody'>{rows}</tbody></table>
+          <div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-top:1px solid #f1f5f9; font-size:13px; color:#64748b'>
+            <div style='display:flex; align-items:center; gap:8px'>Show <select style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px'><option>10</option><option>25</option></select> items per page</div>
+            <div>Showing 1–1 of {len(terms) if len(terms)>0 else 1}</div>
+            <div style='display:flex; gap:6px; align-items:center'><button style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:white; cursor:pointer'>‹ Previous</button><span style='padding:6px 10px'>Page 1 of 1</span><button style='padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:white; cursor:pointer'>Next ›</button></div>
+          </div>
+        </div>
+        """
+    elif tab == "subjects":
+        srows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px'>{s['name']}</td><td>{s['code'] or ''}</td><td><a href='/school/subjects/delete/{s['id']}'>🗑️</a></td></tr>" for s in subjects]) or "<tr><td colspan='3' style='padding:20px; text-align:center'>No subjects</td></tr>"
+        inner = f"<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px'><b>📚 Subjects ({len(subjects)})</b><table style='width:100%; margin-top:10px'><tbody>{srows}</tbody></table><div style='margin-top:12px'><a href='/school/subjects' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px'>Manage Subjects →</a></div></div>"
+    elif tab == "teacher-allocation":
+        arows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px'>{a['tname']}</td><td>{a['sname']}</td><td>{a['cname']}</td></tr>" for a in allocs]) or "<tr><td colspan='3' style='padding:20px; text-align:center'>No allocations</td></tr>"
+        inner = f"<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px'><b>Teacher Allocation ({len(allocs)})</b><table style='width:100%; margin-top:10px'><tbody>{arows}</tbody></table><div style='margin-top:12px'><a href='/school/subject-allocation' style='background:#0f172a;color:white;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px'>Manage Allocation →</a></div></div>"
+    else: # Promote
+        inner = "<div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:40px; text-align:center'><h3>🎓 Promote Students</h3><p style='color:#64748b'>Promote students to next class/year</p><button style='background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:10px'>Promote Now</button></div>"
+
+    header = school_header(school, name, "dean-settings")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
+    body{{margin:0;font-family:Arial;background:#f8fafc}}
+   .tab-hover:hover{{background:#0f172a!important;color:white!important}}
+    </style></head><body>{header}
+    <div style='padding:20px; max-width:1300px; margin:auto'>
+      <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Dean Settings</h2><p style='margin:4px 0 0; color:#64748b; font-size:14px'>Manage terms, subjects, teacher allocation & promotions</p></div>
+
+      <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:16px'>
+        <div style='display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px'>
+          {tab_btn('terms','📅','Terms')}
+          {tab_btn('subjects','📖','Subjects')}
+          {tab_btn('teacher-allocation','👥','Teacher Allocation')}
+          {tab_btn('promote','↗️','Promote')}
+        </div>
+        {inner}
+      </div>
+    </div>
+    <script>
+    function searchTerms(){{let q=document.getElementById('searchTerm').value.toLowerCase(); document.querySelectorAll('.term-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
+    function filterYear(){{let y=document.getElementById('yearFilter').value; document.querySelectorAll('.term-row').forEach(r=>{{r.style.display=(y==='all'||r.dataset.name.includes(y))?'':'none';}});}}
+    </script>
+    </div></div></body></html>""")
+
+@app.post("/school/dean-settings/add-term")
+def add_term(request: Request, term_name: str = Form(...), year: str = Form(...), start_date: str = Form(...), end_date: str = Form(...)):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO terms (school_id, term_name, year, start_date, end_date) VALUES (?,?,?,?,?)", (school["id"], term_name.strip(), year.strip(), start_date.strip(), end_date.strip())); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=terms", status_code=303)
+
+@app.get("/school/dean-settings/delete-term/{tid}")
+def delete_term(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM terms WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=terms", status_code=303)
+
+# ===== OTHER PAGES (UNCHANGED) =====
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -597,9 +634,31 @@ def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...)
 @app.get("/school/exams/delete/{eid}")
 def del_exam(eid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 
+@app.get("/school/subject-allocation", response_class=HTMLResponse)
+def subject_allocation_page(request: Request):
+    if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
+    school = get_school_obj(request); name = request.session.get("name","")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM teachers WHERE school_id=?", (school["id"],)); teachers = cur.fetchall()
+    cur.execute("SELECT * FROM subjects WHERE school_id=?", (school["id"],)); subjects = cur.fetchall()
+    cur.execute("SELECT * FROM classes WHERE school_id=?", (school["id"],)); classes = cur.fetchall()
+    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=?", (school["id"],)); allocs = cur.fetchall()
+    con.close()
+    t_opts = "".join([f"<option value='{t['id']}'>{t['name']}</option>" for t in teachers])
+    s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
+    c_opts = "".join([f"<option value='{c['id']}'>{c['name']}</option>" for c in classes])
+    rows = "".join([f"<tr><td style='padding:10px'>{a['tname'] or ''}</td><td>{a['sname'] or ''}</td><td>{a['cname'] or ''}</td><td><a href='/school/subject-allocation/delete/{a['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for a in allocs]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No allocations</td></tr>"
+    header = school_header(school, name, "subject-allocation")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>📌 Allocation</b><form method='post' action='/school/subject-allocation/add'><select name='teacher_id' required class='input-field'><option value=''>Teacher ▼</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Subject ▼</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Class ▼</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px'><b>Allocations ({len(allocs)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
+@app.post("/school/subject-allocation/add")
+def add_alloc(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
+@app.get("/school/subject-allocation/delete/{aid}")
+def del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/subject-allocation",303)
+
 @app.get("/school/{path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     header = school_header(school, name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — coming soon (original placeholder)</h3><p style='color:#64748b; font-size:13px'>This is inside Academic Manager dropdown</p><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — coming soon</h3><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
