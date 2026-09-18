@@ -79,8 +79,8 @@ def header_html(initials, name, email):
     <style>
 .do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}
 .dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item:hover{{background:#0f172a;color:white}}
-.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;text-align:center;transition:all 0.2s ease;cursor:pointer}}
-.back-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,0.25)}}
+.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;transition:all 0.2s;cursor:pointer}}
+.back-btn:hover{{background:#0f172a!important;color:white!important}}
     </style>
     <div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'>
         <div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div>
@@ -102,10 +102,12 @@ def school_header(school, name, active="dashboard"):
         return f"<a href='/school/{link}' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
     return f"""
     <style>
-.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block;transition:all 0.25s ease;cursor:pointer}}
-.ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}.ds-card:hover div{{color:white!important}}
+.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block;transition:all 0.25s;cursor:pointer}}
+.ds-card:hover{{background:#0f172a!important;color:white!important;transform:translateY(-3px);box-shadow:0 12px 24px rgba(15,23,42,0.35)}}
 .input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}
-.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.add-btn:hover{{background:#1e3a8a}}
+.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}
+.back-btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px;transition:all 0.2s;cursor:pointer}}
+.back-btn:hover{{background:#0f172a!important;color:white!important}}
     </style>
     <div style='display:flex;min-height:100vh'>
     <div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'>
@@ -125,7 +127,7 @@ def school_header(school, name, active="dashboard"):
       {nav('ranking','🏆','Ranking')}
       {nav('analysis','📈','Exam Analysis')}
       {nav('reports','📑','Student Reports')}
-      {nav('teachers','👨‍🏫','Teachers')}
+      {nav('teachers','👨‍🏫','Staff Manager')}
       {nav('subject-allocation','📌','Subject Allocation')}
       {nav('timetable','🗓️','Smart Timetable')}
       {nav('fees','💰','Fees & Finance')}
@@ -134,7 +136,7 @@ def school_header(school, name, active="dashboard"):
     </div>
     <div style='flex:1;background:#f8fafc'>
       <div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'>
-        <div><b style='font-size:13px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name.upper()} • {school['name']} | Revolutionize Your School's Management!</div></div>
+        <div><b style='font-size:13px'>DaviSchool Management System 🚀</b><div style='font-size:11px;color:#64748b'>{name.upper()} • {school['name']}</div></div>
         <div style='display:flex;align-items:center;gap:10px'><span style='font-size:11px;background:#dbeafe;color:#1e40af;padding:6px 10px;border-radius:20px'>{school['name']}</span><div style='width:32px;height:32px;background:#dcfce7;color:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px'>{initials}</div></div>
       </div>
     """
@@ -153,17 +155,13 @@ def profile_page(request: Request, tab: str = "personal"):
     active_log = "border-bottom:3px solid #0f172a; color:#0f172a; font-weight:800" if tab=="activity" else "color:#64748b"
     left_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; text-align:center; height:fit-content; display:flex; flex-direction:column'><div><div style='width:80px; height:80px; background:#a8d8ff; color:#1e3a8a; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:28px; margin:0 auto 12px'>{initials}</div><div style='font-weight:800; font-size:16px'>{name}</div><div style='background:#e0f2fe; color:#0369a1; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; display:inline-block; margin:6px 0'>Super Admin</div><div style='font-size:12px; color:#64748b; margin-top:4px; word-break:break-all'>{email}</div></div><a href='/dashboard' class='back-btn' style='margin-top:20px; justify-content:center'>⬅️ Back to Dashboard</a></div>"""
     if tab == "personal":
-        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='font-weight:800; margin-bottom:16px; font-size:14px'>👤 Personal Information</div><form method='post' action='/profile/update'><label style='font-size:11px; font-weight:700; color:#475569'>👤 Full Name</label><input name='full_name' value="{name}" style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px; background:#f0f9ff'><label style='font-size:11px; font-weight:700; color:#475569'>📧 Email</label><input value="{email}" disabled style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px; background:#f0f9ff'><label style='font-size:11px; font-weight:700; color:#475569'>📱 Phone</label><input name='phone' value="+254748588874" style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px; background:#f0f9ff'><label style='font-size:11px; font-weight:700; color:#475569'>🏫 Organization</label><input value="Davischool Platform" disabled style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px; background:#f0f9ff'><div style='text-align:right; margin-top:16px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px; font-weight:700; font-size:12px'>💾 Save Changes</button></div></form></div>"""
+        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='font-weight:800; margin-bottom:16px'>👤 Personal</div><form method='post' action='/profile/update'><input name='full_name' value="{name}" style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px'><input value="{email}" disabled style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px'><input name='phone' value="+254748588874" style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 12px'><div style='text-align:right'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px'>💾 Save</button></div></form></div>"""
     elif tab == "security":
-        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='font-weight:800; margin-bottom:16px; font-size:14px'>🔒 Security Settings</div><form method='post' action='/profile/change-password'><label style='font-size:11px; font-weight:700; color:#475569'>🔑 Current Password</label><input type='password' name='current_pass' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px; background:#f8fafc'><label style='font-size:11px; font-weight:700; color:#475569'>🆕 New Password</label><input type='password' name='new_pass' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px; background:#f8fafc'><label style='font-size:11px; font-weight:700; color:#475569'>✅ Confirm New Password</label><input type='password' name='confirm_pass' required style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px; background:#f8fafc'><div style='text-align:right; margin-top:16px'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px; font-weight:700; font-size:12px'>🔒 Update Password</button></div></form></div>"""
+        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='font-weight:800; margin-bottom:16px'>🔒 Security</div><form method='post' action='/profile/change-password'><input type='password' name='current_pass' required placeholder='Current' style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px'><input type='password' name='new_pass' required placeholder='New' style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px'><input type='password' name='confirm_pass' required placeholder='Confirm' style='width:100%; padding:11px; border:1px solid #e2e8f0; border-radius:10px; margin:4px 0 14px'><div style='text-align:right'><button style='background:#0f172a; color:white; padding:10px 18px; border:none; border-radius:10px'>🔒 Update</button></div></form></div>"""
     else:
-        log_rows_html = ""
-        for l in logs:
-            icon = "👁️" if "Viewed" in l['action'] else "🏫" if "Registered" in l['action'] else "🔐" if "Auth code" in l['action'] else "📊"
-            log_rows_html += f"""<div style='padding:12px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; gap:12px'><div style='flex:1'><div style='font-weight:700; font-size:12px'>{icon} {l['action']}</div><div style='font-size:11px; color:#64748b'>{l['details']}</div></div><div style='font-size:10px; color:#64748b; white-space:nowrap'>{l['timestamp']}</div></div>"""
-        if not log_rows_html: log_rows_html = "<div style='padding:30px; text-align:center; color:#94a3b8'>No activity yet 📭</div>"
-        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px'><div style='font-weight:800; font-size:14px'>📜 Activity Log</div><a href='/profile/clear-logs' style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:8px; font-size:11px; text-decoration:none; color:#475569'>🧹 Clear</a></div><div style='font-size:11px; color:#64748b; margin-bottom:14px'>{total_events} events — EAT</div><div style='border-top:1px solid #f1f5f9; padding-top:8px; max-height:65vh; overflow:auto'>{log_rows_html}</div></div>"""
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}<div style='padding:20px; max-width:1100px; margin:auto'><div style='margin-bottom:16px'><h2 style='margin:0; font-size:20px'>👤 My Profile</h2></div><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:0 16px; display:flex; gap:20px; margin-bottom:16px'><a href='/profile?tab=personal' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_personal}'>👤 Personal</a><a href='/profile?tab=security' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_security}'>🔒 Security</a><a href='/profile?tab=activity' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_log}'>📜 Activity Log</a></div><div style='display:grid; grid-template-columns:300px 1fr; gap:20px'>{left_card}{right_card}</div></div></body></html>""")
+        log_rows_html = "".join([f"""<div style='padding:12px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><div><div style='font-weight:700; font-size:12px'>{l['action']}</div><div style='font-size:11px; color:#64748b'>{l['details']}</div></div><div style='font-size:10px; color:#64748b'>{l['timestamp']}</div></div>""" for l in logs]) or "<div style='padding:30px; text-align:center; color:#94a3b8'>No activity yet</div>"
+        right_card = f"""<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px'><div style='display:flex; justify-content:space-between'><div style='font-weight:800'>📜 Activity Log</div><a href='/profile/clear-logs' style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:8px; font-size:11px; text-decoration:none'>🧹 Clear</a></div><div style='font-size:11px; color:#64748b; margin:6px 0 14px'>{total_events} events</div><div style='max-height:65vh; overflow:auto'>{log_rows_html}</div></div>"""
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}<div style='padding:20px; max-width:1100px; margin:auto'><div style='background:white; border:1px solid #e2e8f0; border-radius:12px; padding:0 16px; display:flex; gap:20px; margin-bottom:16px'><a href='/profile?tab=personal' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_personal}'>👤 Personal</a><a href='/profile?tab=security' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_security}'>🔒 Security</a><a href='/profile?tab=activity' style='padding:12px 4px; text-decoration:none; font-size:13px; {active_log}'>📜 Activity Log</a></div><div style='display:grid; grid-template-columns:300px 1fr; gap:20px'>{left_card}{right_card}</div></div></body></html>""")
 
 @app.get("/profile/clear-logs")
 def clear_logs(request: Request):
@@ -174,22 +172,22 @@ def clear_logs(request: Request):
 def profile_update(request: Request, full_name: str = Form(...), phone: str = Form(...)):
     if "email" not in request.session: return RedirectResponse("/")
     email = request.session.get("email"); con = get_db(); cur = con.cursor(); cur.execute("UPDATE users SET full_name=? WHERE email=?", (full_name, email)); con.commit(); con.close()
-    request.session["name"] = full_name; log_activity(email, "✏️ Updated profile", f"Name: {full_name}"); return RedirectResponse("/profile?tab=personal", status_code=303)
+    request.session["name"] = full_name; return RedirectResponse("/profile?tab=personal", status_code=303)
 @app.post("/profile/change-password")
 def change_password(request: Request, current_pass: str = Form(...), new_pass: str = Form(...), confirm_pass: str = Form(...)):
     if "email" not in request.session: return RedirectResponse("/")
     email = request.session.get("email")
-    if new_pass!= confirm_pass: return HTMLResponse(f"❌ Passwords don't match <a href='/profile?tab=security'>Back</a>")
+    if new_pass!= confirm_pass: return HTMLResponse("❌ Mismatch <a href='/profile?tab=security'>Back</a>")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email, current_pass)); u = cur.fetchone()
-    if not u: con.close(); return HTMLResponse(f"❌ Wrong current password <a href='/profile?tab=security'>Back</a>")
+    if not u: con.close(); return HTMLResponse("❌ Wrong password <a href='/profile?tab=security'>Back</a>")
     cur.execute("UPDATE users SET password=? WHERE email=?", (new_pass, email)); con.commit(); con.close()
-    log_activity(email, "🔒 Changed password", "Password updated"); return RedirectResponse("/profile?tab=security", status_code=303)
+    return RedirectResponse("/profile?tab=security", status_code=303)
 
 @app.get("/health")
 def health(): return PlainTextResponse("OK")
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8fafc;margin:0'><div style='background:white;padding:36px 32px;border-radius:16px;border:1px solid #e2e8f0;width:400px'><div style='text-align:center;margin-bottom:24px'><div style='width:52px;height:52px;background:#0f172a;color:white;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;margin:0 auto'>D</div><h2 style='margin:12px 0 4px'>Davischool</h2><p style='font-size:11px;color:#64748b'>ONE LOGIN FOR ALL ROLES 🔐</p></div><form method='post' action='/login'><input name='email' placeholder='📧 Email' required style='width:100%;padding:12px;margin:6px 0 12px;border:1px solid #e2e8f0;border-radius:10px'><input name='password' type='password' placeholder='🔑 Password' required style='width:100%;padding:12px;margin:6px 0 20px;border:1px solid #e2e8f0;border-radius:10px'><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>Sign In → Auto Redirect by Role</button></form></div></body></html>"""
+    return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'></head><body style='font-family:Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8fafc;margin:0'><div style='background:white;padding:36px 32px;border-radius:16px;border:1px solid #e2e8f0;width:400px'><div style='text-align:center;margin-bottom:24px'><div style='width:52px;height:52px;background:#0f172a;color:white;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;margin:0 auto'>D</div><h2 style='margin:12px 0 4px'>Davischool</h2></div><form method='post' action='/login'><input name='email' placeholder='📧 Email' required style='width:100%;padding:12px;margin:6px 0 12px;border:1px solid #e2e8f0;border-radius:10px'><input name='password' type='password' placeholder='🔑 Password' required style='width:100%;padding:12px;margin:6px 0 20px;border:1px solid #e2e8f0;border-radius:10px'><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>Sign In →</button></form></div></body></html>"""
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u = cur.fetchone()
@@ -198,8 +196,8 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     con.close()
     if not u: return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
     request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0
-    if u["role"]!= "super_admin" and school_info: log_activity(u["email"], f"🏫 School login: {school_info['name']}", ""); return RedirectResponse("/school/dashboard", status_code=303)
-    log_activity(u["email"], "🔓 Super Admin Logged in", "Viewed dashboard"); return RedirectResponse("/dashboard", status_code=303)
+    if u["role"]!= "super_admin" and school_info: return RedirectResponse("/school/dashboard", status_code=303)
+    return RedirectResponse("/dashboard", status_code=303)
 @app.get("/logout")
 def logout(request: Request):
     request.session.clear(); return RedirectResponse("/")
@@ -214,11 +212,8 @@ def dashboard(request: Request):
     con.close()
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
-    rows = ""
-    for s in recent:
-        rows += f"<tr><td style='padding:10px 14px; font-size:12px; font-weight:600'>{s['name']}</td><td style='padding:10px 14px; font-size:12px'>{s['location']}</td><td style='padding:10px 14px'><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Active</span></td><td style='padding:10px 14px; font-size:11px; color:#64748b'>Today</td></tr>"
-    if not rows: rows = "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
-    content = f"""<div style='padding:20px; max-width:1400px; margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Welcome {name}</p></div><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>📈 Up 12% from last month</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>{total}</div><div style='font-size:11px; color:#16a34a'>🟢 100% operational</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0 8px'>KES {total*15000 if total>0 else 0}</div><div style='font-size:11px; color:#16a34a'>💹 +8% monthly growth</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0 8px'>0</div><div style='font-size:11px; color:#64748b'>👥 Avg 350 per school</div></div></div><div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th style='padding:10px 14px'>Location</th><th style='padding:10px 14px'>Status</th><th style='padding:10px 14px'>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#0f172a; font-weight:600; font-size:13px; margin-bottom:10px'>🏫 Manage Schools</a><a href='/schools/manage' style='display:block; text-align:center; background:white; border:1px solid #e2e8f0; padding:10px; border-radius:10px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px'>➕ Register New School</a></div><div style='background:#0f172a; border-radius:14px; padding:16px; color:white'><div style='font-weight:800; font-size:14px; margin-bottom:4px'>📊 Davischool Analytics</div><div style='font-size:11px; color:#94a3b8; margin-bottom:14px'>🛠️ All {total} schools are active</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:10px; color:#94a3b8; letter-spacing:0.5px; margin-bottom:6px'>🔧 PLATFORM HEALTH</div><div style='color:#22c55e; font-weight:800; font-size:14px'>✅ 99.9% Uptime</div><div style='height:4px; background:#334155; border-radius:10px; margin-top:8px'><div style='width:99%; height:100%; background:#22c55e; border-radius:10px'></div></div></div></div></div></div></div>"""
+    rows = "".join([f"<tr><td style='padding:10px 14px; font-size:12px; font-weight:600'>{s['name']}</td><td style='padding:10px 14px; font-size:12px'>{s['location']}</td><td style='padding:10px 14px'><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Active</span></td><td style='padding:10px 14px; font-size:11px; color:#64748b'>Today</td></tr>" for s in recent]) or "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
+    content = f"""<div style='padding:20px; max-width:1400px; margin:auto'><h2 style='margin:0; font-size:22px; font-weight:800'>📊 School Overview</h2><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:18px 0'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0'>{total}</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px; font-weight:900; margin:12px 0'>{total}</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🔥 REVENUE</div><div style='font-size:26px; font-weight:900; margin:12px 0'>KES {total*15000}</div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:18px'><div style='font-size:11px; color:#64748b'>🎓 STUDENTS</div><div style='font-size:32px; font-weight:900; margin:12px 0'>0</div></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9'><b>🏫 Recently Added Schools</b></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><th style='padding:10px 14px'>Name</th><th>Location</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows}</tbody></table></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
 
 @app.get("/schools/manage", response_class=HTMLResponse)
@@ -237,27 +232,24 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     popup_html = ""
     if success == "code_sent" and pending:
         code_display = " ".join(list(pending["auth_code"]))
-        popup_html = f"""<div style='margin-bottom:16px'><div style='background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>🔓 Enter Code for 🏫 {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin-bottom:12px'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>🔑 {code_display}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required maxlength='6' style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;font-size:18px;letter-spacing:6px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px;font-weight:700'>✅ Verify & Create Login</button></form></div></div>"""
+        popup_html = f"""<div style='margin-bottom:16px; background:white; border:1.5px solid #fb923c; border-radius:12px; padding:16px'><div style='font-weight:800; margin-bottom:12px'>🔓 Enter Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c; border-radius:10px; padding:18px; text-align:center; background:#fffbeb; margin-bottom:12px'><div style='font-size:28px; font-weight:900; letter-spacing:10px'>{code_display}</div></div><form method='post' action='/verify-school-code' style='display:flex; gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1; padding:12px; border:1px solid #e2e8f0; border-radius:10px; text-align:center; font-weight:700'><button style='background:#0f172a; color:white; padding:12px 18px; border:none; border-radius:10px'>✅ Verify</button></form></div>"""
     elif success == "added" and new_pass:
-        popup_html = f"""<div id='successModal' style='position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999'><div style='background:white;padding:24px;border-radius:16px;width:420px'><div style='font-size:18px;font-weight:800;margin-bottom:8px'>✅ {school_name} Added!</div><div style='background:#f8fafc;padding:12px;border-radius:10px;font-size:13px;border:1px solid #e2e8f0'><div>🏫 <b>{school_name}</b></div><div>👤 Username: <b>{school_email}</b></div><div>🔑 Password: <b>{new_pass}</b></div></div><div style='display:flex;gap:10px;margin-top:16px'><button onclick="document.getElementById('successModal').style.display='none'" style='flex:1;background:#0f172a;color:white;padding:10px;border:none;border-radius:10px'>OK ✅</button></div></div></div>"""
-    rows_html = ""
-    for s in schools:
-        sid = s["id"]; u = users_by_school.get(sid); upass = u["password"] if u else "—"; uemail = u["email"] if u else s["email"]
-        rows_html += f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px; color:#64748b'>🔑 Code: <b>{s['code']}</b></div></td><td style='padding:12px 10px; font-size:12px'>📞 {s['phone'] or ''}</td><td style='padding:12px 10px; font-size:11px'>📧 {s['email']}</td><td style='padding:12px 10px; font-size:12px'>📍 {s['location']}</td><td style='padding:12px 10px; font-size:11px'>👤 {uemail}</td><td style='padding:12px 10px; font-size:12px'><span id='pwd-dot-{sid}'>••••••••</span><span id='pwd-real-{sid}' style='display:none; font-weight:700'>{upass}</span> <span onclick="event.stopPropagation(); togglePwd({sid})" style='cursor:pointer'>👁️</span></td><td style='padding:12px 10px'><a href='/schools/edit/{sid}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>✏️ Edit</a> <a href='/schools/delete/{sid}' style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px; font-weight:700'>🗑️ Delete</a></td></tr>"""
-    if not rows_html: rows_html = "<tr><td colspan='7' style='padding:40px; text-align:center; color:#94a3b8'>No schools yet</td></tr>"
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'><div><div class='card'>{popup_html}<div style='font-weight:800; font-size:15px'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px; margin-top:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; color:#475569; font-size:11px'><th style='padding:10px'>🏫 School</th><th style='padding:10px'>📞 Contact</th><th style='padding:10px'>📧 Email</th><th style='padding:10px'>📍 Location</th><th style='padding:10px'>👤 Username</th><th style='padding:10px'>🔑 Password</th><th style='padding:10px'>⚙️ Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back to Dashboard</a></div></div><div class='card' style='height:fit-content; position:sticky; top:16px'><div style='font-weight:800'>➕ Register New School 🏫</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code & Create Login</button></form></div></div><script>function togglePwd(id){{let d=document.getElementById('pwd-dot-'+id); let r=document.getElementById('pwd-real-'+id); if(d.style.display=='none'){{d.style.display='inline'; r.style.display='none';}} else {{d.style.display='none'; r.style.display='inline';}}}}</script></body></html>""")
+        popup_html = f"""<div style='position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:9999'><div style='background:white; padding:24px; border-radius:16px; width:420px'><div style='font-size:18px; font-weight:800'>✅ {school_name} Added!</div><div style='background:#f8fafc; padding:12px; border-radius:10px; margin:12px 0; font-size:13px'><div>🏫 {school_name}</div><div>👤 {school_email}</div><div>🔑 {new_pass}</div></div><button onclick="this.closest('div').parentElement.style.display='none'" style='width:100%; background:#0f172a; color:white; padding:10px; border:none; border-radius:10px'>OK</button></div></div>"""
+    rows_html = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px; color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px; font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px; font-size:11px'>{s['email']}</td><td style='padding:12px 10px; font-size:12px'>{s['location']}</td><td style='padding:12px 10px; font-size:11px'>👤 {users_by_school.get(s['id'])['email'] if users_by_school.get(s['id']) else s['email']}</td><td style='padding:12px 10px; font-size:12px'>{users_by_school.get(s['id'])['password'] if users_by_school.get(s['id']) else '—'}</td><td style='padding:12px 10px'><a href='/schools/edit/{s['id']}' style='background:#dbeafe; color:#1e40af; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px'>✏️ Edit</a> <a href='/schools/delete/{s['id']}' style='background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; text-decoration:none; font-size:11px'>🗑️ Delete</a></td></tr>" for s in schools]) or "<tr><td colspan='7' style='padding:40px; text-align:center'>No schools</td></tr>"
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px; padding:16px; max-width:1500px; margin:auto'><div><div class='card'>{popup_html}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto; max-height:65vh; border:1px solid #f1f5f9; border-radius:10px; margin-top:10px'><table style='width:100%; border-collapse:collapse; font-size:13px'><thead style='position:sticky; top:0; background:#f8fafc'><tr style='text-align:left; font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Action</th></tr></thead><tbody>{rows_html}</tbody></table></div><a href='/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option value=''>🎓 Type *</option><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px; margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
 
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
     auth_code = str(random.randint(100000, 999999)); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, auth_code, ts))
-    pending_id = cur.lastrowid; con.commit(); con.close(); log_activity(SUPER_ADMIN, f"🔐 Auth code sent for {school_name.upper()}", f"Code {auth_code}"); send_email(SUPER_ADMIN, f"🔐 Code: {auth_code} - {school_name}", f"🏫 {school_name.upper()}\n🔑 CODE: {auth_code}")
+    pending_id = cur.lastrowid; con.commit(); con.close()
+    send_email(SUPER_ADMIN, f"🔐 Code: {auth_code} - {school_name}", f"CODE: {auth_code}")
     return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}", status_code=303)
 @app.post("/verify-school-code")
 def verify_school_code(pending_id: str = Form(...), auth_code: str = Form(...)):
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,)); pending = cur.fetchone()
     if not pending: con.close(); return HTMLResponse("Invalid <a href='/schools/manage'>Back</a>")
-    if pending["auth_code"]!= auth_code.strip(): con.close(); return HTMLResponse(f"<h3>❌ Wrong Code!</h3><a href='/schools/manage?success=code_sent&pending_id={pending_id}'>Try Again</a>")
+    if pending["auth_code"]!= auth_code.strip(): con.close(); return HTMLResponse(f"❌ Wrong Code <a href='/schools/manage?success=code_sent&pending_id={pending_id}'>Back</a>")
     code = str(random.randint(100000,999999)); unique_pass = generate_unique_password(pending["name"])
     cur.execute("INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)", (pending["name"], pending["email"], code, pending["location"], pending["phone"], pending["principal"], pending["school_type"]))
     sid = cur.lastrowid; cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (pending["email"], unique_pass, "school_admin", pending["principal"], sid))
@@ -272,9 +264,8 @@ def delete_school(sid: int, request: Request):
 def edit_school_page(sid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close()
-    name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com")
-    initials = "".join([p[0] for p in name.split()][:2]).upper()
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}} input,select{{width:100%;padding:11px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;max-width:500px;margin:30px auto}}</style></head><body>{header_html(initials, name, email)}<div class='card'><h3>✏️ Edit School - {s['name']}</h3><form method='post' action='/schools/edit/{sid}'><input name='school_name' value="{s['name']}" required><input name='school_email' value="{s['email']}" required><input name='location' value="{s['location']}" required><input name='phone' value="{s['phone']}" required><input name='principal' value="{s['principal']}" required><input name='new_password' placeholder='New Password (blank keep old)'><div style='display:flex;gap:10px;margin-top:12px'><button style='flex:1;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px'>💾 Save</button><a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div></form></div></body></html>""")
+    name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
+    return HTMLResponse(f"""<html><body>{header_html(initials, name, email)}<div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:20px; max-width:500px; margin:30px auto'><h3>✏️ Edit {s['name']}</h3><form method='post' action='/schools/edit/{sid}'><input name='school_name' value="{s['name']}" required><input name='school_email' value="{s['email']}" required><input name='location' value="{s['location']}" required><input name='phone' value="{s['phone']}" required><input name='principal' value="{s['principal']}" required><input name='new_password' placeholder='New Password blank keep old'><div style='display:flex; gap:10px; margin-top:12px'><button style='flex:1; background:#0f172a; color:white; padding:12px; border:none; border-radius:10px'>💾 Save</button><a href='/schools/manage' class='back-btn' style='flex:1; justify-content:center'>❌ Cancel</a></div></form></div></body></html>""")
 @app.post("/schools/edit/{sid}")
 def edit_school_save(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), new_password: str = Form("")):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -288,7 +279,7 @@ def edit_school_save(sid: int, request: Request, school_name: str = Form(...), s
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name","JOHN DOE")
+    school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]
     cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
@@ -311,42 +302,16 @@ def school_dashboard(request: Request):
         gh = int((v['girls']/max_v)*150) if v['girls']>0 else 6
         chart_html += f"<div style='text-align:center; min-width:90px'><div style='display:flex; gap:10px; align-items:end; justify-content:center; height:170px'><div><div style='width:42px; height:{bh}px; background:#0a84ff; border-radius:6px 6px 0 0'></div><div style='font-size:10px; font-weight:700; color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px; height:{gh}px; background:#ff2d92; border-radius:6px 6px 0 0'></div><div style='font-size:10px; font-weight:700; color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px; font-weight:800; margin-top:8px'>{cls_name}</div></div>"
     if not chart_html: chart_html = "<div style='padding:30px; color:#94a3b8; text-align:center; width:100%'>No students yet — add students to see chart 📊</div>"
-    stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px'>{st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['admission_no'] or st['assessment_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td style='padding:10px 12px; font-size:11px'>Class {st['class_id'] or ''}</td></tr>" for st in recent_students]) or "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
+    stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px; font-size:12px'>{st['name']}</td><td style='padding:10px 12px; font-size:11px'>{st['assessment_no'] or st['admission_no'] or ''}</td><td style='padding:10px 12px; font-size:11px'>{st['gender']}</td><td>Class {st['class_id'] or ''}</td></tr>" for st in recent_students]) or "<tr><td colspan='4' style='padding:30px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
     header = school_header(school, name, "dashboard")
-    html = f"""
-    <div style='padding:18px; max-width:1400px; margin:auto'>
-        <div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%); border-radius:18px; padding:22px 24px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'>
-          <div><div style='font-size:22px; font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px; color:#bfdbfe; margin-top:4px'>REVOLUTIONIZE YOUR SCHOOL'S MANAGEMENT!</div></div>
-          <div style='text-align:right'><div style='font-size:34px; font-weight:900'>{sc}</div><div style='font-size:11px; color:#cbd5e1'>Total Students</div></div>
-        </div>
-        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'>
-          <a href='/school/students' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{sc}</div></a>
-          <a href='/school/classes' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{cc}</div></a>
-          <a href='/school/exams' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{ec}</div></a>
-          <a href='/school/teachers' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>👨‍🏫 TEACHERS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{tc}</div></a>
-        </div>
-        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'>
-          <div style='display:flex; justify-content:space-between; align-items:center'>
-            <div><div style='font-weight:800; font-size:14px'>👥 Students by Gender</div><div style='font-size:11px; color:#64748b'>Boys vs Girls enrollment per form — auto updates</div></div>
-            <div style='display:flex; gap:12px; font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block;border-radius:2px'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block;border-radius:2px'></span> Girls</span></div>
-          </div>
-          <div style='display:flex; gap:24px; overflow-x:auto; margin-top:18px; padding-bottom:10px'>{chart_html}</div>
-          <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:18px; border-top:1px solid #f1f5f9; padding-top:14px'>
-            <div style='background:#f0f9ff; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Total Boys</div><div style='font-size:20px; font-weight:900; color:#0a84ff'>{tb}</div></div>
-            <div style='background:#fdf2f8; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Total Girls</div><div style='font-size:20px; font-weight:900; color:#ff2d92'>{tg}</div></div>
-            <div style='background:#f8fafc; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Total Students</div><div style='font-size:20px; font-weight:900'>{total}</div></div>
-            <div style='background:#f0fdf4; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px; color:#64748b'>Girl:Boy Ratio</div><div style='font-size:20px; font-weight:900'>{ratio}:1</div></div>
-          </div>
-        </div>
-        <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:14px'>
-          <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9'><div style='font-weight:800; font-size:14px'>🎓 Recently Added Students</div><a href='/school/students' style='font-size:11px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:10px; color:#64748b'><th style='padding:10px 12px'>Name</th><th style='padding:10px 12px'>Adm No</th><th style='padding:10px 12px'>Gender</th><th style='padding:10px 12px'>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div>
-          <div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px; margin-bottom:12px'>📊 Gender Stats LIVE</div><div style='background:#1e293b; border-radius:10px; padding:12px'><div style='font-size:11px'>👦 Boys: {tb} | 👧 Girls: {tg}</div><div style='font-size:11px; margin-top:6px; color:#22c55e'>Auto-updates ✅</div></div></div>
-        </div>
-    </div>
-    """
+    html = f"""<div style='padding:18px; max-width:1400px; margin:auto'>
+        <div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%); border-radius:18px; padding:22px 24px; color:white; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px'><div><div style='font-size:22px; font-weight:900'>DaviSchool Management System 🚀</div></div><div style='text-align:right'><div style='font-size:34px; font-weight:900'>{sc}</div><div style='font-size:11px'>Total Students</div></div></div>
+        <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px'><a href='/school/students' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{sc}</div></a><a href='/school/classes' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>🏫 CLASSES</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{cc}</div></a><a href='/school/exams' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>📝 EXAMS</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{ec}</div></a><a href='/school/teachers' class='ds-card'><div style='font-size:11px; color:#64748b; font-weight:700'>👨‍🏫 STAFF</div><div style='font-size:30px; font-weight:900; margin:10px 0'>{tc}</div></a></div>
+        <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; margin-bottom:16px'><div style='display:flex; justify-content:space-between'><div><div style='font-weight:800; font-size:14px'>👥 Students by Gender</div><div style='font-size:11px; color:#64748b'>Boys vs Girls per form — auto updates</div></div><div style='display:flex; gap:12px; font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block'></span> Girls</span></div></div><div style='display:flex; gap:24px; overflow-x:auto; margin-top:18px'>{chart_html}</div><div style='display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:18px; border-top:1px solid #f1f5f9; padding-top:14px'><div style='background:#f0f9ff; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px'>Total Boys</div><div style='font-size:20px; font-weight:900; color:#0a84ff'>{tb}</div></div><div style='background:#fdf2f8; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px'>Total Girls</div><div style='font-size:20px; font-weight:900; color:#ff2d92'>{tg}</div></div><div style='background:#f8fafc; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px'>Total</div><div style='font-size:20px; font-weight:900'>{total}</div></div><div style='background:#f0fdf4; padding:12px; border-radius:10px; text-align:center'><div style='font-size:11px'>Ratio</div><div style='font-size:20px; font-weight:900'>{ratio}:1</div></div></div></div>
+        <div style='display:grid; grid-template-columns:1.9fr 0.8fr; gap:14px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px 16px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between'><div style='font-weight:800'>🎓 Recent Students</div><a href='/school/students' style='font-size:11px; color:#3b82f6; text-decoration:none'>View All →</a></div><table style='width:100%; border-collapse:collapse'><thead><tr style='background:#f8fafc; text-align:left; font-size:10px; color:#64748b'><th style='padding:10px 12px'>Name</th><th>Adm No</th><th>Gender</th><th>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div><div style='background:#0f172a; border-radius:14px; padding:16px; color:white; height:fit-content'><div style='font-weight:800; font-size:14px'>📊 LIVE</div><div style='background:#1e293b; border-radius:10px; padding:12px; margin-top:10px'><div style='font-size:11px'>👦 {tb} | 👧 {tg}</div><div style='font-size:11px; margin-top:6px; color:#22c55e'>Auto ✅</div></div></div></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
-# ===== NEW STUDENTS PAGE LIKE SCREENSHOT =====
+# ===== STUDENTS PAGE LIKE SCREENSHOT =====
 @app.get("/school/students", response_class=HTMLResponse)
 def school_students(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
@@ -355,95 +320,52 @@ def school_students(request: Request):
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
     cur.execute("SELECT s.*, c.name as class_name, c.stream as class_stream FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? ORDER BY s.id DESC", (school["id"],)); students = cur.fetchall()
     con.close()
-    total = len(students)
-    boys = len([s for s in students if (s['gender'] or '').lower().startswith('m')])
-    girls = total - boys
-    boarding = 0; day = total
+    total = len(students); boys = len([s for s in students if (s['gender'] or '').lower().startswith('m')]); girls = total - boys; boarding=0; day=total
     by_class_text = f"{classes[0]['name'] if classes else 'GRADE 7'}: {total}" if total>0 else "GRADE 7: 0"
     class_set = sorted(set([c['name'] for c in classes if c['name']])); stream_set = sorted(set([c['stream'] or c['level'] for c in classes if c['stream'] or c['level']]))
     distinct_class_opts = "".join([f"<option value='{cn}'>{cn}</option>" for cn in class_set])
     distinct_stream_opts = "".join([f"<option value='{st}'>{st}</option>" for st in stream_set])
     filter_class_opts = "".join([f"<option value='{cn}'>{cn}</option>" for cn in class_set])
-
     rows = ""
     for i, st in enumerate(students, 1):
-        gender = st['gender'] or 'Female'
-        g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
+        gender = st['gender'] or 'Female'; g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
         cls = f"{st['class_name'] or 'GRADE 7'} {('('+ (st['stream'] or st['class_stream'] or 'BLUE') +')')}"
         initials = "".join([p[0] for p in st['name'].split()][:2]).upper()
-        rows += f"""<tr class='stu-row' data-gender="{gender}" data-class="{st['class_name'] or ''}" data-name="{st['name'].lower()} {st['assessment_no'] or ''}" style='border-bottom:1px solid #f1f5f9; transition:all 0.15s'>
-        <td style='padding:12px'><input type='checkbox'></td>
-        <td style='padding:12px; font-size:12px; color:#64748b'>{i}</td>
-        <td style='padding:12px; font-size:12px; font-weight:700; color:#2563eb'>{st['assessment_no'] or st['admission_no'] or i}</td>
-        <td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#fce7f3;color:#be185d;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{initials}</div><span style='font-size:12px; font-weight:600'>{st['name']}</span></td>
-        <td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td>
-        <td style='padding:12px; font-size:12px'>{cls}</td>
-        <td style='padding:12px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600'>Day</span></td>
-        <td style='padding:12px; font-size:12px; color:#94a3b8'>—</td>
-        <td style='padding:12px; font-size:12px'>{st['parent_phone'] or '—'}</td>
-        <td style='padding:12px; display:flex; gap:8px'><span style='cursor:pointer'>👁️</span><span style='cursor:pointer'>📄</span></td></tr>"""
-    if not rows: rows = "<tr><td colspan='10' style='padding:40px; text-align:center; color:#94a3b8'>No students yet — Admit Pupil to see like screenshot</td></tr>"
-
+        rows += f"""<tr class='stu-row' data-gender="{gender}" data-class="{st['class_name'] or ''}" data-name="{st['name'].lower()} {st['assessment_no'] or ''}" style='border-bottom:1px solid #f1f5f9'>
+        <td style='padding:12px'><input type='checkbox'></td><td style='padding:12px; font-size:12px; color:#64748b'>{i}</td><td style='padding:12px; font-size:12px; font-weight:700; color:#2563eb'>{st['assessment_no'] or st['admission_no'] or i}</td><td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#fce7f3;color:#be185d;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{initials}</div><span style='font-size:12px; font-weight:600'>{st['name']}</span></td><td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td><td style='padding:12px; font-size:12px'>{cls}</td><td style='padding:12px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px'>Day</span></td><td style='padding:12px; font-size:12px; color:#94a3b8'>—</td><td style='padding:12px; font-size:12px'>{st['parent_phone'] or '—'}</td><td style='padding:12px'>👁️ 📄</td></tr>"""
+    if not rows: rows = "<tr><td colspan='10' style='padding:40px; text-align:center; color:#94a3b8'>No students yet</td></tr>"
     header = school_header(school, name, "students")
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
     body{{margin:0;font-family:Arial;background:#f8fafc}}
-  .card-top{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;cursor:pointer}}
-  .card-top:hover{{transform:translateY(-3px);box-shadow:0 12px 24px rgba(0,0,0,0.08);border-color:#0f172a}}
-  .filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}}
-  .filter-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important;transform:translateY(-1px)}}
-  .black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}}
-  .black-btn:hover{{background:#1e293b;transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,0.2)}}
-  .stu-row:hover{{background:#f8fafc!important}}
+.card-top{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;cursor:pointer}}.card-top:hover{{transform:translateY(-3px);box-shadow:0 12px 24px rgba(0,0,0,0.08)}}
+.filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}}.filter-btn:hover{{background:#0f172a!important;color:white!important}}
+.black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.black-btn:hover{{background:#1e293b}}
     </style></head><body>{header}
     <div style='padding:18px; max-width:1500px; margin:auto'>
       <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Students</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Manage student records and admissions</p></div>
       <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px'>
         <div class='card-top' onclick="filterAll()"><div><div style='font-size:13px; color:#64748b'>Total Students</div><div style='font-size:28px; font-weight:900; margin-top:6px'>{total}</div></div><div style='width:40px;height:40px;background:#eff6ff;color:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center'>👥</div></div>
-        <div class='card-top' onclick="document.getElementById('genderFilter').value='all'; applyFilters()"><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{boys}</span><span style='color:#94a3b8'> / </span><span style='color:#db2777'>{girls}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
-        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Boarding / Day</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#7c3aed'>{boarding}</span><span style='color:#94a3b8'> / </span><span style='color:#059669'>{day}</span></div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>🎓</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{boys}</span> / <span style='color:#db2777'>{girls}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Boarding / Day</div><div style='font-size:22px; font-weight:900; margin-top:6px'>{boarding} / {day}</div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>🎓</div></div>
         <div class='card-top'><div><div style='font-size:13px; color:#64748b'>By Class</div><div style='margin-top:8px'><span style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600'>{by_class_text}</span></div></div></div>
       </div>
       <div style='display:grid; grid-template-columns:1.9fr 0.7fr; gap:16px'>
         <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
-          <div style='padding:14px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'>
-            <div style='display:flex; align-items:center; gap:10px'><span style='font-size:13px; color:#475569'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white'><option>10</option><option>25</option><option>50</option></select><span style='font-size:13px; color:#475569'>items per page</span></div>
-          </div>
+          <div style='padding:14px 16px; display:flex; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'><div style='display:flex; gap:10px; align-items:center'><span style='font-size:13px'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px'><option>10</option><option>25</option><option>50</option></select><span style='font-size:13px'>items per page</span></div></div>
           <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; border-bottom:1px solid #f1f5f9'>
-            <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchInput' onkeyup="searchTable()" placeholder='Search name, admission' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
+            <div style='position:relative'><span style='position:absolute; left:10px; top:10px'>🔍</span><input id='searchInput' onkeyup="searchTable()" placeholder='Search name, admission' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:200px'></div>
             <select id='classFilter' onchange="applyFilters()" class='filter-btn'><option value='all'>All Classes</option>{filter_class_opts}</select>
-            <select id='genderFilter' onchange="applyFilters()" class='filter-btn'><option value='all'>All Gender</option><option value='Male'>Male</option><option value='Female'>Female</option></select>
-            <select class='filter-btn'><option>All Category</option><option>Day</option><option>Boarding</option></select>
-            <button class='filter-btn'>📄 CSV</button>
-            <button class='filter-btn'>⬇️ PDF</button>
+            <select id='genderFilter' onchange="applyFilters()" class='filter-btn'><option value='all'>All Gender</option><option>Male</option><option>Female</option></select>
+            <select class='filter-btn'><option>All Category</option></select><button class='filter-btn'>📄 CSV</button><button class='filter-btn'>⬇️ PDF</button>
           </div>
-          <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; border-bottom:1px solid #f1f5f9'>
-            <button class='filter-btn'>📄 KEMIS Export</button>
-            <button class='filter-btn'>⬆️ Import</button>
-            <button class='filter-btn'>📷 Photos</button>
-            <button class='black-btn' onclick="document.getElementById('admitPanel').scrollIntoView({{behavior:'smooth'}})">+ Admit Pupil</button>
-          </div>
+          <div style='padding:12px 16px; display:flex; gap:10px; border-bottom:1px solid #f1f5f9'><button class='filter-btn'>📄 KEMIS Export</button><button class='filter-btn'>⬆️ Import</button><button class='filter-btn'>📷 Photos</button><button class='black-btn' onclick="document.getElementById('admitPanel').scrollIntoView({{behavior:'smooth'}})">+ Admit Pupil</button></div>
           <div style='overflow:auto; max-height:70vh'><table style='width:100%; border-collapse:collapse'><thead style='position:sticky; top:0; background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'><input type='checkbox'></th><th>#</th><th>ADM NO ↑</th><th>NAME ↕</th><th>GENDER</th><th>CLASS</th><th>CATEGORY</th><th>GUARDIAN</th><th>PHONE</th><th></th></tr></thead><tbody id='stuBody'>{rows}</tbody></table></div>
           <div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back to Overview</a></div>
         </div>
-        <div id='admitPanel' style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:16px'>
-          <div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div>
-          <form method='post' action='/school/students/add'>
-            <input name='assessment_no' required placeholder='🆔 Assessment No *' class='input-field'>
-            <input name='student_name' required placeholder='👤 Student Name *' class='input-field'>
-            <select name='class_name' required class='input-field'><option value=''>🏫 Select Class *</option>{distinct_class_opts}</select>
-            <select name='stream' required class='input-field'><option value=''>🔀 Select Stream *</option>{distinct_stream_opts}</select>
-            <select name='gender' required class='input-field'><option value=''>⚧️ Gender *</option><option value='Male'>Male</option><option value='Female'>Female</option></select>
-            <input name='parent_phone' required placeholder='📞 Parent Phone *' class='input-field'>
-            <button class='add-btn' style='margin-top:8px'>➕ Add Student</button>
-          </form>
-        </div>
+        <div id='admitPanel' style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px; height:fit-content; position:sticky; top:16px'><div style='font-weight:800; margin-bottom:12px'>➕ Add New Student</div><form method='post' action='/school/students/add'><input name='assessment_no' required placeholder='🆔 Assessment No *' class='input-field'><input name='student_name' required placeholder='👤 Student Name *' class='input-field'><select name='class_name' required class='input-field'><option value=''>🏫 Select Class *</option>{distinct_class_opts}</select><select name='stream' required class='input-field'><option value=''>🔀 Select Stream *</option>{distinct_stream_opts}</select><select name='gender' required class='input-field'><option value=''>⚧️ Gender *</option><option value='Male'>Male</option><option value='Female'>Female</option></select><input name='parent_phone' required placeholder='📞 Parent Phone *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Student</button></form></div>
       </div>
     </div>
-    <script>
-    function applyFilters(){{let cf=document.getElementById('classFilter').value; let gf=document.getElementById('genderFilter').value; document.querySelectorAll('.stu-row').forEach(r=>{{let cm=(cf==='all'||r.dataset.class.includes(cf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(cm&&gm)?'':'none';}});}}
-    function filterAll(){{document.getElementById('classFilter').value='all'; document.getElementById('genderFilter').value='all'; applyFilters();}}
-    function searchTable(){{let q=document.getElementById('searchInput').value.toLowerCase(); document.querySelectorAll('.stu-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
-    </script>
+    <script>function applyFilters(){{let cf=document.getElementById('classFilter').value; let gf=document.getElementById('genderFilter').value; document.querySelectorAll('.stu-row').forEach(r=>{{let cm=(cf==='all'||r.dataset.class.includes(cf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(cm&&gm)?'':'none';}});}} function filterAll(){{document.getElementById('classFilter').value='all'; document.getElementById('genderFilter').value='all'; applyFilters();}} function searchTable(){{let q=document.getElementById('searchInput').value.toLowerCase(); document.querySelectorAll('.stu-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}</script>
     </div></div></body></html>""")
 
 @app.post("/school/students/add")
@@ -455,22 +377,22 @@ def add_student(request: Request, assessment_no: str = Form(...), student_name: 
     cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_phone, stream) VALUES (?,?,?,?,?,?,?,?)", (school["id"], assessment_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), class_id, gender, parent_phone.strip(), stream.strip().upper())); con.commit(); con.close()
     return RedirectResponse("/school/students", status_code=303)
 @app.get("/school/students/delete/{sid}")
-def delete_student(sid: int, request: Request):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/students", status_code=303)
+def delete_student(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/students",303)
 
+# ===== OTHER PAGES UNTOUCHED =====
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td style='padding:10px 12px'>{c['stream'] or ''}</td><td><a href='/school/classes/delete/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='/school/classes/delete/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
     header = school_header(school, name, "classes")
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>➕ Add Class</b><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>Add</button></form></div></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:1.7fr 0.7fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' class='back-btn'>⬅️ Back</a></div></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><b>➕ Add Class</b><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>Add</button></form></div></div></div></div></div></body></html>")
 @app.post("/school/classes/add")
 def add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, level, stream) VALUES (?,?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 @app.get("/school/classes/delete/{cid}")
-def delete_class(cid: int, request: Request): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes", status_code=303)
+def delete_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 
 @app.get("/school/subjects", response_class=HTMLResponse)
 def school_subjects(request: Request):
@@ -500,17 +422,99 @@ def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...)
 @app.get("/school/exams/delete/{eid}")
 def del_exam(eid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 
+# ===== NEW STAFF MANAGER LIKE SCREENSHOT =====
 @app.get("/school/teachers", response_class=HTMLResponse)
 def teachers_page(request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY id DESC", (school["id"],)); teachers = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{t['name']}<br><span style='background:#0f172a;color:white;padding:2px 6px;border-radius:10px;font-size:10px'>{t['role'] or 'Teacher'}</span></td><td>{t['tsc_no']}</td><td>{t['phone']}</td><td>{t['email'] or ''}</td><td><a href='/school/teachers/delete/{t['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for t in teachers]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No teachers</td></tr>"
+
+    total = len(teachers)
+    male = len([t for t in teachers if (t['gender'] or '').lower().startswith('m')])
+    female = total - male
+    teaching = total
+    non_teaching = 0
+    role_counts = {}
+    for t in teachers:
+        r = (t['role'] or 'Teacher').strip()
+        role_counts[r] = role_counts.get(r, 0) + 1
+    role_badges = "".join([f"<span style='border:1px solid #e2e8f0; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; margin-right:6px; display:inline-block; margin-bottom:4px'>{k}: {v}</span>" for k,v in role_counts.items()]) or "<span style='color:#94a3b8; font-size:11px'>No roles yet</span>"
+
+    rows = ""
+    for i, t in enumerate(teachers, 1):
+        gender = t['gender'] or 'Male'
+        g_style = "background:#dbeafe; color:#1e40af" if gender.lower().startswith('m') else "background:#fce7f3; color:#be185d"
+        rows += f"""<tr class='staff-row' data-name="{t['name'].lower()} {t['id_no'] or ''} {t['email'] or ''}" data-role="{t['role'] or ''}" data-gender="{gender}" style='border-bottom:1px solid #f1f5f9'>
+        <td style='padding:12px; font-size:12px; color:#64748b'>{i}</td>
+        <td style='padding:12px; font-size:12px; font-weight:600'>{t['id_no'] or t['tsc_no'] or '—'}</td>
+        <td style='padding:12px; display:flex; align-items:center; gap:8px'><div style='width:28px;height:28px;background:#e0f2fe;color:#0369a1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px'>{''.join([p[0] for p in t['name'].split()][:2])}</div><span style='font-size:12px; font-weight:600'>{t['name']}</span></td>
+        <td style='padding:12px'><span style='{g_style}; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:700'>{gender}</span></td>
+        <td style='padding:12px; font-size:12px'><span style='background:#f1f5f9; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:600'>{t['role'] or 'Teacher'}</span></td>
+        <td style='padding:12px; font-size:12px'>{t['phone'] or '—'}</td>
+        <td style='padding:12px; font-size:11px; color:#64748b'>{t['email'] or '—'}</td>
+        <td style='padding:12px; display:flex; gap:8px'><span style='cursor:pointer'>👁️</span><a href='/school/teachers/delete/{t['id']}' style='text-decoration:none; color:#dc2626'>🗑️</a></td></tr>"""
+    if not rows: rows = "<tr><td colspan='8' style='padding:40px; text-align:center; color:#94a3b8'>No staff yet — Add Staff to see like screenshot</td></tr>"
+
     header = school_header(school, name, "teachers")
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid; grid-template-columns:360px 1fr; gap:16px'><div style='background:white; border:1px solid #e2e8f0; border-radius:14px; padding:16px'><div style='font-weight:800'>➕ Add Teacher + Role</div><form method='post' action='/school/teachers/add'><input name='name' placeholder='Full Name *' required class='input-field'><input name='tsc_no' placeholder='TSC No *' required class='input-field'><select name='gender' class='input-field'><option>Male</option><option>Female</option></select><select name='role' required class='input-field'><option value=''>Select Role</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select><input name='phone' placeholder='Phone *' required class='input-field'><input name='email' placeholder='Email' class='input-field'><button class='add-btn' style='margin-top:10px'>Add Teacher</button></form></div><div style='background:white; border:1px solid #e2e8f0; border-radius:14px'><div style='padding:12px 16px'><b>Teachers ({len(teachers)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div></div></div></div></div></body></html>")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
+    body{{margin:0;font-family:Arial;background:#f8fafc}}
+.card-top{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;display:flex;justify-content:space-between;align-items:center;transition:all 0.2s;cursor:pointer}}
+.card-top:hover{{transform:translateY(-3px);box-shadow:0 12px 24px rgba(0,0,0,0.08);border-color:#0f172a}}
+.filter-btn{{padding:9px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}}
+.filter-btn:hover{{background:#0f172a!important;color:white!important;border-color:#0f172a!important}}
+.black-btn{{padding:10px 16px;background:#0f172a;color:white;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}}
+.black-btn:hover{{background:#1e293b}}
+    </style></head><body>{header}
+    <div style='padding:18px; max-width:1500px; margin:auto'>
+      <div style='margin-bottom:16px'><h2 style='margin:0; font-size:22px; font-weight:800'>Staff</h2><p style='margin:4px 0 0; color:#64748b; font-size:13px'>Manage staff records and assignments</p></div>
+      <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px'>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Total Staff</div><div style='font-size:28px; font-weight:900; margin-top:6px'>{total}</div></div><div style='width:40px;height:40px;background:#eff6ff;color:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center'>👥</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Male / Female</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#2563eb'>{male}</span><span style='color:#94a3b8'> / </span><span style='color:#db2777'>{female}</span></div></div><div style='width:40px;height:40px;background:#faf5ff;color:#9333ea;border-radius:10px;display:flex;align-items:center;justify-content:center'>👤+</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b'>Teaching / Non-Teaching</div><div style='font-size:22px; font-weight:900; margin-top:6px'><span style='color:#059669'>{teaching}</span><span style='color:#94a3b8'> / </span><span style='color:#ea580c'>{non_teaching}</span></div></div><div style='width:40px;height:40px;background:#ecfdf5;color:#059669;border-radius:10px;display:flex;align-items:center;justify-content:center'>💼</div></div>
+        <div class='card-top'><div><div style='font-size:13px; color:#64748b; margin-bottom:8px'>By Role</div><div>{role_badges}</div></div></div>
+      </div>
+      <div style='background:white; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden'>
+        <div style='padding:14px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid #f1f5f9'>
+          <div style='display:flex; align-items:center; gap:10px'><span style='font-size:13px; color:#475569'>Show</span><select style='padding:8px 12px; border:1px solid #e2e8f0; border-radius:10px; background:white'><option>10</option><option>25</option><option>50</option></select><span style='font-size:13px; color:#475569'>items per page</span></div>
+        </div>
+        <div style='padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; border-bottom:1px solid #f1f5f9'>
+          <div style='position:relative'><span style='position:absolute; left:10px; top:10px; color:#94a3b8'>🔍</span><input id='searchStaff' onkeyup="searchStaff()" placeholder='Search name, ID, email.' style='padding:9px 12px 9px 32px; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; width:220px'></div>
+          <select id='roleFilter' onchange="applyStaffFilter()" class='filter-btn'><option value='all'>All Roles</option><option>Administrator</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select>
+          <select id='genderFilter' onchange="applyStaffFilter()" class='filter-btn'><option value='all'>All Gender</option><option>Male</option><option>Female</option></select>
+          <select class='filter-btn'><option>All Employment</option><option>Employed</option><option>On Leave</option></select>
+          <button class='filter-btn'>📄 CSV</button>
+          <button class='filter-btn'>⬇️ PDF</button>
+        </div>
+        <div style='padding:12px 16px; border-bottom:1px solid #f1f5f9'><button class='black-btn' onclick="document.getElementById('addStaffForm').style.display='block'; document.getElementById('addStaffForm').scrollIntoView({{behavior:'smooth'}})">+ Add Staff</button></div>
+        <div id='addStaffForm' style='display:none; padding:16px; border-bottom:1px solid #f1f5f9; background:#f8fafc'>
+          <div style='font-weight:800; margin-bottom:10px'>➕ Add Staff Member</div>
+          <form method='post' action='/school/teachers/add' style='display:grid; grid-template-columns:1fr 1fr; gap:10px'>
+            <input name='name' placeholder='Full Name *' required class='input-field'>
+            <input name='tsc_no' placeholder='TSC No / Staff No *' required class='input-field'>
+            <input name='id_no' placeholder='National ID / Passport' class='input-field'>
+            <select name='gender' class='input-field'><option>Male</option><option>Female</option></select>
+            <select name='role' required class='input-field'><option value=''>System Role ▼</option><option>Administrator</option><option>Principal</option><option>Deputy Principal</option><option>Class Teacher</option><option>Senior Teacher</option><option>Director of Studies</option><option>Teacher</option></select>
+            <input name='phone' placeholder='Phone *' required class='input-field'>
+            <input name='email' placeholder='Email' class='input-field'>
+            <div style='grid-column:span 2'><button class='add-btn'>Add Staff</button></div>
+          </form>
+        </div>
+        <div style='overflow:auto; max-height:70vh'>
+          <table style='width:100%; border-collapse:collapse'><thead style='position:sticky; top:0; background:#f8fafc; text-align:left; font-size:11px; color:#64748b'><tr><th style='padding:12px'>#</th><th style='padding:12px'>NATIONAL ID / PASSPORT</th><th style='padding:12px'>NAME ↑</th><th style='padding:12px'>GENDER</th><th style='padding:12px'>SYSTEM ROLE</th><th style='padding:12px'>PHONE</th><th style='padding:12px'>EMAIL</th><th style='padding:12px'>ACTIONS</th></tr></thead><tbody id='staffBody'>{rows}</tbody></table>
+        </div>
+      </div>
+    </div>
+    <script>
+    function applyStaffFilter(){{
+      let rf=document.getElementById('roleFilter').value; let gf=document.getElementById('genderFilter').value;
+      document.querySelectorAll('.staff-row').forEach(r=>{{let rm=(rf==='all'||r.dataset.role.includes(rf)); let gm=(gf==='all'||r.dataset.gender===gf); r.style.display=(rm&&gm)?'':'none';}});
+    }}
+    function searchStaff(){{let q=document.getElementById('searchStaff').value.toLowerCase(); document.querySelectorAll('.staff-row').forEach(r=>{{r.style.display=r.dataset.name.includes(q)?'':'none';}});}}
+    </script>
+    </div></div></body></html>""")
 @app.post("/school/teachers/add")
-def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form("")):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role) VALUES (?,?,?,?,?,?,?,?)", (school["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender, "", role.strip())); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
+def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(...), id_no: str = Form(""), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form("")):
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role) VALUES (?,?,?,?,?,?,?,?)", (school["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender, id_no.strip(), role.strip())); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
@@ -541,4 +545,4 @@ def school_other(path: str, request: Request):
     if "email" not in request.session or request.session.get("role")!="school_admin": return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name","")
     header = school_header(school, name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — original v38.6 intact</h3><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3>🚧 {path.upper()} — intact</h3><a href='/school/dashboard' class='back-btn' style='margin-top:14px'>⬅️ Back</a></div></div></div></div></body></html>")
