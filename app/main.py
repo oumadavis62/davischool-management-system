@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v54-no-subjects-btn")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v55-system-settings-tab")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -30,6 +30,8 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, email TEXT, phone TEXT, tsc_no TEXT, gender TEXT, id_no TEXT, role TEXT, employment_type TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS teacher_allocations (id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER, subject_id INTEGER, class_id INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS global_notices (id INTEGER PRIMARY KEY, message TEXT, created_at TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS system_audit (id INTEGER PRIMARY KEY, school_id INTEGER, user_email TEXT, action TEXT, details TEXT, timestamp TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS billing (id INTEGER PRIMARY KEY, school_id INTEGER, amount TEXT, status TEXT, due_date TEXT, created_at TEXT)")
     try: cur.execute("ALTER TABLE teachers ADD COLUMN employment_type TEXT")
     except: pass
     try: cur.execute("ALTER TABLE students ADD COLUMN category TEXT")
@@ -59,11 +61,22 @@ def header_html(initials, name, email):
 
 def school_header(school, name, active="dashboard", is_impersonating=False):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
+    email = school['email'] if school else ""
     academic_pages = ["dean-settings","exams","marks","subject-allocation","marksheets","analysis","spreadsheet","sba"]
+    comm_pages = ["sms","communication","announcements","bulk-sms"]
+    system_pages = ["system-settings","school-profile","system-classes","user-management","roles-permissions","database-backup","system-audit","integrations","billing-payments","my-profile","user-manual"]
     is_academic_active = active in academic_pages
-    dropdown_display = "block" if is_academic_active else "none"
-    arrow = "⌃" if is_academic_active else "⌄"
-    academic_bg = "background:#0f172a;color:white" if is_academic_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    is_comm_active = active in comm_pages
+    is_system_active = active in system_pages or str(active).startswith("system-settings")
+    acad_display = "block" if is_academic_active else "none"
+    comm_display = "block" if is_comm_active else "none"
+    sys_display = "block" if is_system_active else "none"
+    acad_arrow = "⌃" if is_academic_active else "⌄"
+    comm_arrow = "⌃" if is_comm_active else "⌄"
+    sys_arrow = "⌃" if is_system_active else "⌄"
+    acad_bg = "background:#0f172a;color:white" if is_academic_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    comm_bg = "background:#0f172a;color:white" if is_comm_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    sys_bg = "background:#0f172a;color:white" if is_system_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
     def nav(link, icon, label):
         is_active = "background:#0f172a;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
         return f"<a href='/school/{link}' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
@@ -73,15 +86,25 @@ def school_header(school, name, active="dashboard", is_impersonating=False):
     banner = f"""<div style='background:#f59e0b;color:#0f172a;padding:8px 20px;text-align:center;font-weight:800;font-size:12px'>⚠️ Viewing as {school['name']} — <a href='/super/back-to-admin' style='background:#0f172a;color:white;padding:6px 12px;border-radius:8px;text-decoration:none;font-size:11px'>🔙 Back to Super Admin</a></div>""" if is_impersonating else ""
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM global_notices ORDER BY id DESC LIMIT 1"); notice = cur.fetchone(); con.close()
     notice_banner = f"""<div style='background:#0f172a;color:white;padding:8px 20px;text-align:center;font-size:12px'>📢 {notice['message']}</div>""" if notice else ""
-    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.academic-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px;{academic_bg}}}.academic-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20].upper()}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {school['location']}</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{arrow}</span></div><div id='academicDropdown' style='display:{dropdown_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('marks','✏️','Record Marks')}{sub_nav('marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('fees','💰','Fees & Finance')}{nav('sms','💬','Bulk SMS Parents')}<div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{banner}{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>{school['name']} (Code: {school['code']})</b></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
+    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.section-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px}}.academic-header{{ {acad_bg} }}.comm-header{{ {comm_bg} }}.system-header{{ {sys_bg} }}.section-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20].upper()}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {school['location']}</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='section-header academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{acad_arrow}</span></div><div id='academicDropdown' style='display:{acad_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('marks','✏️','Record Marks')}{sub_nav('marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('fees','💰','Fees & Finance')}<div style='margin-bottom:4px'><div class='section-header comm-header' onclick='toggleComm()'><span>💬 Communication</span><span id='commArrow'>{comm_arrow}</span></div><div id='commDropdown' style='display:{comm_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('sms','💬','Bulk SMS Parents')}{sub_nav('communication','📢','Announcements')}</div></div><div style='margin-bottom:4px;margin-top:6px'><div class='section-header system-header' onclick='toggleSystem()'><span>⚙️ System Settings</span><span id='systemArrow'>{sys_arrow}</span></div><div id='systemDropdown' style='display:{sys_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('system-settings/school-profile','🏢','School Profile')}{sub_nav('system-settings/classes','🏫','Classes')}{sub_nav('system-settings/user-management','👤+','User Management')}{sub_nav('system-settings/roles-permissions','🛡️','Roles & Permissi...')}{sub_nav('system-settings/database-backup','🗄️','Database Backup')}{sub_nav('system-settings/system-audit','📈','System Audit')}{sub_nav('system-settings/integrations','🔌','Integrations')}{sub_nav('system-settings/billing-payments','💳','Billing & Payments')}</div></div>{nav('my-profile','👤','My Profile')}<div style='margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9'><div style='font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:8px'>Help</div>{nav('user-manual','❓','User Manual')}<div style='margin-top:14px;padding:10px;background:#f8fafc;border-radius:10px;border:1px solid #f1f5f9'><div style='display:flex;gap:8px;align-items:center'><div style='width:28px;height:28px;background:#e2e8f0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800'>DO</div><div><div style='font-size:12px;font-weight:800'>{name}</div><div style='font-size:10px;color:#64748b'>{email}</div></div></div><div style='margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12px'><span>🌤️ 24°C</span></div><div style='font-size:11px;color:#64748b'>Mostly cloudy</div></div></div><div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{banner}{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>{school['name']} (Code: {school['code']})</b></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleComm(){{let d=document.getElementById('commDropdown'); let a=document.getElementById('commArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleSystem(){{let d=document.getElementById('systemDropdown'); let a=document.getElementById('systemArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
 
 def global_header(name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
     academic_pages = ["dean-settings","exams","marks","subject-allocation","marksheets","analysis","spreadsheet","sba"]
+    comm_pages = ["sms","communication"]
+    system_pages = ["system-settings","school-profile","system-classes","user-management","roles-permissions","database-backup","system-audit","integrations","billing-payments","my-profile","user-manual"]
     is_academic_active = active in academic_pages
-    dropdown_display = "block" if is_academic_active else "none"
-    arrow = "⌃" if is_academic_active else "⌄"
-    academic_bg = "background:#0f172a;color:white" if is_academic_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    is_comm_active = active in comm_pages
+    is_system_active = active in system_pages or str(active).startswith("system-settings")
+    acad_display = "block" if is_academic_active else "none"
+    comm_display = "block" if is_comm_active else "none"
+    sys_display = "block" if is_system_active else "none"
+    acad_arrow = "⌃" if is_academic_active else "⌄"
+    comm_arrow = "⌃" if is_comm_active else "⌄"
+    sys_arrow = "⌃" if is_system_active else "⌄"
+    acad_bg = "background:#0f172a;color:white" if is_academic_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    comm_bg = "background:#0f172a;color:white" if is_comm_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
+    sys_bg = "background:#0f172a;color:white" if is_system_active else "background:white;color:#0f172a;border:1px solid #e2e8f0"
     def nav(link, icon, label):
         is_active = "background:#0f172a;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
         return f"<a href='/super/global-control/{link}' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
@@ -90,7 +113,7 @@ def global_header(name, active="dashboard"):
         return f"<a href='/super/global-control/{link}' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;font-size:13px;margin-bottom:2px;{is_sel}'>{icon} {label}</a>"
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM global_notices ORDER BY id DESC LIMIT 1"); notice = cur.fetchone(); con.close()
     notice_banner = f"""<div style='background:#0f172a;color:white;padding:8px 20px;text-align:center;font-size:12px'>📢 {notice['message']}</div>""" if notice else ""
-    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.academic-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px;{academic_bg}}}.academic-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🌍</div><div><b style='font-size:13px'>GLOBAL CONTROL</b><div style='font-size:10px;color:#64748b'>ALL SCHOOLS • Automatic</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{arrow}</span></div><div id='academicDropdown' style='display:{dropdown_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('marks','✏️','Record Marks')}{sub_nav('marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('fees','💰','Fees & Finance')}{nav('sms','💬','Bulk SMS Parents')}<div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/dashboard' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#0f172a;background:#f8fafc;font-weight:700'>⬅️ Back to Super Admin</a><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>GLOBAL CONTROL (ALL SCHOOLS)</b><div style='font-size:10px;color:#64748b'>Any change here updates all schools instantly</div></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#0f172a;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b> <span style="background:#0f172a;color:white;padding:2px 6px;border-radius:6px;font-size:9px">SUPER</span></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
+    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.section-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px}}.academic-header{{ {acad_bg} }}.comm-header{{ {comm_bg} }}.system-header{{ {sys_bg} }}.section-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🌍</div><div><b style='font-size:13px'>GLOBAL CONTROL</b><div style='font-size:10px;color:#64748b'>ALL SCHOOLS • Automatic</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='section-header academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{acad_arrow}</span></div><div id='academicDropdown' style='display:{acad_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('marks','✏️','Record Marks')}{sub_nav('marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('fees','💰','Fees & Finance')}<div style='margin-bottom:4px'><div class='section-header comm-header' onclick='toggleComm()'><span>💬 Communication</span><span id='commArrow'>{comm_arrow}</span></div><div id='commDropdown' style='display:{comm_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('sms','💬','Bulk SMS Parents')}{sub_nav('communication','📢','Announcements')}</div></div><div style='margin-bottom:4px;margin-top:6px'><div class='section-header system-header' onclick='toggleSystem()'><span>⚙️ System Settings</span><span id='systemArrow'>{sys_arrow}</span></div><div id='systemDropdown' style='display:{sys_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('system-settings/school-profile','🏢','School Profile')}{sub_nav('system-settings/classes','🏫','Classes')}{sub_nav('system-settings/user-management','👤+','User Management')}{sub_nav('system-settings/roles-permissions','🛡️','Roles & Permissi...')}{sub_nav('system-settings/database-backup','🗄️','Database Backup')}{sub_nav('system-settings/system-audit','📈','System Audit')}{sub_nav('system-settings/integrations','🔌','Integrations')}{sub_nav('system-settings/billing-payments','💳','Billing & Payments')}</div></div>{nav('my-profile','👤','My Profile')}<div style='margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9'><div style='font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:8px'>Help</div>{nav('user-manual','❓','User Manual')}<div style='margin-top:14px;padding:10px;background:#f8fafc;border-radius:10px;border:1px solid #f1f5f9'><div style='display:flex;gap:8px;align-items:center'><div style='width:28px;height:28px;background:#0f172a;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800'>DO</div><div><div style='font-size:12px;font-weight:800'>{name}</div><div style='font-size:10px;color:#64748b'>Super Admin</div></div></div><div style='margin-top:10px;font-size:12px'>🌤️ 24°C<br><span style='color:#64748b'>Mostly cloudy</span></div></div></div><div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/dashboard' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#0f172a;background:#f8fafc;font-weight:700'>⬅️ Back to Super Admin</a><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>GLOBAL CONTROL (ALL SCHOOLS)</b><div style='font-size:10px;color:#64748b'>Any change here updates all schools instantly</div></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#0f172a;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b> <span style="background:#0f172a;color:white;padding:2px 6px;border-radius:6px;font-size:9px">SUPER</span></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleComm(){{let d=document.getElementById('commDropdown'); let a=document.getElementById('commArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleSystem(){{let d=document.getElementById('systemDropdown'); let a=document.getElementById('systemArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
 
 def staff_manager_html(teachers, school_name, is_global=False):
     total = len(teachers)
@@ -137,193 +160,7 @@ def students_manager_html(students, classes_list, school_name, is_global=False):
         rows_html = "<tr><td colspan='9' style='padding:40px;text-align:center;color:#94a3b8'>No pupils yet — click + Admit Pupil</td></tr>"
     add_action = "/super/global-control/students/add" if is_global else "/school/students/add"
     class_opts_form = "".join([f"<option value='{c['id']}'>{c['name']} {c['stream'] or ''}</option>" for c in classes_list])
-    return f"""<style>.stu-card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;display:flex;justify-content:space-between;align-items:center}}.filter-select{{padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:12px;min-width:130px}}.action-btn{{padding:9px 12px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:12px;font-weight:600;cursor:pointer}}.add-pupil-btn{{background:#0f172a;color:white;padding:11px 16px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}.modal.active{{display:flex}}</style><div style='padding:20px;max-width:1500px;margin:auto'><div style='margin-bottom:16px'><h1 style='margin:0;font-size:26px;font-weight:900'>Students Manager</h1><p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage pupils — {school_name}</p></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px'><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Total Students</div><div style='font-size:26px;font-weight:900;margin-top:6px'>{total}</div></div></div><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Male / Female</div><div style='font-size:22px;font-weight:900;margin-top:6px'><span style='color:#2563eb'>{male}</span> / <span style='color:#db2777'>{female}</span></div></div></div><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Boarding / Day</div><div style='font-size:22px;font-weight:900;margin-top:6px'><span style='color:#059669'>{boarding}</span> / <span style='color:#ea580c'>{day}</span></div></div></div><div class='stu-card' style='flex-direction:column;align-items:flex-start'><div style='font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px'>By Class</div><div style='display:flex;flex-wrap:wrap'>{class_pills}</div></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid #f1f5f9'><div style='display:flex;align-items:center;gap:8px'><span style='font-size:12px;color:#64748b'>Show</span><select id='perPage' class='filter-select' style='min-width:70px' onchange='filterStu()'><option value='10'>10</option><option value='25'>25</option><option value='50'>50</option><option value='100'>100</option><option value='1000'>All</option></select><span style='font-size:12px;color:#64748b'>items</span></div><div style='display:flex;gap:8px;flex-wrap:wrap'><button class='add-pupil-btn' onclick='openStuModal()'>+ Admit Pupil</button></div></div><div style='padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='stuSearch' onkeyup='filterStu()' placeholder='Search name, ADM, guardian' style='padding:9px 12px 9px 30px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px;min-width:200px'></div><select id='classFilter' class='filter-select' onchange='filterStu()'>{class_filter_opts}</select><select id='genderFilter' class='filter-select' onchange='filterStu()'><option value='all'>All Gender</option><option value='male'>Male</option><option value='female'>Female</option></select><select id='categoryFilter' class='filter-select' onchange='filterStu()'><option value='all'>All Category</option><option value='day'>Day</option><option value='boarding'>Boarding</option></select><button class='action-btn' onclick='exportStuCSV()'>📄 CSV</button><button class='action-btn' onclick='exportPDF()'>⬇️ PDF</button><button class='action-btn' onclick='exportKemis()'>📤 KEMIS Export</button></div><div style='overflow:auto;max-height:68vh'><table id='stuTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9'><th style='padding:11px 10px'>#</th><th style='padding:11px 10px'>ADM NO</th><th style='padding:11px 10px'>NAME</th><th style='padding:11px 10px'>GENDER</th><th style='padding:11px 10px'>CLASS</th><th style='padding:11px 10px'>CATEGORY</th><th style='padding:11px 10px'>GUARDIAN</th><th style='padding:11px 10px'>PHONE</th><th style='padding:11px 10px'>ACTIONS</th></tr></thead><tbody>{rows_html}</tbody></table></div></div></div><div id='stuModal' class='modal'><div style='background:white;border-radius:16px;width:560px;max-width:96%;max-height:92vh;overflow:auto'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center'><b>➕ Admit Pupil — {school_name}</b><span onclick='closeStuModal()' style='cursor:pointer;font-size:20px'>✕</span></div><form method='post' action='{add_action}' style='padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px'><div><label style='font-size:11px;font-weight:700'>🆔 Admission No *</label><input name='admission_no' required placeholder='e.g. 1001' class='input-field'></div><div><label style='font-size:11px;font-weight:700'>📝 Assessment No</label><input name='assessment_no' placeholder='KEMIS' class='input-field'></div><div style='grid-column:span 2'><label style='font-size:11px;font-weight:700'>👤 Full Name *</label><input name='student_name' required placeholder='Full Name *' class='input-field'></div><div><label style='font-size:11px;font-weight:700'>🏫 Class *</label><select name='class_id' required class='input-field'><option value=''>Select Class *</option>{class_opts_form}</select></div><div><label style='font-size:11px;font-weight:700'>⚧️ Gender *</label><select name='gender' required class='input-field'><option value='Male'>Male</option><option value='Female'>Female</option></select></div><div><label style='font-size:11px;font-weight:700'>🏠 Category *</label><select name='category' required class='input-field'><option value='Day'>Day</option><option value='Boarding'>Boarding</option></select></div><div><label style='font-size:11px;font-weight:700'>👨‍👩‍👧 Guardian Name</label><input name='guardian_name' placeholder='Guardian Name' class='input-field'></div><div style='grid-column:span 2'><label style='font-size:11px;font-weight:700'>📞 Guardian Phone</label><input name='parent_phone' placeholder='Phone' class='input-field'></div><div style='grid-column:span 2;margin-top:6px'><button class='add-btn'>✅ Admit Pupil</button></div></form></div></div><script>function openStuModal(){{document.getElementById('stuModal').classList.add('active');}}function closeStuModal(){{document.getElementById('stuModal').classList.remove('active');}}function filterStu(){{let q=document.getElementById('stuSearch').value.toLowerCase();let cf=document.getElementById('classFilter').value.toLowerCase();let gf=document.getElementById('genderFilter').value.toLowerCase();let catf=document.getElementById('categoryFilter').value.toLowerCase();let per=parseInt(document.getElementById('perPage').value);let rows=document.querySelectorAll('.stu-row');let vis=0;rows.forEach(r=>{{let ok=true;if(q&&!r.getAttribute('data-search').includes(q))ok=false;if(cf!=='all'&&!r.getAttribute('data-class').includes(cf))ok=false;if(gf!=='all'&&!r.getAttribute('data-gender').includes(gf))ok=false;if(catf!=='all'&&!r.getAttribute('data-category').includes(catf))ok=false;if(ok){{vis++;r.style.display=(per>=1000||vis<=per)?'':'none';}} else {{r.style.display='none';}}}});}}function exportStuCSV(){{let rows=document.querySelectorAll('#stuTable tr');let csv=[];rows.forEach(row=>{{let cols=row.querySelectorAll('th,td');let d=[];cols.forEach((c,i)=>{{if(i<8)d.push('\"'+c.innerText.replace(/\"/g,'\"\"')+'\"');}});if(d.length)csv.push(d.join(','));}});let b=new Blob([csv.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='students_{school_name}.csv';a.click();}}function exportKemis(){{let rows=document.querySelectorAll('.stu-row');let out=[['ADM_NO','NAME','GENDER','CLASS','CATEGORY','GUARDIAN','PHONE'].join(',')];rows.forEach(r=>{{if(r.style.display==='none')return;let tds=r.querySelectorAll('td');let vals=[tds[1].innerText,tds[2].innerText,tds[3].innerText,tds[4].innerText,tds[5].innerText,tds[6].innerText,tds[7].innerText].map(v=>'\"'+v.replace(/\"/g,'\"\"')+'\"');out.push(vals.join(','));}});let b=new Blob([out.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='KEMIS_{school_name}.csv';a.click();}}function exportPDF(){{window.print();}}</script>"""
-
-def dean_manager_html(terms, subjects, teachers, classes, allocations, students, school_name, is_global=False, active_tab="terms"):
-    years = sorted(list(set([t['year'] for t in terms if t['year']])), reverse=True)
-    year_opts = "<option value='all'>All Years</option>" + "".join([f"<option value='{y}'>{y}</option>" for y in years])
-    term_rows = ""
-    for idx, t in enumerate(terms,1):
-        edit_btn = f"""<a href='#' onclick='openEditTerm({t['id']},\"{t['term_name']}\",\"{t['year']}\",\"{t['start_date']}\",\"{t['end_date']}\");return false;' style='padding:6px 8px;background:#f1f5f9;border-radius:8px;text-decoration:none'>✏️</a>"""
-        del_url = f"/super/global-control/dean-settings/delete-term/{t['id']}" if is_global else f"/school/dean-settings/delete-term/{t['id']}"
-        term_rows += f"""<tr class='term-row' data-search="{t['term_name'].lower()} {t['year']}" data-year="{t['year']}"><td style='padding:12px'><input type='checkbox'></td><td style='padding:12px;font-size:13px'>{idx}</td><td style='padding:12px;font-size:13px;font-weight:700'>{t['term_name']}</td><td style='padding:12px;font-size:13px'>{t['year']}</td><td style='padding:12px;font-size:13px'>{t['start_date']}</td><td style='padding:12px;font-size:13px'>{t['end_date']}</td><td style='padding:12px;display:flex;gap:6px'>{edit_btn}<a href='{del_url}' style='padding:6px 8px;background:#fee2e2;border-radius:8px;text-decoration:none'>🗑️</a></td></tr>"""
-    if not term_rows:
-        term_rows = "<tr><td colspan='7' style='padding:40px;text-align:center;color:#94a3b8'>No terms — click + Add Term</td></tr>"
-    subj_rows = ""
-    for idx, s in enumerate(subjects,1):
-        del_url = f"/super/global-control/dean-settings/delete-subject/{s['id']}" if is_global else f"/school/dean-settings/delete-subject/{s['id']}"
-        subj_rows += f"""<tr class='subj-row' data-search="{s['name'].lower()}"><td style='padding:12px'><input type='checkbox'></td><td style='padding:12px;font-size:13px'>{idx}</td><td style='padding:12px;font-size:13px;font-weight:700'>{s['name']}</td><td style='padding:12px;font-size:13px'>{s['code'] or '—'}</td><td style='padding:12px;font-size:13px'>{s['initial'] or '—'}</td><td style='padding:12px'><a href='{del_url}' style='padding:6px 8px;background:#fee2e2;border-radius:8px;text-decoration:none'>🗑️</a></td></tr>"""
-    if not subj_rows:
-        subj_rows = "<tr><td colspan='6' style='padding:40px;text-align:center;color:#94a3b8'>No subjects — add in Subjects tab</td></tr>"
-    t_opts = "".join([f"<option value='{t['id']}'>{t['name']} ({t['role'] or 'Teacher'})</option>" for t in teachers])
-    s_opts = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    c_opts = "".join([f"<option value='{c['id']}'>{c['name']} {c['stream'] or ''}</option>" for c in classes])
-    alloc_rows = ""
-    for a in allocations:
-        del_url = f"/super/global-control/dean-settings/delete-alloc/{a['id']}" if is_global else f"/school/dean-settings/delete-alloc/{a['id']}"
-        alloc_rows += f"""<tr><td style='padding:10px 12px;font-size:13px'>{a['tname'] or '—'}</td><td style='padding:10px 12px;font-size:13px'>{a['sname'] or '—'}</td><td style='padding:10px 12px;font-size:13px'>{a['cname'] or '—'}</td><td style='padding:10px 12px'><a href='{del_url}' style='background:#fee2e2;color:#991b1b;padding:5px 8px;border-radius:7px;text-decoration:none'>🗑️</a></td></tr>"""
-    if not alloc_rows:
-        alloc_rows = "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No allocations yet</td></tr>"
-    class_options_promote = "".join([f"<option value='{c['id']}'>{c['name']} {c['stream'] or ''}</option>" for c in classes])
-    add_term_action = "/super/global-control/dean-settings/add-term" if is_global else "/school/dean-settings/add-term"
-    add_subject_action = "/super/global-control/dean-settings/add-subject" if is_global else "/school/dean-settings/add-subject"
-    alloc_action = "/super/global-control/dean-settings/allocate" if is_global else "/school/dean-settings/allocate"
-    promote_action = "/super/global-control/dean-settings/promote" if is_global else "/school/dean-settings/promote"
-    return f"""
-<style>
-.dean-card{{background:white;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden}}
-.dean-tab{{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px}}
-.dean-tab.active{{background:#0f172a;color:white}}
-.dean-tab:not(.active){{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}}
-.filter-input{{padding:10px 12px 10px 34px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;width:220px}}
-.filter-select{{padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px}}
-.action-btn{{padding:10px 14px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;font-weight:600;cursor:pointer}}
-.add-term-btn{{background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:12px;font-weight:700;cursor:pointer}}
-.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}
-.modal.active{{display:flex}}
-</style>
-<div style='padding:20px;max-width:1450px;margin:auto'>
-<div style='margin-bottom:14px'>
-<h1 style='margin:0;font-size:26px;font-weight:900;letter-spacing:-0.5px'>Dean Settings</h1>
-<p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage terms, subjects, teacher allocation & promotions</p>
-</div>
-<div class='dean-card'>
-<div style='padding:14px 16px;display:flex;gap:8px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap'>
-<div onclick="switchTab('terms')" id='tab-terms' class='dean-tab {"active" if active_tab=="terms" else ""}'>📅 Terms</div>
-<div onclick="switchTab('subjects')" id='tab-subjects' class='dean-tab {"active" if active_tab=="subjects" else ""}'>📖 Subjects</div>
-<div onclick="switchTab('allocation')" id='tab-allocation' class='dean-tab {"active" if active_tab=="allocation" else ""}'>👥 Teacher Allocation</div>
-<div onclick="switchTab('promote')" id='tab-promote' class='dean-tab {"active" if active_tab=="promote" else ""}'>↗️ Promote</div>
-</div>
-<div id='panel-terms' style='display:{"block" if active_tab=="terms" else "none"}'>
-<div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'>
-<div style='display:flex;gap:10px;align-items:center'>
-<div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='termSearch' onkeyup='filterTerms()' placeholder='Search terms...' class='filter-input'></div>
-<select id='yearFilter' class='filter-select' onchange='filterTerms()'>{year_opts}</select>
-</div>
-<div style='display:flex;gap:8px'>
-<button class='action-btn' onclick='downloadTerms()'>⬇️ Download</button>
-<button class='add-term-btn' onclick='openAddTerm()'>+ Add Term</button>
-</div>
-</div>
-<div style='overflow:auto;max-height:60vh'>
-<table id='termsTable' style='width:100%;border-collapse:collapse'>
-<thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px 12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>TERM ↕️</th><th style='padding:12px'>YEAR ↕️</th><th style='padding:12px'>START DATE ↕️</th><th style='padding:12px'>END DATE ↕️</th><th style='padding:12px;text-align:right'>ACTIONS</th></tr></thead>
-<tbody>{term_rows}</tbody>
-</table>
-</div>
-<div style='padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #f1f5f9;background:#fcfcfc'>
-<div style='display:flex;gap:10px;align-items:center;font-size:13px;color:#64748b'><span>Show</span><select id='termPerPage' class='filter-select' style='min-width:70px' onchange='filterTerms()'><option>10</option><option>25</option><option>50</option><option value='1000'>All</option></select><span>items per page</span></div>
-<div style='display:flex;gap:12px;align-items:center;font-size:13px'><span id='termInfo' style='color:#64748b'>Showing 1–{len(terms)} of {len(terms)}</span><div style='display:flex;gap:6px'><button class='action-btn' onclick='prevPage()'>‹ Previous</button><span style='padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;background:white'>Page 1 of 1</span><button class='action-btn' onclick='nextPage()'>Next ›</button></div></div>
-</div>
-</div>
-<div id='panel-subjects' style='display:{"block" if active_tab=="subjects" else "none"}'>
-<div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'>
-<div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='subjSearch' onkeyup='filterSubjects()' placeholder='Search subjects...' class='filter-input'></div></div>
-<div style='display:flex;gap:8px'><button class='add-term-btn' onclick='openAddSubject()'>+ Add Subject</button></div>
-</div>
-<div style='overflow:auto;max-height:60vh'><table style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>NAME</th><th style='padding:12px'>CODE</th><th style='padding:12px'>INITIAL</th><th style='padding:12px'>ACTIONS</th></tr></thead><tbody>{subj_rows}</tbody></table></div>
-</div>
-<div id='panel-allocation' style='display:{"block" if active_tab=="allocation" else "none"}'>
-<div style='padding:16px;display:grid;grid-template-columns:320px 1fr;gap:16px'>
-<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;height:fit-content'>
-<b style='font-size:13px'>📌 Allocate Teacher</b>
-<form method='post' action='{alloc_action}' style='margin-top:10px'>
-<select name='teacher_id' required class='input-field'><option value=''>Select Teacher *</option>{t_opts}</select>
-<select name='subject_id' required class='input-field'><option value=''>Select Subject *</option>{s_opts}</select>
-<select name='class_id' required class='input-field'><option value=''>Select Class *</option>{c_opts}</select>
-<button class='add-btn' style='margin-top:10px'>Allocate</button>
-</form>
-</div>
-<div style='background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden'>
-<div style='padding:12px 14px;border-bottom:1px solid #f1f5f9'><b>Allocations ({len(allocations)})</b></div>
-<table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 12px'>TEACHER</th><th>SUBJECT</th><th>CLASS</th><th>ACTION</th></tr></thead><tbody>{alloc_rows}</tbody></table>
-</div>
-</div>
-</div>
-<div id='panel-promote' style='display:{"block" if active_tab=="promote" else "none"}'>
-<div style='padding:20px;max-width:600px'>
-<div style='background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px'>⚠️ Promotion will move all students from source class to destination class. This action is recorded.</div>
-<form method='post' action='{promote_action}' style='display:grid;gap:12px'>
-<div><label style='font-size:12px;font-weight:700'>From Class *</label><select name='from_class' required class='input-field'><option value=''>Select Source Class *</option>{class_options_promote}</select></div>
-<div><label style='font-size:12px;font-weight:700'>To Class *</label><select name='to_class' required class='input-field'><option value=''>Select Destination Class *</option>{class_options_promote}</select></div>
-<button class='add-btn'>↗️ Promote Students</button>
-</form>
-</div>
-</div>
-</div>
-</div>
-<div id='addTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Term</b><span onclick='closeAddTerm()' style='cursor:pointer'>✕</span></div>
-<form method='post' action='{add_term_action}' style='padding:18px;display:grid;gap:10px'>
-<select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select>
-<input name='year' required placeholder='Year e.g. 2026' class='input-field'>
-<label style='font-size:11px;font-weight:700'>Start Date</label><input name='start_date' type='date' required class='input-field'>
-<label style='font-size:11px;font-weight:700'>End Date</label><input name='end_date' type='date' required class='input-field'>
-<button class='add-btn'>Add Term</button>
-</form></div></div>
-<div id='editTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>✏️ Edit Term</b><span onclick='closeEditTerm()' style='cursor:pointer'>✕</span></div>
-<form id='editTermForm' method='post' style='padding:18px;display:grid;gap:10px'>
-<select name='term_name' id='e_term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select>
-<input name='year' id='e_year' required class='input-field'>
-<input name='start_date' id='e_start' type='date' required class='input-field'>
-<input name='end_date' id='e_end' type='date' required class='input-field'>
-<button class='add-btn'>Update Term</button>
-</form></div></div>
-<div id='addSubjectModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Subject</b><span onclick='closeAddSubject()' style='cursor:pointer'>✕</span></div>
-<form method='post' action='{add_subject_action}' style='padding:18px;display:grid;gap:10px'>
-<input name='subject_name' required placeholder='Subject Name *' class='input-field'>
-<input name='code' placeholder='Code e.g. MAT' class='input-field'>
-<input name='initial' placeholder='Initial e.g. M' class='input-field'>
-<button class='add-btn'>Add Subject</button>
-</form></div></div>
-<script>
-function switchTab(t){{
-  document.querySelectorAll('[id^=panel-]').forEach(p=>p.style.display='none');
-  document.querySelectorAll('.dean-tab').forEach(b=>b.classList.remove('active'));
-  document.getElementById('panel-'+t).style.display='block';
-  document.getElementById('tab-'+t).classList.add('active');
-  const url=new URL(window.location); url.searchParams.set('tab',t); history.pushState({{}},'',url);
-}}
-function openAddTerm(){{document.getElementById('addTermModal').classList.add('active');}}
-function closeAddTerm(){{document.getElementById('addTermModal').classList.remove('active');}}
-function openEditTerm(id,name,year,s,e){{
-  document.getElementById('editTermModal').classList.add('active');
-  document.getElementById('editTermForm').action = (window.location.pathname.includes('global-control')? '/super/global-control/dean-settings/edit-term/' : '/school/dean-settings/edit-term/') + id;
-  document.getElementById('e_term_name').value=name;
-  document.getElementById('e_year').value=year;
-  document.getElementById('e_start').value=s;
-  document.getElementById('e_end').value=e;
-}}
-function closeEditTerm(){{document.getElementById('editTermModal').classList.remove('active');}}
-function openAddSubject(){{document.getElementById('addSubjectModal').classList.add('active');}}
-function closeAddSubject(){{document.getElementById('addSubjectModal').classList.remove('active');}}
-function filterTerms(){{
-  let q=document.getElementById('termSearch').value.toLowerCase();
-  let y=document.getElementById('yearFilter').value.toLowerCase();
-  let per=parseInt(document.getElementById('termPerPage').value);
-  let rows=document.querySelectorAll('.term-row');
-  let vis=0;
-  rows.forEach(r=>{{
-    let ok=true;
-    if(q &&!r.getAttribute('data-search').includes(q)) ok=false;
-    if(y!=='all' && r.getAttribute('data-year').toLowerCase()!==y) ok=false;
-    if(ok){{vis++; r.style.display=(per>=1000||vis<=per)?'':'none';}} else {{r.style.display='none';}}
-  }});
-  document.getElementById('termInfo').innerText='Showing 1–'+vis+' of '+vis;
-}}
-function filterSubjects(){{
-  let q=document.getElementById('subjSearch').value.toLowerCase();
-  document.querySelectorAll('.subj-row').forEach(r=>{{r.style.display=r.getAttribute('data-search').includes(q)?'':'none';}});
-}}
-function downloadTerms(){{
-  let rows=document.querySelectorAll('#termsTable tr');
-  let csv=[];
-  rows.forEach(row=>{{let cols=row.querySelectorAll('th,td');let d=[];cols.forEach((c,i)=>{{if(i>0 && i<6) d.push('\"'+c.innerText.replace(/\"/g,'\"\"')+'\"');}}); if(d.length) csv.push(d.join(','));}});
-  let b=new Blob([csv.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='terms_{school_name}.csv';a.click();
-}}
-function prevPage(){{}}
-function nextPage(){{}}
-</script>
-"""
+    return f"""<style>.stu-card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;display:flex;justify-content:space-between;align-items:center}}.filter-select{{padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:12px;min-width:130px}}.action-btn{{padding:9px 12px;border:1px solid #e2e8f0;border-radius:10px;background:white;font-size:12px;font-weight:600;cursor:pointer}}.add-pupil-btn{{background:#0f172a;color:white;padding:11px 16px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}.modal.active{{display:flex}}</style><div style='padding:20px;max-width:1500px;margin:auto'><div style='margin-bottom:16px'><h1 style='margin:0;font-size:26px;font-weight:900'>Students Manager</h1><p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage pupils — {school_name}</p></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px'><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Total Students</div><div style='font-size:26px;font-weight:900;margin-top:6px'>{total}</div></div></div><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Male / Female</div><div style='font-size:22px;font-weight:900;margin-top:6px'><span style='color:#2563eb'>{male}</span> / <span style='color:#db2777'>{female}</span></div></div></div><div class='stu-card'><div><div style='font-size:12px;color:#64748b;font-weight:600'>Boarding / Day</div><div style='font-size:22px;font-weight:900;margin-top:6px'><span style='color:#059669'>{boarding}</span> / <span style='color:#ea580c'>{day}</span></div></div></div><div class='stu-card' style='flex-direction:column;align-items:flex-start'><div style='font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px'>By Class</div><div style='display:flex;flex-wrap:wrap'>{class_pills}</div></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid #f1f5f9'><div style='display:flex;align-items:center;gap:8px'><span style='font-size:12px;color:#64748b'>Show</span><select id='perPage' class='filter-select' style='min-width:70px' onchange='filterStu()'><option value='10'>10</option><option value='25'>25</option><option value='50'>50</option><option value='100'>100</option><option value='1000'>All</option></select><span style='font-size:12px;color:#64748b'>items</span></div><div style='display:flex;gap:8px;flex-wrap:wrap'><button class='add-pupil-btn' onclick='openStuModal()'>+ Admit Pupil</button></div></div><div style='padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='stuSearch' onkeyup='filterStu()' placeholder='Search name, ADM, guardian' style='padding:9px 12px 9px 30px;border:1px solid #e2e8f0;border-radius:10px;font-size:12px;min-width:200px'></div><select id='classFilter' class='filter-select' onchange='filterStu()'>{class_filter_opts}</select><select id='genderFilter' class='filter-select' onchange='filterStu()'><option value='all'>All Gender</option><option value='male'>Male</option><option value='female'>Female</option></select><select id='categoryFilter' class='filter-select' onchange='filterStu()'><option value='all'>All Category</option><option value='day'>Day</option><option value='boarding'>Boarding</option></select><button class='action-btn' onclick='exportStuCSV()'>📄 CSV</button><button class='action-btn' onclick='exportPDF()'>⬇️ PDF</button><button class='action-btn' onclick='exportKemis()'>📤 KEMIS Export</button></div><div style='overflow:auto;max-height:68vh'><table id='stuTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9'><th style='padding:11px 10px'>#</th><th style='padding:11px 10px'>ADM NO</th><th style='padding:11px 10px'>NAME</th><th style='padding:11px 10px'>GENDER</th><th style='padding:11px 10px'>CLASS</th><th style='padding:11px 10px'>CATEGORY</th><th style='padding:11px 10px'>GUARDIAN</th><th style='padding:11px 10px'>PHONE</th><th style='padding:11px 10px'>ACTIONS</th></tr></thead><tbody>{rows_html}</tbody></table></div></div></div><div id='stuModal' class='modal'><div style='background:white;border-radius:16px;width:560px;max-width:96%;max-height:92vh;overflow:auto'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center'><b>➕ Admit Pupil — {school_name}</b><span onclick='closeStuModal()' style='cursor:pointer;font-size:20px'>✕</span></div><form method='post' action='{add_action}' style='padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px'><div><label style='font-size:11px;font-weight:700'>🆔 Admission No *</label><input name='admission_no' required placeholder='e.g. 1001' class='input-field'></div><div><label style='font-size:11px;font-weight:700'>📝 Assessment No</label><input name='assessment_no' placeholder='KEMIS' class='input-field'></div><div style='grid-column:span 2'><label style='font-size:11px;font-weight:700'>👤 Full Name *</label><input name='student_name' required placeholder='Full Name *' class='input-field'></div><div><label style='font-size:11px;font-weight:700'>🏫 Class *</label><select name='class_id' required class='input-field'><option value=''>Select Class *</option>{class_opts_form}</select></div><div><label style='font-size:11px;font-weight:700'>⚧️ Gender *</label><select name='gender' required class
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{margin:0;font-family:Arial;background:#f0f2f5;display:flex;height:100vh}.blue-bar{width:32px;background:#0d8bf2;flex-shrink:0}.main{flex:1;display:flex;justify-content:center;align-items:center;padding:20px}.card{background:white;width:540px;max-width:100%;padding:48px 48px 40px;border-radius:6px;box-shadow:0 0 0 1px #e2e8f0;text-align:center}.logo-box{width:72px;height:72px;background:#0f172a;color:white;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:32px;margin:0 auto}.input{width:100%;padding:14px 16px;border:1px solid #e2e8f0;border-radius:10px;background:#fcfcfc;font-size:14px;outline:none;box-sizing:border-box}.sign{background:#0d8bf2;color:white;width:100%;padding:15px;border:none;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;margin-top:10px}</style></head><body><div class="blue-bar"></div><div class="main"><div class="card"><div class="logo-box">D</div><h1 style="margin:16px 0 0;font-size:40px;font-weight:900;color:#0f172a">DaviSchool</h1><div style="margin-top:12px;color:#334155;font-size:15px">Sign in to your Davischool account</div><form method="post" action="/login" style="margin-top:30px;text-align:left"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Username or Email</label><input name="email" class="input" required style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Password</label><input name="password" type="password" class="input" required style="margin-bottom:18px"><button class="sign">Sign In</button></form></div></div></body></html>"""
@@ -333,8 +170,11 @@ def home_head(): return PlainTextResponse("OK")
 def health(): return PlainTextResponse("OK")
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u = cur.fetchone(); con.close()
-    if not u: return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u = cur.fetchone()
+    if not u: con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
+    ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts))
+    con.commit(); con.close()
     request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["is_impersonating"]=False
     if u["role"]!= "super_admin": return RedirectResponse("/school/dashboard", status_code=303)
     return RedirectResponse("/dashboard", status_code=303)
@@ -523,11 +363,6 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
 @app.get("/school/classes/delete/{cid}")
 def del_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 
-# Old standalone subjects page still exists but no button - kept for direct access if needed
-@app.get("/school/subjects", response_class=HTMLResponse)
-def school_subjects_old(request: Request):
-    return RedirectResponse("/school/dean-settings?tab=subjects",303)
-
 @app.get("/school/exams", response_class=HTMLResponse)
 def school_exams(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -561,33 +396,277 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""),
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
-@app.get("/school/subject-allocation", response_class=HTMLResponse)
-def school_alloc(request: Request): return RedirectResponse("/school/dean-settings?tab=allocation",303)
+# === SYSTEM SETTINGS ROUTES ===
+def system_settings_data(school_id):
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM schools WHERE id=?", (school_id,)); school = cur.fetchone()
+    cur.execute("SELECT * FROM users WHERE school_id=? ORDER BY id DESC", (school_id,)); users = cur.fetchall()
+    cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school_id,)); classes = cur.fetchall()
+    cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 200", (school_id,)); audit = cur.fetchall()
+    con.close()
+    return school, users, classes, audit
 
-# GLOBAL CONTROL
-@app.get("/super/global-control", response_class=HTMLResponse)
-@app.get("/super/global-control/dashboard", response_class=HTMLResponse)
-def global_dashboard(request: Request):
+@app.get("/school/system-settings/{sub}", response_class=HTMLResponse)
+def school_system_settings(sub: str, request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    school_obj = get_school_obj(request)
+    if not school_obj: return RedirectResponse("/dashboard")
+    name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
+    school, users, classes, audit = system_settings_data(school_obj["id"])
+    header = school_header(school_obj, name, f"system-settings/{sub}", is_impersonating=is_imp)
+    # reuse system_settings_html but we need to render correct panel
+    # Build custom content for each sub
+    base_path = f"/school/system-settings"
+    # Generate panel via function - we'll inline quickly
+    if sub=="school-profile":
+        panel = f"""
+        <div style='display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px'>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'>
+            <h3 style='margin:0 0 12px'>🏢 School Profile</h3>
+            <form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px'>
+              <label style='font-size:11px;font-weight:700'>School Name</label><input name='name' value="{school['name']}" class='input-field'>
+              <label style='font-size:11px;font-weight:700'>Email</label><input name='email' value="{school['email']}" class='input-field'>
+              <label style='font-size:11px;font-weight:700'>Location</label><input name='location' value="{school['location']}" class='input-field'>
+              <label style='font-size:11px;font-weight:700'>Phone</label><input name='phone' value="{school['phone']}" class='input-field'>
+              <label style='font-size:11px;font-weight:700'>Principal</label><input name='principal' value="{school['principal']}" class='input-field'>
+              <label style='font-size:11px;font-weight:700'>School Type</label><input name='school_type' value="{school['school_type']}" class='input-field'>
+              <button class='add-btn' style='margin-top:8px'>💾 Update Profile</button>
+            </form>
+          </div>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'>
+            <h3 style='margin:0 0 12px'>📊 Info</h3>
+            <div style='font-size:13px;line-height:1.8;color:#334155'>
+              <div>🔑 Code: <b>{school['code']}</b></div><div>📧 Email: <b>{school['email']}</b></div><div>📍 Location: <b>{school['location']}</b></div><div>👥 Users: <b>{len(users)}</b></div><div>🏫 Classes: <b>{len(classes)}</b></div>
+            </div>
+          </div>
+        </div>
+        """
+    elif sub=="classes":
+        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center;color:#94a3b8'>No classes</td></tr>"
+        panel = f"""
+        <div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>NAME</th><th>STREAM</th><th>ACTION</th></tr></thead><tbody>{rows}</tbody></table></div>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;height:fit-content'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class' style='margin-top:10px'><input name='class_name' required placeholder='Class e.g. GRADE 7' class='input-field'><input name='stream' required placeholder='Stream e.g. EAST' class='input-field'><button class='add-btn'>Add Class</button></form></div>
+        </div>
+        """
+    elif sub=="user-management":
+        urows = "".join([f"<tr><td style='padding:10px;font-size:12px;font-weight:700'>{u['full_name']}</td><td style='padding:10px;font-size:12px'>{u['email']}</td><td><span style='background:#e0e7ff;color:#3730a3;padding:3px 8px;border-radius:12px;font-size:11px'>{u['role']}</span></td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
+        panel = f"""
+        <div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥+ User Management ({len(users)})</b></div><table style='width:100%'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>NAME</th><th>EMAIL</th><th>ROLE</th><th>ACTION</th></tr></thead><tbody>{urows}</tbody></table></div>
+          <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;height:fit-content'><b>➕ Add User</b><form method='post' action='{base_path}/add-user' style='margin-top:10px'><input name='full_name' required placeholder='Full Name *' class='input-field'><input name='email' required placeholder='Email *' class='input-field'><input name='password' required placeholder='Password *' class='input-field'><select name='role' required class='input-field'><option>teacher</option><option>school_admin</option><option>accountant</option><option>librarian</option></select><button class='add-btn'>Create User</button></form></div>
+        </div>
+        """
+    elif sub=="roles-permissions":
+        panel = """
+        <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'>
+          <h3>🛡️ Roles & Permissions</h3>
+          <div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px'>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>👑 Super Admin</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Full access to all schools, global control, billing, backup, audit</div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>🏫 School Admin</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Manage students, staff, classes, exams, fees, system settings for own school</div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>👨‍🏫 Teacher</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Record marks, view timetable, my profile, limited academic access</div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>💰 Accountant</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Fees & Finance, billing view, reports</div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>📚 Librarian</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Library, student view only</div></div>
+          </div>
+        </div>
+        """
+    elif sub=="database-backup":
+        panel = f"""
+        <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'>
+          <h3>💾 Database Backup — {school['name']}</h3>
+          <p style='font-size:13px;color:#64748b'>Backup your school data. Includes students, staff, classes, exams.</p>
+          <div style='display:flex;gap:12px;margin-top:16px;flex-wrap:wrap'>
+            <a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>⬇️ Download Backup (SQL)</a>
+            <a href='{base_path}/backup/csv' style='background:white;border:1px solid #e2e8f0;color:#0f172a;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>📄 Export All as CSV</a>
+          </div>
+        </div>
+        """
+    elif sub=="system-audit":
+        audit_rows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{a['timestamp'] or ''}</td><td style='padding:10px;font-size:12px'>{a['user_email'] or ''}</td><td style='padding:10px;font-size:12px;font-weight:600'>{a['action'] or ''}</td><td style='padding:10px;font-size:12px;color:#64748b'>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No audit logs yet</td></tr>"
+        panel = f"""
+        <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'>
+          <div style='padding:14px;display:flex;justify-content:space-between'><b>📈 System Audit — Last 100 actions</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none;font-size:12px'>Clear Logs</a></div>
+          <div style='overflow:auto;max-height:60vh'><table style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>TIME</th><th>USER</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>{audit_rows}</tbody></table></div>
+        </div>
+        """
+    elif sub=="integrations":
+        panel = """
+        <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'>
+          <h3>🔌 Integrations</h3>
+          <div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px'>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>📱 SMS Gateway</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Bulk SMS Parents — Africa's Talking</div><div style='margin-top:10px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px'>Active</span></div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>💳 M-Pesa</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Fees & Billing — Daraja API</div><div style='margin-top:10px'><span style='background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:12px;font-size:11px'>Pending Setup</span></div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>📧 Email</b><div style='font-size:12px;color:#64748b;margin-top:6px'>SMTP for auth codes</div><div style='margin-top:10px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px'>Active</span></div></div>
+            <div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>🎓 KEMIS</b><div style='font-size:12px;color:#64748b;margin-top:6px'>KEMIS Export — CSV</div><div style='margin-top:10px'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:12px;font-size:11px'>Active</span></div></div>
+          </div>
+        </div>
+        """
+    elif sub=="billing-payments":
+        con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM billing WHERE school_id=? ORDER BY id DESC", (school_obj["id"],)); bills = cur.fetchall(); con.close()
+        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:11px'>{b['status']}</span></td><td style='padding:10px'>{b['due_date'] or ''}</td><td style='padding:10px;font-size:11px'>{b['created_at'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No invoices</td></tr>"
+        panel = f"""
+        <div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'>
+          <h3>💳 Billing & Payments — {school['name']}</h3>
+          <div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px'>
+            <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px'><div style='font-size:11px;color:#64748b'>CURRENT PLAN</div><div style='font-size:18px;font-weight:800;margin-top:6px'>Premium — All Modules</div></div>
+            <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px'><div style='font-size:11px;color:#64748b'>MONTHLY FEE</div><div style='font-size:18px;font-weight:800;margin-top:6px'>KES 3,500</div></div>
+            <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px'><div style='font-size:11px;color:#64748b'>STATUS</div><div style='font-size:18px;font-weight:800;color:#16a34a;margin-top:6px'>✅ Paid</div></div>
+          </div>
+          <div style='margin-top:18px'><form method='post' action='{base_path}/billing/add' style='display:flex;gap:10px;flex-wrap:wrap'><input name='amount' required placeholder='Amount e.g. 3500' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option><option>Overdue</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add Invoice</button></form></div>
+          <div style='margin-top:18px;overflow:auto'><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px'><th style='padding:10px'>AMOUNT</th><th>STATUS</th><th>DUE</th><th>DATE</th></tr></thead><tbody>{brows}</tbody></table></div>
+        </div>
+        """
+    else:
+        panel = "<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:40px;text-align:center'>🚧 Coming Soon</div>"
+    # wrap with top nav pills
+    def pill(tab, label, icon):
+        active_style = "background:#0f172a;color:white" if sub==tab else "background:#f8fafc;color:#475569;border:1px solid #e2e8f0"
+        return f"<a href='/school/system-settings/{tab}' style='padding:8px 12px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:700;{active_style}'>{icon} {label}</a>"
+    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('roles-permissions','Roles & Permissi...','🛡️')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('integrations','Integrations','🔌')}{pill('billing-payments','Billing & Payments','💳')}</div>"
+    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings</h1><p style='margin:6px 0 14px;color:#64748b;font-size:13px'>Manage {school_obj['name']} — {sub.replace('-',' ').title()}</p>{pills}{panel}</div>"
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{content}</div></div></body></html>")
+
+@app.post("/school/system-settings/update-profile")
+def sys_update_profile(request: Request, name: str = Form(...), email: str = Form(""), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
+    school_obj = get_school_obj(request)
+    con = get_db(); cur = con.cursor()
+    cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=?, school_type=? WHERE id=?", (name.strip().upper(), email.strip(), location.strip(), phone.strip(), principal.strip(), school_type.strip(), school_obj["id"]))
+    con.commit(); con.close()
+    return RedirectResponse("/school/system-settings/school-profile",303)
+
+@app.post("/school/system-settings/add-class")
+def sys_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
+    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (school_obj["id"], class_name.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
+@app.get("/school/system-settings/delete-class/{cid}")
+def sys_del_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
+
+@app.post("/school/system-settings/add-user")
+def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
+    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+@app.get("/school/system-settings/delete-user/{uid}")
+def sys_del_user(uid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM users WHERE id=?", (uid,)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+
+@app.get("/school/system-settings/backup/download")
+def sys_backup_download(request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    # return dummy - in production send file
+    return RedirectResponse("/school/system-settings/database-backup",303)
+@app.get("/school/system-settings/backup/csv")
+def sys_backup_csv(request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    return RedirectResponse("/school/system-settings/database-backup",303)
+@app.get("/school/system-settings/audit/clear")
+def sys_audit_clear(request: Request):
+    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?", (school_obj["id"],)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/system-audit",303)
+@app.post("/school/system-settings/billing/add")
+def sys_billing_add(request: Request, amount: str = Form(...), status: str = Form(...), due_date: str = Form(...)):
+    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO billing (school_id, amount, status, due_date, created_at) VALUES (?,?,?,?,?)", (school_obj["id"], amount.strip(), status.strip(), due_date.strip(), ts)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/billing-payments",303)
+
+# GLOBAL SYSTEM SETTINGS
+@app.get("/super/global-control/system-settings/{sub}", response_class=HTMLResponse)
+def global_system_settings(sub: str, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     name = request.session.get("name","Davis Ouma")
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT COUNT(*) c FROM students"); sc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM classes"); cc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM exams"); ec = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM teachers"); tc = cur.fetchone()["c"]
-    cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id GROUP BY c.name, s.gender ORDER BY c.name"); gender_rows = cur.fetchall()
-    cur.execute("SELECT s.*, sc.name as school_name FROM students s LEFT JOIN schools sc ON s.school_id=sc.id ORDER BY s.id DESC LIMIT 5"); recent = cur.fetchall()
+    cur.execute("SELECT * FROM schools LIMIT 1"); school = cur.fetchone()
+    if not school:
+        con.close()
+        header = global_header(name, f"system-settings/{sub}")
+        return HTMLResponse(f"<html><body>{header}<div style='padding:40px;text-align:center'>No school yet</div></div></div></body></html>")
+    cur.execute("SELECT * FROM users ORDER BY id DESC"); users = cur.fetchall()
+    cur.execute("SELECT * FROM classes GROUP BY name, stream ORDER BY name"); classes = cur.fetchall()
+    cur.execute("SELECT * FROM system_audit ORDER BY id DESC LIMIT 200"); audit = cur.fetchall()
     con.close()
-    stats = {}; tb=0; tg=0
-    for r in gender_rows:
-        cn = (r['class_name'] or 'UNASSIGNED').upper()
-        if cn not in stats: stats[cn] = {'boys':0,'girls':0}
-        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']=r['cnt']; tb+=r['cnt']
-        else: stats[cn]['girls']=r['cnt']; tg+=r['cnt']
-    max_v = max([max(v['boys'],v['girls']) for v in stats.values()], default=1) or 1
-    chart_html = "".join([f"<div style='text-align:center;min-width:90px'><div style='display:flex;gap:10px;align-items:end;justify-content:center;height:170px'><div><div style='width:42px;height:{bh}px;background:#0a84ff;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px;height:{gh}px;background:#ff2d92;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px;font-weight:800;margin-top:8px'>{cn}</div></div>" for cn,v in stats.items() for bh in [int((v['boys']/max_v)*150) if v['boys']>0 else 6] for gh in [int((v['girls']/max_v)*150) if v['girls']>0 else 6]]) or "<div style='padding:30px;color:#94a3b8;text-align:center;width:100%'>No students yet</div>"
-    stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px;font-size:12px'>{st['name']} <span style='font-size:10px;color:#64748b'>({st['school_name'] or ''})</span></td><td style='padding:10px 12px;font-size:11px'>{st['assessment_no'] or ''}</td><td style='padding:10px 12px;font-size:11px'>{st['gender']}</td><td>Class {st['class_id'] or ''}</td></tr>" for st in recent]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No students yet</td></tr>"
-    header = global_header(name, "dashboard")
-    html = f"""<div style='padding:18px;max-width:1400px;margin:auto'><div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%);border-radius:18px;padding:22px 24px;color:white;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'><div><div style='font-size:22px;font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px;color:#bfdbfe;margin-top:4px'>GLOBAL CONTROL — School Overview — Automatic Sync</div></div><div style='text-align:right'><div style='font-size:34px;font-weight:900'>{sc}</div><div style='font-size:11px'>Total Students (ALL)</div></div></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px'><a href='/super/global-control/students' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{sc}</div></a><a href='/super/global-control/classes' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🏫 CLASSES</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{cc}</div></a><a href='/super/global-control/exams' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>📝 EXAMS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{ec}</div></a><a href='/super/global-control/teachers' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>👨‍🏫 STAFF</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{tc}</div></a></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='display:flex;justify-content:space-between'><div><div style='font-weight:800;font-size:14px'>👥 Students by Gender — ALL Schools</div></div><div style='display:flex;gap:12px;font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block'></span> Girls</span></div></div><div style='display:flex;gap:24px;overflow-x:auto;margin-top:18px'>{chart_html}</div></div><div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:14px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'><div style='padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><div style='font-weight:800'>🎓 Recent Students — ALL Schools</div><a href='/super/global-control/students' style='font-size:11px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:10px;color:#64748b'><th style='padding:10px 12px'>Name (School)</th><th>Adm No</th><th>Gender</th><th>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div><div style='background:#0f172a;border-radius:14px;padding:16px;color:white;height:fit-content'><div style='font-weight:800;font-size:14px'>📊 GLOBAL LIVE</div><div style='background:#1e293b;border-radius:10px;padding:12px;margin-top:10px'><div style='font-size:11px'>👦 {tb} | 👧 {tg}</div><div style='font-size:11px;margin-top:6px;color:#22c55e'>Sync ✅</div></div></div></div></div>"""
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
+    header = global_header(name, f"system-settings/{sub}")
+    base_path = "/super/global-control/system-settings"
+    # same panel logic but global
+    if sub=="school-profile":
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3>🏢 Global — School Profiles ({len(users)} users)</h3><div style='font-size:13px;color:#64748b'>Editing here updates ALL schools</div><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px;margin-top:12px;max-width:500px'><input name='name' placeholder='New School Name (applies to ALL)' class='input-field'><input name='location' placeholder='Location (ALL)' class='input-field'><input name='phone' placeholder='Phone (ALL)' class='input-field'><button class='add-btn'>Update ALL Schools</button></form></div>"""
+    elif sub=="classes":
+        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Global</span></td><td><a href='{base_path}/delete-class/{c['name']}/{c['stream'] or ''}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No classes</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>🏫 Global Classes — Automatic Sync</b></div><table style='width:100%'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px'><th style='padding:10px'>NAME</th><th>STREAM</th><th>TYPE</th><th>ACTION</th></tr></thead><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add Class (ALL schools)</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add Global Class</button></form></div></div>"""
+    elif sub=="user-management":
+        urows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥 Global Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User (ALL schools)</b><form method='post' action='{base_path}/add-user'><input name='full_name' required placeholder='Name' class='input-field'><input name='email' required placeholder='Email' class='input-field'><input name='password' required placeholder='Password' class='input-field'><select name='role' class='input-field'><option>teacher</option><option>school_admin</option><option>accountant</option></select><button class='add-btn'>Create Global User</button></form></div></div>"""
+    elif sub=="roles-permissions":
+        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🛡️ Global Roles & Permissions</h3><p style='font-size:13px;color:#64748b'>Same as school level — enforced globally</p><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px'><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>Super Admin</b><div style='font-size:12px'>Full access</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>School Admin</b><div style='font-size:12px'>School access</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>Teacher</b><div style='font-size:12px'>Marks only</div></div></div></div>"""
+    elif sub=="database-backup":
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Global Database Backup — ALL Schools</h3><div style='display:flex;gap:12px;margin-top:16px'><a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>⬇️ Download Full Backup</a><a href='{base_path}/backup/csv' style='background:white;border:1px solid #e2e8f0;padding:12px 18px;border-radius:10px;text-decoration:none'>📄 Export CSV</a></div></div>"""
+    elif sub=="system-audit":
+        audit_rows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{a['timestamp'] or ''}</td><td>{a['user_email'] or ''}</td><td style='font-weight:600'>{a['action'] or ''}</td><td style='color:#64748b;font-size:12px'>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No logs</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px;display:flex;justify-content:space-between'><b>📈 Global Audit — ALL Schools</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none'>Clear</a></div><div style='overflow:auto;max-height:60vh'><table style='width:100%'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px'><th style='padding:10px'>TIME</th><th>USER</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>{audit_rows}</tbody></table></div></div>"""
+    elif sub=="integrations":
+        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🔌 Global Integrations</h3><div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px'><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>SMS</b><div style='font-size:12px'>Active globally</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>M-Pesa</b><div style='font-size:12px'>Pending</div></div></div></div>"""
+    elif sub=="billing-payments":
+        con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM billing ORDER BY id DESC"); bills = cur.fetchall(); con.close()
+        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td>{b['status']}</td><td>{b['due_date'] or ''}</td><td>{b['created_at'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No invoices</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💳 Global Billing — ALL Schools</h3><form method='post' action='{base_path}/billing/add' style='display:flex;gap:10px;margin-top:12px'><input name='amount' required placeholder='Amount' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add</button></form><table style='width:100%;margin-top:16px'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px'><th style='padding:10px'>AMOUNT</th><th>STATUS</th><th>DUE</th><th>DATE</th></tr></thead><tbody>{brows}</tbody></table></div>"""
+    else:
+        panel = "<div style='padding:40px;text-align:center;background:white;border-radius:16px'>🚧 Coming Soon</div>"
+    def pill(tab, label, icon):
+        active_style = "background:#0f172a;color:white" if sub==tab else "background:#f8fafc;color:#475569;border:1px solid #e2e8f0"
+        return f"<a href='/super/global-control/system-settings/{tab}' style='padding:8px 12px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:700;{active_style}'>{icon} {label}</a>"
+    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('roles-permissions','Roles & Permissi...','🛡️')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('integrations','Integrations','🔌')}{pill('billing-payments','Billing & Payments','💳')}</div>"
+    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings — GLOBAL</h1><p style='margin:6px 0 14px;color:#64748b;font-size:13px'>ALL Schools — {sub}</p>{pills}{panel}</div>"
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{content}</div></div></body></html>")
 
+@app.post("/super/global-control/system-settings/update-profile")
+def global_sys_update_profile(request: Request, name: str = Form(""), location: str = Form(""), phone: str = Form("")):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    if name.strip(): cur.execute("UPDATE schools SET name=?", (name.strip().upper(),))
+    if location.strip(): cur.execute("UPDATE schools SET location=?", (location.strip(),))
+    if phone.strip(): cur.execute("UPDATE schools SET phone=?", (phone.strip(),))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/school-profile",303)
+@app.post("/super/global-control/system-settings/add-class")
+def global_sys_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+        if not cur.fetchone(): cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
+@app.get("/super/global-control/system-settings/delete-class/{cname}/{stream}")
+def global_sys_del_class(cname: str, stream: str, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
+@app.post("/super/global-control/system-settings/add-user")
+def global_sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), sch["id"]))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+@app.get("/super/global-control/system-settings/delete-user/{uid}")
+def global_sys_del_user(uid: int, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT email FROM users WHERE id=?", (uid,)); u = cur.fetchone()
+    if u: cur.execute("DELETE FROM users WHERE email=?", (u["email"],))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+@app.get("/super/global-control/system-settings/backup/download")
+def global_sys_backup_download(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    return RedirectResponse("/super/global-control/system-settings/database-backup",303)
+@app.get("/super/global-control/system-settings/backup/csv")
+def global_sys_backup_csv(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    return RedirectResponse("/super/global-control/system-settings/database-backup",303)
+@app.get("/super/global-control/system-settings/audit/clear")
+def global_sys_audit_clear(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit"); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/system-audit",303)
+@app.post("/super/global-control/system-settings/billing/add")
+def global_sys_billing_add(request: Request, amount: str = Form(...), status: str = Form(...), due_date: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("INSERT INTO billing (school_id, amount, status, due_date, created_at) VALUES (?,?,?,?,?)", (sch["id"], amount.strip(), status.strip(), due_date.strip(), ts))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/billing-payments",303)
+
+# GLOBAL OTHER
 @app.get("/super/global-control/students", response_class=HTMLResponse)
 def global_students(request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -674,7 +753,6 @@ def global_add_term(request: Request, term_name: str = Form(...), year: str = Fo
         cur.execute("SELECT id FROM terms WHERE school_id=? AND term_name=? AND year=?", (sch["id"], term_name, year))
         if not cur.fetchone(): cur.execute("INSERT INTO terms (school_id, term_name, year, start_date, end_date) VALUES (?,?,?,?,?)", (sch["id"], term_name, year, start_date, end_date))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=terms",303)
-
 @app.post("/super/global-control/dean-settings/edit-term/{tid}")
 def global_edit_term(tid: int, request: Request, term_name: str = Form(...), year: str = Form(...), start_date: str = Form(...), end_date: str = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -683,7 +761,6 @@ def global_edit_term(tid: int, request: Request, term_name: str = Form(...), yea
     if old:
         cur.execute("UPDATE terms SET term_name=?, year=?, start_date=?, end_date=? WHERE term_name=? AND year=?", (term_name, year, start_date, end_date, old["term_name"], old["year"]))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=terms",303)
-
 @app.get("/super/global-control/dean-settings/delete-term/{tid}")
 def global_del_term(tid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -692,7 +769,6 @@ def global_del_term(tid: int, request: Request):
     if old: cur.execute("DELETE FROM terms WHERE term_name=? AND year=?", (old["term_name"], old["year"]))
     else: cur.execute("DELETE FROM terms WHERE id=?", (tid,))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=terms",303)
-
 @app.post("/super/global-control/dean-settings/add-subject")
 def global_dean_add_subject(request: Request, subject_name: str = Form(...), code: str = Form(""), initial: str = Form("")):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -701,7 +777,6 @@ def global_dean_add_subject(request: Request, subject_name: str = Form(...), cod
         cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=?", (sch["id"], subject_name.strip().upper()))
         if not cur.fetchone(): cur.execute("INSERT INTO subjects (school_id, name, code, initial) VALUES (?,?,?,?)", (sch["id"], subject_name.strip().upper(), code.strip().upper(), initial.strip().upper()))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=subjects",303)
-
 @app.get("/super/global-control/dean-settings/delete-subject/{sid}")
 def global_dean_del_subject(sid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -709,7 +784,6 @@ def global_dean_del_subject(sid: int, request: Request):
     if old: cur.execute("DELETE FROM subjects WHERE name=?", (old["name"],))
     else: cur.execute("DELETE FROM subjects WHERE id=?", (sid,))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=subjects",303)
-
 @app.post("/super/global-control/dean-settings/allocate")
 def global_dean_allocate(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -719,21 +793,16 @@ def global_dean_allocate(request: Request, teacher_id: int = Form(...), subject_
     cur.execute("SELECT * FROM classes WHERE id=?", (class_id,)); c = cur.fetchone()
     if t and s and c:
         for sch in schools:
-            cur.execute("SELECT id FROM teachers WHERE school_id=? AND id_no=?", (sch["id"], t["id_no"]))
-            tt = cur.fetchone()
-            cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=?", (sch["id"], s["name"]))
-            ss = cur.fetchone()
-            cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], c["name"], c["stream"]))
-            cc = cur.fetchone()
+            cur.execute("SELECT id FROM teachers WHERE school_id=? AND id_no=?", (sch["id"], t["id_no"])); tt = cur.fetchone()
+            cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=?", (sch["id"], s["name"])); ss = cur.fetchone()
+            cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], c["name"], c["stream"])); cc = cur.fetchone()
             if tt and ss and cc:
                 cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (sch["id"], tt["id"], ss["id"], cc["id"]))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=allocation",303)
-
 @app.get("/super/global-control/dean-settings/delete-alloc/{aid}")
 def global_del_alloc(aid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=allocation",303)
-
 @app.post("/super/global-control/dean-settings/promote")
 def global_promote(request: Request, from_class: int = Form(...), to_class: int = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -748,6 +817,28 @@ def global_promote(request: Request, from_class: int = Form(...), to_class: int 
             if f_real and t_real:
                 cur.execute("UPDATE students SET class_id=? WHERE school_id=? AND class_id=?", (t_real["id"], sch["id"], f_real["id"]))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=promote",303)
+
+@app.get("/super/global-control/dashboard", response_class=HTMLResponse)
+def global_dashboard(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    name = request.session.get("name","Davis Ouma")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT COUNT(*) c FROM students"); sc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM classes"); cc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM exams"); ec = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM teachers"); tc = cur.fetchone()["c"]
+    cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id GROUP BY c.name, s.gender ORDER BY c.name"); gender_rows = cur.fetchall()
+    cur.execute("SELECT s.*, sc.name as school_name FROM students s LEFT JOIN schools sc ON s.school_id=sc.id ORDER BY s.id DESC LIMIT 5"); recent = cur.fetchall()
+    con.close()
+    stats = {}; tb=0; tg=0
+    for r in gender_rows:
+        cn = (r['class_name'] or 'UNASSIGNED').upper()
+        if cn not in stats: stats[cn] = {'boys':0,'girls':0}
+        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']=r['cnt']; tb+=r['cnt']
+        else: stats[cn]['girls']=r['cnt']; tg+=r['cnt']
+    max_v = max([max(v['boys'],v['girls']) for v in stats.values()], default=1) or 1
+    chart_html = "".join([f"<div style='text-align:center;min-width:90px'><div style='display:flex;gap:10px;align-items:end;justify-content:center;height:170px'><div><div style='width:42px;height:{bh}px;background:#0a84ff;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px;height:{gh}px;background:#ff2d92;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px;font-weight:800;margin-top:8px'>{cn}</div></div>" for cn,v in stats.items() for bh in [int((v['boys']/max_v)*150) if v['boys']>0 else 6] for gh in [int((v['girls']/max_v)*150) if v['girls']>0 else 6]]) or "<div style='padding:30px;color:#94a3b8;text-align:center;width:100%'>No students yet</div>"
+    stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px;font-size:12px'>{st['name']} <span style='font-size:10px;color:#64748b'>({st['school_name'] or ''})</span></td><td style='padding:10px 12px;font-size:11px'>{st['assessment_no'] or ''}</td><td style='padding:10px 12px;font-size:11px'>{st['gender']}</td><td>Class {st['class_id'] or ''}</td></tr>" for st in recent]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No students yet</td></tr>"
+    header = global_header(name, "dashboard")
+    html = f"""<div style='padding:18px;max-width:1400px;margin:auto'><div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%);border-radius:18px;padding:22px 24px;color:white;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'><div><div style='font-size:22px;font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px;color:#bfdbfe;margin-top:4px'>GLOBAL CONTROL — School Overview — Automatic Sync</div></div><div style='text-align:right'><div style='font-size:34px;font-weight:900'>{sc}</div><div style='font-size:11px'>Total Students (ALL)</div></div></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px'><a href='/super/global-control/students' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{sc}</div></a><a href='/super/global-control/classes' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🏫 CLASSES</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{cc}</div></a><a href='/super/global-control/exams' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>📝 EXAMS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{ec}</div></a><a href='/super/global-control/teachers' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>👨‍🏫 STAFF</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{tc}</div></a></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='display:flex;justify-content:space-between'><div><div style='font-weight:800;font-size:14px'>👥 Students by Gender — ALL Schools</div></div><div style='display:flex;gap:12px;font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block'></span> Girls</span></div></div><div style='display:flex;gap:24px;overflow-x:auto;margin-top:18px'>{chart_html}</div></div><div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:14px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'><div style='padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><div style='font-weight:800'>🎓 Recent Students — ALL Schools</div><a href='/super/global-control/students' style='font-size:11px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:10px;color:#64748b'><th style='padding:10px 12px'>Name (School)</th><th>Adm No</th><th>Gender</th><th>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div><div style='background:#0f172a;border-radius:14px;padding:16px;color:white;height:fit-content'><div style='font-weight:800;font-size:14px'>📊 GLOBAL LIVE</div><div style='background:#1e293b;border-radius:10px;padding:12px;margin-top:10px'><div style='font-size:11px'>👦 {tb} | 👧 {tg}</div><div style='font-size:11px;margin-top:6px;color:#22c55e'>Sync ✅</div></div></div></div></div>"""
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
 @app.get("/super/global-control/classes", response_class=HTMLResponse)
 def global_classes(request: Request):
@@ -789,7 +880,7 @@ def global_add_exam(request: Request, exam_name: str = Form(...), term: str = Fo
 def global_other(path: str, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     name = request.session.get("name","Davis Ouma"); header = global_header(name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3 style='margin:0'>🚧 {path.upper()} — Coming Soon</h3><p style='color:#64748b;font-size:13px'>Academic Manager auto-hides</p><a href='/super/global-control/dashboard' style='margin-top:16px;display:inline-block;padding:10px 16px;background:#0f172a;color:white;border-radius:10px;text-decoration:none;font-weight:700'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3 style='margin:0'>🚧 {path.upper()} — Coming Soon</h3><p style='color:#64748b;font-size:13px'>Module in progress</p><a href='/super/global-control/dashboard' style='margin-top:16px;display:inline-block;padding:10px 16px;background:#0f172a;color:white;border-radius:10px;text-decoration:none;font-weight:700'>⬅️ Back</a></div></div></div></div></body></html>")
 
 @app.get("/school/{path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
@@ -808,4 +899,3 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
         return RedirectResponse("/", status_code=303)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-# END PART 1 — Say next for Part 2
