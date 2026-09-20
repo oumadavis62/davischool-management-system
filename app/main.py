@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key="davischool-v58-set-marks-config-final")
+app.add_middleware(SessionMiddleware, secret_key="davischool-v60-full-two-parts")
 SUPER_ADMIN = "oumadavis62@gmail.com"
 
 def get_db():
@@ -193,11 +193,25 @@ def dean_manager_html(terms, subjects, teachers, classes, allocations, students,
     add_subject_action = "/super/global-control/dean-settings/add-subject" if is_global else "/school/dean-settings/add-subject"
     alloc_action = "/super/global-control/dean-settings/allocate" if is_global else "/school/dean-settings/allocate"
     promote_action = "/super/global-control/dean-settings/promote" if is_global else "/school/dean-settings/promote"
-    return f"""
-<style>.dean-card{{background:white;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden}}.dean-tab{{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px}}.dean-tab.active{{background:#0f172a;color:white}}.dean-tab:not(.active){{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}}.filter-input{{padding:10px 12px 10px 34px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;width:220px}}.filter-select{{padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px}}.action-btn{{padding:10px 14px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;font-weight:600;cursor:pointer}}.add-term-btn{{background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:12px;font-weight:700;cursor:pointer}}.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}.modal.active{{display:flex}}</style>
-<div style='padding:20px;max-width:1450px;margin:auto'><div style='margin-bottom:14px'><h1 style='margin:0;font-size:26px;font-weight:900;letter-spacing:-0.5px'>Dean Settings</h1><p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage terms, subjects, teacher allocation & promotions</p></div><div class='dean-card'><div style='padding:14px 16px;display:flex;gap:8px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap'><div onclick="switchTab('terms')" id='tab-terms' class='dean-tab {"active" if active_tab=="terms" else ""}'>📅 Terms</div><div onclick="switchTab('subjects')" id='tab-subjects' class='dean-tab {"active" if active_tab=="subjects" else ""}'>📖 Subjects</div><div onclick="switchTab('allocation')" id='tab-allocation' class='dean-tab {"active" if active_tab=="allocation" else ""}'>👥 Teacher Allocation</div><div onclick="switchTab('promote')" id='tab-promote' class='dean-tab {"active" if active_tab=="promote" else ""}'>↗️ Promote</div></div><div id='panel-terms' style='display:{"block" if active_tab=="terms" else "none"}'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='termSearch' onkeyup='filterTerms()' placeholder='Search terms...' class='filter-input'></div><select id='yearFilter' class='filter-select' onchange='filterTerms()'>{year_opts}</select></div><div style='display:flex;gap:8px'><button class='action-btn' onclick='downloadTerms()'>⬇️ Download</button><button class='add-term-btn' onclick='openAddTerm()'>+ Add Term</button></div></div><div style='overflow:auto;max-height:60vh'><table id='termsTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px 12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>TERM ↕️</th><th style='padding:12px'>YEAR ↕️</th><th style='padding:12px'>START DATE ↕️</th><th style='padding:12px'>END DATE ↕️</th><th style='padding:12px;text-align:right'>ACTIONS</th></tr></thead><tbody>{term_rows}</tbody></table></div></div><div id='panel-subjects' style='display:{"block" if active_tab=="subjects" else "none"}'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='subjSearch' onkeyup='filterSubjects()' placeholder='Search subjects...' class='filter-input'></div></div><div style='display:flex;gap:8px'><button class='add-term-btn' onclick='openAddSubject()'>+ Add Subject</button></div></div><div style='overflow:auto;max-height:60vh'><table style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>NAME</th><th style='padding:12px'>CODE</th><th style='padding:12px'>INITIAL</th><th style='padding:12px'>ACTIONS</th></tr></thead><tbody>{subj_rows}</tbody></table></div></div><div id='panel-allocation' style='display:{"block" if active_tab=="allocation" else "none"}'><div style='padding:16px;display:grid;grid-template-columns:320px 1fr;gap:16px'><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;height:fit-content'><b style='font-size:13px'>📌 Allocate Teacher</b><form method='post' action='{alloc_action}' style='margin-top:10px'><select name='teacher_id' required class='input-field'><option value=''>Select Teacher *</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Select Subject *</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Select Class *</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden'><div style='padding:12px 14px;border-bottom:1px solid #f1f5f9'><b>Allocations ({len(allocations)})</b></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 12px'>TEACHER</th><th>SUBJECT</th><th>CLASS</th><th>ACTION</th></tr></thead><tbody>{alloc_rows}</tbody></table></div></div></div><div id='panel-promote' style='display:{"block" if active_tab=="promote" else "none"}'><div style='padding:20px;max-width:600px'><div style='background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px'>⚠️ Promotion will move all students from source class to destination class. This action is recorded.</div><form method='post' action='{promote_action}' style='display:grid;gap:12px'><div><label style='font-size:12px;font-weight:700'>From Class *</label><select name='from_class' required class='input-field'><option value=''>Select Source Class *</option>{class_options_promote}</select></div><div><label style='font-size:12px;font-weight:700'>To Class *</label><select name='to_class' required class='input-field'><option value=''>Select Destination Class *</option>{class_options_promote}</select></div><button class='add-btn'>↗️ Promote Students</button></form></div></div></div></div><div id='addTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Term</b><span onclick='closeAddTerm()' style='cursor:pointer'>✕</span></div><form method='post' action='{add_term_action}' style='padding:18px;display:grid;gap:10px'><select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='Year e.g. 2026' class='input-field'><label style='font-size:11px;font-weight:700'>Start Date</label><input name='start_date' type='date' required class='input-field'><label style='font-size:11px;font-weight:700'>End Date</label><input name='end_date' type='date' required class='input-field'><button class='add-btn'>Add Term</button></form></div></div><div id='editTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>✏️ Edit Term</b><span onclick='closeEditTerm()' style='cursor:pointer'>✕</span></div><form id='editTermForm' method='post' style='padding:18px;display:grid;gap:10px'><select name='term_name' id='e_term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' id='e_year' required class='input-field'><input name='start_date' id='e_start' type='date' required class='input-field'><input name='end_date' id='e_end' type='date' required class='input-field'><button class='add-btn'>Update Term</button></form></div></div><div id='addSubjectModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Subject</b><span onclick='closeAddSubject()' style='cursor:pointer'>✕</span></div><form method='post' action='{add_subject_action}' style='padding:18px;display:grid;gap:10px'><input name='subject_name' required placeholder='Subject Name *' class='input-field'><input name='code' placeholder='Code e.g. MAT' class='input-field'><input name='initial' placeholder='Initial e.g. M' class='input-field'><button class='add-btn'>Add Subject</button></form></div></div><script>function switchTab(t){{document.querySelectorAll('[id^=panel-]').forEach(p=>p.style.display='none');document.querySelectorAll('.dean-tab').forEach(b=>b.classList.remove('active'));document.getElementById('panel-'+t).style.display='block';document.getElementById('tab-'+t).classList.add('active');const url=new URL(window.location); url.searchParams.set('tab',t); history.pushState({{}},'',url);}}function openAddTerm(){{document.getElementById('addTermModal').classList.add('active');}}function closeAddTerm(){{document.getElementById('addTermModal').classList.remove('active');}}function openEditTerm(id,name,year,s,e){{document.getElementById('editTermModal').classList.add('active');document.getElementById('editTermForm').action = (window.location.pathname.includes('global-control')? '/super/global-control/dean-settings/edit-term/' : '/school/dean-settings/edit-term/') + id;document.getElementById('e_term_name').value=name;document.getElementById('e_year').value=year;document.getElementById('e_start').value=s;document.getElementById('e_end').value=e;}}function closeEditTerm(){{document.getElementById('editTermModal').classList.remove('active');}}function openAddSubject(){{document.getElementById('addSubjectModal').classList.add('active');}}function closeAddSubject(){{document.getElementById('addSubjectModal').classList.remove('active');}}function filterTerms(){{let q=document.getElementById('termSearch').value.toLowerCase();let y=document.getElementById('yearFilter').value.toLowerCase();document.querySelectorAll('.term-row').forEach(r=>{{let ok=true;if(q &&!r.getAttribute('data-search').includes(q)) ok=false;if(y!=='all' && r.getAttribute('data-year').toLowerCase()!==y) ok=false;r.style.display=ok?'':'none';}});}}function filterSubjects(){{let q=document.getElementById('subjSearch').value.toLowerCase();document.querySelectorAll('.subj-row').forEach(r=>{{r.style.display=r.getAttribute('data-search').includes(q)?'':'none';}});}}function downloadTerms(){{let rows=document.querySelectorAll('#termsTable tr');let csv=[];rows.forEach(row=>{{let cols=row.querySelectorAll('th,td');let d=[];cols.forEach((c,i)=>{{if(i>0 && i<6) d.push('\"'+c.innerText.replace(/\"/g,'\"\"')+'\"');}}); if(d.length) csv.push(d.join(','));}});let b=new Blob([csv.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='terms_{school_name}.csv';a.click();}}</script>"""
+    return f"""<style>.dean-card{{background:white;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden}}.dean-tab{{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px}}.dean-tab.active{{background:#0f172a;color:white}}.dean-tab:not(.active){{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}}.filter-input{{padding:10px 12px 10px 34px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;width:220px}}.filter-select{{padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px}}.action-btn{{padding:10px 14px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;font-weight:600;cursor:pointer}}.add-term-btn{{background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:12px;font-weight:700;cursor:pointer}}.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}.modal.active{{display:flex}}</style><div style='padding:20px;max-width:1450px;margin:auto'><div style='margin-bottom:14px'><h1 style='margin:0;font-size:26px;font-weight:900;letter-spacing:-0.5px'>Dean Settings</h1><p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage terms, subjects, teacher allocation & promotions</p></div><div class='dean-card'><div style='padding:14px 16px;display:flex;gap:8px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap'><div onclick="switchTab('terms')" id='tab-terms' class='dean-tab {"active" if active_tab=="terms" else ""}'>📅 Terms</div><div onclick="switchTab('subjects')" id='tab-subjects' class='dean-tab {"active" if active_tab=="subjects" else ""}'>📖 Subjects</div><div onclick="switchTab('allocation')" id='tab-allocation' class='dean-tab {"active" if active_tab=="allocation" else ""}'>👥 Teacher Allocation</div><div onclick="switchTab('promote')" id='tab-promote' class='dean-tab {"active" if active_tab=="promote" else ""}'>↗️ Promote</div></div><div id='panel-terms' style='display:{"block" if active_tab=="terms" else "none"}'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='termSearch' onkeyup='filterTerms()' placeholder='Search terms...' class='filter-input'></div><select id='yearFilter' class='filter-select' onchange='filterTerms()'>{year_opts}</select></div><div style='display:flex;gap:8px'><button class='action-btn' onclick='downloadTerms()'>⬇️ Download</button><button class='add-term-btn' onclick='openAddTerm()'>+ Add Term</button></div></div><div style='overflow:auto;max-height:60vh'><table id='termsTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px 12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>TERM ↕️</th><th style='padding:12px'>YEAR ↕️</th><th style='padding:12px'>START DATE ↕️</th><th style='padding:12px'>END DATE ↕️</th><th style='padding:12px;text-align:right'>ACTIONS</th></tr></thead><tbody>{term_rows}</tbody></table></div></div><div id='panel-subjects' style='display:{"block" if active_tab=="subjects" else "none"}'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='subjSearch' onkeyup='filterSubjects()' placeholder='Search subjects...' class='filter-input'></div></div><div style='display:flex;gap:8px'><button class='add-term-btn' onclick='openAddSubject()'>+ Add Subject</button></div></div><div style='overflow:auto;max-height:60vh'><table style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>NAME</th><th style='padding:12px'>CODE</th><th style='padding:12px'>INITIAL</th><th style='padding:12px'>ACTIONS</th></tr></thead><tbody>{subj_rows}</tbody></table></div></div><div id='panel-allocation' style='display:{"block" if active_tab=="allocation" else "none"}'><div style='padding:16px;display:grid;grid-template-columns:320px 1fr;gap:16px'><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;height:fit-content'><b style='font-size:13px'>📌 Allocate Teacher</b><form method='post' action='{alloc_action}' style='margin-top:10px'><select name='teacher_id' required class='input-field'><option value=''>Select Teacher *</option>{t_opts}</select><select name='subject_id' required class='input-field'><option value=''>Select Subject *</option>{s_opts}</select><select name='class_id' required class='input-field'><option value=''>Select Class *</option>{c_opts}</select><button class='add-btn' style='margin-top:10px'>Allocate</button></form></div><div style='background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden'><div style='padding:12px 14px;border-bottom:1px solid #f1f5f9'><b>Allocations ({len(allocations)})</b></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 12px'>TEACHER</th><th>SUBJECT</th><th>CLASS</th><th>ACTION</th></tr></thead><tbody>{alloc_rows}</tbody></table></div></div></div><div id='panel-promote' style='display:{"block" if active_tab=="promote" else "none"}'><div style='padding:20px;max-width:600px'><div style='background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:10px;margin-bottom:16px;font-size:13px'>⚠️ Promotion will move all students from source class to destination class. This action is recorded.</div><form method='post' action='{promote_action}' style='display:grid;gap:12px'><div><label style='font-size:12px;font-weight:700'>From Class *</label><select name='from_class' required class='input-field'><option value=''>Select Source Class *</option>{class_options_promote}</select></div><div><label style='font-size:12px;font-weight:700'>To Class *</label><select name='to_class' required class='input-field'><option value=''>Select Destination Class *</option>{class_options_promote}</select></div><button class='add-btn'>↗️ Promote Students</button></form></div></div></div></div><div id='addTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Term</b><span onclick='closeAddTerm()' style='cursor:pointer'>✕</span></div><form method='post' action='{add_term_action}' style='padding:18px;display:grid;gap:10px'><select name='term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='Year e.g. 2026' class='input-field'><label style='font-size:11px;font-weight:700'>Start Date</label><input name='start_date' type='date' required class='input-field'><label style='font-size:11px;font-weight:700'>End Date</label><input name='end_date' type='date' required class='input-field'><button class='add-btn'>Add Term</button></form></div></div><div id='editTermModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>✏️ Edit Term</b><span onclick='closeEditTerm()' style='cursor:pointer'>✕</span></div><form id='editTermForm' method='post' style='padding:18px;display:grid;gap:10px'><select name='term_name' id='e_term_name' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' id='e_year' required class='input-field'><input name='start_date' id='e_start' type='date' required class='input-field'><input name='end_date' id='e_end' type='date' required class='input-field'><button class='add-btn'>Update Term</button></form></div></div><div id='addSubjectModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Subject</b><span onclick='closeAddSubject()' style='cursor:pointer'>✕</span></div><form method='post' action='{add_subject_action}' style='padding:18px;display:grid;gap:10px'><input name='subject_name' required placeholder='Subject Name *' class='input-field'><input name='code' placeholder='Code e.g. MAT' class='input-field'><input name='initial' placeholder='Initial e.g. M' class='input-field'><button class='add-btn'>Add Subject</button></form></div></div><script>function switchTab(t){{document.querySelectorAll('[id^=panel-]').forEach(p=>p.style.display='none');document.querySelectorAll('.dean-tab').forEach(b=>b.classList.remove('active'));document.getElementById('panel-'+t).style.display='block';document.getElementById('tab-'+t).classList.add('active');const url=new URL(window.location); url.searchParams.set('tab',t); history.pushState({{}},'',url);}}function openAddTerm(){{document.getElementById('addTermModal').classList.add('active');}}function closeAddTerm(){{document.getElementById('addTermModal').classList.remove('active');}}function openEditTerm(id,name,year,s,e){{document.getElementById('editTermModal').classList.add('active');document.getElementById('editTermForm').action = (window.location.pathname.includes('global-control')? '/super/global-control/dean-settings/edit-term/' : '/school/dean-settings/edit-term/') + id;document.getElementById('e_term_name').value=name;document.getElementById('e_year').value=year;document.getElementById('e_start').value=s;document.getElementById('e_end').value=e;}}function closeEditTerm(){{document.getElementById('editTermModal').classList.remove('active');}}function openAddSubject(){{document.getElementById('addSubjectModal').classList.add('active');}}function closeAddSubject(){{document.getElementById('addSubjectModal').classList.remove('active');}}function filterTerms(){{let q=document.getElementById('termSearch').value.toLowerCase();let y=document.getElementById('yearFilter').value.toLowerCase();document.querySelectorAll('.term-row').forEach(r=>{{let ok=true;if(q &&!r.getAttribute('data-search').includes(q)) ok=false;if(y!=='all' && r.getAttribute('data-year').toLowerCase()!==y) ok=false;r.style.display=ok?'':'none';}});}}function filterSubjects(){{let q=document.getElementById('subjSearch').value.toLowerCase();document.querySelectorAll('.subj-row').forEach(r=>{{r.style.display=r.getAttribute('data-search').includes(q)?'':'none';}});}}function downloadTerms(){{let rows=document.querySelectorAll('#termsTable tr');let csv=[];rows.forEach(row=>{{let cols=row.querySelectorAll('th,td');let d=[];cols.forEach((c,i)=>{{if(i>0 && i<6) d.push('\"'+c.innerText.replace(/\"/g,'\"\"')+'\"');}}); if(d.length) csv.push(d.join(','));}});let b=new Blob([csv.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='terms_{school_name}.csv';a.click();}}</script>"""
 
-# NEW EXACT SET MARKS PAGE
+def exam_manager_html(exams, school_name, is_global=False):
+    from collections import Counter
+    year_counter = Counter([e['year'] for e in exams if e['year']])
+    term_counter = Counter([e['term'] for e in exams if e['term']])
+    year_opts_filter = "<option value='all'>All Years</option>" + "".join([f"<option value='{y}'>{y} ({c})</option>" for y,c in sorted(year_counter.items(), reverse=True)])
+    term_opts_filter = "<option value='all'>All Terms</option>" + "".join([f"<option value='{t}'>{t} ({c})</option>" for t,c in term_counter.items()])
+    rows = ""
+    for idx, e in enumerate(exams, 1):
+        del_url = f"/super/global-control/exams/delete/{e['id']}" if is_global else f"/school/exams/delete/{e['id']}"
+        edit_btn = f"""<a href='#' onclick='openEditExam({e['id']},"{e['name']}","{e['term']}","{e['year']}","{e['exam_type'] or 'Main Exam'}");return false;' style='padding:6px 8px;background:#f1f5f9;border-radius:8px;text-decoration:none;font-size:12px'>✏️</a>"""
+        rows += f"""<tr class='exam-row' data-search="{e['name'].lower()} {e['year']} {e['term'].lower()}" data-year="{e['year']}" data-term="{e['term']}"><td style='padding:12px'><input type='checkbox'></td><td style='padding:12px;font-size:13px'>{idx}</td><td style='padding:12px;font-size:13px;font-weight:700'>{e['name']}</td><td style='padding:12px;font-size:13px'>{e['term']}</td><td style='padding:12px;font-size:13px'>{e['year']}</td><td style='padding:12px'><span style='background:#0f172a;color:white;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700'>{e['exam_type'] or 'Main Exam'}</span></td><td style='padding:12px;display:flex;gap:6px'>{edit_btn}<a href='{del_url}' style='padding:6px 8px;background:#fee2e2;border-radius:8px;text-decoration:none;font-size:12px'>🗑️</a></td></tr>"""
+    if not rows:
+        rows = "<tr><td colspan='7' style='padding:40px;text-align:center;color:#94a3b8'>No exams — click + Add Exam</td></tr>"
+    add_action = "/super/global-control/exams/add" if is_global else "/school/exams/add"
+    edit_base = "/super/global-control/exams/edit/" if is_global else "/school/exams/edit/"
+    return f"""<style>.exam-card{{background:white;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden}}.filter-input{{padding:10px 12px 10px 34px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;width:220px}}.filter-select{{padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;min-width:120px}}.action-btn{{padding:10px 14px;border:1px solid #e2e8f0;border-radius:12px;background:white;font-size:13px;font-weight:600;cursor:pointer}}.add-exam-btn{{background:#0f172a;color:white;padding:10px 16px;border:none;border-radius:12px;font-weight:700;cursor:pointer}}.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:16px}}.modal.active{{display:flex}}</style><div style='padding:20px;max-width:1450px;margin:auto'><div style='margin-bottom:14px'><h1 style='margin:0;font-size:26px;font-weight:900;letter-spacing:-0.5px'>Exam Settings</h1><p style='margin:6px 0 0;color:#64748b;font-size:13px'>Manage exams — {school_name} • Linked to Set Marks (Out Of)</p></div><div class='exam-card'><div style='padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='display:flex;gap:10px;align-items:center'><div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8'>🔍</span><input id='examSearch' onkeyup='filterExams()' placeholder='Search exams...' class='filter-input'></div><select id='yearFilter' class='filter-select' onchange='filterExams()'>{year_opts_filter}</select><select id='termFilter' class='filter-select' onchange='filterExams()'>{term_opts_filter}</select></div><div style='display:flex;gap:8px'><button class='action-btn' onclick='downloadExams()'>⬇️ Download CSV</button><button class='add-exam-btn' onclick='openAddExam()'>+ Add Exam</button></div></div><div style='overflow:auto;max-height:65vh'><table id='examTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc;z-index:2'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:12px'><input type='checkbox'></th><th style='padding:12px'>#</th><th style='padding:12px'>EXAM NAME ↕️</th><th style='padding:12px'>TERM ↕️</th><th style='padding:12px'>YEAR ↕️</th><th style='padding:12px'>TYPE</th><th style='padding:12px;text-align:right'>ACTIONS</th></tr></thead><tbody>{rows}</tbody></table></div></div></div><div id='addExamModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>+ Add Exam</b><span onclick='closeAddExam()' style='cursor:pointer'>✕</span></div><form method='post' action='{add_action}' style='padding:18px;display:grid;gap:10px'><input name='exam_name' required placeholder='Exam Name * e.g. OPENER' class='input-field'><select name='term' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='Year e.g. 2026' class='input-field'><select name='exam_type' required class='input-field'><option>Main Exam</option><option>End Term Exam</option><option>Mid Term</option><option>CAT</option></select><button class='add-btn'>Add Exam</button></form></div></div><div id='editExamModal' class='modal'><div style='background:white;border-radius:16px;width:460px;max-width:95%'><div style='padding:18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><b>✏️ Edit Exam</b><span onclick='closeEditExam()' style='cursor:pointer'>✕</span></div><form id='editExamForm' method='post' style='padding:18px;display:grid;gap:10px'><input name='exam_name' id='e_name' required class='input-field'><select name='term' id='e_term' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' id='e_year' required class='input-field'><select name='exam_type' id='e_type' required class='input-field'><option>Main Exam</option><option>End Term Exam</option><option>Mid Term</option><option>CAT</option></select><button class='add-btn'>Update Exam</button></form></div></div><script>function openAddExam(){{document.getElementById('addExamModal').classList.add('active');}}function closeAddExam(){{document.getElementById('addExamModal').classList.remove('active');}}function openEditExam(id,name,term,year,type){{document.getElementById('editExamModal').classList.add('active');document.getElementById('editExamForm').action = "{edit_base}" + id; document.getElementById('e_name').value=name; document.getElementById('e_term').value=term; document.getElementById('e_year').value=year; document.getElementById('e_type').value=type;}}function closeEditExam(){{document.getElementById('editExamModal').classList.remove('active');}}function filterExams(){{let q=document.getElementById('examSearch').value.toLowerCase();let y=document.getElementById('yearFilter').value.toLowerCase();let t=document.getElementById('termFilter').value.toLowerCase();document.querySelectorAll('.exam-row').forEach(r=>{{let ok=true;if(q &&!r.getAttribute('data-search').includes(q)) ok=false;if(y!=='all' && r.getAttribute('data-year').toLowerCase()!==y) ok=false;if(t!=='all' && r.getAttribute('data-term').toLowerCase()!==t) ok=false;r.style.display=ok?'':'none';}});}}function downloadExams(){{let rows=document.querySelectorAll('#examTable tr');let csv=[];rows.forEach(row=>{{let cols=row.querySelectorAll('th,td');let d=[];cols.forEach((c,i)=>{{if(i>0 && i<6) d.push('\"'+c.innerText.replace(/\"/g,'\"\"')+'\"');}}); if(d.length) csv.push(d.join(','));}});let b=new Blob([csv.join('\\n')],{{type:'text/csv'}});let u=URL.createObjectURL(b);let a=document.createElement('a');a.href=u;a.download='exams_{school_name}.csv';a.click();}}</script>"""
+
 def set_marks_exact_html(subjects, classes, streams, years, terms_list, exams, configs, school_name, is_global=False, filters=None):
     filters = filters or {}
     subj_opts = "<option value=''>-- Select Subject --</option>" + "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
@@ -216,80 +230,9 @@ def set_marks_exact_html(subjects, classes, streams, years, terms_list, exams, c
     if not rows:
         rows = "<tr><td colspan='8' style='padding:40px;text-align:center;color:#94a3b8'>No set marks yet — configure on left</td></tr>"
     save_action = "/super/global-control/set-marks/save" if is_global else "/school/set-marks/save"
-    return f"""
-<style>
-.page-title{{font-size:24px;font-weight:900;margin:0}}
-.page-sub{{font-size:13px;color:#64748b;margin-top:4px}}
-.two-col{{display:grid;grid-template-columns:380px 1fr;gap:16px;margin-top:16px}}
-.card-white{{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px}}
-.info-blue{{background:#e6f0ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:12px;color:#1e40af;display:flex;gap:8px;line-height:1.5}}
-.label-red{{font-size:11px;font-weight:700;color:#dc2626;display:block;margin-top:10px;margin-bottom:4px}}
-.select-field{{width:100%;padding:11px 12px;border:1px solid #e5e7eb;border-radius:10px;background:white;font-size:13px}}
-.save-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer;margin-top:14px;display:flex;justify-content:center;align-items:center;gap:8px}}
-.filter-bar{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}
-.filter-select{{padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px;background:white;font-size:12px;min-width:110px}}
-</style>
-<div style='padding:20px;max-width:1500px;margin:auto'>
-<div><h1 class='page-title'>Set Marks</h1><p class='page-sub'>Configure the maximum marks (out of) for each subject per exam</p></div>
-<div class='two-col'>
-<div class='card-white'>
-<h3 style='margin:0 0 12px;font-size:16px;font-weight:800'>Set Marks Options</h3>
-<div class='info-blue'>ℹ️ <span><b>Out Of:</b> This is what the teacher will mark this paper out of e.g. 50 or 100. Marks are not converted. e.g. if the paper is out of 60 set that.</span></div>
-<form method='post' action='{save_action}' style='margin-top:14px'>
-<label class='label-red'>Subject *</label><select name='subject_id' required class='select-field'>{subj_opts}</select>
-<label class='label-red'>Class *</label><select name='class_name' required class='select-field'>{class_opts}</select>
-<label class='label-red'>Stream *</label><select name='stream' required class='select-field'>{stream_opts}</select>
-<label class='label-red'>Year *</label><select name='year' required class='select-field'>{year_opts}</select>
-<label class='label-red'>Term *</label><select name='term' required class='select-field'>{term_opts}</select>
-<label class='label-red'>Exam *</label><select name='exam_id' required class='select-field'>{exam_opts}</select>
-<label class='label-red'>Out Of *</label><input name='out_of' required type='number' min='1' max='500' placeholder='Out Of' class='select-field'>
-<button class='save-btn'>💾 Save Settings</button>
-</form>
-</div>
-<div class='card-white'>
-<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'><h3 style='margin:0;font-size:16px;font-weight:800'>Already Set Marks</h3><span style='font-size:11px;color:#64748b'>{len(configs)} records</span></div>
-<div class='filter-bar'>
-<select id='filterYear' class='filter-select' onchange='filterConfigs()'>{all_years_filter}</select>
-<select id='filterTerm' class='filter-select' onchange='filterConfigs()'>{all_terms_filter}</select>
-<select id='filterClass' class='filter-select' onchange='filterConfigs()'>{all_classes_filter}</select>
-<input id='searchConfig' onkeyup='filterConfigs()' placeholder='🔍 Search...' style='padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;min-width:130px'>
-</div>
-<div style='overflow:auto;max-height:70vh'>
-<table id='configTable' style='width:100%;border-collapse:collapse'>
-<thead style='position:sticky;top:0;background:#fcfcfc'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:10px 12px'><input type='checkbox'></th><th style='padding:10px 12px'>#</th><th>YEAR ↓</th><th>TERM</th><th>CLASS</th><th>SUBJECT</th><th>OUT OF</th><th>ACTION</th></tr></thead>
-<tbody>{rows}</tbody>
-</table>
-</div>
-<div style='display:flex;justify-content:space-between;margin-top:12px;font-size:12px;color:#64748b'><span>Show <select id='perPage' onchange='filterConfigs()' style='padding:4px;border:1px solid #e5e7eb;border-radius:6px'><option>10</option><option>25</option><option>50</option><option>100</option></select> items per page</span><span id='showing'>Showing 1-{len(configs)} of {len(configs)}</span></div>
-</div>
-</div>
-</div>
-<script>
-function filterConfigs(){{
-  let q=document.getElementById('searchConfig').value.toLowerCase();
-  let yf=document.getElementById('filterYear').value.toLowerCase();
-  let tf=document.getElementById('filterTerm').value.toLowerCase();
-  let cf=document.getElementById('filterClass').value.toLowerCase();
-  let rows=document.querySelectorAll('.cfg-row');
-  let visible=0;
-  rows.forEach(r=>{{
-    let ok=true;
-    let txt=r.getAttribute('data-search');
-    if(q &&!txt.includes(q)) ok=false;
-    let tds=r.querySelectorAll('td');
-    let year=tds[2].innerText.toLowerCase();
-    let term=tds[3].innerText.toLowerCase();
-    let cls=tds[4].innerText.toLowerCase();
-    if(yf!=='all' && yf!=='' &&!year.includes(yf)) ok=false;
-    if(tf!=='all' && tf!=='' &&!term.includes(tf)) ok=false;
-    if(cf!=='all' && cf!=='' &&!cls.includes(cf)) ok=false;
-    r.style.display=ok?'':'none';
-    if(ok) visible++;
-  }});
-  document.getElementById('showing').innerText='Showing 1-'+visible+' of '+visible;
-}}
-</script>
-"""
+    return f"""<style>.page-title{{font-size:24px;font-weight:900;margin:0}}.page-sub{{font-size:13px;color:#64748b;margin-top:4px}}.two-col{{display:grid;grid-template-columns:380px 1fr;gap:16px;margin-top:16px}}.card-white{{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px}}.info-blue{{background:#e6f0ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:12px;color:#1e40af;display:flex;gap:8px;line-height:1.5}}.label-red{{font-size:11px;font-weight:700;color:#dc2626;display:block;margin-top:10px;margin-bottom:4px}}.select-field{{width:100%;padding:11px 12px;border:1px solid #e5e7eb;border-radius:10px;background:white;font-size:13px}}.save-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer;margin-top:14px;display:flex;justify-content:center;align-items:center;gap:8px}}.filter-bar{{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}}.filter-select{{padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px;background:white;font-size:12px;min-width:110px}}</style><div style='padding:20px;max-width:1500px;margin:auto'><div><h1 class='page-title'>Set Marks</h1><p class='page-sub'>Configure the maximum marks (out of) for each subject per exam</p></div><div class='two-col'><div class='card-white'><h3 style='margin:0 0 12px;font-size:16px;font-weight:800'>Set Marks Options</h3><div class='info-blue'>ℹ️ <span><b>Out Of:</b> This is what the teacher will mark this paper out of e.g. 50 or 100. Marks are not converted. e.g. if the paper is out of 60 set that.</span></div><form method='post' action='{save_action}' style='margin-top:14px'><label class='label-red'>Subject *</label><select name='subject_id' required class='select-field'>{subj_opts}</select><label class='label-red'>Class *</label><select name='class_name' required class='select-field'>{class_opts}</select><label class='label-red'>Stream *</label><select name='stream' required class='select-field'>{stream_opts}</select><label class='label-red'>Year *</label><select name='year' required class='select-field'>{year_opts}</select><label class='label-red'>Term *</label><select name='term' required class='select-field'>{term_opts}</select><label class='label-red'>Exam *</label><select name='exam_id' required class='select-field'>{exam_opts}</select><label class='label-red'>Out Of *</label><input name='out_of' required type='number' min='1' max='500' placeholder='Out Of' class='select-field'><button class='save-btn'>💾 Save Settings</button></form></div><div class='card-white'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'><h3 style='margin:0;font-size:16px;font-weight:800'>Already Set Marks</h3><span style='font-size:11px;color:#64748b'>{len(configs)} records</span></div><div class='filter-bar'><select id='filterYear' class='filter-select' onchange='filterConfigs()'>{all_years_filter}</select><select id='filterTerm' class='filter-select' onchange='filterConfigs()'>{all_terms_filter}</select><select id='filterClass' class='filter-select' onchange='filterConfigs()'>{all_classes_filter}</select><input id='searchConfig' onkeyup='filterConfigs()' placeholder='🔍 Search...' style='padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;min-width:130px'></div><div style='overflow:auto;max-height:70vh'><table id='configTable' style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#fcfcfc'><tr style='text-align:left;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9'><th style='padding:10px 12px'><input type='checkbox'></th><th style='padding:10px 12px'>#</th><th>YEAR ↓</th><th>TERM</th><th>CLASS</th><th>SUBJECT</th><th>OUT OF</th><th>ACTION</th></tr></thead><tbody>{rows}</tbody></table></div><div style='display:flex;justify-content:space-between;margin-top:12px;font-size:12px;color:#64748b'><span>Show <select id='perPage' onchange='filterConfigs()' style='padding:4px;border:1px solid #e5e7eb;border-radius:6px'><option>10</option><option>25</option><option>50</option><option>100</option></select> items per page</span><span id='showing'>Showing 1-{len(configs)} of {len(configs)}</span></div></div></div></div><script>function filterConfigs(){{let q=document.getElementById('searchConfig').value.toLowerCase();let yf=document.getElementById('filterYear').value.toLowerCase();let tf=document.getElementById('filterTerm').value.toLowerCase();let cf=document.getElementById('filterClass').value.toLowerCase();let rows=document.querySelectorAll('.cfg-row');let visible=0;rows.forEach(r=>{{let ok=true;let txt=r.getAttribute('data-search');if(q &&!txt.includes(q)) ok=false;let tds=r.querySelectorAll('td');let year=tds[2].innerText.toLowerCase();let term=tds[3].innerText.toLowerCase();let cls=tds[4].innerText.toLowerCase();if(yf!=='all' && yf!=='' &&!year.includes(yf)) ok=false;if(tf!=='all' && tf!=='' &&!term.includes(tf)) ok=false;if(cf!=='all' && cf!=='' &&!cls.includes(cf)) ok=false;r.style.display=ok?'':'none';if(ok) visible++;}});document.getElementById('showing').innerText='Showing 1-'+visible+' of '+visible;}}</script>"""
+
+# === CORE ROUTES ===
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{margin:0;font-family:Arial;background:#f0f2f5;display:flex;height:100vh}.blue-bar{width:32px;background:#0d8bf2;flex-shrink:0}.main{flex:1;display:flex;justify-content:center;align-items:center;padding:20px}.card{background:white;width:540px;max-width:100%;padding:48px 48px 40px;border-radius:6px;box-shadow:0 0 0 1px #e2e8f0;text-align:center}.logo-box{width:72px;height:72px;background:#0f172a;color:white;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:32px;margin:0 auto}.input{width:100%;padding:14px 16px;border:1px solid #e2e8f0;border-radius:10px;background:#fcfcfc;font-size:14px;outline:none;box-sizing:border-box}.sign{background:#0d8bf2;color:white;width:100%;padding:15px;border:none;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;margin-top:10px}</style></head><body><div class="blue-bar"></div><div class="main"><div class="card"><div class="logo-box">D</div><h1 style="margin:16px 0 0;font-size:40px;font-weight:900;color:#0f172a">DaviSchool</h1><div style="margin-top:12px;color:#334155;font-size:15px">Sign in to your Davischool account</div><form method="post" action="/login" style="margin-top:30px;text-align:left"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Username or Email</label><input name="email" class="input" required style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Password</label><input name="password" type="password" class="input" required style="margin-bottom:18px"><button class="sign">Sign In</button></form></div></div></body></html>"""
@@ -358,7 +301,7 @@ def switch_to_school(sid: int, request: Request):
 @app.get("/super/back-to-admin")
 def back_to_admin(request: Request): request.session["school_id"]=0; request.session["is_impersonating"]=False; return RedirectResponse("/dashboard",303)
 
-# === SET MARKS HELPERS ===
+# === SET MARKS FILTER HELPERS ===
 def get_set_marks_filter_data(school_id):
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)); subjects = cur.fetchall()
@@ -371,7 +314,6 @@ def get_set_marks_filter_data(school_id):
     cur.execute("SELECT DISTINCT term_name FROM terms WHERE school_id=? ORDER BY term_name", (school_id,)); terms_list = [r["term_name"] for r in cur.fetchall()]
     if not terms_list: terms_list = ["Term 1","Term 2","Term 3"]
     cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (school_id,)); exams = cur.fetchall()
-    # classes for dropdown unique names
     classes_unique = []
     seen = set()
     for c in classes_raw:
@@ -402,7 +344,6 @@ def get_global_set_marks_filter_data():
     con.close()
     return subjects, classes_unique, streams, years, terms_list, exams
 
-# === SCHOOL SET MARKS PAGE ===
 @app.get("/school/set-marks", response_class=HTMLResponse)
 @app.get("/school/marks", response_class=HTMLResponse)
 def school_set_marks(request: Request, year: str = "all", term: str = "all", class_name: str = "all", search: str = ""):
@@ -413,11 +354,8 @@ def school_set_marks(request: Request, year: str = "all", term: str = "all", cla
     name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     subjects, classes, streams, years, terms_list, exams = get_set_marks_filter_data(school["id"])
     con = get_db(); cur = con.cursor()
-    # fetch configs with join for subject name
     cur.execute("""SELECT cfg.*, s.name as subject_name FROM set_marks_config cfg LEFT JOIN subjects s ON cfg.subject_id=s.id WHERE cfg.school_id=? ORDER BY cfg.year DESC, cfg.term, cfg.class_name""", (school["id"],))
-    configs = cur.fetchall()
-    # apply filters if provided via query (for already set marks filter - server side optional)
-    con.close()
+    configs = cur.fetchall(); con.close()
     filters = {"year": year, "term": term, "class": class_name}
     header = school_header(school, name, "set-marks", is_impersonating=is_imp)
     body = set_marks_exact_html(subjects, classes, streams, years, terms_list, exams, configs, school["name"], is_global=False, filters=filters)
@@ -429,7 +367,6 @@ def school_set_marks_save(request: Request, subject_id: int = Form(...), class_n
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
     con = get_db(); cur = con.cursor()
-    # prevent duplicate
     cur.execute("SELECT id FROM set_marks_config WHERE school_id=? AND subject_id=? AND class_name=? AND stream=? AND year=? AND term=? AND exam_id=?", (school["id"], subject_id, class_name.strip().upper(), stream.strip().upper(), year.strip(), term.strip(), exam_id))
     existing = cur.fetchone()
     ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
@@ -447,7 +384,6 @@ def school_set_marks_delete(cid: int, request: Request):
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM set_marks_config WHERE id=?", (cid,)); con.commit(); con.close()
     return RedirectResponse("/school/set-marks",303)
 
-# === GLOBAL SET MARKS ===
 @app.get("/super/global-control/set-marks", response_class=HTMLResponse)
 @app.get("/super/global-control/marks", response_class=HTMLResponse)
 def global_set_marks(request: Request, year: str = "all", term: str = "all", class_name: str = "all"):
@@ -456,8 +392,7 @@ def global_set_marks(request: Request, year: str = "all", term: str = "all", cla
     subjects, classes, streams, years, terms_list, exams = get_global_set_marks_filter_data()
     con = get_db(); cur = con.cursor()
     cur.execute("""SELECT cfg.*, s.name as subject_name FROM set_marks_config cfg LEFT JOIN subjects s ON cfg.subject_id=s.id GROUP BY cfg.subject_id, cfg.class_name, cfg.stream, cfg.year, cfg.term ORDER BY cfg.year DESC""")
-    configs = cur.fetchall()
-    con.close()
+    configs = cur.fetchall(); con.close()
     filters = {"year": year, "term": term, "class": class_name}
     header = global_header(name, "set-marks")
     body = set_marks_exact_html(subjects, classes, streams, years, terms_list, exams, configs, "ALL SCHOOLS", is_global=True, filters=filters)
@@ -466,10 +401,8 @@ def global_set_marks(request: Request, year: str = "all", term: str = "all", cla
 @app.post("/super/global-control/set-marks/save")
 def global_set_marks_save(request: Request, subject_id: int = Form(...), class_name: str = Form(...), stream: str = Form(...), year: str = Form(...), term: str = Form(...), exam_id: int = Form(...), out_of: int = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
     ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    # need real subject ids per school by name
     cur.execute("SELECT name FROM subjects WHERE id=?", (subject_id,)); srow = cur.fetchone()
     sname = srow["name"] if srow else ""
     for sch in schools:
@@ -497,7 +430,7 @@ def global_set_marks_delete(cid: int, request: Request):
         cur.execute("DELETE FROM set_marks_config WHERE id=?", (cid,))
     con.commit(); con.close()
     return RedirectResponse("/super/global-control/set-marks",303)
-    # === SCHOOL DASHBOARD & OTHERS ===
+# === SCHOOL DASHBOARD ===
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -506,7 +439,15 @@ def school_dashboard(request: Request):
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
     name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?", (school["id"],)); tc = cur.fetchone()["c"]; cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? GROUP BY c.name, s.gender ORDER BY c.name", (school["id"],)); gender_rows = cur.fetchall(); cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 5", (school["id"],)); recent_students = cur.fetchall(); cur.execute("SELECT COUNT(*) c FROM set_marks_config WHERE school_id=?", (school["id"],)); set_cfg_count = cur.fetchone()["c"]; con.close()
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["c"]
+    cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school["id"],)); cc = cur.fetchone()["c"]
+    cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?", (school["id"],)); ec = cur.fetchone()["c"]
+    cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?", (school["id"],)); tc = cur.fetchone()["c"]
+    cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.school_id=? GROUP BY c.name, s.gender ORDER BY c.name", (school["id"],)); gender_rows = cur.fetchall()
+    cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY id DESC LIMIT 5", (school["id"],)); recent_students = cur.fetchall()
+    cur.execute("SELECT COUNT(*) c FROM set_marks_config WHERE school_id=?", (school["id"],)); set_cfg_count = cur.fetchone()["c"]
+    con.close()
     stats = {}; tb=0; tg=0
     for r in gender_rows:
         cn = (r['class_name'] or 'UNASSIGNED').upper()
@@ -523,7 +464,6 @@ def school_dashboard(request: Request):
 @app.get("/school/students", response_class=HTMLResponse)
 def school_students(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
@@ -543,7 +483,6 @@ def del_stud(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE 
 @app.get("/school/dean-settings", response_class=HTMLResponse)
 def dean_settings(request: Request, tab: str = "terms"):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
     name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
@@ -593,19 +532,40 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 @app.get("/school/classes/delete/{cid}")
 def del_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
+
+# EXAM SETTINGS RESTORED - EXACT
 @app.get("/school/exams", response_class=HTMLResponse)
 def school_exams(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (school["id"],)); exams = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td><span style='background:#0f172a;color:white;padding:3px 8px;border-radius:12px;font-size:10px'>{e['exam_type'] or ''}</span></td><td><a href='/school/exams/delete/{e['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for e in exams]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No exams</td></tr>"
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/dashboard")
+    name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY year DESC, id DESC", (school["id"],))
+    exams = cur.fetchall(); con.close()
     header = school_header(school, name, "exams", is_impersonating=is_imp)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>📝 Exams ({len(exams)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Exam</b><form method='post' action='/school/exams/add'><input name='exam_name' required placeholder='Exam Name *' class='input-field'><select name='term' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='2026' class='input-field'><select name='exam_type' required class='input-field'><option>Main Exam</option><option>End Term Exam</option></select><button class='add-btn' style='margin-top:8px'>➕ Add Exam</button></form></div></div></div></div></div></body></html>")
+    body = exam_manager_html(exams, school["name"], is_global=False)
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
 @app.post("/school/exams/add")
 def add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip())); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
+    school = get_school_obj(request)
+    con = get_db(); cur = con.cursor()
+    cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (school["id"], exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip()))
+    ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (school["id"], request.session.get("email",""), "ADD EXAM", f"{exam_name} {year}", ts))
+    con.commit(); con.close()
+    return RedirectResponse("/school/exams",303)
+@app.post("/school/exams/edit/{eid}")
+def edit_exam(eid: int, request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
+    con = get_db(); cur = con.cursor()
+    cur.execute("UPDATE exams SET name=?, term=?, year=?, exam_type=? WHERE id=?", (exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip(), eid))
+    con.commit(); con.close()
+    return RedirectResponse("/school/exams",303)
 @app.get("/school/exams/delete/{eid}")
-def del_exam(eid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
+def del_exam(eid: int):
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close()
+    return RedirectResponse("/school/exams",303)
+
 @app.get("/school/teachers", response_class=HTMLResponse)
 def teachers_page(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -625,7 +585,6 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""),
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
-# === RECORD MARKS WITH OUT OF CHECK ===
 @app.get("/school/record-marks", response_class=HTMLResponse)
 def school_record_marks(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -641,16 +600,14 @@ def school_record_marks(request: Request):
     cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall()
     con.close()
     header = school_header(school, name, "record-marks", is_impersonating=is_imp)
-    # simple record marks filter page that will use set_marks_config to validate out_of
     opts_class = "".join([f"<option>{c['name']}</option>" for c in classes])
     opts_stream = "".join([f"<option>{s}</option>" for s in streams])
     opts_year = "".join([f"<option>{y}</option>" for y in years])
     opts_term = "".join([f"<option>{t}</option>" for t in terms_list])
     opts_exam = "".join([f"<option value='{e['id']}'>{e['name']}</option>" for e in exams])
     opts_subj = "".join([f"<option value='{s['id']}'>{s['name']}</option>" for s in subjects])
-    html = f"""<div style='padding:20px;max-width:1400px;margin:auto'><h1 style='margin:0;font-size:22px;font-weight:900'>✏️ Record Marks</h1><p style='color:#64748b;font-size:13px'>Select filters — system will check Out Of from Set Marks</p><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px'><form method='post' action='/school/record-marks/load' style='display:contents'><select name='class_name' required class='input-field'>{opts_class}</select><select name='stream' required class='input-field'>{opts_stream}</select><select name='year' required class='input-field'>{opts_year}</select><select name='term' required class='input-field'>{opts_term}</select><select name='exam_id' required class='input-field'>{opts_exam}</select><select name='subject_id' required class='input-field'>{opts_subj}</select><button style='grid-column:span 3;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:800'>🔍 Load Students</button></form></div></div>"""
+    html = f"""<div style='padding:20px;max-width:1400px;margin:auto'><h1 style='margin:0;font-size:22px;font-weight:900'>✏️ Record Marks</h1><p style='color:#64748b;font-size:13px'>Select filters — system checks Out Of from Set Marks</p><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px'><form method='post' action='/school/record-marks/load' style='display:contents'><select name='class_name' required class='input-field'>{opts_class}</select><select name='stream' required class='input-field'>{opts_stream}</select><select name='year' required class='input-field'>{opts_year}</select><select name='term' required class='input-field'>{opts_term}</select><select name='exam_id' required class='input-field'>{opts_exam}</select><select name='subject_id' required class='input-field'>{opts_subj}</select><button style='grid-column:span 3;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:800'>🔍 Load Students</button></form></div></div>"""
     return HTMLResponse(f"<html><body>{header}{html}</div></div></body></html>")
-
 @app.post("/school/record-marks/load", response_class=HTMLResponse)
 def school_record_load(request: Request, class_name: str = Form(...), stream: str = Form(...), year: str = Form(...), term: str = Form(...), exam_id: int = Form(...), subject_id: int = Form(...)):
     if "email" not in request.session: return RedirectResponse("/")
@@ -674,10 +631,9 @@ def school_record_load(request: Request, class_name: str = Form(...), stream: st
         val = existing.get(str(st["id"]), "")
         rows += f"<tr><td style='padding:10px'>{i}</td><td style='padding:10px;font-weight:600'>{st['name']}</td><td style='padding:10px'>{st['admission_no'] or ''}</td><td style='padding:10px'><input name='marks_{st['id']}' type='number' min='0' max='{out_of}' value='{val}' placeholder='0-{out_of}' style='width:90px;padding:8px;border:1px solid #e2e8f0;border-radius:8px'></td></tr>"
     if not rows:
-        rows = f"<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No students in {class_name} {stream}. Add students first.</td></tr>"
-    html = f"""<div style='padding:20px;max-width:1200px;margin:auto'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><div style='display:flex;justify-content:space-between'><div><b>Recording: {class_name} {stream} | Year {year} | {term} | Out Of {out_of}</b><div style='font-size:11px;color:#64748b'>Exam ID {exam_id} | Subject ID {subject_id} — max {out_of} enforced</div></div><a href='/school/record-marks' style='background:#f1f5f9;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:12px'>⬅️ Back</a></div><form method='post' action='/school/record-marks/save' style='margin-top:14px'><input type='hidden' name='save_class' value='{class_name}'><input type='hidden' name='save_stream' value='{stream}'><input type='hidden' name='save_year' value='{year}'><input type='hidden' name='save_term' value='{term}'><input type='hidden' name='save_exam' value='{exam_id}'><input type='hidden' name='save_subject' value='{subject_id}'><input type='hidden' name='save_out_of' value='{out_of}'><table style='width:100%;border-collapse:collapse;margin-top:10px'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>#</th><th>NAME</th><th>ADM</th><th>MARKS / {out_of}</th></tr></thead><tbody>{rows}</tbody></table><button style='margin-top:14px;width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:800'>💾 Save Marks</button></form></div></div>"""
+        rows = f"<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No students in {class_name} {stream}.</td></tr>"
+    html = f"""<div style='padding:20px;max-width:1200px;margin:auto'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><div style='display:flex;justify-content:space-between'><div><b>Recording: {class_name} {stream} | Year {year} | {term} | Out Of {out_of}</b><div style='font-size:11px;color:#64748b'>Exam {exam_id} | Subject {subject_id} — max {out_of}</div></div><a href='/school/record-marks' style='background:#f1f5f9;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:12px'>⬅️ Back</a></div><form method='post' action='/school/record-marks/save' style='margin-top:14px'><input type='hidden' name='save_class' value='{class_name}'><input type='hidden' name='save_stream' value='{stream}'><input type='hidden' name='save_year' value='{year}'><input type='hidden' name='save_term' value='{term}'><input type='hidden' name='save_exam' value='{exam_id}'><input type='hidden' name='save_subject' value='{subject_id}'><input type='hidden' name='save_out_of' value='{out_of}'><table style='width:100%;border-collapse:collapse;margin-top:10px'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>#</th><th>NAME</th><th>ADM</th><th>MARKS / {out_of}</th></tr></thead><tbody>{rows}</tbody></table><button style='margin-top:14px;width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:800'>💾 Save Marks</button></form></div></div>"""
     return HTMLResponse(f"<html><body>{header}{html}</div></div></body></html>")
-
 @app.post("/school/record-marks/save", response_class=HTMLResponse)
 async def school_record_save(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -709,13 +665,11 @@ async def school_record_save(request: Request):
     ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (school["id"], request.session.get("email",""), "RECORD MARKS", f"{class_name} {stream} Out {out_of}", ts))
     con.commit(); con.close()
-    return RedirectResponse("/school/marksheets",303)
+    return RedirectResponse("/school/dashboard",303)
 
-# === SYSTEM SETTINGS SCHOOL ===
 @app.get("/school/system-settings/{sub}", response_class=HTMLResponse)
 def school_system_settings(sub: str, request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
     school_obj = get_school_obj(request)
     if not school_obj: return RedirectResponse("/dashboard")
     name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
@@ -729,34 +683,29 @@ def school_system_settings(sub: str, request: Request):
     header = school_header(school_obj, name, f"system-settings/{sub}", is_impersonating=is_imp)
     base_path = "/school/system-settings"
     if sub=="school-profile":
-        panel = f"""<div style='display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3 style='margin:0 0 12px'>🏢 School Profile</h3><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px'><label style='font-size:11px;font-weight:700'>School Name</label><input name='name' value="{school['name']}" class='input-field'><label style='font-size:11px;font-weight:700'>Email</label><input name='email' value="{school['email']}" class='input-field'><label style='font-size:11px;font-weight:700'>Location</label><input name='location' value="{school['location']}" class='input-field'><label style='font-size:11px;font-weight:700'>Phone</label><input name='phone' value="{school['phone']}" class='input-field'><label style='font-size:11px;font-weight:700'>Principal</label><input name='principal' value="{school['principal']}" class='input-field'><label style='font-size:11px;font-weight:700'>School Type</label><input name='school_type' value="{school['school_type']}" class='input-field'><button class='add-btn' style='margin-top:8px'>💾 Update Profile</button></form></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3 style='margin:0 0 12px'>📊 Info</h3><div style='font-size:13px;line-height:1.8;color:#334155'><div>🔑 Code: <b>{school['code']}</b></div><div>📧 Email: <b>{school['email']}</b></div><div>📍 Location: <b>{school['location']}</b></div><div>👥 Users: <b>{len(users)}</b></div><div>🏫 Classes: <b>{len(classes)}</b></div></div></div></div>"""
+        panel = f"""<div style='display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3 style='margin:0 0 12px'>🏢 School Profile</h3><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px'><input name='name' value="{school['name']}" class='input-field'><input name='email' value="{school['email']}" class='input-field'><input name='location' value="{school['location']}" class='input-field'><input name='phone' value="{school['phone']}" class='input-field'><input name='principal' value="{school['principal']}" class='input-field'><input name='school_type' value="{school['school_type']}" class='input-field'><button class='add-btn'>💾 Update Profile</button></form></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3>📊 Info</h3><div style='font-size:13px;line-height:1.8'><div>🔑 Code: <b>{school['code']}</b></div><div>📧 {school['email']}</div><div>👥 Users: <b>{len(users)}</b></div></div></div></div>"""
     elif sub=="classes":
-        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center;color:#94a3b8'>No classes</td></tr>"
-        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>NAME</th><th>STREAM</th><th>ACTION</th></tr></thead><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;height:fit-content'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class' style='margin-top:10px'><input name='class_name' required placeholder='Class e.g. GRADE 7' class='input-field'><input name='stream' required placeholder='Stream e.g. EAST' class='input-field'><button class='add-btn'>Add Class</button></form></div></div>"""
+        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add</button></form></div></div>"""
     elif sub=="user-management":
-        urows = "".join([f"<tr><td style='padding:10px;font-size:12px;font-weight:700'>{u['full_name']}</td><td style='padding:10px;font-size:12px'>{u['email']}</td><td><span style='background:#e0e7ff;color:#3730a3;padding:3px 8px;border-radius:12px;font-size:11px'>{u['role']}</span></td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
-        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥+ User Management ({len(users)})</b></div><table style='width:100%'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>NAME</th><th>EMAIL</th><th>ROLE</th><th>ACTION</th></tr></thead><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;height:fit-content'><b>➕ Add User</b><form method='post' action='{base_path}/add-user' style='margin-top:10px'><input name='full_name' required placeholder='Full Name *' class='input-field'><input name='email' required placeholder='Email *' class='input-field'><input name='password' required placeholder='Password *' class='input-field'><select name='role' required class='input-field'><option>teacher</option><option>school_admin</option><option>accountant</option><option>librarian</option></select><button class='add-btn'>Create User</button></form></div></div>"""
-    elif sub=="roles-permissions":
-        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🛡️ Roles & Permissions</h3><div style='display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px'><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>👑 Super Admin</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Full access</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>🏫 School Admin</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Manage own school</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:14px'><b>👨‍🏫 Teacher</b><div style='font-size:12px;color:#64748b;margin-top:6px'>Record marks</div></div></div></div>"""
+        urows = "".join([f"<tr><td style='padding:10px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px'><div style='padding:14px'><b>👥 Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User</b><form method='post' action='{base_path}/add-user'><input name='full_name' required class='input-field' placeholder='Name'><input name='email' required class='input-field' placeholder='Email'><input name='password' required class='input-field' placeholder='Pass'><select name='role' class='input-field'><option>teacher</option><option>school_admin</option></select><button class='add-btn'>Create</button></form></div></div>"""
     elif sub=="database-backup":
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Database Backup — {school['name']}</h3><p style='font-size:13px;color:#64748b'>Backup includes students, staff, classes, exams, set marks config.</p><div style='display:flex;gap:12px;margin-top:16px'><a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>⬇️ Download Backup</a><a href='{base_path}/backup/csv' style='background:white;border:1px solid #e2e8f0;color:#0f172a;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>📄 Export CSV</a></div></div>"""
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Backup — {school['name']}</h3><a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none'>⬇️ Download</a></div>"""
     elif sub=="system-audit":
-        audit_rows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{a['timestamp'] or ''}</td><td style='padding:10px;font-size:12px'>{a['user_email'] or ''}</td><td style='padding:10px;font-size:12px;font-weight:600'>{a['action'] or ''}</td><td style='padding:10px;font-size:12px;color:#64748b'>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No audit logs yet</td></tr>"
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px;display:flex;justify-content:space-between'><b>📈 System Audit — Last 100</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none;font-size:12px'>Clear Logs</a></div><div style='overflow:auto;max-height:60vh'><table style='width:100%;border-collapse:collapse'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px;color:#64748b'><th style='padding:10px'>TIME</th><th>USER</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>{audit_rows}</tbody></table></div></div>"""
-    elif sub=="integrations":
-        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🔌 Integrations</h3><div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px'><div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>📱 SMS</b><div style='font-size:12px;color:#64748b'>Active</div></div><div style='border:1px solid #e2e8f0;border-radius:12px;padding:16px'><b>💳 M-Pesa</b><div style='font-size:12px;color:#64748b'>Pending</div></div></div></div>"""
+        audit_rows = "".join([f"<tr><td style='padding:10px'>{a['timestamp'] or ''}</td><td>{a['user_email'] or ''}</td><td>{a['action'] or ''}</td><td>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No logs</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px'><div style='padding:14px;display:flex;justify-content:space-between'><b>📈 Audit</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none'>Clear</a></div><table style='width:100%'><tbody>{audit_rows}</tbody></table></div>"""
     elif sub=="billing-payments":
-        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:11px'>{b['status']}</span></td><td style='padding:10px'>{b['due_date'] or ''}</td><td style='padding:10px;font-size:11px'>{b['created_at'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No invoices</td></tr>"
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💳 Billing & Payments</h3><form method='post' action='{base_path}/billing/add' style='display:flex;gap:10px;flex-wrap:wrap;margin-top:12px'><input name='amount' required placeholder='Amount' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option><option>Overdue</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add Invoice</button></form><div style='margin-top:18px;overflow:auto'><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px'><th style='padding:10px'>AMOUNT</th><th>STATUS</th><th>DUE</th><th>DATE</th></tr></thead><tbody>{brows}</tbody></table></div></div>"""
+        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td>{b['status']}</td><td>{b['due_date'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No invoices</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💳 Billing</h3><form method='post' action='{base_path}/billing/add'><input name='amount' required placeholder='Amount' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add</button></form><table style='width:100%;margin-top:10px'><tbody>{brows}</tbody></table></div>"""
     else:
-        panel = "<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:40px;text-align:center'>🚧 Coming Soon</div>"
+        panel = "<div style='background:white;border-radius:16px;padding:40px;text-align:center'>🚧 Coming Soon</div>"
     def pill(tab, label, icon):
         active_style = "background:#0f172a;color:white" if sub==tab else "background:#f8fafc;color:#475569;border:1px solid #e2e8f0"
         return f"<a href='/school/system-settings/{tab}' style='padding:8px 12px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:700;{active_style}'>{icon} {label}</a>"
-    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('roles-permissions','Roles & Permissi...','🛡️')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('integrations','Integrations','🔌')}{pill('billing-payments','Billing & Payments','💳')}</div>"
-    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings</h1><p style='margin:6px 0 14px;color:#64748b;font-size:13px'>Manage {school_obj['name']} — {sub.replace('-',' ').title()}</p>{pills}{panel}</div>"
+    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('billing-payments','Billing & Payments','💳')}</div>"
+    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings</h1>{pills}{panel}</div>"
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{content}</div></div></body></html>")
-
 @app.post("/school/system-settings/update-profile")
 def sys_update_profile(request: Request, name: str = Form(...), email: str = Form(""), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("UPDATE schools SET name=?, email=?, location=?, phone=?, principal=?, school_type=? WHERE id=?", (name.strip().upper(), email.strip(), location.strip(), phone.strip(), principal.strip(), school_type.strip(), school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/school-profile",303)
@@ -772,8 +721,6 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
 def sys_del_user(uid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM users WHERE id=?", (uid,)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/backup/download")
 def sys_backup_download(request: Request): return RedirectResponse("/school/system-settings/database-backup",303)
-@app.get("/school/system-settings/backup/csv")
-def sys_backup_csv(request: Request): return RedirectResponse("/school/system-settings/database-backup",303)
 @app.get("/school/system-settings/audit/clear")
 def sys_audit_clear(request: Request):
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?", (school_obj["id"],)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/system-audit",303)
@@ -782,7 +729,7 @@ def sys_billing_add(request: Request, amount: str = Form(...), status: str = For
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO billing (school_id, amount, status, due_date, created_at) VALUES (?,?,?,?,?)", (school_obj["id"], amount.strip(), status.strip(), due_date.strip(), ts)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/billing-payments",303)
 
-# === GLOBAL DASHBOARD & OTHERS ===
+# === GLOBAL ===
 @app.get("/super/global-control/dashboard", response_class=HTMLResponse)
 def global_dashboard(request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -802,6 +749,49 @@ def global_dashboard(request: Request):
     header = global_header(name, "dashboard")
     html = f"""<div style='padding:18px;max-width:1400px;margin:auto'><div style='background:linear-gradient(135deg,#0f172a 0%, #1e3a8a 60%, #1e40af 100%);border-radius:18px;padding:22px 24px;color:white;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'><div><div style='font-size:22px;font-weight:900'>DaviSchool — GLOBAL CONTROL 🚀</div><div style='font-size:12px;color:#bfdbfe;margin-top:4px'>Set Marks Config: {setc} | All Schools Automatic Sync</div></div><div style='text-align:right'><div style='font-size:34px;font-weight:900'>{sc}</div><div style='font-size:11px'>Total Students (ALL)</div></div></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px'><a href='/super/global-control/students' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{sc}</div></a><a href='/super/global-control/classes' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🏫 CLASSES</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{cc}</div></a><a href='/super/global-control/exams' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>📝 EXAMS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{ec}</div></a><a href='/super/global-control/teachers' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>👨‍🏫 STAFF</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{tc}</div></a></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='display:flex;justify-content:space-between'><div><div style='font-weight:800;font-size:14px'>👥 Students by Gender — ALL Schools</div></div><div style='display:flex;gap:12px;font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block'></span> Girls</span></div></div><div style='display:flex;gap:24px;overflow-x:auto;margin-top:18px'>{chart_html}</div></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
+
+@app.get("/super/global-control/exams", response_class=HTMLResponse)
+def global_exams(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    name = request.session.get("name","Davis Ouma")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM exams GROUP BY name, year ORDER BY year DESC, id DESC")
+    exams = cur.fetchall(); con.close()
+    header = global_header(name, "exams")
+    body = exam_manager_html(exams, "ALL SCHOOLS — Global Control", is_global=True)
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
+@app.post("/super/global-control/exams/add")
+def global_add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("SELECT id FROM exams WHERE school_id=? AND name=? AND year=?", (sch["id"], exam_name.strip().upper(), year.strip()))
+        if not cur.fetchone():
+            cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (sch["id"], exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip()))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/exams",303)
+@app.post("/super/global-control/exams/edit/{eid}")
+def global_edit_exam(eid: int, request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT name, year FROM exams WHERE id=?", (eid,)); old = cur.fetchone()
+    if old:
+        cur.execute("UPDATE exams SET name=?, term=?, year=?, exam_type=? WHERE name=? AND year=?", (exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip(), old["name"], old["year"]))
+    else:
+        cur.execute("UPDATE exams SET name=?, term=?, year=?, exam_type=? WHERE id=?", (exam_name.strip().upper(), term.strip(), year.strip(), exam_type.strip(), eid))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/exams",303)
+@app.get("/super/global-control/exams/delete/{eid}")
+def global_del_exam(eid: int, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT name, year FROM exams WHERE id=?", (eid,)); old = cur.fetchone()
+    if old:
+        cur.execute("DELETE FROM exams WHERE name=? AND year=?", (old["name"], old["year"]))
+    else:
+        cur.execute("DELETE FROM exams WHERE id=?", (eid,))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/exams",303)
 
 @app.get("/super/global-control/students", response_class=HTMLResponse)
 def global_students(request: Request):
@@ -861,6 +851,114 @@ def global_del_teacher(tid: int, request: Request):
     if t and t["id_no"]: cur.execute("DELETE FROM teachers WHERE id_no=?", (t["id_no"],))
     else: cur.execute("DELETE FROM teachers WHERE id=?", (tid,))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/teachers",303)
+@app.get("/super/global-control/classes", response_class=HTMLResponse)
+def global_classes(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    name = request.session.get("name",""); header = global_header(name, "classes")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT name, stream, COUNT(*) cnt FROM classes GROUP BY name, stream ORDER BY name"); classes = cur.fetchall(); con.close()
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>In {c['cnt']} schools</span></td><td><a href='/super/global-control/classes/delete/{c['name']}/{c['stream'] or ''}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No classes</td></tr>"
+    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes & Streams ({len(classes)}) — Automatic</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/super/global-control/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='/super/global-control/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Class</button></form></div></div></div></div></div></body></html>")
+@app.post("/super/global-control/classes/add")
+def global_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+        if not cur.fetchone(): cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/classes",303)
+@app.get("/super/global-control/classes/delete/{cname}/{stream}")
+def global_del_class(cname: str, stream: str, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/classes",303)
+
+@app.get("/super/global-control/system-settings/{sub}", response_class=HTMLResponse)
+def global_system_settings(sub: str, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    name = request.session.get("name","Davis Ouma")
+    con = get_db(); cur = con.cursor()
+    cur.execute("SELECT * FROM schools LIMIT 1"); school = cur.fetchone()
+    if not school:
+        con.close()
+        header = global_header(name, f"system-settings/{sub}")
+        return HTMLResponse(f"<html><body>{header}<div style='padding:40px;text-align:center'>No school yet</div></div></div></body></html>")
+    cur.execute("SELECT * FROM users ORDER BY id DESC"); users = cur.fetchall()
+    cur.execute("SELECT * FROM classes GROUP BY name, stream ORDER BY name"); classes = cur.fetchall()
+    cur.execute("SELECT * FROM system_audit ORDER BY id DESC LIMIT 200"); audit = cur.fetchall()
+    cur.execute("SELECT * FROM billing ORDER BY id DESC"); bills = cur.fetchall()
+    con.close()
+    header = global_header(name, f"system-settings/{sub}")
+    base_path = "/super/global-control/system-settings"
+    if sub=="school-profile":
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3>🏢 Global — School Profiles</h3><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px;margin-top:12px;max-width:500px'><input name='name' placeholder='New School Name (ALL)' class='input-field'><input name='location' placeholder='Location (ALL)' class='input-field'><input name='phone' placeholder='Phone (ALL)' class='input-field'><button class='add-btn'>Update ALL Schools</button></form></div>"""
+    elif sub=="classes":
+        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c['name']}/{c['stream'] or ''}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>🏫 Global Classes — Automatic Sync</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add Class (ALL schools)</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add Global Class</button></form></div></div>"""
+    elif sub=="user-management":
+        urows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥 Global Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User (ALL schools)</b><form method='post' action='{base_path}/add-user'><input name='full_name' required placeholder='Name' class='input-field'><input name='email' required placeholder='Email' class='input-field'><input name='password' required placeholder='Password' class='input-field'><select name='role' class='input-field'><option>teacher</option><option>school_admin</option></select><button class='add-btn'>Create Global User</button></form></div></div>"""
+    elif sub=="database-backup":
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Global Database Backup — ALL Schools</h3><div style='display:flex;gap:12px;margin-top:16px'><a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>⬇️ Download Full Backup</a></div></div>"""
+    elif sub=="system-audit":
+        audit_rows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{a['timestamp'] or ''}</td><td>{a['user_email'] or ''}</td><td style='font-weight:600'>{a['action'] or ''}</td><td style='color:#64748b;font-size:12px'>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No logs</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px;display:flex;justify-content:space-between'><b>📈 Global Audit — ALL Schools</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none'>Clear</a></div><div style='overflow:auto;max-height:60vh'><table style='width:100%'><tbody>{audit_rows}</tbody></table></div></div>"""
+    elif sub=="billing-payments":
+        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td>{b['status']}</td><td>{b['due_date'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No invoices</td></tr>"
+        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💳 Global Billing — ALL Schools</h3><form method='post' action='{base_path}/billing/add' style='display:flex;gap:10px;margin-top:12px'><input name='amount' required placeholder='Amount' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add</button></form><table style='width:100%;margin-top:16px'><tbody>{brows}</tbody></table></div>"""
+    else:
+        panel = "<div style='padding:40px;text-align:center;background:white;border-radius:16px'>🚧 Coming Soon</div>"
+    def pill(tab, label, icon):
+        active_style = "background:#0f172a;color:white" if sub==tab else "background:#f8fafc;color:#475569;border:1px solid #e2e8f0"
+        return f"<a href='/super/global-control/system-settings/{tab}' style='padding:8px 12px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:700;{active_style}'>{icon} {label}</a>"
+    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('billing-payments','Billing & Payments','💳')}</div>"
+    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings — GLOBAL</h1>{pills}{panel}</div>"
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{content}</div></div></body></html>")
+@app.post("/super/global-control/system-settings/update-profile")
+def global_sys_update_profile(request: Request, name: str = Form(""), location: str = Form(""), phone: str = Form("")):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor()
+    if name.strip(): cur.execute("UPDATE schools SET name=?", (name.strip().upper(),))
+    if location.strip(): cur.execute("UPDATE schools SET location=?", (location.strip(),))
+    if phone.strip(): cur.execute("UPDATE schools SET phone=?", (phone.strip(),))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/school-profile",303)
+@app.post("/super/global-control/system-settings/add-class")
+def global_sys_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+        if not cur.fetchone(): cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
+@app.get("/super/global-control/system-settings/delete-class/{cname}/{stream}")
+def global_sys_del_class(cname: str, stream: str, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
+@app.post("/super/global-control/system-settings/add-user")
+def global_sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), sch["id"]))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+@app.get("/super/global-control/system-settings/delete-user/{uid}")
+def global_sys_del_user(uid: int, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT email FROM users WHERE id=?", (uid,)); u = cur.fetchone()
+    if u: cur.execute("DELETE FROM users WHERE email=?", (u["email"],))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+@app.get("/super/global-control/system-settings/backup/download")
+def global_sys_backup_download(request: Request): return RedirectResponse("/super/global-control/system-settings/database-backup",303)
+@app.get("/super/global-control/system-settings/audit/clear")
+def global_sys_audit_clear(request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit"); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/system-audit",303)
+@app.post("/super/global-control/system-settings/billing/add")
+def global_sys_billing_add(request: Request, amount: str = Form(...), status: str = Form(...), due_date: str = Form(...)):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
+    for sch in schools:
+        cur.execute("INSERT INTO billing (school_id, amount, status, due_date, created_at) VALUES (?,?,?,?,?)", (sch["id"], amount.strip(), status.strip(), due_date.strip(), ts))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/billing-payments",303)
 
 @app.get("/super/global-control/dean-settings", response_class=HTMLResponse)
 def global_dean_settings(request: Request, tab: str = "terms"):
@@ -876,7 +974,6 @@ def global_dean_settings(request: Request, tab: str = "terms"):
     header = global_header(name, "dean-settings")
     body = dean_manager_html(terms, subjects, teachers, classes, allocs, 0, "ALL SCHOOLS — Global Control", is_global=True, active_tab=tab)
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
-
 @app.post("/super/global-control/dean-settings/add-term")
 def global_add_term(request: Request, term_name: str = Form(...), year: str = Form(...), start_date: str = Form(...), end_date: str = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
@@ -947,138 +1044,11 @@ def global_promote(request: Request, from_class: int = Form(...), to_class: int 
                 cur.execute("UPDATE students SET class_id=? WHERE school_id=? AND class_id=?", (t_real["id"], sch["id"], f_real["id"]))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/dean-settings?tab=promote",303)
 
-@app.get("/super/global-control/classes", response_class=HTMLResponse)
-def global_classes(request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    name = request.session.get("name",""); header = global_header(name, "classes")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT name, stream, COUNT(*) cnt FROM classes GROUP BY name, stream ORDER BY name"); classes = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>In {c['cnt']} schools</span></td><td><a href='/super/global-control/classes/delete/{c['name']}/{c['stream'] or ''}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No classes</td></tr>"
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes & Streams ({len(classes)}) — Automatic</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/super/global-control/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='/super/global-control/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Class</button></form></div></div></div></div></div></body></html>")
-@app.post("/super/global-control/classes/add")
-def global_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
-        if not cur.fetchone(): cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/classes",303)
-@app.get("/super/global-control/classes/delete/{cname}/{stream}")
-def global_del_class(cname: str, stream: str, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/classes",303)
-@app.get("/super/global-control/exams", response_class=HTMLResponse)
-def global_exams(request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    name = request.session.get("name",""); header = global_header(name, "exams")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT name, term, year, exam_type, COUNT(*) cnt FROM exams GROUP BY name, year ORDER BY year DESC"); exams = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{e['name']}</td><td>{e['term']}</td><td>{e['year']}</td><td><span style='background:#0f172a;color:white;padding:3px 8px;border-radius:12px;font-size:10px'>{e['exam_type'] or ''}</span></td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>{e['cnt']} schools</span></td></tr>" for e in exams]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No exams</td></tr>"
-    return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>📝 Exams — Automatic</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/super/global-control/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Exam</b><form method='post' action='/super/global-control/exams/add'><input name='exam_name' required placeholder='Exam Name *' class='input-field'><select name='term' required class='input-field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required placeholder='2026' class='input-field'><select name='exam_type' required class='input-field'><option>Main Exam</option><option>End Term Exam</option></select><button class='add-btn' style='margin-top:8px'>➕ Add Exam</button></form></div></div></div></div></div></body></html>")
-@app.post("/super/global-control/exams/add")
-def global_add_exam(request: Request, exam_name: str = Form(...), term: str = Form(...), year: str = Form(...), exam_type: str = Form(...)):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("SELECT id FROM exams WHERE school_id=? AND name=? AND year=?", (sch["id"], exam_name.strip().upper(), year))
-        if not cur.fetchone(): cur.execute("INSERT INTO exams (school_id, name, term, year, exam_type) VALUES (?,?,?,?,?)", (sch["id"], exam_name.strip().upper(), term, year, exam_type))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/exams",303)
-@app.get("/super/global-control/system-settings/{sub}", response_class=HTMLResponse)
-def global_system_settings(sub: str, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    name = request.session.get("name","Davis Ouma")
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM schools LIMIT 1"); school = cur.fetchone()
-    if not school:
-        con.close()
-        header = global_header(name, f"system-settings/{sub}")
-        return HTMLResponse(f"<html><body>{header}<div style='padding:40px;text-align:center'>No school yet</div></div></div></body></html>")
-    cur.execute("SELECT * FROM users ORDER BY id DESC"); users = cur.fetchall()
-    cur.execute("SELECT * FROM classes GROUP BY name, stream ORDER BY name"); classes = cur.fetchall()
-    cur.execute("SELECT * FROM system_audit ORDER BY id DESC LIMIT 200"); audit = cur.fetchall()
-    cur.execute("SELECT * FROM billing ORDER BY id DESC"); bills = cur.fetchall()
-    con.close()
-    header = global_header(name, f"system-settings/{sub}")
-    base_path = "/super/global-control/system-settings"
-    if sub=="school-profile":
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3>🏢 Global — School Profiles</h3><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px;margin-top:12px;max-width:500px'><input name='name' placeholder='New School Name (ALL)' class='input-field'><input name='location' placeholder='Location (ALL)' class='input-field'><input name='phone' placeholder='Phone (ALL)' class='input-field'><button class='add-btn'>Update ALL Schools</button></form></div>"""
-    elif sub=="classes":
-        rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c['name']}/{c['stream'] or ''}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
-        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>🏫 Global Classes — Automatic Sync</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add Class (ALL schools)</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add Global Class</button></form></div></div>"""
-    elif sub=="user-management":
-        urows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
-        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥 Global Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User (ALL schools)</b><form method='post' action='{base_path}/add-user'><input name='full_name' required placeholder='Name' class='input-field'><input name='email' required placeholder='Email' class='input-field'><input name='password' required placeholder='Password' class='input-field'><select name='role' class='input-field'><option>teacher</option><option>school_admin</option></select><button class='add-btn'>Create Global User</button></form></div></div>"""
-    elif sub=="roles-permissions":
-        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🛡️ Global Roles & Permissions</h3><p style='font-size:13px;color:#64748b'>Enforced globally</p></div>"""
-    elif sub=="database-backup":
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Global Database Backup — ALL Schools</h3><div style='display:flex;gap:12px;margin-top:16px'><a href='{base_path}/backup/download' style='background:#0f172a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700'>⬇️ Download Full Backup</a></div></div>"""
-    elif sub=="system-audit":
-        audit_rows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{a['timestamp'] or ''}</td><td>{a['user_email'] or ''}</td><td style='font-weight:600'>{a['action'] or ''}</td><td style='color:#64748b;font-size:12px'>{a['details'] or ''}</td></tr>" for a in audit[:100]]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No logs</td></tr>"
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px;display:flex;justify-content:space-between'><b>📈 Global Audit — ALL Schools</b><a href='{base_path}/audit/clear' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;text-decoration:none'>Clear</a></div><div style='overflow:auto;max-height:60vh'><table style='width:100%'><tbody>{audit_rows}</tbody></table></div></div>"""
-    elif sub=="integrations":
-        panel = """<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>🔌 Global Integrations</h3></div>"""
-    elif sub=="billing-payments":
-        brows = "".join([f"<tr><td style='padding:10px'>{b['amount']}</td><td>{b['status']}</td><td>{b['due_date'] or ''}</td><td>{b['created_at'] or ''}</td></tr>" for b in bills]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No invoices</td></tr>"
-        panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💳 Global Billing — ALL Schools</h3><form method='post' action='{base_path}/billing/add' style='display:flex;gap:10px;margin-top:12px'><input name='amount' required placeholder='Amount' class='input-field' style='width:200px'><select name='status' class='input-field' style='width:200px'><option>Paid</option><option>Pending</option></select><input name='due_date' type='date' class='input-field' style='width:200px'><button class='add-btn' style='width:200px'>Add</button></form><table style='width:100%;margin-top:16px'><tbody>{brows}</tbody></table></div>"""
-    else:
-        panel = "<div style='padding:40px;text-align:center;background:white;border-radius:16px'>🚧 Coming Soon</div>"
-    def pill(tab, label, icon):
-        active_style = "background:#0f172a;color:white" if sub==tab else "background:#f8fafc;color:#475569;border:1px solid #e2e8f0"
-        return f"<a href='/super/global-control/system-settings/{tab}' style='padding:8px 12px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:700;{active_style}'>{icon} {label}</a>"
-    pills = f"<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap'>{pill('school-profile','School Profile','🏢')}{pill('classes','Classes','🏫')}{pill('user-management','User Management','👥+')}{pill('roles-permissions','Roles & Permissi...','🛡️')}{pill('database-backup','Database Backup','💾')}{pill('system-audit','System Audit','📈')}{pill('integrations','Integrations','🔌')}{pill('billing-payments','Billing & Payments','💳')}</div>"
-    content = f"<div style='padding:20px;max-width:1450px;margin:auto'><h1 style='margin:0;font-size:26px;font-weight:900'>⚙️ System Settings — GLOBAL</h1>{pills}{panel}</div>"
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{content}</div></div></body></html>")
-@app.post("/super/global-control/system-settings/update-profile")
-def global_sys_update_profile(request: Request, name: str = Form(""), location: str = Form(""), phone: str = Form("")):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor()
-    if name.strip(): cur.execute("UPDATE schools SET name=?", (name.strip().upper(),))
-    if location.strip(): cur.execute("UPDATE schools SET location=?", (location.strip(),))
-    if phone.strip(): cur.execute("UPDATE schools SET phone=?", (phone.strip(),))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/school-profile",303)
-@app.post("/super/global-control/system-settings/add-class")
-def global_sys_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
-        if not cur.fetchone(): cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (sch["id"], class_name.strip().upper(), stream.strip().upper()))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
-@app.get("/super/global-control/system-settings/delete-class/{cname}/{stream}")
-def global_sys_del_class(cname: str, stream: str, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
-@app.post("/super/global-control/system-settings/add-user")
-def global_sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), sch["id"]))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
-@app.get("/super/global-control/system-settings/delete-user/{uid}")
-def global_sys_del_user(uid: int, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT email FROM users WHERE id=?", (uid,)); u = cur.fetchone()
-    if u: cur.execute("DELETE FROM users WHERE email=?", (u["email"],))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
-@app.get("/super/global-control/system-settings/backup/download")
-def global_sys_backup_download(request: Request): return RedirectResponse("/super/global-control/system-settings/database-backup",303)
-@app.get("/super/global-control/system-settings/audit/clear")
-def global_sys_audit_clear(request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit"); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/system-audit",303)
-@app.post("/super/global-control/system-settings/billing/add")
-def global_sys_billing_add(request: Request, amount: str = Form(...), status: str = Form(...), due_date: str = Form(...)):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("INSERT INTO billing (school_id, amount, status, due_date, created_at) VALUES (?,?,?,?,?)", (sch["id"], amount.strip(), status.strip(), due_date.strip(), ts))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/billing-payments",303)
-
 @app.get("/super/global-control/{path}", response_class=HTMLResponse)
 def global_other(path: str, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     name = request.session.get("name","Davis Ouma"); header = global_header(name, path)
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3 style='margin:0'>🚧 {path.upper()} — Coming Soon</h3><p style='color:#64748b;font-size:13px'>Module in progress — use Set Marks for now</p><a href='/super/global-control/dashboard' style='margin-top:16px;display:inline-block;padding:10px 16px;background:#0f172a;color:white;border-radius:10px;text-decoration:none;font-weight:700'>⬅️ Back</a></div></div></div></div></body></html>")
+    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:40px;text-align:center'><h3 style='margin:0'>🚧 {path.upper()} — Coming Soon</h3><p style='color:#64748b;font-size:13px'>Module in progress — use Set Marks / Exam Settings for now</p><a href='/super/global-control/dashboard' style='margin-top:16px;display:inline-block;padding:10px 16px;background:#0f172a;color:white;border-radius:10px;text-decoration:none;font-weight:700'>⬅️ Back</a></div></div></div></div></body></html>")
 
 @app.get("/school/{path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
