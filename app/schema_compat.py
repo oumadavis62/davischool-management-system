@@ -38,7 +38,49 @@ def _ensure_live_postgres_schema():
         "system_audit": {
             "school_id": "INTEGER", "user_email": "TEXT", "action": "TEXT",
             "details": "TEXT", "timestamp": "TEXT",
+        },        "classes": {"school_id": "INTEGER", "name": "TEXT", "level": "TEXT", "stream": "TEXT"},
+        "students": {
+            "school_id": "INTEGER", "admission_no": "TEXT", "assessment_no": "TEXT",
+            "name": "TEXT", "class_id": "INTEGER", "gender": "TEXT",
+            "parent_phone": "TEXT", "stream": "TEXT", "category": "TEXT",
+            "guardian_name": "TEXT",
         },
+        "subjects": {"school_id": "INTEGER", "name": "TEXT", "code": "TEXT", "initial": "TEXT"},
+        "exams": {"school_id": "INTEGER", "name": "TEXT", "term": "TEXT", "year": "TEXT", "exam_type": "TEXT"},
+        "terms": {"school_id": "INTEGER", "term_name": "TEXT", "year": "TEXT", "start_date": "TEXT", "end_date": "TEXT"},
+        "teachers": {
+            "school_id": "INTEGER", "name": "TEXT", "email": "TEXT", "phone": "TEXT",
+            "tsc_no": "TEXT", "gender": "TEXT", "id_no": "TEXT", "role": "TEXT",
+            "employment_type": "TEXT",
+        },
+        "teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER"},
+        "billing": {"school_id": "INTEGER", "amount": "TEXT", "status": "TEXT", "due_date": "TEXT", "created_at": "TEXT"},
+        "marks": {
+            "school_id": "INTEGER", "student_id": "INTEGER", "subject_id": "INTEGER",
+            "exam_id": "INTEGER", "class_id": "INTEGER", "marks": "INTEGER",
+            "year": "TEXT", "term": "TEXT",
+        },
+        "set_marks_config": {
+            "school_id": "INTEGER", "subject_id": "INTEGER", "class_name": "TEXT",
+            "stream": "TEXT", "year": "TEXT", "term": "TEXT", "exam_id": "INTEGER",
+            "out_of": "INTEGER", "created_at": "TEXT",
+        },
+        "timetable": {"school_id": "INTEGER", "day": "TEXT", "start_time": "TEXT", "end_time": "TEXT", "class_name": "TEXT", "stream": "TEXT", "subject": "TEXT", "teacher": "TEXT", "room": "TEXT"},
+        "fees": {"school_id": "INTEGER", "student_id": "INTEGER", "amount": "REAL", "paid": "REAL", "description": "TEXT", "due_date": "TEXT", "status": "TEXT"},
+        "announcements": {"school_id": "INTEGER", "title": "TEXT", "message": "TEXT", "audience": "TEXT", "created_at": "TEXT"},
+        "sms_logs": {"school_id": "INTEGER", "recipient": "TEXT", "message": "TEXT", "status": "TEXT", "created_at": "TEXT"},
+        "roles_permissions": {"school_id": "INTEGER", "role": "TEXT", "permission": "TEXT", "enabled": "INTEGER"},
+        "integrations": {"school_id": "INTEGER", "name": "TEXT", "status": "TEXT", "config": "TEXT"},
+        "report_comments": {"school_id": "INTEGER", "student_id": "INTEGER", "exam_id": "INTEGER", "comment": "TEXT", "created_at": "TEXT"},
+        "attendance": {"school_id": "INTEGER", "student_id": "INTEGER", "date": "TEXT", "status": "TEXT"},
+        "expenses": {"school_id": "INTEGER", "category": "TEXT", "description": "TEXT", "amount": "REAL", "paid_to": "TEXT", "voucher_no": "TEXT", "date": "TEXT", "status": "TEXT"},
+        "pledges": {"school_id": "INTEGER", "parent_name": "TEXT", "phone": "TEXT", "amount": "REAL", "paid": "REAL", "purpose": "TEXT", "due_date": "TEXT", "status": "TEXT"},
+        "payment_vouchers": {"school_id": "INTEGER", "voucher_no": "TEXT", "payee": "TEXT", "description": "TEXT", "amount": "REAL", "date": "TEXT", "status": "TEXT"},
+        "lpos": {"school_id": "INTEGER", "lpo_no": "TEXT", "supplier": "TEXT", "description": "TEXT", "amount": "REAL", "date": "TEXT", "status": "TEXT"},
+        "cashbook": {"school_id": "INTEGER", "date": "TEXT", "reference": "TEXT", "description": "TEXT", "debit": "REAL", "credit": "REAL", "account": "TEXT"},
+        "fee_payments": {"school_id": "INTEGER", "student_id": "INTEGER", "amount": "REAL", "reference": "TEXT", "method": "TEXT", "date": "TEXT", "received_by": "TEXT"},
+        "finance_accounts": {"school_id": "INTEGER", "code": "TEXT", "name": "TEXT", "type": "TEXT", "opening_balance": "REAL"},
+
     }
 
     with psycopg.connect(database_url) as pg:
