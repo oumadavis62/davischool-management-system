@@ -380,7 +380,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
         "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
         "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
-        <script>function printDocument(){window.print();}</script>"
+        "<script>function printDocument(){window.print();}</script>"
         "<style>"
         ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
