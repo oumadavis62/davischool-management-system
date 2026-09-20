@@ -1776,6 +1776,59 @@ def school_attendance_register(request:Request):
 
 
 
+
+# === DAVISCHOOL REMAINING MAJOR FUNCTIONALITY ===
+@app.get("/school/attendance/bulk", response_class=HTMLResponse)
+def school_attendance_bulk(request: Request, date: str = ""):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    if not date: date=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    con=get_db(); cur=con.cursor()
+    students=cur.execute("SELECT s.id,s.name,s.admission_no,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY c.name,c.stream,s.name",(school["id"],)).fetchall()
+    existing={r["student_id"]:r["status"] for r in cur.execute("SELECT student_id,status FROM attendance WHERE school_id=? AND date=?",(school["id"],date)).fetchall()}
+    con.close()
+    rows="".join(f"<tr><td>{s['name']}</td><td>{s['admission_no'] or ''}</td><td>{s['class_name'] or ''} {s['stream'] or ''}</td><td><select name='status_{s['id']}' class='input-field'><option {'selected' if existing.get(s['id'])=='Present' else ''}>Present</option><option {'selected' if existing.get(s['id'])=='Absent' else ''}>Absent</option><option {'selected' if existing.get(s['id'])=='Late' else ''}>Late</option><option {'selected' if existing.get(s['id'])=='Excused' else ''}>Excused</option></select></td></tr>" for s in students)
+    return module_page(request,"🗓️ Class Attendance","attendance",f"<div class='card'><h2>🗓️ Class Attendance</h2><form method='post' action='/school/attendance/bulk'><input type='date' name='date' value='{date}' required class='input-field'><table><tr><th>Student</th><th>Admission</th><th>Class</th><th>Status</th></tr>{rows or '<tr><td colspan=4>No students.</td></tr>'}</table><button class='btn' style='margin-top:12px'>Save Attendance</button></form></div>")
+
+@app.post("/school/attendance/bulk")
+async def school_attendance_bulk_save(request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    form=await request.form(); date=str(form.get("date") or "")
+    if not date: return RedirectResponse("/school/attendance/bulk",303)
+    con=get_db(); cur=con.cursor()
+    students=cur.execute("SELECT id FROM students WHERE school_id=?",(school["id"],)).fetchall()
+    for s in students:
+        status=form.get(f"status_{s['id']}")
+        if status:
+            cur.execute("DELETE FROM attendance WHERE school_id=? AND student_id=? AND date=?",(school["id"],s["id"],date))
+            cur.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(school["id"],s["id"],date,str(status)))
+    con.commit(); con.close(); return RedirectResponse(f"/school/attendance/bulk?date={date}",303)
+
+@app.post("/school/report-cards/comment")
+def school_report_comment(request:Request,student_id:int=Form(...),exam_id:int=Form(...),comment:str=Form(...)):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor()
+    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,school["id"])).fetchone() and cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,school["id"])).fetchone()
+    if valid:
+        cur.execute("INSERT INTO report_comments(school_id,student_id,exam_id,comment,created_at) VALUES(?,?,?,?,?)",(school["id"],student_id,exam_id,comment.strip(),datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+        con.commit()
+    con.close(); return RedirectResponse(f"/school/report-cards?student_id={student_id}&exam_id={exam_id}",303)
+
+@app.get("/school/student-analysis/{student_id}", response_class=HTMLResponse)
+def school_student_analysis_printable(student_id:int, request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor()
+    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(student_id,school["id"])).fetchone()
+    rows=cur.execute("SELECT sub.name subject,AVG(CAST(m.marks AS REAL)) average,COUNT(m.id) entries,MAX(m.marks) best,MIN(m.marks) lowest FROM marks m JOIN subjects sub ON sub.id=m.subject_id WHERE m.student_id=? AND m.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name",(student_id,school["id"])).fetchall() if st else []
+    overall=cur.execute("SELECT AVG(CAST(marks AS REAL)) average,COUNT(id) entries FROM marks WHERE student_id=? AND school_id=?",(student_id,school["id"])).fetchone() if st else {"average":0,"entries":0}
+    con.close()
+    tr="".join(f"<tr><td>{r['subject']}</td><td>{round(r['average'] or 0,2)}</td><td>{r['best']}</td><td>{r['lowest']}</td><td>{r['entries']}</td></tr>" for r in rows) or "<tr><td colspan=5>No subject marks.</td></tr>"
+    body=f"<div class='card'><div style='display:flex;justify-content:space-between;align-items:center'><div><h2>🎓 Student Performance Analysis</h2><p><b>{st['name'] if st else 'Student not found'}</b> — {st['class_name'] if st else ''} {st['stream'] if st else ''}</p></div><button class='btn' onclick='window.print()'>🖨️ Print</button></div><div class='kpis'><div class='kpi'><span>OVERALL AVERAGE</span><b>{round(overall['average'] or 0,2)}</b></div><div class='kpi'><span>MARK ENTRIES</span><b>{overall['entries'] or 0}</b></div></div><table><tr><th>Subject</th><th>Average</th><th>Best</th><th>Lowest</th><th>Entries</th></tr>{tr}</table></div>"
+    return module_page(request,"🎓 Student Analysis","analysis",body)
+
 @app.get("/school/{path:path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session: return RedirectResponse("/")
