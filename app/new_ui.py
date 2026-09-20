@@ -336,3 +336,47 @@ async def attendance_save(request: Request, class_id:int=Form(...), date:str=For
         else: cur.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(sid,s["id"],date,status))
     _audit(cur,sid,request,"ATTENDANCE_SAVE",f"Saved attendance for class {class_id} on {date}")
     con.commit();con.close();return RedirectResponse(f"/app/attendance?class_id={class_id}&date={date}",303)
+
+
+@router.get("/app/users", response_class=HTMLResponse)
+def users_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
+        FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id LEFT JOIN students s ON s.id=u.student_id
+        WHERE u.school_id=? ORDER BY u.id DESC""",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    con.close()
+    rows="".join(f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(str(u['role'] or ''))}</td><td>{escape(str(u['teacher_name'] or u['student_name'] or '—'))}</td></tr>" for u in users)
+    topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
+    sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
+<div class='card section'><h2>Create user</h2><form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<input name='full_name' required placeholder='Full name' class='field'><input name='email' type='email' required placeholder='Email' class='field'><input name='password' type='password' required minlength='8' placeholder='Temporary password' class='field'>
+<select name='role' class='field'><option value='school_admin'>School Admin</option><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
+<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
+<button class='btn'>Create Account</button></form></div>
+<div class='card section'><h2>Accounts ({len(users)})</h2><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile</th></tr></thead><tbody>{rows or '<tr><td colspan=4>No users yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"User Management",body)
+
+@router.post("/app/users/add")
+def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), student_id:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    allowed={"school_admin","teacher","parent","student","accountant","registrar"}
+    if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM users WHERE email=?",(email.strip(),)).fetchone():
+        con.close();return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",400)
+    tid=int(teacher_id) if teacher_id.isdigit() else None
+    stid=int(student_id) if student_id.isdigit() else None
+    if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): tid=None
+    if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): stid=None
+    from app.main import hash_password
+    cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email.strip(),hash_password(password),role,full_name.strip(),sid,tid,stid))
+    _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
+    con.commit();con.close();return RedirectResponse("/app/users",303)
