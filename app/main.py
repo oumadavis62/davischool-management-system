@@ -400,6 +400,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     pending_id = cur.lastrowid; con.commit(); con.close(); return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
 @app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
+    from urllib.parse import quote
     if request.session.get("role") != "super_admin":
         return RedirectResponse("/", status_code=303)
 
