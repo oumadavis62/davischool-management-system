@@ -380,3 +380,102 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
     cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email.strip(),hash_password(password),role,full_name.strip(),sid,tid,stid))
     _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
+
+
+@router.get("/app/classes", response_class=HTMLResponse)
+def classes_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall();con.close()
+    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['level'] or ''))}</td><td>{escape(str(x['stream'] or ''))}</td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Classes & Streams</h1><div class='card section'><form method='post' action='/app/classes/add' class='formgrid'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><input name='level' placeholder='Level' class='field'><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div><div class='card section'><table><thead><tr><th>Name</th><th>Level</th><th>Stream</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No classes.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Classes",body)
+
+@router.post("/app/classes/add")
+def classes_add(request: Request,name:str=Form(...),level:str=Form(""),stream:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO classes(school_id,name,level,stream) VALUES(?,?,?,?)",(sid,name.strip(),level.strip(),stream.strip()));_audit(cur,sid,request,"CLASS_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/classes",303)
+
+@router.get("/app/subjects", response_class=HTMLResponse)
+def subjects_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall();con.close()
+    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Subjects</h1><div class='card section'><form method='post' action='/app/subjects/add' class='formgrid'><input name='name' required placeholder='Subject name' class='field'><input name='code' placeholder='Code' class='field'><input name='initial' placeholder='Initial' class='field'><button class='btn'>Add Subject</button></form></div><div class='card section'><table><thead><tr><th>Subject</th><th>Code</th><th>Initial</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No subjects.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Subjects",body)
+
+@router.post("/app/subjects/add")
+def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name.strip(),code.strip(),initial.strip()));_audit(cur,sid,request,"SUBJECT_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/subjects",303)
+
+@router.get("/app/exams", response_class=HTMLResponse)
+def exams_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
+    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['exam_type'] or ''))}</td><td>{escape(str(x['term'] or ''))}</td><td>{escape(str(x['year'] or ''))}</td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><form method='post' action='/app/exams/add' class='formgrid'><input name='name' required placeholder='Exam name' class='field'><input name='exam_type' placeholder='Exam type' class='field'><input name='term' placeholder='Term' class='field'><input name='year' placeholder='Year' class='field'><button class='btn'>Create Exam</button></form></div><div class='card section'><table><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Examinations",body)
+
+@router.post("/app/exams/add")
+def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:str=Form(""),year:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO exams(school_id,name,term,year,exam_type) VALUES(?,?,?,?,?)",(sid,name.strip(),term.strip(),year.strip(),exam_type.strip()));_audit(cur,sid,request,"EXAM_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/exams",303)
+
+@router.get("/app/finance/fees", response_class=HTMLResponse)
+def fees_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    fees=cur.execute("""SELECT f.*,s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
+        WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100""",(sid,)).fetchall()
+    con.close()
+    sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    trs="".join(f"<tr><td>{escape(str(x['student_name']))}</td><td>{x['amount']}</td><td>{x['paid'] or 0}</td><td>{x['status'] or 'Pending'}</td><td>{escape(str(x['description'] or ''))}</td></tr>" for x in fees)
+    body=f"""<div class='page'><h1>Fees & Student Charges</h1><div class='card section'><h2>Charge a student</h2><form method='post' action='/app/finance/fees/add' class='formgrid'><select name='student_id' class='field' required>{sopts}</select><input name='amount' type='number' step='0.01' min='0' required placeholder='Amount' class='field'><input name='description' required placeholder='Description' class='field'><input name='due_date' type='date' class='field'><button class='btn'>Post Charge</button></form></div><div class='card section'><table><thead><tr><th>Student</th><th>Charged</th><th>Paid</th><th>Status</th><th>Description</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No fee charges.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1.5fr 1fr 1.5fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Fees",body)
+
+@router.post("/app/finance/fees/add")
+def fees_add(request: Request,student_id:int=Form(...),amount:float=Form(...),description:str=Form(...),due_date:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
+        cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,0,description.strip(),due_date or None,"Pending"));_audit(cur,sid,request,"FEE_CHARGE",f"Charged {amount} to student {student_id}")
+    con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
+
+@router.post("/app/finance/payments")
+def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(""),method:str=Form("Cash")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+        cur.execute("INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,reference.strip(),method,now,str(request.session.get("user_email",""))))
+        remaining=amount
+        charges=cur.execute("SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND COALESCE(amount,0)>COALESCE(paid,0) ORDER BY id",(sid,student_id)).fetchall()
+        for f in charges:
+            if remaining<=0:break
+            applied=min(remaining,float(f["amount"])-float(f["paid"] or 0)); newpaid=float(f["paid"] or 0)+applied; remaining-=applied
+            cur.execute("UPDATE fees SET paid=?,status=? WHERE id=?",(newpaid,"Paid" if newpaid>=float(f["amount"]) else "Partial",f["id"]))
+        cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",(sid,now,reference,"School fee receipt",0,amount,"Fees"))
+        _audit(cur,sid,request,"FEE_PAYMENT",f"Received {amount} from student {student_id}")
+    con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
+
+@router.get("/app/finance", response_class=HTMLResponse)
+def finance_workspace(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    charged=float(cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fees WHERE school_id=?",(sid,)).fetchone()["v"])
+    paid=float(cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments WHERE school_id=?",(sid,)).fetchone()["v"])
+    expenses=float(cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"])
+    con.close()
+    body=f"""<div class='page'><h1>Finance</h1><div class='grid'><div class='card'><div class='label'>Charges</div><div class='kpi'>{charged:,.2f}</div></div><div class='card'><div class='label'>Collected</div><div class='kpi'>{paid:,.2f}</div></div><div class='card'><div class='label'>Outstanding</div><div class='kpi'>{charged-paid:,.2f}</div></div><div class='card'><div class='label'>Expenses</div><div class='kpi'>{expenses:,.2f}</div></div></div><div class='card section'><h2>Finance operations</h2><p><a class='btn' href='/app/finance/fees'>Fee Register</a> <a class='btn' href='/school/finance'>Finance Workspace</a> <a class='btn' href='/school/accounting'>Accounting</a> <a class='btn' href='/school/trial-balance'>Trial Balance</a></p><h3>Receive payment</h3><form method='post' action='/app/finance/payments' class='formgrid'><select name='student_id' required class='field'>""" + "".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in _db().execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()) + """</select><input name='amount' required type='number' min='0' step='0.01' class='field' placeholder='Amount'><input name='reference' class='field' placeholder='Receipt/reference'><select name='method' class='field'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option></select><button class='btn'>Receive Payment</button></form></div></div><style>.formgrid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px}.field{padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn{display:inline-block;padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;text-decoration:none;font-weight:800}</style>"""
+    return _school_page(request,"Finance",body)
