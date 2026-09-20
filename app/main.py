@@ -344,8 +344,15 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
     if needs_migration:
         cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), u["id"]))
-    ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts))
+    # Do not let a legacy/incomplete audit table turn a valid login into a 500.
+    try:
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute(
+            "INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)",
+            (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts)
+        )
+    except Exception as audit_exc:
+        print("DAVISCHOOL LOGIN AUDIT WARNING:", repr(audit_exc), flush=True)
     con.commit(); con.close()
     request.session["user_id"]=u["id"]; request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
     # Every authenticated user enters the unified DaviSchool interface.
