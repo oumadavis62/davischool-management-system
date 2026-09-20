@@ -481,13 +481,14 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
         school_id = cur.lastrowid
 
         cur.execute(
-            "INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
+            "INSERT INTO users (email,password,role,full_name,school_id,credential_secret) VALUES (?,?,?,?,?,?)",
             (
                 email,
                 hash_password(unique_pass),
                 "school_admin",
                 str(pending["principal"] or "").strip(),
                 school_id,
+                encrypt_credential(unique_pass),
             )
         )
 
