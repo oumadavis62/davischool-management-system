@@ -11,6 +11,7 @@ import re
 from starlette.middleware.sessions import SessionMiddleware
 import random
 from datetime import datetime
+from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
@@ -98,6 +99,7 @@ def init_db():
         else:
             cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
                         (SUPER_ADMIN,hash_password(admin_password),"super_admin","Davis Ouma",0))
+    ensure_schema_compatibility(con)
     con.commit(); con.close()
 init_db()
 
