@@ -13,8 +13,7 @@ def install_legacy_school_redirect(app):
             return RedirectResponse("/app", status_code=303)
 
         # Handle school verification before the old route can execute.
-        # This is intentionally implemented at middleware level so an older
-        # route implementation cannot turn a valid verification into a 500.
+        # This prevents the legacy handler from producing a generic 500.
         if path == "/verify-school-code" and request.method.upper() == "POST":
             if request.session.get("role") != "super_admin":
                 return RedirectResponse("/", status_code=303)
@@ -27,7 +26,7 @@ def install_legacy_school_redirect(app):
                 if not pending_id or not entered:
                     return RedirectResponse("/schools/manage?success=invalid_code", status_code=303)
 
-                # Import lazily to avoid a circular import during application startup.
+                # Import lazily to avoid a circular import during startup.
                 import app.main as core
 
                 con = core.get_db()
@@ -105,12 +104,11 @@ def install_legacy_school_redirect(app):
 
                 except Exception as exc:
                     con.rollback()
-                    # Keep the user out of a generic 500. The exact server-side
-                    # error is logged for diagnosis while the UI gives a clear
-                    # retry path.
+                    # Log the exact server-side exception, but return the user
+                    # to the visible verification panel instead of a 500.
                     print("DAVISCHOOL SCHOOL VERIFICATION ERROR:", repr(exc), flush=True)
                     return RedirectResponse(
-                        "/schools/manage?success=verify_error",
+                        f"/schools/manage?success=code_sent&pending_id={quote(pending_id)}",
                         status_code=303
                     )
                 finally:
@@ -118,6 +116,6 @@ def install_legacy_school_redirect(app):
 
             except Exception as exc:
                 print("DAVISCHOOL SCHOOL VERIFICATION REQUEST ERROR:", repr(exc), flush=True)
-                return RedirectResponse("/schools/manage?success=verify_error", status_code=303)
+                return RedirectResponse("/schools/manage?success=invalid_code", status_code=303)
 
         return await call_next(request)
