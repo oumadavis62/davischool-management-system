@@ -201,6 +201,62 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     return _school_page(request,"Academic Management",body)
 
 
+def _ensure_overall_grading_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS overall_grading_rules(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER,
+        min_total REAL,
+        max_total REAL,
+        grade TEXT
+    )""")
+
+def _overall_grade(cur, school_id, total):
+    _ensure_overall_grading_table(cur)
+    rule=cur.execute("""SELECT grade FROM overall_grading_rules
+        WHERE school_id=? AND ? BETWEEN min_total AND max_total
+        ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,total)).fetchone()
+    return str(rule["grade"]) if rule else _default_grade_points(total)[0]
+
+@router.get("/app/academics/overall-grading", response_class=HTMLResponse)
+def overall_grading(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+    rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
+    con.close()
+    rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><a class='btnlink' href='/app/academics/overall-grading/delete/%s'>Delete</a></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
+    body=("<div class='page'><h1>Overall Grade & Position Settings</h1>"
+      "<div class='muted'>Set the total-mark bands your school uses for the final overall grade. Position is then calculated automatically from total marks within the selected class and stream.</div>"
+      "<div class='card section'><h2>Add overall grade band</h2><form method='post' action='/app/academics/overall-grading/add' style='display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px'>"
+      "<input name='min_total' type='number' min='0' step='0.01' required placeholder='Minimum total marks' class='field'>"
+      "<input name='max_total' type='number' min='0' step='0.01' required placeholder='Maximum total marks' class='field'>"
+      "<input name='grade' required placeholder='Overall grade e.g. A' class='field'><button class='btn'>Save</button></form></div>"
+      "<div class='card section'><table><thead><tr><th>Minimum Total</th><th>Maximum Total</th><th>Overall Grade</th><th>Action</th></tr></thead><tbody>"+(rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")+"</tbody></table></div>"
+      "<div class='card section'><b>Position:</b> DaviSchool ranks learners automatically by total marks, highest total first. Equal totals receive the same position.</div>"
+      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style></div>")
+    return _school_page(request,"Overall Grade & Position Settings",body)
+
+@router.post("/app/academics/overall-grading/add")
+def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if min_total<0 or max_total<min_total:
+        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)
+    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+    cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
+    _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f total marks"%(grade.strip(),min_total,max_total))
+    con.commit();con.close()
+    return RedirectResponse("/app/academics/overall-grading",303)
+
+@router.get("/app/academics/overall-grading/delete/{rule_id}")
+def overall_grading_delete(request: Request,rule_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+    cur.execute("DELETE FROM overall_grading_rules WHERE id=? AND school_id=?",(rule_id,sid))
+    con.commit();con.close()
+    return RedirectResponse("/app/academics/overall-grading",303)
+
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
     sid = _school_session(request)
@@ -263,38 +319,43 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
         sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th>"
 
-    rows = ""
-    for n, student in enumerate(students, 1):
-        total = 0.0
-        total_points = 0.0
-        count = 0
-        cells = ""
+    computed=[]
+    for student in students:
+        total=0.0
+        total_points=0.0
+        count=0
+        cells=""
         for subject in subjects:
-            value = marks.get((int(student["id"]), int(subject["id"])))
+            value=marks.get((int(student["id"]),int(subject["id"])))
             if value is None:
-                cells += "<td>—</td><td>—</td><td>—</td>"
+                cells+="<td>—</td><td>—</td><td>—</td>"
             else:
-                grade, points = _subject_grade_points(cur, sid, int(subject["id"]), value)
-                total += float(value or 0)
-                total_points += float(points or 0)
-                count += 1
-                cells += "<td>%.1f</td><td><b>%s</b></td><td>%.1f</td>" % (
-                    float(value), escape(str(grade)), float(points)
-                )
-        average = total / count if count else 0
-        overall_grade, overall_points = _default_grade_points(average) if count else ("—", 0)
-        rows += (
-            "<tr><td>%d</td><td>%s</td><td><b>%s</b></td>%s"
-            "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%s</b></td></tr>"
-            % (n, escape(str(student["admission_no"] or "")), escape(str(student["name"] or "")),
-               cells, total, total_points, escape(str(overall_grade)))
-        )
+                grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value)
+                total+=float(value or 0)
+                total_points+=float(points or 0)
+                count+=1
+                cells+="<td>%.1f</td><td><b>%s</b></td><td>%.1f</td>"%(float(value),escape(str(grade)),float(points))
+        computed.append((student,total,total_points,count,cells))
+    computed.sort(key=lambda x:x[1],reverse=True)
+    rows=""
+    last_total=None
+    last_position=0
+    for index,item in enumerate(computed,1):
+        student,total,total_points,count,cells=item
+        if last_total is None or total != last_total:
+            last_position=index
+            last_total=total
+        overall_grade=_overall_grade(cur,sid,total) if count else "—"
+        average=(total/count) if count else 0
+        rows+=("<tr><td>%d</td><td>%s</td><td><b>%s</b></td>%s"
+          "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
+          %(index,escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
     school_row = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
     school_name = escape(str(school_row["name"])) if school_row else "DaviSchool"
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
-    colspan = 3 + len(subjects) * 3 + 3
+    colspan = 3 + len(subjects) * 3 + 5
 
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
@@ -307,11 +368,11 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
         "<button type='button' class='btn' onclick='window.print()'>Print Marksheet</button>"
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
-        "<a class='btnlink' href='/app/academics/grading'>Set Grade & Points</a></div></div>"
+        "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> <a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
         "<div class='card section marksheet-card'><div class='marksheet-title'>DAVISCHOOL MANAGEMENT SYSTEM</div>"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
-        "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='3'>TOTAL</th></tr>"
-        "<tr>%s<th>MKS</th><th>PTS</th><th>GRD</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
+        "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
+        "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
         "<style>"
         ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
