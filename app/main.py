@@ -11,10 +11,10 @@ from zoneinfo import ZoneInfo
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("DAVISCHOOL_SECRET_KEY", "davischool-v60-full-two-parts"))
-SUPER_ADMIN = "oumadavis62@gmail.com"
+SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "oumadavis62@gmail.com")
 
 def get_db():
-    con = sqlite3.connect("davischool.db")
+    con = sqlite3.connect(os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db"))
     con.row_factory = sqlite3.Row
     return con
 
@@ -1397,6 +1397,145 @@ def school_other(path: str, request: Request):
     header = school_header(school, name, path, is_impersonating=is_imp)
     body=f"<div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:30px'><h3>{path.replace('-', ' ').title()}</h3><p style='color:#64748b;font-size:13px'>This navigation window is active. The module workspace is ready for the school's data.</p></div>"
     return HTMLResponse(f"<html><body>{header}<div style='padding:30px'>{body}</div></div></div></body></html>")
+
+
+# ============================================================
+# DAVISCHOOL COMPLETE RECORD MANAGEMENT EXTENSION
+# These routes are additive: existing working routes/design are preserved.
+# ============================================================
+
+def _school_user(request: Request):
+    school = get_school_obj(request)
+    if not school or not request.session.get("email"):
+        return None
+    return school
+
+def _safe_school_redirect(request: Request, fallback="/school/dashboard"):
+    return fallback if _school_user(request) else "/"
+
+@app.get("/school/staff", response_class=HTMLResponse)
+def school_staff_alias(request: Request):
+    return school_teachers(request)
+
+@app.get("/school/students/{student_id}", response_class=HTMLResponse)
+def school_student_profile(student_id: int, request: Request):
+    school = _school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    st=cur.execute("SELECT s.*, c.name class_name, c.stream class_stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(student_id,school["id"])).fetchone()
+    if not st:
+        con.close(); return RedirectResponse("/school/students",303)
+    marks=cur.execute("SELECT sub.name subject,e.name exam,m.marks,e.term,e.year FROM marks m JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id WHERE m.student_id=? AND m.school_id=? ORDER BY e.year DESC,e.id DESC,sub.name",(student_id,school["id"])).fetchall()
+    fees=cur.execute("SELECT COALESCE(SUM(amount),0) expected, COALESCE(SUM(paid),0) paid FROM fees WHERE student_id=? AND school_id=?",(student_id,school["id"])).fetchone()
+    con.close()
+    mr=''.join(f"<tr><td>{r['subject']}</td><td>{r['exam']}</td><td>{r['marks']}</td><td>{r['term']} {r['year']}</td></tr>" for r in marks) or '<tr><td colspan=4>No academic records yet.</td></tr>'
+    body=f"""<div class='card'><div style='display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap'><div><h2 style='margin:0'>{st['name']}</h2><p>Admission: {st['admission_no'] or '—'} | Assessment: {st['assessment_no'] or '—'}</p><p>Class: {st['class_name'] or '—'} {st['class_stream'] or ''} | Gender: {st['gender'] or '—'} | Category: {st['category'] or '—'}</p><p>Guardian: {st['guardian_name'] or '—'} | Phone: {st['parent_phone'] or '—'}</p></div><div><a class='btn' href='/school/students/{student_id}/edit'>✏️ Edit Student</a> <a class='btn' href='/school/student-analysis/{student_id}'>📊 Analysis</a> <a class='btn' href='/school/report-cards?student_id={student_id}'>📄 Report Card</a></div></div></div>
+    <div class='card'><h3>💰 Fee Position</h3><p>Expected: <b>{float(fees['expected'] or 0):,.2f}</b> &nbsp; Paid: <b>{float(fees['paid'] or 0):,.2f}</b> &nbsp; Balance: <b>{float(fees['expected'] or 0)-float(fees['paid'] or 0):,.2f}</b></p></div>
+    <div class='card'><h3>📚 Academic Record</h3><table><tr><th>Subject</th><th>Exam</th><th>Marks</th><th>Term</th></tr>{mr}</table></div>"""
+    return module_page(request,f"🎓 Student Profile — {st['name']}","students",body)
+
+@app.get("/school/students/{student_id}/edit", response_class=HTMLResponse)
+def school_student_edit(student_id:int, request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); cur=con.cursor(); st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,school["id"])).fetchone(); classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(school["id"],)).fetchall(); con.close()
+    if not st: return RedirectResponse("/school/students",303)
+    opts=''.join(f"<option value='{c['id']}' {'selected' if c['id']==st['class_id'] else ''}>{c['name']} {c['stream'] or ''}</option>" for c in classes)
+    body=f"""<div class='card'><h2>✏️ Edit Student</h2><form method='post' action='/school/students/{student_id}/edit' class='form-grid'><label>Admission No<input name='admission_no' value='{st['admission_no'] or ''}' required class='input-field'></label><label>Assessment No<input name='assessment_no' value='{st['assessment_no'] or ''}' class='input-field'></label><label style='grid-column:span 2'>Full Name<input name='student_name' value='{st['name'] or ''}' required class='input-field'></label><label>Class<select name='class_id' class='input-field'>{opts}</select></label><label>Gender<select name='gender' class='input-field'><option {'selected' if st['gender']=='Male' else ''}>Male</option><option {'selected' if st['gender']=='Female' else ''}>Female</option></select></label><label>Category<select name='category' class='input-field'><option {'selected' if (st['category'] or 'Day')=='Day' else ''}>Day</option><option {'selected' if st['category']=='Boarding' else ''}>Boarding</option></select></label><label>Guardian<input name='guardian_name' value='{st['guardian_name'] or ''}' class='input-field'></label><label style='grid-column:span 2'>Guardian Phone<input name='parent_phone' value='{st['parent_phone'] or ''}' class='input-field'></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div>"""
+    return module_page(request,"Edit Student","students",body)
+
+@app.post("/school/students/{student_id}/edit")
+def school_student_edit_save(student_id:int, request:Request, admission_no:str=Form(...), assessment_no:str=Form(""), student_name:str=Form(...), class_id:int=Form(...), gender:str=Form(...), category:str=Form("Day"), guardian_name:str=Form(""), parent_phone:str=Form("")):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); con.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,category=?,guardian_name=?,parent_phone=? WHERE id=? AND school_id=?",(admission_no.strip().upper(),assessment_no.strip().upper(),student_name.strip().upper(),class_id,gender,category,guardian_name.strip().upper(),parent_phone.strip(),student_id,school["id"])); con.commit(); con.close(); return RedirectResponse(f"/school/students/{student_id}",303)
+
+@app.get("/school/teachers/{teacher_id}/edit", response_class=HTMLResponse)
+def school_teacher_edit(teacher_id:int, request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); t=con.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,school["id"])).fetchone(); con.close()
+    if not t: return RedirectResponse("/school/teachers",303)
+    body=f"""<div class='card'><h2>✏️ Edit Staff Member</h2><form method='post' action='/school/teachers/{teacher_id}/edit' class='form-grid'><label>Full Name<input name='name' value='{t['name'] or ''}' required class='input-field'></label><label>TSC No<input name='tsc_no' value='{t['tsc_no'] or ''}' class='input-field'></label><label>ID No<input name='id_no' value='{t['id_no'] or ''}' class='input-field'></label><label>Gender<select name='gender' class='input-field'><option {'selected' if t['gender']=='Male' else ''}>Male</option><option {'selected' if t['gender']=='Female' else ''}>Female</option></select></label><label>Role<input name='role' value='{t['role'] or ''}' class='input-field'></label><label>Employment Type<input name='employment_type' value='{t['employment_type'] or 'Teaching'}' class='input-field'></label><label>Phone<input name='phone' value='{t['phone'] or ''}' class='input-field'></label><label>Email<input name='email' type='email' value='{t['email'] or ''}' class='input-field'></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div>"""
+    return module_page(request,"Edit Staff","staff",body)
+
+@app.post("/school/teachers/{teacher_id}/edit")
+def school_teacher_edit_save(teacher_id:int, request:Request, name:str=Form(...), tsc_no:str=Form(""), id_no:str=Form(""), gender:str=Form(""), role:str=Form(""), phone:str=Form(""), email:str=Form(""), employment_type:str=Form("Teaching")):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); con.execute("UPDATE teachers SET name=?,tsc_no=?,id_no=?,gender=?,role=?,phone=?,email=?,employment_type=? WHERE id=? AND school_id=?",(name.strip().upper(),tsc_no.strip(),id_no.strip(),gender,role.strip(),phone.strip(),email.strip(),employment_type.strip(),teacher_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
+
+@app.get("/school/classes/{class_id}/edit", response_class=HTMLResponse)
+def school_class_edit(class_id:int, request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); c=con.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(class_id,school["id"])).fetchone(); con.close()
+    if not c: return RedirectResponse("/school/classes",303)
+    body=f"<div class='card'><h2>✏️ Edit Class</h2><form method='post' action='/school/classes/{class_id}/edit' class='form-grid'><label>Class Name<input name='name' value='{c['name'] or ''}' required class='input-field'></label><label>Level<input name='level' value='{c['level'] or ''}' class='input-field'></label><label>Stream<input name='stream' value='{c['stream'] or ''}' class='input-field'></label><button class='btn'>💾 Save Changes</button></form></div>"
+    return module_page(request,"Edit Class","classes",body)
+
+@app.post("/school/classes/{class_id}/edit")
+def school_class_edit_save(class_id:int, request:Request, name:str=Form(...), level:str=Form(""), stream:str=Form("")):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); con.execute("UPDATE classes SET name=?,level=?,stream=? WHERE id=? AND school_id=?",(name.strip(),level.strip(),stream.strip(),class_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
+
+@app.get("/school/subjects", response_class=HTMLResponse)
+def school_subjects(request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); rows=con.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(school["id"],)).fetchall(); con.close()
+    tr=''.join(f"<tr><td>{r['name']}</td><td>{r['code'] or ''}</td><td>{r['initial'] or ''}</td><td><a class='btn' href='/school/subjects/{r['id']}/edit'>Edit</a></td></tr>" for r in rows) or '<tr><td colspan=4>No subjects yet.</td></tr>'
+    body=f"<div class='card'><h2>📚 Subjects</h2><table><tr><th>Name</th><th>Code</th><th>Initial</th><th>Action</th></tr>{tr}</table></div>"
+    return module_page(request,"Subjects","subject-allocation",body)
+
+@app.get("/school/subjects/{subject_id}/edit", response_class=HTMLResponse)
+def school_subject_edit(subject_id:int, request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); s=con.execute("SELECT * FROM subjects WHERE id=? AND school_id=?",(subject_id,school["id"])).fetchone(); con.close()
+    if not s: return RedirectResponse("/school/subjects",303)
+    body=f"<div class='card'><h2>✏️ Edit Subject</h2><form method='post' action='/school/subjects/{subject_id}/edit' class='form-grid'><label>Name<input name='name' value='{s['name'] or ''}' required class='input-field'></label><label>Code<input name='code' value='{s['code'] or ''}' class='input-field'></label><label>Initial<input name='initial' value='{s['initial'] or ''}' class='input-field'></label><button class='btn'>💾 Save Changes</button></form></div>"
+    return module_page(request,"Edit Subject","subject-allocation",body)
+
+@app.post("/school/subjects/{subject_id}/edit")
+def school_subject_edit_save(subject_id:int, request:Request, name:str=Form(...), code:str=Form(""), initial:str=Form("")):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); con.execute("UPDATE subjects SET name=?,code=?,initial=? WHERE id=? AND school_id=?",(name.strip().upper(),code.strip().upper(),initial.strip().upper(),subject_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/subjects",303)
+
+@app.get("/school/terms", response_class=HTMLResponse)
+def school_terms(request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); rows=con.execute("SELECT * FROM terms WHERE school_id=? ORDER BY year DESC,id DESC",(school["id"],)).fetchall(); con.close()
+    tr=''.join(f"<tr><td>{r['term_name']}</td><td>{r['year']}</td><td>{r['start_date'] or ''}</td><td>{r['end_date'] or ''}</td></tr>" for r in rows) or '<tr><td colspan=4>No terms configured.</td></tr>'
+    body=f"<div class='card'><h2>📅 Academic Terms</h2><form method='post' action='/school/terms/new' class='form-grid'><input name='term_name' placeholder='Term 1' required class='input-field'><input name='year' placeholder='2026' required class='input-field'><input name='start_date' type='date' class='input-field'><input name='end_date' type='date' class='input-field'><button class='btn'>+ Add Term</button></form></div><div class='card'><table><tr><th>Term</th><th>Year</th><th>Start</th><th>End</th></tr>{tr}</table></div>"
+    return module_page(request,"Academic Terms","dean-settings",body)
+
+@app.post("/school/terms/new")
+def school_term_new(request:Request, term_name:str=Form(...), year:str=Form(...), start_date:str=Form(""), end_date:str=Form("")):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); con.execute("INSERT INTO terms(school_id,term_name,year,start_date,end_date) VALUES(?,?,?,?,?)",(school["id"],term_name.strip(),year.strip(),start_date,end_date)); con.commit(); con.close(); return RedirectResponse("/school/terms",303)
+
+@app.get("/school/exams/new", response_class=HTMLResponse)
+def school_exam_new(request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    con=get_db(); terms=con.execute("SELECT * FROM terms WHERE school_id=? ORDER BY year DESC,id DESC",(school["id"],)).fetchall(); con.close()
+    opts=''.join(f"<option value='{t['term_name']}|{t['year']}'>{t['term_name']} {t['year']}</option>" for t in terms)
+    body=f"<div class='card'><h2>📝 Add Examination</h2><form method='post' action='/school/exams/add' class='form-grid'><input name='exam_name' placeholder='Exam name' required class='input-field'><select name='term_year' class='input-field'>{opts or '<option value="Term 1|2026">Term 1 2026</option>'}</select><input name='exam_type' placeholder='Exam type e.g. CAT, End Term' class='input-field'><button class='btn'>+ Create Exam</button></form></div>"
+    return module_page(request,"Add Examination","exams",body)
+
+@app.get("/school/academics", response_class=HTMLResponse)
+def school_academics(request:Request):
+    school=_school_user(request)
+    if not school: return RedirectResponse("/")
+    cards=[("📅 Terms","/school/terms","Academic calendar"),("📝 Exams","/school/exams","Examination setup"),("⚙️ Set Marks","/school/set-marks","Configure assessment limits"),("✏️ Record Marks","/school/record-marks","Enter learner marks"),("📊 Analysis","/school/analysis","Subject and class analysis"),("📄 Report Cards","/school/report-cards","Generate printable reports"),("🗓️ Attendance","/school/attendance","Track attendance"),("👨‍🏫 Allocation","/school/subject-allocation","Allocate teachers and subjects"),("📑 Spreadsheet","/school/spreadsheet","View assessment data")]
+    grid=''.join(f"<a href='{u}' class='card' style='text-decoration:none;color:inherit'><h3 style='margin:0 0 8px'>{t}</h3><p style='color:#64748b;margin:0'>{d}</p></a>" for t,u,d in cards)
+    return module_page(request,"📚 Academics Workspace","analysis",f"<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px'>{grid}</div>")
+
 
 @app.exception_handler(StarletteHTTPException)
 async def custom_404_handler(request: Request, exc: StarletteHTTPException):
