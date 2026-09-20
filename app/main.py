@@ -336,27 +336,24 @@ def home_head(): return PlainTextResponse("OK")
 def health(): return PlainTextResponse("OK")
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE lower(email)=lower(?)", (email.strip(),)); u = cur.fetchone()
-    if not u:
-        con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
-    valid, needs_migration = verify_password(password, u["password"])
-    if not valid:
-        con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
-    if needs_migration:
-        cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), u["id"]))
-    # Do not let a legacy/incomplete audit table turn a valid login into a 500.
+    con = get_db()
     try:
-        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute(
-            "INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)",
-            (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts)
-        )
-    except Exception as audit_exc:
-        print("DAVISCHOOL LOGIN AUDIT WARNING:", repr(audit_exc), flush=True)
-    con.commit(); con.close()
-    request.session["user_id"]=u["id"]; request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
-    # Every authenticated user enters the unified DaviSchool interface.
-    # The /app UI automatically presents the appropriate platform or school workspace.
+        cur = con.cursor()
+        u = cur.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (email.strip(),)).fetchone()
+        if not u:
+            return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
+        valid, _ = verify_password(password, u["password"])
+        if not valid:
+            return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
+        user_id=u["id"]; user_email=u["email"]; role=u["role"]; full_name=u["full_name"]; school_id=u["school_id"] or 0
+    except Exception as exc:
+        print("DAVISCHOOL LOGIN ERROR:", repr(exc), flush=True)
+        return HTMLResponse("DaviSchool could not complete the sign-in request. Please try again.", status_code=500)
+    finally:
+        con.close()
+    request.session["user_id"]=user_id; request.session["email"]=user_email; request.session["role"]=role
+    request.session["name"]=full_name; request.session["school_id"]=school_id
+    request.session["teacher_id"]=None; request.session["student_id"]=None; request.session["is_impersonating"]=False
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
