@@ -89,6 +89,10 @@ def init_db():
     except: pass
     try: cur.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT")
     except: pass
+    # Upgrade legacy PostgreSQL schemas before any query that depends on
+    # columns introduced by the current application.
+    ensure_schema_compatibility(con)
+
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
         legacy_admin = cur.execute("SELECT * FROM users WHERE email=?", ("oumadavis62@gmail.com",)).fetchone()
@@ -99,7 +103,6 @@ def init_db():
         else:
             cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
                         (SUPER_ADMIN,hash_password(admin_password),"super_admin","Davis Ouma",0))
-    ensure_schema_compatibility(con)
     con.commit(); con.close()
 init_db()
 
