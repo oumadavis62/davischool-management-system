@@ -239,7 +239,6 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     mark_rows = cur.execute(mark_query, mark_params).fetchall() if eid and cid else []
     marks = {(int(r["student_id"]), int(r["subject_id"])): r["marks"] for r in mark_rows}
     streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
-    con.close()
 
     eopts = "".join("<option value='%s' %s>%s</option>" % (
         e["id"], "selected" if int(e["id"]) == eid else "", escape(str(e["name"]))
@@ -326,6 +325,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         class_title, class_title, exam_name, escape(term or "All"), escape(year or "All"),
         header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan
     )
+    con.close()
     return _school_page(request, "Class Marksheets", body)
 
 
