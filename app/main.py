@@ -103,6 +103,12 @@ def init_db():
         else:
             cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
                         (SUPER_ADMIN,hash_password(admin_password),"super_admin","Davis Ouma",0))
+    # Remove the obsolete legacy super-admin account once the current
+    # configured super-admin has been established. This keeps the platform
+    # user list from showing a stale duplicate admin account.
+    if SUPER_ADMIN.lower() != "oumadavis62@gmail.com".lower():
+        cur.execute("DELETE FROM users WHERE lower(email)=lower(?) AND lower(email)<>lower(?)",
+                    ("oumadavis62@gmail.com", SUPER_ADMIN))
     con.commit(); con.close()
 init_db()
 
