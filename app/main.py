@@ -13,6 +13,7 @@ import random
 from datetime import datetime
 from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
+from cryptography.fernet import Fernet, InvalidToken
 
 app = FastAPI()
 SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
@@ -34,6 +35,16 @@ DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 310000
+
+def _credential_cipher():
+    key = base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode("utf-8")).digest())
+    return Fernet(key)
+
+def encrypt_credential(password: str) -> str:
+    return _credential_cipher().encrypt(password.encode("utf-8")).decode("utf-8")
+
+def decrypt_credential(token: str) -> str:
+    return _credential_cipher().decrypt(token.encode("utf-8")).decode("utf-8")
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
