@@ -435,17 +435,10 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
                 status_code=303
             )
 
-        # Production databases may have been created by an older version.
-        # Add the columns required by school provisioning before inserting.
-        for table, column, definition in [
-            ("schools", "school_type", "TEXT"),
-            ("users", "full_name", "TEXT"),
-            ("users", "school_id", "INTEGER"),
-        ]:
-            cols = [row["name"] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()]
-            if column not in cols:
-                cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-
+        # Schema compatibility is already applied during application startup.
+        # Do not use SQLite PRAGMA introspection here: production uses PostgreSQL,
+        # where the compatibility layer intentionally translates PRAGMA calls.
+        # The required provisioning columns are therefore guaranteed before this route.
         school_code = str(random.randint(100000, 999999))
         unique_pass = generate_unique_password(str(pending["name"]))
 
