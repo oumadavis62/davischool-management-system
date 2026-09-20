@@ -1937,3 +1937,8 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 # DaviSchool unified application UI
 from app.new_ui import router as new_ui_router
 app.include_router(new_ui_router)
+
+
+# Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
+from app.legacy_redirect import install_legacy_school_redirect
+install_legacy_school_redirect(app)
