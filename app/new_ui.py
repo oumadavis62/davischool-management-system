@@ -546,82 +546,53 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 
 @router.get("/app/academics/marks", response_class=HTMLResponse)
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
-    sid = _school_session(request)
-    if not sid:
-        return RedirectResponse("/")
-    con = _db()
-    cur = con.cursor()
-    _ensure_grading_table(cur)
-    exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
-    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid = int(class_id) if class_id.isdigit() else 0
-    subid = int(subject_id) if subject_id.isdigit() else 0
-    students = []
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();_ensure_grading_table(cur)
+    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    cid=int(class_id) if class_id.isdigit() else 0
+    subid=int(subject_id) if subject_id.isdigit() else 0
+    students=[]
     if eid and cid and subid:
-        students = cur.execute(
-            """SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
-               FROM students s
-               LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
-               WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
-            (eid, subid, sid, sid, cid)
-        ).fetchall()
-    grading_rules = cur.execute(
-        """SELECT * FROM subject_grading_rules
-           WHERE school_id=? AND subject_id=?
-           ORDER BY min_mark DESC, max_mark DESC""",
-        (sid, subid)
-    ).fetchall() if subid else []
-    con.close()
-    eopts = "".join("<option value='%s' %s>%s (%s)</option>" % (
-        e["id"], "selected" if int(e["id"]) == eid else "",
-        escape(str(e["name"])), escape(str(e["year"] or ""))
-    ) for e in exams)
-    copts = "".join("<option value='%s' %s>%s %s</option>" % (
-        c["id"], "selected" if int(c["id"]) == cid else "",
-        escape(str(c["name"])), escape(str(c["stream"] or ""))
-    ) for c in classes)
-    sopts = "".join("<option value='%s' %s>%s</option>" % (
-        s["id"], "selected" if int(s["id"]) == subid else "",
-        escape(str(s["name"]))
-    ) for s in subjects)
-    rule_note = "Custom grading: %s rule(s)" % len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
-    rows = ""
+        students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
+          FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
+          WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+    grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
+      WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall() if subid else []
+    js_rules="["+",".join("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"]),float(r["points"] or 0)) for r in grading_rules)+"]"
+    eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
+    copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
+    sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
+    rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
+    rows=""
     for x in students:
-        mark = x["marks"]
-        if mark == "":
-            grade, points = "—", "—"
+        mark=x["marks"]
+        if mark=="":
+            grade,points="—","—"
         else:
-            grade, points = _subject_grade_points(cur, sid, subid, mark)
-        rows += "<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='100' step='0.01' class='markinput'></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td></tr>" % (
-            escape(str(x["admission_no"] or "")), escape(str(x["name"] or "")), x["id"],
-            escape(str(mark)), escape(str(grade)), points if points == "—" else "%.1f" % float(points)
-        )
-    body = (
-        "<div class='page'><h1>Marks Entry</h1>"
-        "<div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
-        "<div class='card section'><form method='get' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
-        "<select name='exam_id' class='field'><option value=''>Select examination</option>" + eopts + "</select>"
-        "<select name='class_id' class='field'><option value=''>Select class</option>" + copts + "</select>"
-        "<select name='subject_id' class='field'><option value=''>Select subject</option>" + sopts + "</select>"
-        "<button class='btn'>Load Students</button></form>"
-        "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>%s "
-        "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a></div></div>"
-        "<div class='card section'><form method='post' action='/app/academics/marks/save'>"
-        "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
-        "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / 100</th><th>Grade</th><th>Points</th></tr></thead>"
-        "<tbody>%s</tbody></table>%s</form></div></div>"
-        "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
-        "<script>document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){"
-        "var row=el.closest('tr'); var mark=parseFloat(el.value); if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}"
-        "NaN});});</script>"
-    ) % (
-        rule_note, subid, eid, cid, subid,
-        rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>",
-        "<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""
+            grade,points=_subject_grade_points(cur,sid,subid,mark)
+        rows+="<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='100' step='0.01' class='markinput'></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td></tr>"%(escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],escape(str(mark)),escape(str(grade)),points if points=="—" else "%.1f"%float(points))
+    con.close()
+    body=(
+      "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
+      "<div class='card section'><form method='get' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
+      "<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select>"
+      "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
+      "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
+      "<button class='btn'>Load Students</button></form>"
+      "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "
+      "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a></div></div>"%subid+
+      "<div class='card section'><form method='post' action='/app/academics/marks/save'>"
+      "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
+      "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / 100</th><th>Grade</th><th>Points</th></tr></thead><tbody>%s</tbody></table>%s"
+      "</form></div></div>"%(eid,cid,subid,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else "")+
+      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
+      "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
     )
-    return _school_page(request, "Marks Entry", body)
+    return _school_page(request,"Marks Entry",body)
 
 @router.post("/app/academics/marks/save")
 async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
