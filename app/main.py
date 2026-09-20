@@ -1649,7 +1649,8 @@ def school_exam_new(request:Request):
     if not school: return RedirectResponse("/")
     con=get_db(); terms=con.execute("SELECT * FROM terms WHERE school_id=? ORDER BY year DESC,id DESC",(school["id"],)).fetchall(); con.close()
     opts=''.join(f"<option value='{t['term_name']}|{t['year']}'>{t['term_name']} {t['year']}</option>" for t in terms)
-    body=f"<div class='card'><h2>📝 Add Examination</h2><form method='post' action='/school/exams/add' class='form-grid'><input name='exam_name' placeholder='Exam name' required class='input-field'><select name='term_year' class='input-field'>{opts or '<option value="Term 1|2026">Term 1 2026</option>'}</select><input name='exam_type' placeholder='Exam type e.g. CAT, End Term' class='input-field'><button class='btn'>+ Create Exam</button></form></div>"
+    fallback="<option value='Term 1|2026'>Term 1 2026</option>"
+    body=f"<div class='card'><h2>📝 Add Examination</h2><form method='post' action='/school/exams/add' class='form-grid'><input name='exam_name' placeholder='Exam name' required class='input-field'><select name='term_year' class='input-field'>{opts or fallback}</select><input name='exam_type' placeholder='Exam type e.g. CAT, End Term' class='input-field'><button class='btn'>+ Create Exam</button></form></div>"
     return module_page(request,"Add Examination","exams",body)
 
 @app.get("/school/academics", response_class=HTMLResponse)
