@@ -109,6 +109,9 @@ def init_db():
     if SUPER_ADMIN.lower() != "oumadavis62@gmail.com".lower():
         cur.execute("DELETE FROM users WHERE lower(email)=lower(?) AND lower(email)<>lower(?)",
                     ("oumadavis62@gmail.com", SUPER_ADMIN))
+    # Remove the obsolete legacy "admin" account. The current platform
+    # administrator is represented by the configured super_admin account.
+    cur.execute("DELETE FROM users WHERE lower(role)=lower(?)", ("admin",))
     con.commit(); con.close()
 init_db()
 
