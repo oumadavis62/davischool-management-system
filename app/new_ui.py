@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from html import escape
 from datetime import datetime
@@ -13,15 +13,15 @@ def _db():
 def _shell(title, name, role, body):
     nav = [
         ("/app","⌂","Overview"),
-        ("/school/students","🎓","Students"),
-        ("/school/teachers","👩‍🏫","Staff & Teachers"),
+        ("/app/students","🎓","Students"),
+        ("/app/staff","👩‍🏫","Staff & Teachers"),
         ("/school/classes","🏫","Classes"),
-        ("/school/record-marks","📝","Marks Entry"),
+        ("/app/academics","📝","Academics"),
         ("/school/analysis","📊","Academic Analysis"),
         ("/school/report-cards","📄","Report Cards"),
         ("/school/attendance/bulk","✓","Attendance"),
         ("/school/timetable","🗓","Timetable"),
-        ("/school/finance","💰","Fees & Finance"),
+        ("/app/finance","💰","Fees & Finance"),
         ("/school/accounting","📚","Accounting"),
         ("/school/announcements","📢","Announcements"),
         ("/school/system-settings/user-management","👤","Users"),
@@ -47,6 +47,101 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}<a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a></aside>
 <main class='main'><header class='top'><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}</main></div></body></html>"""
+
+def _school_session(request):
+    if "email" not in request.session or request.session.get("role") == "super_admin":
+        return None
+    return int(request.session.get("school_id") or 0)
+
+def _audit(cur, school_id, request, action, details):
+    ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
+                (school_id,request.session.get("email",""),action,details,ts))
+
+def _school_page(request, title, body):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body))
+
+@router.get("/app/students", response_class=HTMLResponse)
+def students_page(request: Request):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    con=_db(); cur=con.cursor()
+    students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.id DESC",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall(); con.close()
+    rows="".join(f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td></tr>" for s in students)
+    opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    body=f"""<div class='page'><h1>Students</h1><div class='muted'>Complete student register and admissions workspace.</div>
+<div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
+<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
+<button class='btn'>Save Student</button></form></div>
+<div class='card section'><div style='display:flex;justify-content:space-between'><h2>Student register ({len(students)})</h2><a class='action' href='/app/students'>Refresh</a></div><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No students yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request,"Students",body)
+
+@router.post("/app/students/add")
+def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/",303)
+    con=_db(); cur=con.cursor()
+    exists=cur.execute("SELECT id FROM students WHERE school_id=? AND admission_no=?",(sid,admission_no.strip())).fetchone()
+    if exists: con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
+    cid=int(class_id) if class_id.isdigit() else None
+    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
+    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream) VALUES(?,?,?,?,?,?,?,?)",(sid,admission_no.strip(),assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),""))
+    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission_no.strip()})")
+    con.commit(); con.close(); return RedirectResponse("/app/students",303)
+
+@router.get("/app/staff", response_class=HTMLResponse)
+def staff_page(request: Request):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    con=_db(); cur=con.cursor(); staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall(); con.close()
+    rows="".join(f"<tr><td>{escape(str(t['name'] or ''))}</td><td>{escape(str(t['role'] or ''))}</td><td>{escape(str(t['email'] or ''))}</td><td>{escape(str(t['phone'] or ''))}</td><td>{escape(str(t['employment_type'] or ''))}</td></tr>" for t in staff)
+    body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory and teaching workforce.</div>
+<div class='card section'><h2>Add staff member</h2><form method='post' action='/app/staff/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<input name='name' required placeholder='Full name' class='field'><input name='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'><input name='role' placeholder='Role / subject area' class='field'><select name='gender' class='field'><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select><button class='btn'>Save Staff</button></form></div>
+<div class='card section'><h2>Staff register ({len(staff)})</h2><table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No staff yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Staff & Teachers",body)
+
+@router.post("/app/staff/add")
+def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type) VALUES(?,?,?,?,?,?,?,?,?)",(sid,name.strip(),email.strip(),phone.strip(),tsc_no.strip(),gender.strip(),id_no.strip(),role.strip(),employment_type.strip()));_audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}");con.commit();con.close();return RedirectResponse("/app/staff",303)
+
+@router.get("/app/academics", response_class=HTMLResponse)
+def academics_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    terms=cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    marks=cur.execute("SELECT COUNT(*) c,COALESCE(AVG(mark),0) a FROM marks WHERE school_id=?",(sid,)).fetchone();con.close()
+    term_rows="".join(f"<tr><td>{escape(str(t['term_name']))}</td><td>{escape(str(t['year'] or ''))}</td><td>{escape(str(t['start_date'] or ''))}</td><td>{escape(str(t['end_date'] or ''))}</td></tr>" for t in terms)
+    exam_rows="".join(f"<tr><td>{escape(str(e['name']))}</td><td>{escape(str(e['term'] or ''))}</td><td>{escape(str(e['year'] or ''))}</td><td>{escape(str(e['exam_type'] or ''))}</td></tr>" for e in exams)
+    body=f"""<div class='page'><h1>Academic Management</h1><div class='muted'>Terms, examinations, subjects, marks and academic intelligence.</div>
+<div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(subjects)}</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>{len(exams)}</div></div><div class='card'><div class='label'>Terms</div><div class='kpi'>{len(terms)}</div></div><div class='card'><div class='label'>Average mark</div><div class='kpi'>{float(marks['a'] or 0):.1f}</div></div></div>
+<div class='section'><div class='actions'><a class='action' href='/school/record-marks'><span>📝</span>Record Marks</a><a class='action' href='/school/set-marks'><span>⚙</span>Set Marks</a><a class='action' href='/school/analysis'><span>📊</span>Analysis</a><a class='action' href='/school/report-cards'><span>📄</span>Report Cards</a></div></div>
+<div class='card section'><h2>Examinations</h2><table><thead><tr><th>Name</th><th>Term</th><th>Year</th><th>Type</th></tr></thead><tbody>{exam_rows or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div>
+<div class='card section'><h2>Terms</h2><table><thead><tr><th>Term</th><th>Year</th><th>Start</th><th>End</th></tr></thead><tbody>{term_rows or '<tr><td colspan=4>No terms.</td></tr>'}</tbody></table></div></div>"""
+    return _school_page(request,"Academic Management",body)
+
+@router.get("/app/finance", response_class=HTMLResponse)
+def finance_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
+    exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
+    payments=cur.execute("SELECT fp.*,s.name student_name FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id WHERE fp.school_id=? ORDER BY fp.id DESC LIMIT 50",(sid,)).fetchall();con.close()
+    rows="".join(f"<tr><td>{escape(str(p['student_name'] or ''))}</td><td>KES {float(p['amount'] or 0):,.2f}</td><td>{escape(str(p['payment_date'] or ''))}</td><td>{escape(str(p['receipt_no'] or ''))}</td></tr>" for p in payments)
+    body=f"""<div class='page'><h1>Finance & Fees</h1><div class='muted'>Fee register, collections, expenses and financial control.</div><div class='grid'><div class='card'><div class='label'>Fees charged</div><div class='kpi'>KES {float(fee['expected'] or 0):,.0f}</div></div><div class='card'><div class='label'>Collected</div><div class='kpi'>KES {float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Outstanding</div><div class='kpi'>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Expenses</div><div class='kpi'>KES {float(exp or 0):,.0f}</div></div></div><div class='section'><div class='actions'><a class='action' href='/school/finance'><span>💳</span>Finance Workspace</a><a class='action' href='/school/accounting'><span>📚</span>Accounting</a><a class='action' href='/school/accounting/trial-balance'><span>⚖</span>Trial Balance</a><a class='action' href='/school/fees'><span>📒</span>Fee Register</a></div></div><div class='card section'><h2>Recent fee payments</h2><table><thead><tr><th>Student</th><th>Amount</th><th>Date</th><th>Receipt</th></tr></thead><tbody>{rows or '<tr><td colspan=4>No payments yet.</td></tr>'}</tbody></table></div></div>"""
+    return _school_page(request,"Finance & Fees",body)
+
 
 @router.get("/app", response_class=HTMLResponse)
 def app_home(request: Request):
