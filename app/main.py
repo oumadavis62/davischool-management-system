@@ -1761,3 +1761,118 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
         return RedirectResponse("/", status_code=303)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+# === DAVISCHOOL ACCOUNTING & ADMIN EXTENSIONS ===
+# These additive routes extend the existing school workspace without replacing
+# the existing UI. All records are strictly scoped to the logged-in school.
+
+def _school_admin_guard(request: Request):
+    school = _school_user(request)
+    if not school or request.session.get("role") not in ("school_admin", "super_admin"):
+        return None
+    return school
+
+def _accounting_shell(request, title, active, body):
+    return module_page(request, title, active, body)
+
+@app.get("/school/accounting", response_class=HTMLResponse)
+def school_accounting(request: Request):
+    school = _school_admin_guard(request)
+    if not school: return RedirectResponse("/", 303)
+    con=get_db(); cur=con.cursor(); sid_=school["id"]
+    fee=cur.execute("SELECT COALESCE(SUM(paid),0) n FROM fees WHERE school_id=?",(sid_,)).fetchone()["n"]
+    expenses=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM expenses WHERE school_id=?",(sid_,)).fetchone()["n"]
+    cash_in=cur.execute("SELECT COALESCE(SUM(credit),0) n FROM cashbook WHERE school_id=?",(sid_,)).fetchone()["n"]
+    cash_out=cur.execute("SELECT COALESCE(SUM(debit),0) n FROM cashbook WHERE school_id=?",(sid_,)).fetchone()["n"]
+    pledges=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM pledges WHERE school_id=?",(sid_,)).fetchone()["n"]
+    pledge_paid=cur.execute("SELECT COALESCE(SUM(paid),0) n FROM pledges WHERE school_id=?",(sid_,)).fetchone()["n"]
+    vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 50",(sid_,)).fetchall()
+    lpos=cur.execute("SELECT * FROM lpos WHERE school_id=? ORDER BY id DESC LIMIT 50",(sid_,)).fetchall()
+    con.close()
+    vr="".join(f"<tr><td>{v['date']}</td><td>{v['voucher_no']}</td><td>{v['payee']}</td><td>{v['amount']}</td><td>{v['status']}</td></tr>" for v in vouchers) or "<tr><td colspan=5>No vouchers.</td></tr>"
+    lr="".join(f"<tr><td>{v['date']}</td><td>{v['lpo_no']}</td><td>{v['supplier']}</td><td>{v['amount']}</td><td>{v['status']}</td></tr>" for v in lpos) or "<tr><td colspan=5>No LPOs.</td></tr>"
+    body=f"""<div class='kpis'>
+<div class='kpi'><span>FEES RECEIVED</span><b>KES {float(fee or 0):,.2f}</b></div>
+<div class='kpi'><span>EXPENSES</span><b>KES {float(expenses or 0):,.2f}</b></div>
+<div class='kpi'><span>CASHBOOK NET</span><b>KES {float(cash_in or 0)-float(cash_out or 0):,.2f}</b></div>
+<div class='kpi'><span>PLEDGE BALANCE</span><b>KES {float(pledges or 0)-float(pledge_paid or 0):,.2f}</b></div></div>
+<div class='grid-2'>
+<div class='card'><h3>🧾 Payment Voucher</h3><form method='post' action='/school/accounting/voucher'>
+<input name='voucher_no' required placeholder='Voucher number' class='input-field'><input name='payee' required placeholder='Payee' class='input-field'>
+<input name='description' required placeholder='Description' class='input-field'><input name='amount' required type='number' min='0.01' step='0.01' placeholder='Amount' class='input-field'>
+<input name='date' required type='date' class='input-field'><select name='status' class='input-field'><option>Draft</option><option>Approved</option><option>Paid</option></select><button class='btn'>Save Voucher</button></form></div>
+<div class='card'><h3>🛒 Local Purchase Order</h3><form method='post' action='/school/accounting/lpo'>
+<input name='lpo_no' required placeholder='LPO number' class='input-field'><input name='supplier' required placeholder='Supplier' class='input-field'>
+<input name='description' required placeholder='Description' class='input-field'><input name='amount' required type='number' min='0.01' step='0.01' placeholder='Amount' class='input-field'>
+<input name='date' required type='date' class='input-field'><select name='status' class='input-field'><option>Open</option><option>Approved</option><option>Closed</option></select><button class='btn'>Save LPO</button></form></div></div>
+<div class='card'><h3>🧾 Payment Vouchers</h3><table><tr><th>Date</th><th>Voucher</th><th>Payee</th><th>Amount</th><th>Status</th></tr>{vr}</table></div>
+<div class='card'><h3>🛒 LPO Register</h3><table><tr><th>Date</th><th>LPO</th><th>Supplier</th><th>Amount</th><th>Status</th></tr>{lr}</table></div>
+<div class='card'><h3>📊 Trial Balance / Cashbook Summary</h3><p>Debits: <b>KES {float(cash_out or 0):,.2f}</b> &nbsp; Credits: <b>KES {float(cash_in or 0):,.2f}</b> &nbsp; Net: <b>KES {float(cash_in or 0)-float(cash_out or 0):,.2f}</b></p><a class='btn' href='/school/accounting/trial-balance'>Open Trial Balance</a></div>"""
+    return _accounting_shell(request,"📚 Accounting & Finance","fees",body)
+
+@app.post("/school/accounting/voucher")
+def school_accounting_voucher(request:Request,voucher_no:str=Form(...),payee:str=Form(...),description:str=Form(...),amount:float=Form(...),date:str=Form(...),status:str=Form(...)):
+    school=_school_admin_guard(request)
+    if not school or amount<=0: return RedirectResponse("/school/accounting",303)
+    con=get_db(); con.execute("INSERT INTO payment_vouchers(school_id,voucher_no,payee,description,amount,date,status) VALUES(?,?,?,?,?,?,?)",(school["id"],voucher_no.strip(),payee.strip(),description.strip(),amount,date,status)); con.commit(); con.close()
+    return RedirectResponse("/school/accounting",303)
+
+@app.post("/school/accounting/lpo")
+def school_accounting_lpo(request:Request,lpo_no:str=Form(...),supplier:str=Form(...),description:str=Form(...),amount:float=Form(...),date:str=Form(...),status:str=Form(...)):
+    school=_school_admin_guard(request)
+    if not school or amount<=0: return RedirectResponse("/school/accounting",303)
+    con=get_db(); con.execute("INSERT INTO lpos(school_id,lpo_no,supplier,description,amount,date,status) VALUES(?,?,?,?,?,?,?)",(school["id"],lpo_no.strip(),supplier.strip(),description.strip(),amount,date,status)); con.commit(); con.close()
+    return RedirectResponse("/school/accounting",303)
+
+@app.get("/school/accounting/trial-balance", response_class=HTMLResponse)
+def school_trial_balance(request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor(); sid_=school["id"]
+    rows=cur.execute("SELECT account,COALESCE(SUM(debit),0) debit,COALESCE(SUM(credit),0) credit FROM cashbook WHERE school_id=? GROUP BY account ORDER BY account",(sid_,)).fetchall()
+    con.close()
+    tr="".join(f"<tr><td>{r['account']}</td><td>KES {float(r['debit'] or 0):,.2f}</td><td>KES {float(r['credit'] or 0):,.2f}</td><td>KES {float(r['debit'] or 0)-float(r['credit'] or 0):,.2f}</td></tr>" for r in rows) or "<tr><td colspan=4>No posted accounting entries.</td></tr>"
+    body=f"""<div class='card'><h2>📊 Trial Balance</h2><p>School: <b>{school['name']}</b></p><table><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Net</th></tr>{tr}</table></div>
+<div class='card'><a class='btn' href='/school/accounting'>← Back to Accounting</a></div>"""
+    return _accounting_shell(request,"📊 Trial Balance","fees",body)
+
+@app.get("/school/roles", response_class=HTMLResponse)
+def school_roles(request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); rows=con.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(school["id"],)).fetchall(); con.close()
+    tr="".join(f"<tr><td>{r['role']}</td><td>{r['permission']}</td><td>{'Enabled' if r['enabled'] else 'Disabled'}</td></tr>" for r in rows) or "<tr><td colspan=3>No custom permissions configured.</td></tr>"
+    body=f"""<div class='card'><h2>🛡️ Roles & Permissions</h2><form method='post' action='/school/roles'>
+<input name='role' required placeholder='Role e.g. teacher' class='input-field'><input name='permission' required placeholder='Permission e.g. record_marks' class='input-field'>
+<select name='enabled' class='input-field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
+<div class='card'><table><tr><th>Role</th><th>Permission</th><th>Status</th></tr>{tr}</table></div>"""
+    return _accounting_shell(request,"🛡️ Roles & Permissions","system-settings/roles-permissions",body)
+
+@app.post("/school/roles")
+def school_roles_save(request:Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor()
+    cur.execute("DELETE FROM roles_permissions WHERE school_id=? AND role=? AND permission=?",(school["id"],role.strip(),permission.strip()))
+    cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(school["id"],role.strip(),permission.strip(),1 if enabled else 0))
+    con.commit(); con.close(); return RedirectResponse("/school/roles",303)
+
+@app.get("/school/system-audit", response_class=HTMLResponse)
+def school_system_audit(request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); rows=con.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 200",(school["id"],)).fetchall(); con.close()
+    tr="".join(f"<tr><td>{r['timestamp']}</td><td>{r['user_email']}</td><td>{r['action']}</td><td>{r['details']}</td></tr>" for r in rows) or "<tr><td colspan=4>No audit entries yet.</td></tr>"
+    return _accounting_shell(request,"📈 System Audit","system-settings/system-audit",f"<div class='card'><table><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr>{tr}</table></div>")
+
+@app.get("/school/attendance-register", response_class=HTMLResponse)
+def school_attendance_register(request:Request):
+    school=_school_admin_guard(request)
+    if not school: return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor()
+    rows=cur.execute("SELECT a.date,s.name student,c.name class_name,a.status FROM attendance a JOIN students s ON s.id=a.student_id LEFT JOIN classes c ON c.id=s.class_id WHERE a.school_id=? ORDER BY a.date DESC,a.id DESC LIMIT 300",(school["id"],)).fetchall()
+    con.close()
+    tr="".join(f"<tr><td>{r['date']}</td><td>{r['student']}</td><td>{r['class_name'] or ''}</td><td>{r['status']}</td></tr>" for r in rows) or "<tr><td colspan=4>No attendance records.</td></tr>"
+    return _accounting_shell(request,"🗓️ Attendance Register","attendance",f"<div class='card'><table><tr><th>Date</th><th>Student</th><th>Class</th><th>Status</th></tr>{tr}</table></div>")
+
