@@ -401,6 +401,53 @@ def finance_page(request: Request):
     return _school_page(request,"Finance & Fees",body)
 
 
+@router.get("/app/school-settings", response_class=HTMLResponse)
+def school_settings_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+    con.close()
+    if not school:return RedirectResponse("/app")
+    def val(key):
+        return escape(str(school[key] or ""))
+    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile and identity details for this school.</div>
+<div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
+<label>School Name<input name='school_name' required value='{val("name")}' class='field'></label>
+<label>School Email<input name='school_email' type='email' required value='{val("email")}' class='field'></label>
+<label>Location<input name='location' required value='{val("location")}' class='field'></label>
+<label>Phone<input name='phone' required value='{val("phone")}' class='field'></label>
+<label>Principal / Administrator<input name='principal' required value='{val("principal")}' class='field'></label>
+<label>School Type<select name='school_type' class='field'><option {'selected' if school["school_type"]=="Primary" else ''}>Primary</option><option {'selected' if school["school_type"]=="Secondary" else ''}>Secondary</option><option {'selected' if school["school_type"]=="Primary & Junior Secondary" else ''}>Primary & Junior Secondary</option></select></label>
+<div style='grid-column:1/-1'><button class='btn'>Save School Settings</button></div></form></div></div>
+<style>label{{display:block;font-size:12px;font-weight:800;color:#475569}}.field{{width:100%;margin-top:6px;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request,"School Settings",body)
+
+@router.post("/app/school-settings")
+def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    allowed={"Primary","Secondary","Primary & Junior Secondary"}
+    if school_type not in allowed:return HTMLResponse("Invalid school type. <a href='/app/school-settings'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    cur.execute("UPDATE schools SET name=?,email=?,location=?,phone=?,principal=?,school_type=? WHERE id=?",(school_name.strip(),school_email.strip(),location.strip(),phone.strip(),principal.strip(),school_type,sid))
+    _audit(cur,sid,request,"SCHOOL_PROFILE_UPDATE",f"Updated school profile for {school_name.strip()}")
+    con.commit();con.close()
+    return RedirectResponse("/app/school-settings?saved=1",303)
+
+@router.get("/app/portals", response_class=HTMLResponse)
+def portals_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    body="""<div class='page'><h1>School Portals</h1><div class='muted'>Portal access and school-facing services.</div>
+<div class='actions section'>
+<div class='action'><span>👨‍🎓</span>Student Portal<small style='display:block;color:#64748b;margin-top:5px'>Student-facing access can be connected to this school workspace.</small></div>
+<div class='action'><span>👨‍👩‍👧</span>Parent Portal<small style='display:block;color:#64748b;margin-top:5px'>Parent-facing access can be connected to this school workspace.</small></div>
+<div class='action'><span>👩‍🏫</span>Teacher Portal<small style='display:block;color:#64748b;margin-top:5px'>Teacher-facing access can be connected to this school workspace.</small></div>
+</div>
+<div class='card section'><h2>Portal Access</h2><div class='muted'>Use User Management to create and assign school accounts, then use the appropriate role to control portal access.</div><div style='margin-top:12px'><a class='action' href='/app/users'>👤 Open User Management</a> <a class='action' href='/app/roles'>🔐 Open Roles & Permissions</a></div></div></div>"""
+    return _school_page(request,"School Portals",body)
+
 @router.get("/app", response_class=HTMLResponse)
 def app_home(request: Request):
     if "email" not in request.session:
@@ -448,7 +495,7 @@ def app_home(request: Request):
         body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><a class='action' href='/school/students'><span>🎓</span>Students</a><a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a><a class='action' href='/app/attendance/bulk'><span>✓</span>Attendance</a><a class='action' href='/app/finance'><span>💰</span>Finance</a><a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a><a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a><a class='action' href='/app/finance'><span>📚</span>Accounting</a><a class='action' href='/school/system-settings/user-management'><span>👤</span>Users</a></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/school/system-settings/school-profile'><span>⚙</span>School Settings</a><a class='action' href='/school/system-settings/roles-permissions'><span>🔐</span>Roles</a><a class='action' href='/school/system-audit'><span>🛡</span>Audit Trail</a><a class='action' href='/portal'><span>🌐</span>Portals</a></div></div></div>"""
+<div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a><a class='action' href='/app/roles'><span>🔐</span>Roles</a><a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a><a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div>"""
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
 
