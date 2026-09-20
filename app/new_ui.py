@@ -22,13 +22,13 @@ def _shell(title, name, role, body):
         ("/app/academics/analysis","📊","Academic Analysis"),
         ("/app/report-cards","📄","Report Cards"),
         ("/app/attendance","✓","Attendance"),
-        ("/school/timetable","🗓","Timetable"),
+        ("/app/timetable","🗓","Timetable"),
         ("/app/finance","💰","Fees & Finance"),
-        ("/app/finance","📚","Accounting"),
-        ("/school/announcements","📢","Announcements"),
+        ("/app/accounting","📚","Accounting"),
+        ("/app/announcements","📢","Announcements"),
         ("/app/users","👤","Users"),
-        ("/school/system-settings/roles-permissions","🔐","Roles & Permissions"),
-        ("/school/system-audit","🛡","Audit Trail"),
+        ("/app/roles","🔐","Roles & Permissions"),
+        ("/app/audit","🛡","Audit Trail"),
     ]
     links="".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l in nav)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
@@ -469,3 +469,109 @@ def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...)
         cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",(sid,now,reference,"School fee receipt",0,amount,"Fees"))
         _audit(cur,sid,request,"FEE_PAYMENT",f"Received {amount} from student {student_id}")
     con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
+
+# Additional native DaviSchool workspaces
+def _simple_rows(rows, cols):
+    return "".join("<tr>"+"".join(f"<td>{escape(str(row[c] if row[c] is not None else ''))}</td>" for c in cols)+"</tr>" for row in rows)
+
+@router.get("/app/timetable", response_class=HTMLResponse)
+def timetable_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY day,start_time",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    con.close()
+    co="".join(f"<option>{escape(str(x['name']))} {escape(str(x['stream'] or ''))}</option>" for x in classes)
+    to="".join(f"<option>{escape(str(x['name']))}</option>" for x in teachers)
+    so="".join(f"<option>{escape(str(x['name']))}</option>" for x in subjects)
+    tr=_simple_rows(rows,["day","start_time","end_time","class_name","stream","subject","teacher","room"])
+    body=f"""<div class='page'><h1>Timetable</h1><div class='muted'>Build and maintain the school timetable.</div>
+<div class='card section'><h2>Add lesson</h2><form method='post' action='/app/timetable/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<select name='day' class='field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select><input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><select name='class_name' class='field'>{co}</select><input name='stream' placeholder='Stream' class='field'><select name='subject' class='field'>{so}</select><select name='teacher' class='field'>{to}</select><input name='room' placeholder='Room' class='field'><button class='btn'>Save Lesson</button></form></div>
+<div class='card section'><h2>Weekly timetable ({len(rows)})</h2><table><thead><tr><th>Day</th><th>Start</th><th>End</th><th>Class</th><th>Stream</th><th>Subject</th><th>Teacher</th><th>Room</th></tr></thead><tbody>{tr or '<tr><td colspan=8>No timetable entries yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Timetable",body)
+
+@router.post("/app/timetable/add")
+def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(""),stream:str=Form(""),subject:str=Form(""),teacher:str=Form(""),room:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,day,start_time,end_time,class_name,stream,subject,teacher,room))
+    _audit(cur,sid,request,"TIMETABLE_CREATE",f"{day} {start_time}-{end_time} {class_name} {subject}")
+    con.commit();con.close();return RedirectResponse("/app/timetable",303)
+
+@router.get("/app/announcements", response_class=HTMLResponse)
+def announcements_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
+    tr=_simple_rows(rows,["title","message","audience","created_at"])
+    body=f"""<div class='page'><h1>Announcements</h1><div class='muted'>Publish school notices and internal communications.</div>
+<div class='card section'><h2>New announcement</h2><form method='post' action='/app/announcements/add' style='display:grid;gap:10px'><input name='title' required placeholder='Title' class='field'><select name='audience' class='field'><option>All</option><option>Students</option><option>Parents</option><option>Teachers</option><option>Staff</option></select><textarea name='message' required placeholder='Message' class='field' rows='5'></textarea><button class='btn'>Publish Announcement</button></form></div>
+<div class='card section'><h2>Published announcements ({len(rows)})</h2><table><thead><tr><th>Title</th><th>Message</th><th>Audience</th><th>Created</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No announcements yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Announcements",body)
+
+@router.post("/app/announcements/add")
+def announcements_add(request: Request,title:str=Form(...),message:str=Form(...),audience:str=Form("All")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO announcements(school_id,title,message,audience,created_at) VALUES(?,?,?,?,?)",(sid,title.strip(),message.strip(),audience,now))
+    _audit(cur,sid,request,"ANNOUNCEMENT_CREATE",title.strip());con.commit();con.close();return RedirectResponse("/app/announcements",303)
+
+@router.get("/app/roles", response_class=HTMLResponse)
+def roles_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall();con.close()
+    tr=_simple_rows(rows,["role","permission","enabled"])
+    body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
+<div class='card section'><h2>Grant permission</h2><form method='post' action='/app/roles/add' style='display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px'><select name='role' class='field'><option>school_admin</option><option>teacher</option><option>parent</option><option>student</option><option>accountant</option><option>registrar</option></select><input name='permission' required placeholder='Permission e.g. marks.edit' class='field'><select name='enabled' class='field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
+<div class='card section'><h2>Configured permissions ({len(rows)})</h2><table><thead><tr><th>Role</th><th>Permission</th><th>Enabled</th></tr></thead><tbody>{tr or '<tr><td colspan=3>No custom permissions yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Roles & Permissions",body)
+
+@router.post("/app/roles/add")
+def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(sid,role,permission.strip(),enabled))
+    _audit(cur,sid,request,"PERMISSION_CHANGE",f"{role}: {permission.strip()}={enabled}");con.commit();con.close();return RedirectResponse("/app/roles",303)
+
+@router.get("/app/audit", response_class=HTMLResponse)
+def audit_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall();con.close()
+    tr=_simple_rows(rows,["timestamp","user_email","action","details"])
+    body=f"""<div class='page'><h1>Audit Trail</h1><div class='muted'>Security and activity history for this school.</div><div class='card section'><h2>Recent activity ({len(rows)})</h2><table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table></div></div>"""
+    return _school_page(request,"Audit Trail",body)
+
+@router.get("/app/accounting", response_class=HTMLResponse)
+def accounting_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    expenses=cur.execute("SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
+    vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
+    lpos=cur.execute("SELECT * FROM lpos WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
+    cash=cur.execute("SELECT COALESCE(SUM(credit),0) credit,COALESCE(SUM(debit),0) debit FROM cashbook WHERE school_id=?",(sid,)).fetchone()
+    con.close()
+    exp_total=sum(float(x["amount"] or 0) for x in expenses)
+    body=f"""<div class='page'><h1>Accounting</h1><div class='muted'>School accounting workspace: expenses, vouchers, LPOs and cashbook.</div>
+<div class='grid'><div class='card'><div class='label'>Expenses listed</div><div class='kpi'>{exp_total:,.2f}</div></div><div class='card'><div class='label'>Cash credits</div><div class='kpi'>{float(cash['credit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Cash debits</div><div class='kpi'>{float(cash['debit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Open LPOs</div><div class='kpi'>{len(lpos)}</div></div></div>
+<div class='card section'><h2>Record expense</h2><form method='post' action='/app/accounting/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><input name='category' required placeholder='Category' class='field'><input name='description' required placeholder='Description' class='field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='field'><input name='paid_to' placeholder='Paid to' class='field'><input name='voucher_no' placeholder='Voucher no.' class='field'><input name='date' type='date' class='field'><button class='btn'>Save Expense</button></form></div>
+<div class='card section'><h2>Expenses</h2><table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th><th>Voucher</th><th>Date</th></tr></thead><tbody>{_simple_rows(expenses,['category','description','amount','paid_to','voucher_no','date']) or '<tr><td colspan=6>No expenses yet.</td></tr>'}</tbody></table></div>
+<div class='card section'><h2>Payment Vouchers ({len(vouchers)})</h2><table><thead><tr><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(vouchers,['voucher_no','payee','description','amount','date','status']) or '<tr><td colspan=6>No vouchers yet.</td></tr>'}</tbody></table></div>
+<div class='card section'><h2>LPOs ({len(lpos)})</h2><table><thead><tr><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(lpos,['lpo_no','supplier','description','amount','date','status']) or '<tr><td colspan=6>No LPOs yet.</td></tr>'}</tbody></table></div>
+</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Accounting",body)
+
+@router.post("/app/accounting/expense")
+def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date) VALUES(?,?,?,?,?,?,?)",(sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")))
+    _audit(cur,sid,request,"EXPENSE_CREATE",f"{category}: {amount}");con.commit();con.close();return RedirectResponse("/app/accounting",303)
