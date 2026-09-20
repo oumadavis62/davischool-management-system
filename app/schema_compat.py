@@ -29,6 +29,7 @@ def _ensure_live_postgres_schema():
             "name": "TEXT", "email": "TEXT", "code": "TEXT",
             "location": "TEXT", "phone": "TEXT", "principal": "TEXT",
             "school_type": "TEXT",
+            "postal_address": "TEXT", "postal_code": "TEXT", "logo_data": "TEXT",
         },
         "pending_schools": {
             "name": "TEXT", "email": "TEXT", "location": "TEXT",
@@ -122,6 +123,7 @@ def ensure_schema_compatibility(con):
             "phone": "TEXT",
             "principal": "TEXT",
             "school_type": "TEXT",
+            "postal_address": "TEXT", "postal_code": "TEXT", "logo_data": "TEXT",
         },
         "pending_schools": {
             "name": "TEXT",
