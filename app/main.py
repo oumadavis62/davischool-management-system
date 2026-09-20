@@ -401,9 +401,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
 @app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
     from urllib.parse import quote
-    if request.session.get("role") != "super_admin":
-        return RedirectResponse("/", status_code=303)
-
+    # Do not access request.session here. School verification is authorized by the one-time code.
     con = get_db()
     try:
         cur = con.cursor()
