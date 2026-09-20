@@ -30,7 +30,7 @@ class CompatRow(dict):
 
 
 def _row_factory(cursor):
-    columns = [getattr(col, "name", col[0]) for col in (cursor.description or [])]
+    columns = []\n    for col in (cursor.description or []):\n        columns.append(getattr(col, "name", None) or col[0])
 
     def make_row(values):
         return CompatRow(columns, values)
