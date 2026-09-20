@@ -199,7 +199,7 @@ function closeDaviSuccess(){
   if(el) el.remove();
   try{{history.replaceState({{}},document.title,'/schools/manage');}}catch(e){{}}
 }
-document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDaviSuccess();});
+document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeDaviSuccess();}});
 </script>
 """
                 page = page.replace("</body>", success_prompt + "</body>", 1) if "</body>" in page else page + success_prompt
