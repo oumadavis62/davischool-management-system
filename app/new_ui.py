@@ -24,7 +24,7 @@ def _shell(title, name, role, body):
         ("/app/finance","💰","Fees & Finance"),
         ("/school/accounting","📚","Accounting"),
         ("/school/announcements","📢","Announcements"),
-        ("/school/system-settings/user-management","👤","Users"),
+        ("/app/users","👤","Users"),
         ("/school/system-settings/roles-permissions","🔐","Roles & Permissions"),
         ("/school/system-audit","🛡","Audit Trail"),
     ]
