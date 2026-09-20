@@ -1661,108 +1661,6 @@ def school_academics(request:Request):
     return module_page(request,"📚 Academics Workspace","analysis",f"<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px'>{grid}</div>")
 
 
-@app.get("/school/{path:path}", response_class=HTMLResponse)
-def school_other(path: str, request: Request):
-    if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
-    school = get_school_obj(request)
-    if not school: return RedirectResponse("/dashboard")
-    con=get_db(); cur=con.cursor(); school_id=sid(request)
-    configs={"finance":("💰 Fees & Finance","/school/modules/finance/fee-payment","Record Payment"),"fees":("💳 Fees Management","/school/modules/fees/add","Create Fee Charge"),"teachers":("👨‍🏫 Staff Manager","/school/teachers/add","Add Staff"),"students":("🎓 Students Manager","/school/students/add","Add Student"),"attendance":("🗓️ Attendance","/school/attendance/record","Record Attendance"),"communication":("📢 Announcements","/school/modules/announcements/add","Create Announcement"),"sms":("💬 Bulk SMS Parents","/school/modules/sms/send","Send SMS")}
-    if path in configs:
-        title,action,label=configs[path]
-        students=cur.execute("SELECT COUNT(*) n FROM students WHERE school_id=?",(school_id,)).fetchone()["n"]
-        teachers=cur.execute("SELECT COUNT(*) n FROM teachers WHERE school_id=?",(school_id,)).fetchone()["n"]
-        classes=cur.execute("SELECT COUNT(*) n FROM classes WHERE school_id=?",(school_id,)).fetchone()["n"]
-        fees_total=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM fees WHERE school_id=?",(school_id,)).fetchone()["n"]
-        if path=="students":
-            rows=cur.execute("SELECT s.name,s.admission_no,c.name class_name,c.stream,s.gender FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Student Directory</b><input class='search' type='search' placeholder='Search students'></div><table><tr><th>Name</th><th>Admission</th><th>Class</th><th>Stream</th><th>Gender</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['admission_no'] or ''}</td><td>{r['class_name'] or ''}</td><td>{r['stream'] or ''}</td><td>{r['gender'] or ''}</td></tr>" for r in rows)+"</table></div>"
-        elif path=="teachers":
-            rows=cur.execute("SELECT name,email,phone,role FROM teachers WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Staff Directory</b><input class='search' type='search' placeholder='Search staff'></div><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['email'] or ''}</td><td>{r['phone'] or ''}</td><td>{r['role'] or ''}</td></tr>" for r in rows)+"</table></div>"
-        elif path=="fees":
-            rows=cur.execute("SELECT f.*,s.name student_name FROM fees f LEFT JOIN students s ON s.id=f.student_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Fee Register</b><input class='search' type='search' placeholder='Search fee records'></div><table><tr><th>Student</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['student_name'] or ''}</td><td>{r['amount'] or 0}</td><td>{r['paid'] or 0}</td><td>{(r['amount'] or 0)-(r['paid'] or 0)}</td><td><span class='badge'>{r['status'] or 'Pending'}</span></td></tr>" for r in rows)+"</table></div>"
-        elif path=="attendance":
-            rows=cur.execute("SELECT a.date,s.name student,a.status FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=? ORDER BY a.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Recent Attendance</b><input class='search' type='search' placeholder='Search attendance'></div><table><tr><th>Date</th><th>Student</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['date']}</td><td>{r['student']}</td><td><span class='badge'>{r['status']}</span></td></tr>" for r in rows)+"</table></div>"
-        else: table="<div class='card'><h3>Workspace</h3><p>Use the action above to create a new record. Existing records will appear here as soon as they are saved.</p></div>"
-        con.close(); body=f"<div class='kpis'><div class='kpi'><span>STUDENTS</span><b>{students}</b></div><div class='kpi'><span>STAFF</span><b>{teachers}</b></div><div class='kpi'><span>CLASSES</span><b>{classes}</b></div><div class='kpi'><span>FEES CHARGED</span><b>{fees_total:,.0f}</b></div></div><div class='card toolbar'><div><b>Quick action</b><div style='font-size:12px;color:#64748b'>Create and manage {path.replace('-',' ')} records.</div></div><a class='btn' href='{action}'>＋ {label}</a></div>{table}"
-        return module_page(request,title,path,body)
-    con.close(); title=path.replace('/',' • ').replace('-',' ').title(); body=f"<div class='grid-3'><a class='ds-card' href='/school/dashboard'><b>📊 Overview</b><p>Return to the school performance dashboard.</p></a><a class='ds-card' href='/school/students'><b>🎓 Student Records</b><p>Manage enrolment, profiles and academic history.</p></a><a class='ds-card' href='/school/analysis'><b>📈 Analytics</b><p>Review subject, student and class performance.</p></a></div><div class='card'><h3>{title} workspace</h3><p>This workspace is connected to the DaviSchool data model. Use the related module links above to create records and review live school data.</p></div>"; return module_page(request,title,path,body)
-
-
-# === DAVISCHOOL OPERATIONS COMPLETION ===
-def _require_school_admin(request: Request):
-    school=_school_user(request)
-    if not school or request.session.get('role') not in ('school_admin','super_admin'): return None
-    return school
-
-@app.get('/school/finance', response_class=HTMLResponse)
-def school_finance(request: Request):
-    school=_require_school_admin(request)
-    if not school: return RedirectResponse('/',303)
-    con=get_db(); cur=con.cursor()
-    fee=cur.execute('SELECT COALESCE(SUM(amount),0) charged,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?',(school['id'],)).fetchone()
-    exp=cur.execute('SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC',(school['id'],)).fetchall()
-    payments=cur.execute('SELECT fp.*,s.name student FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id WHERE fp.school_id=? ORDER BY fp.id DESC',(school['id'],)).fetchall()
-    cash=cur.execute('SELECT * FROM cashbook WHERE school_id=? ORDER BY id DESC LIMIT 100',(school['id'],)).fetchall()
-    students=cur.execute('SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name',(school['id'],)).fetchall()
-    expense_total=cur.execute('SELECT COALESCE(SUM(amount),0) n FROM expenses WHERE school_id=?',(school['id'],)).fetchone()['n']
-    con.close()
-    opts=''.join(f"<option value='{s['id']}'>{s['name']} ({s['admission_no'] or ''})</option>" for s in students)
-    payrows=''.join(f"<tr><td>{p['date']}</td><td>{p['student'] or ''}</td><td>{p['amount']}</td><td>{p['reference']}</td><td>{p['method']}</td></tr>" for p in payments) or '<tr><td colspan=5>No payments.</td></tr>'
-    exprows=''.join(f"<tr><td>{e['date']}</td><td>{e['category']}</td><td>{e['description']}</td><td>{e['amount']}</td><td>{e['paid_to'] or ''}</td></tr>" for e in exp) or '<tr><td colspan=5>No expenses.</td></tr>'
-    cashrows=''.join(f"<tr><td>{x['date']}</td><td>{x['reference']}</td><td>{x['description']}</td><td>{x['debit']}</td><td>{x['credit']}</td></tr>" for x in cash) or '<tr><td colspan=5>No cashbook entries.</td></tr>'
-    body=f"""<div class='kpis'><div class='kpi'><span>FEES CHARGED</span><b>KES {float(fee['charged'] or 0):,.2f}</b></div><div class='kpi'><span>FEES RECEIVED</span><b>KES {float(fee['paid'] or 0):,.2f}</b></div><div class='kpi'><span>FEE BALANCE</span><b>KES {float(fee['charged'] or 0)-float(fee['paid'] or 0):,.2f}</b></div><div class='kpi'><span>EXPENSES</span><b>KES {float(expense_total or 0):,.2f}</b></div></div><div class='grid-2'><div class='card'><h3>💳 Fee Payment</h3><form method='post' action='/school/finance/fee-payment'><select name='student_id' required class='input-field'>{opts}</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount' class='input-field'><input name='reference' required placeholder='Receipt / reference' class='input-field'><select name='method' class='input-field'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option></select><button class='btn'>Save Payment</button></form></div><div class='card'><h3>💸 Expense</h3><form method='post' action='/school/finance/expense'><input name='category' required placeholder='Category' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount' class='input-field'><input name='paid_to' placeholder='Paid to' class='input-field'><input name='voucher_no' placeholder='Voucher No.' class='input-field'><input name='date' type='date' required class='input-field'><button class='btn'>Save Expense</button></form></div></div><div class='card'><h3>🧾 Fee Payments</h3><table><tr><th>Date</th><th>Student</th><th>Amount</th><th>Reference</th><th>Method</th></tr>{payrows}</table></div><div class='card'><h3>💸 Expenses</h3><table><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th></tr>{exprows}</table></div><div class='card'><h3>📒 Cashbook</h3><table><tr><th>Date</th><th>Reference</th><th>Description</th><th>Debit</th><th>Credit</th></tr>{cashrows}</table></div>"""
-    return module_page(request,'💰 Finance & Accounting','fees',body)
-
-@app.post('/school/finance/fee-payment')
-def school_finance_fee_payment(request:Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(...),method:str=Form(...)):
-    school=_require_school_admin(request)
-    if not school or amount<=0: return RedirectResponse('/',303)
-    con=get_db(); cur=con.cursor()
-    if not cur.execute('SELECT id FROM students WHERE id=? AND school_id=?',(student_id,school['id'])).fetchone(): con.close(); return RedirectResponse('/school/finance',303)
-    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S')
-    cur.execute('INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)',(school['id'],student_id,amount,reference.strip(),method,ts,request.session.get('email','')))
-    remaining=amount
-    for row in cur.execute('SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND amount>paid ORDER BY id',(school['id'],student_id)).fetchall():
-        if remaining<=0: break
-        add=min(remaining,float(row['amount'] or 0)-float(row['paid'] or 0)); new_paid=float(row['paid'] or 0)+add
-        cur.execute('UPDATE fees SET paid=?,status=? WHERE id=?',(new_paid,'Paid' if new_paid>=float(row['amount'] or 0) else 'Partial',row['id'])); remaining-=add
-    cur.execute('INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)',(school['id'],ts,reference.strip(),'Fee payment',0,amount,'Fees Receivable'))
-    con.commit(); con.close(); return RedirectResponse('/school/finance',303)
-
-@app.post('/school/finance/expense')
-def school_finance_expense(request:Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(''),voucher_no:str=Form(''),date:str=Form(...)):
-    school=_require_school_admin(request)
-    if not school or amount<=0: return RedirectResponse('/',303)
-    con=get_db(); cur=con.cursor(); cur.execute('INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)',(school['id'],category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date,'Paid'))
-    cur.execute('INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)',(school['id'],date,voucher_no.strip(),'Expense: '+description,amount,0,category.strip()))
-    con.commit(); con.close(); return RedirectResponse('/school/finance',303)
-
-@app.get('/portal', response_class=HTMLResponse)
-def role_portal(request:Request):
-    if request.session.get('role') not in ('teacher','parent','student'): return RedirectResponse('/',303)
-    school=get_school_obj(request)
-    if not school: return RedirectResponse('/',303)
-    con=get_db(); cur=con.cursor(); role=request.session['role']; student_id=request.session.get('student_id'); teacher_id=request.session.get('teacher_id')
-    if role=='teacher':
-        t=cur.execute('SELECT * FROM teachers WHERE id=? AND school_id=?',(teacher_id,school['id'])).fetchone() if teacher_id else None
-        alloc=cur.execute('SELECT ta.*,s.name subject,c.name class_name,c.stream FROM teacher_allocations ta JOIN subjects s ON s.id=ta.subject_id JOIN classes c ON c.id=ta.class_id WHERE ta.teacher_id=? AND ta.school_id=?',(teacher_id,school['id'])).fetchall() if teacher_id else []
-        body=f"<div class='card'><h2>👨‍🏫 Teacher Portal</h2><p>Welcome {t['name'] if t else request.session.get('name','Teacher')}.</p><table><tr><th>Subject</th><th>Class</th><th>Stream</th></tr>"+''.join(f"<tr><td>{a['subject']}</td><td>{a['class_name']}</td><td>{a['stream'] or ''}</td></tr>" for a in alloc)+"</table><div style='margin-top:12px'><a class='btn' href='/school/record-marks'>✏️ Record Marks</a></div></div>"
-    else:
-        st=cur.execute('SELECT * FROM students WHERE id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else None
-        marks=cur.execute('SELECT sub.name subject,e.name exam,m.marks,e.term,e.year FROM marks m JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id WHERE m.student_id=? AND m.school_id=? ORDER BY e.year DESC,e.id DESC',(student_id,school['id'])).fetchall() if student_id else []
-        fee=cur.execute('SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE student_id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else {'expected':0,'paid':0}
-        body=f"<div class='card'><h2>🎓 {'Parent' if role=='parent' else 'Student'} Portal</h2><p>{st['name'] if st else 'Linked student account'}</p><p>Fee balance: <b>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.2f}</b></p><table><tr><th>Subject</th><th>Exam</th><th>Marks</th><th>Term</th></tr>"+''.join(f"<tr><td>{m['subject']}</td><td>{m['exam']}</td><td>{m['marks']}</td><td>{m['term']} {m['year']}</td></tr>" for m in marks)+"</table></div>"
-    con.close(); return module_page(request,role.title()+' Portal','dashboard',body)
-@app.exception_handler(StarletteHTTPException)
-async def custom_404_handler(request: Request, exc: StarletteHTTPException):
-    if exc.status_code == 404:
-        if request.url.path.startswith("/api") or "application/json" in request.headers.get("accept",""):
-            return JSONResponse(status_code=404, content={"detail": "Not Found"})
-        return RedirectResponse("/", status_code=303)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-
-
 # === DAVISCHOOL ACCOUNTING & ADMIN EXTENSIONS ===
 # These additive routes extend the existing school workspace without replacing
 # the existing UI. All records are strictly scoped to the logged-in school.
@@ -1875,4 +1773,108 @@ def school_attendance_register(request:Request):
     con.close()
     tr="".join(f"<tr><td>{r['date']}</td><td>{r['student']}</td><td>{r['class_name'] or ''}</td><td>{r['status']}</td></tr>" for r in rows) or "<tr><td colspan=4>No attendance records.</td></tr>"
     return _accounting_shell(request,"🗓️ Attendance Register","attendance",f"<div class='card'><table><tr><th>Date</th><th>Student</th><th>Class</th><th>Status</th></tr>{tr}</table></div>")
+
+
+
+@app.get("/school/{path:path}", response_class=HTMLResponse)
+def school_other(path: str, request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/dashboard")
+    con=get_db(); cur=con.cursor(); school_id=sid(request)
+    configs={"finance":("💰 Fees & Finance","/school/modules/finance/fee-payment","Record Payment"),"fees":("💳 Fees Management","/school/modules/fees/add","Create Fee Charge"),"teachers":("👨‍🏫 Staff Manager","/school/teachers/add","Add Staff"),"students":("🎓 Students Manager","/school/students/add","Add Student"),"attendance":("🗓️ Attendance","/school/attendance/record","Record Attendance"),"communication":("📢 Announcements","/school/modules/announcements/add","Create Announcement"),"sms":("💬 Bulk SMS Parents","/school/modules/sms/send","Send SMS")}
+    if path in configs:
+        title,action,label=configs[path]
+        students=cur.execute("SELECT COUNT(*) n FROM students WHERE school_id=?",(school_id,)).fetchone()["n"]
+        teachers=cur.execute("SELECT COUNT(*) n FROM teachers WHERE school_id=?",(school_id,)).fetchone()["n"]
+        classes=cur.execute("SELECT COUNT(*) n FROM classes WHERE school_id=?",(school_id,)).fetchone()["n"]
+        fees_total=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM fees WHERE school_id=?",(school_id,)).fetchone()["n"]
+        if path=="students":
+            rows=cur.execute("SELECT s.name,s.admission_no,c.name class_name,c.stream,s.gender FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Student Directory</b><input class='search' type='search' placeholder='Search students'></div><table><tr><th>Name</th><th>Admission</th><th>Class</th><th>Stream</th><th>Gender</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['admission_no'] or ''}</td><td>{r['class_name'] or ''}</td><td>{r['stream'] or ''}</td><td>{r['gender'] or ''}</td></tr>" for r in rows)+"</table></div>"
+        elif path=="teachers":
+            rows=cur.execute("SELECT name,email,phone,role FROM teachers WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Staff Directory</b><input class='search' type='search' placeholder='Search staff'></div><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['email'] or ''}</td><td>{r['phone'] or ''}</td><td>{r['role'] or ''}</td></tr>" for r in rows)+"</table></div>"
+        elif path=="fees":
+            rows=cur.execute("SELECT f.*,s.name student_name FROM fees f LEFT JOIN students s ON s.id=f.student_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Fee Register</b><input class='search' type='search' placeholder='Search fee records'></div><table><tr><th>Student</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['student_name'] or ''}</td><td>{r['amount'] or 0}</td><td>{r['paid'] or 0}</td><td>{(r['amount'] or 0)-(r['paid'] or 0)}</td><td><span class='badge'>{r['status'] or 'Pending'}</span></td></tr>" for r in rows)+"</table></div>"
+        elif path=="attendance":
+            rows=cur.execute("SELECT a.date,s.name student,a.status FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=? ORDER BY a.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Recent Attendance</b><input class='search' type='search' placeholder='Search attendance'></div><table><tr><th>Date</th><th>Student</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['date']}</td><td>{r['student']}</td><td><span class='badge'>{r['status']}</span></td></tr>" for r in rows)+"</table></div>"
+        else: table="<div class='card'><h3>Workspace</h3><p>Use the action above to create a new record. Existing records will appear here as soon as they are saved.</p></div>"
+        con.close(); body=f"<div class='kpis'><div class='kpi'><span>STUDENTS</span><b>{students}</b></div><div class='kpi'><span>STAFF</span><b>{teachers}</b></div><div class='kpi'><span>CLASSES</span><b>{classes}</b></div><div class='kpi'><span>FEES CHARGED</span><b>{fees_total:,.0f}</b></div></div><div class='card toolbar'><div><b>Quick action</b><div style='font-size:12px;color:#64748b'>Create and manage {path.replace('-',' ')} records.</div></div><a class='btn' href='{action}'>＋ {label}</a></div>{table}"
+        return module_page(request,title,path,body)
+    con.close(); title=path.replace('/',' • ').replace('-',' ').title(); body=f"<div class='grid-3'><a class='ds-card' href='/school/dashboard'><b>📊 Overview</b><p>Return to the school performance dashboard.</p></a><a class='ds-card' href='/school/students'><b>🎓 Student Records</b><p>Manage enrolment, profiles and academic history.</p></a><a class='ds-card' href='/school/analysis'><b>📈 Analytics</b><p>Review subject, student and class performance.</p></a></div><div class='card'><h3>{title} workspace</h3><p>This workspace is connected to the DaviSchool data model. Use the related module links above to create records and review live school data.</p></div>"; return module_page(request,title,path,body)
+
+
+# === DAVISCHOOL OPERATIONS COMPLETION ===
+def _require_school_admin(request: Request):
+    school=_school_user(request)
+    if not school or request.session.get('role') not in ('school_admin','super_admin'): return None
+    return school
+
+@app.get('/school/finance', response_class=HTMLResponse)
+def school_finance(request: Request):
+    school=_require_school_admin(request)
+    if not school: return RedirectResponse('/',303)
+    con=get_db(); cur=con.cursor()
+    fee=cur.execute('SELECT COALESCE(SUM(amount),0) charged,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?',(school['id'],)).fetchone()
+    exp=cur.execute('SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC',(school['id'],)).fetchall()
+    payments=cur.execute('SELECT fp.*,s.name student FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id WHERE fp.school_id=? ORDER BY fp.id DESC',(school['id'],)).fetchall()
+    cash=cur.execute('SELECT * FROM cashbook WHERE school_id=? ORDER BY id DESC LIMIT 100',(school['id'],)).fetchall()
+    students=cur.execute('SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name',(school['id'],)).fetchall()
+    expense_total=cur.execute('SELECT COALESCE(SUM(amount),0) n FROM expenses WHERE school_id=?',(school['id'],)).fetchone()['n']
+    con.close()
+    opts=''.join(f"<option value='{s['id']}'>{s['name']} ({s['admission_no'] or ''})</option>" for s in students)
+    payrows=''.join(f"<tr><td>{p['date']}</td><td>{p['student'] or ''}</td><td>{p['amount']}</td><td>{p['reference']}</td><td>{p['method']}</td></tr>" for p in payments) or '<tr><td colspan=5>No payments.</td></tr>'
+    exprows=''.join(f"<tr><td>{e['date']}</td><td>{e['category']}</td><td>{e['description']}</td><td>{e['amount']}</td><td>{e['paid_to'] or ''}</td></tr>" for e in exp) or '<tr><td colspan=5>No expenses.</td></tr>'
+    cashrows=''.join(f"<tr><td>{x['date']}</td><td>{x['reference']}</td><td>{x['description']}</td><td>{x['debit']}</td><td>{x['credit']}</td></tr>" for x in cash) or '<tr><td colspan=5>No cashbook entries.</td></tr>'
+    body=f"""<div class='kpis'><div class='kpi'><span>FEES CHARGED</span><b>KES {float(fee['charged'] or 0):,.2f}</b></div><div class='kpi'><span>FEES RECEIVED</span><b>KES {float(fee['paid'] or 0):,.2f}</b></div><div class='kpi'><span>FEE BALANCE</span><b>KES {float(fee['charged'] or 0)-float(fee['paid'] or 0):,.2f}</b></div><div class='kpi'><span>EXPENSES</span><b>KES {float(expense_total or 0):,.2f}</b></div></div><div class='grid-2'><div class='card'><h3>💳 Fee Payment</h3><form method='post' action='/school/finance/fee-payment'><select name='student_id' required class='input-field'>{opts}</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount' class='input-field'><input name='reference' required placeholder='Receipt / reference' class='input-field'><select name='method' class='input-field'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option></select><button class='btn'>Save Payment</button></form></div><div class='card'><h3>💸 Expense</h3><form method='post' action='/school/finance/expense'><input name='category' required placeholder='Category' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount' class='input-field'><input name='paid_to' placeholder='Paid to' class='input-field'><input name='voucher_no' placeholder='Voucher No.' class='input-field'><input name='date' type='date' required class='input-field'><button class='btn'>Save Expense</button></form></div></div><div class='card'><h3>🧾 Fee Payments</h3><table><tr><th>Date</th><th>Student</th><th>Amount</th><th>Reference</th><th>Method</th></tr>{payrows}</table></div><div class='card'><h3>💸 Expenses</h3><table><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th></tr>{exprows}</table></div><div class='card'><h3>📒 Cashbook</h3><table><tr><th>Date</th><th>Reference</th><th>Description</th><th>Debit</th><th>Credit</th></tr>{cashrows}</table></div>"""
+    return module_page(request,'💰 Finance & Accounting','fees',body)
+
+@app.post('/school/finance/fee-payment')
+def school_finance_fee_payment(request:Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(...),method:str=Form(...)):
+    school=_require_school_admin(request)
+    if not school or amount<=0: return RedirectResponse('/',303)
+    con=get_db(); cur=con.cursor()
+    if not cur.execute('SELECT id FROM students WHERE id=? AND school_id=?',(student_id,school['id'])).fetchone(): con.close(); return RedirectResponse('/school/finance',303)
+    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S')
+    cur.execute('INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)',(school['id'],student_id,amount,reference.strip(),method,ts,request.session.get('email','')))
+    remaining=amount
+    for row in cur.execute('SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND amount>paid ORDER BY id',(school['id'],student_id)).fetchall():
+        if remaining<=0: break
+        add=min(remaining,float(row['amount'] or 0)-float(row['paid'] or 0)); new_paid=float(row['paid'] or 0)+add
+        cur.execute('UPDATE fees SET paid=?,status=? WHERE id=?',(new_paid,'Paid' if new_paid>=float(row['amount'] or 0) else 'Partial',row['id'])); remaining-=add
+    cur.execute('INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)',(school['id'],ts,reference.strip(),'Fee payment',0,amount,'Fees Receivable'))
+    con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.post('/school/finance/expense')
+def school_finance_expense(request:Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(''),voucher_no:str=Form(''),date:str=Form(...)):
+    school=_require_school_admin(request)
+    if not school or amount<=0: return RedirectResponse('/',303)
+    con=get_db(); cur=con.cursor(); cur.execute('INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)',(school['id'],category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date,'Paid'))
+    cur.execute('INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)',(school['id'],date,voucher_no.strip(),'Expense: '+description,amount,0,category.strip()))
+    con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.get('/portal', response_class=HTMLResponse)
+def role_portal(request:Request):
+    if request.session.get('role') not in ('teacher','parent','student'): return RedirectResponse('/',303)
+    school=get_school_obj(request)
+    if not school: return RedirectResponse('/',303)
+    con=get_db(); cur=con.cursor(); role=request.session['role']; student_id=request.session.get('student_id'); teacher_id=request.session.get('teacher_id')
+    if role=='teacher':
+        t=cur.execute('SELECT * FROM teachers WHERE id=? AND school_id=?',(teacher_id,school['id'])).fetchone() if teacher_id else None
+        alloc=cur.execute('SELECT ta.*,s.name subject,c.name class_name,c.stream FROM teacher_allocations ta JOIN subjects s ON s.id=ta.subject_id JOIN classes c ON c.id=ta.class_id WHERE ta.teacher_id=? AND ta.school_id=?',(teacher_id,school['id'])).fetchall() if teacher_id else []
+        body=f"<div class='card'><h2>👨‍🏫 Teacher Portal</h2><p>Welcome {t['name'] if t else request.session.get('name','Teacher')}.</p><table><tr><th>Subject</th><th>Class</th><th>Stream</th></tr>"+''.join(f"<tr><td>{a['subject']}</td><td>{a['class_name']}</td><td>{a['stream'] or ''}</td></tr>" for a in alloc)+"</table><div style='margin-top:12px'><a class='btn' href='/school/record-marks'>✏️ Record Marks</a></div></div>"
+    else:
+        st=cur.execute('SELECT * FROM students WHERE id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else None
+        marks=cur.execute('SELECT sub.name subject,e.name exam,m.marks,e.term,e.year FROM marks m JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id WHERE m.student_id=? AND m.school_id=? ORDER BY e.year DESC,e.id DESC',(student_id,school['id'])).fetchall() if student_id else []
+        fee=cur.execute('SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE student_id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else {'expected':0,'paid':0}
+        body=f"<div class='card'><h2>🎓 {'Parent' if role=='parent' else 'Student'} Portal</h2><p>{st['name'] if st else 'Linked student account'}</p><p>Fee balance: <b>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.2f}</b></p><table><tr><th>Subject</th><th>Exam</th><th>Marks</th><th>Term</th></tr>"+''.join(f"<tr><td>{m['subject']}</td><td>{m['exam']}</td><td>{m['marks']}</td><td>{m['term']} {m['year']}</td></tr>" for m in marks)+"</table></div>"
+    con.close(); return module_page(request,role.title()+' Portal','dashboard',body)
+@app.exception_handler(StarletteHTTPException)
+async def custom_404_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        if request.url.path.startswith("/api") or "application/json" in request.headers.get("accept",""):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        return RedirectResponse("/", status_code=303)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
