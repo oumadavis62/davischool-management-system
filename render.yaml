@@ -11,15 +11,13 @@ services:
         fromDatabase:
           name: davischool-db
           property: connectionString
-      - key: SECRET_KEY
+      - key: DAVISCHOOL_SECRET_KEY
         generateValue: true
-      - key: SESSION_HTTPS
+      - key: DAVISCHOOL_HTTPS_ONLY
         value: "1"
-      - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: SCHOOL_NAME
+      - key: DAVISCHOOL_SUPER_ADMIN
+        value: "admin@davischool.com"
+      - key: DAVISCHOOL_SUPER_ADMIN_PASSWORD
         sync: false
       - key: WEB_CONCURRENCY
         value: "2"
