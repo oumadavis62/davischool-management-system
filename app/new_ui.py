@@ -411,7 +411,8 @@ def app_home(request: Request):
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
-        students=cur.execute("SELECT COUNT(*) c FROM students").fetchone()["c"]
+        platform_users=cur.execute("SELECT full_name,email,role FROM users ORDER BY id").fetchall()
+                students=cur.execute("SELECT COUNT(*) c FROM students").fetchone()["c"]
         revenue=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments").fetchone()["v"]
         recent=cur.execute("SELECT name,location FROM schools ORDER BY id DESC LIMIT 8").fetchall()
         con.close()
@@ -426,7 +427,11 @@ def app_home(request: Request):
 <div class='actions'>
   <div class='action'><span>🗄️</span>Database Health<small style='display:block;color:#64748b;margin-top:5px'>🟢 Connected</small></div>
   <div class='action'><span>🏫</span>School Services<small style='display:block;color:#64748b;margin-top:5px'>🟢 {schools} schools registered</small></div>
-  <div class='action'><span>👥</span>User Access<small style='display:block;color:#64748b;margin-top:5px'>🟢 {users} users registered</small></div>
+  <div class='action'><span>👥</span>User Access<small style='display:block;color:#64748b;margin-top:5px'>🟢 {users} users registered</small>
+    <div style='margin-top:10px;text-align:left;border-top:1px solid #e2e8f0;padding-top:8px'>
+      {''.join(f"<div style='padding:6px 0;border-bottom:1px solid #f1f5f9'><b>👤 {escape(str(u['full_name'] or 'User'))}</b><br><span style='font-size:12px;color:#64748b'>📧 {escape(str(u['email'] or ''))} · 🔐 {escape(str(u['role'] or ''))}</span></div>" for u in platform_users)}
+    </div>
+  </div>
   <div class='action'><span>🎓</span>Student Records<small style='display:block;color:#64748b;margin-top:5px'>🟢 {students} students recorded</small></div>
 </div>
 </div>
