@@ -28,7 +28,8 @@ async def security_headers(request: Request, call_next):
     if SESSION_HTTPS_ONLY:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
-SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "oumadavis62@gmail.com")
+SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
+SUPER_ADMIN_PASSWORD = os.environ.get("DAVISCHOOL_SUPER_ADMIN_PASSWORD", "DaviSchool@2026!")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
@@ -83,8 +84,23 @@ def init_db():
     try: cur.execute("ALTER TABLE students ADD COLUMN guardian_name TEXT")
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
-    if not cur.fetchone():
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (SUPER_ADMIN,hash_password("DaviSchool@2026!"),"super_admin","Davis Ouma",0))
+    admin_user = cur.fetchone()
+    # Migrate the original bootstrap Super Admin account to the new DaviSchool
+    # administrator identity on first startup.
+    if SUPER_ADMIN == "admin@davischool.com":
+        cur.execute("SELECT id FROM users WHERE email=?", ("oumadavis62@gmail.com",))
+        legacy_admin = cur.fetchone()
+        if legacy_admin and not admin_user:
+            cur.execute(
+                "UPDATE users SET email=?, password=?, role=?, full_name=?, school_id=? WHERE id=?",
+                (SUPER_ADMIN, hash_password(SUPER_ADMIN_PASSWORD), "super_admin", "DaviSchool Administrator", 0, legacy_admin["id"])
+            )
+            admin_user = True
+    if not admin_user:
+        cur.execute(
+            "INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
+            (SUPER_ADMIN, hash_password(SUPER_ADMIN_PASSWORD), "super_admin", "DaviSchool Administrator", 0)
+        )
     con.commit(); con.close()
 init_db()
 
