@@ -197,7 +197,7 @@ def install_legacy_school_redirect(app):
 function closeDaviSuccess(){
   const el=document.getElementById('daviSuccessOverlay');
   if(el) el.remove();
-  try{history.replaceState({},document.title,'/schools/manage');}catch(e){}
+  try{{history.replaceState({{}},document.title,'/schools/manage');}}catch(e){{}}
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDaviSuccess();});
 </script>
