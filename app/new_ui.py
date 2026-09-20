@@ -15,7 +15,9 @@ def _shell(title, name, role, body):
         ("/app","⌂","Overview"),
         ("/app/students","🎓","Students"),
         ("/app/staff","👩‍🏫","Staff & Teachers"),
-        ("/school/classes","🏫","Classes"),
+        ("/app/classes","🏫","Classes"),
+        ("/app/subjects","📚","Subjects"),
+        ("/app/exams","🧪","Examinations"),
         ("/app/academics","📝","Academics"),
         ("/app/academics/analysis","📊","Academic Analysis"),
         ("/app/report-cards","📄","Report Cards"),
@@ -139,7 +141,7 @@ def finance_page(request: Request):
     exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
     payments=cur.execute("SELECT fp.*,s.name student_name FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id WHERE fp.school_id=? ORDER BY fp.id DESC LIMIT 50",(sid,)).fetchall();con.close()
     rows="".join(f"<tr><td>{escape(str(p['student_name'] or ''))}</td><td>KES {float(p['amount'] or 0):,.2f}</td><td>{escape(str(p['payment_date'] or ''))}</td><td>{escape(str(p['receipt_no'] or ''))}</td></tr>" for p in payments)
-    body=f"""<div class='page'><h1>Finance & Fees</h1><div class='muted'>Fee register, collections, expenses and financial control.</div><div class='grid'><div class='card'><div class='label'>Fees charged</div><div class='kpi'>KES {float(fee['expected'] or 0):,.0f}</div></div><div class='card'><div class='label'>Collected</div><div class='kpi'>KES {float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Outstanding</div><div class='kpi'>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Expenses</div><div class='kpi'>KES {float(exp or 0):,.0f}</div></div></div><div class='section'><div class='actions'><a class='action' href='/school/finance'><span>💳</span>Finance Workspace</a><a class='action' href='/school/accounting'><span>📚</span>Accounting</a><a class='action' href='/school/accounting/trial-balance'><span>⚖</span>Trial Balance</a><a class='action' href='/school/fees'><span>📒</span>Fee Register</a></div></div><div class='card section'><h2>Recent fee payments</h2><table><thead><tr><th>Student</th><th>Amount</th><th>Date</th><th>Receipt</th></tr></thead><tbody>{rows or '<tr><td colspan=4>No payments yet.</td></tr>'}</tbody></table></div></div>"""
+    body=f"""<div class='page'><h1>Finance & Fees</h1><div class='muted'>Fee register, collections, expenses and financial control.</div><div class='grid'><div class='card'><div class='label'>Fees charged</div><div class='kpi'>KES {float(fee['expected'] or 0):,.0f}</div></div><div class='card'><div class='label'>Collected</div><div class='kpi'>KES {float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Outstanding</div><div class='kpi'>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.0f}</div></div><div class='card'><div class='label'>Expenses</div><div class='kpi'>KES {float(exp or 0):,.0f}</div></div></div><div class='section'><div class='actions'><a class='action' href='/school/finance'><span>💳</span>Finance Workspace</a><a class='action' href='/school/accounting'><span>📚</span>Accounting</a><a class='action' href='/school/accounting/trial-balance'><span>⚖</span>Trial Balance</a><a class='action' href='/app/finance/fees'><span>📒</span>Fee Register</a></div></div><div class='card section'><h2>Recent fee payments</h2><table><thead><tr><th>Student</th><th>Amount</th><th>Date</th><th>Receipt</th></tr></thead><tbody>{rows or '<tr><td colspan=4>No payments yet.</td></tr>'}</tbody></table></div></div>"""
     return _school_page(request,"Finance & Fees",body)
 
 
