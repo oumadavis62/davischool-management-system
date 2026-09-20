@@ -330,13 +330,8 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts))
     con.commit(); con.close()
     request.session["user_id"]=u["id"]; request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
-    if u["role"] == "super_admin":
-        return RedirectResponse("/dashboard", status_code=303)
-    # All school users now enter the new DaviSchool interface automatically.
-    if u["school_id"]:
-        return RedirectResponse("/app", status_code=303)
-    if u["role"] in ["teacher", "parent", "student"]:
-        return RedirectResponse("/portal", status_code=303)
+    # Every authenticated user enters the unified DaviSchool interface.
+    # The /app UI automatically presents the appropriate platform or school workspace.
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
