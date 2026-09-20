@@ -176,3 +176,163 @@ def app_home(request: Request):
 <div class='section'><h2>Daily operations</h2><div class='actions'><a class='action' href='/school/students'><span>🎓</span>Students</a><a class='action' href='/school/record-marks'><span>📝</span>Record Marks</a><a class='action' href='/school/attendance/bulk'><span>✓</span>Attendance</a><a class='action' href='/school/finance'><span>💰</span>Finance</a><a class='action' href='/school/report-cards'><span>📄</span>Report Cards</a><a class='action' href='/school/analysis'><span>📊</span>Analysis</a><a class='action' href='/school/accounting'><span>📚</span>Accounting</a><a class='action' href='/school/system-settings/user-management'><span>👤</span>Users</a></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/school/system-settings/school-profile'><span>⚙</span>School Settings</a><a class='action' href='/school/system-settings/roles-permissions'><span>🔐</span>Roles</a><a class='action' href='/school/system-audit'><span>🛡</span>Audit Trail</a><a class='action' href='/portal'><span>🌐</span>Portals</a></div></div></div>"""
     return HTMLResponse(_shell("DaviSchool",name,role,body))
+
+
+def _grade(mark, out_of=100):
+    try:
+        p=(float(mark)/float(out_of))*100
+    except Exception:
+        p=0
+    if p>=80: return "A"
+    if p>=75: return "A-"
+    if p>=70: return "B+"
+    if p>=65: return "B"
+    if p>=60: return "B-"
+    if p>=55: return "C+"
+    if p>=50: return "C"
+    if p>=45: return "C-"
+    if p>=40: return "D+"
+    if p>=30: return "D"
+    return "E"
+
+@router.get("/app/academics/marks", response_class=HTMLResponse)
+def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    con=_db(); cur=con.cursor()
+    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    cid=int(class_id) if class_id.isdigit() else 0
+    subid=int(subject_id) if subject_id.isdigit() else 0
+    students=[]
+    if eid and cid and subid:
+        students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
+          FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
+          WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+    con.close()
+    eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} ({escape(str(e['year'] or ''))})</option>" for e in exams)
+    copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==subid else ''}>{escape(str(s['name']))}</option>" for s in subjects)
+    rows="".join(f"<tr><td>{escape(str(x['admission_no'] or ''))}</td><td><b>{escape(str(x['name'] or ''))}</b></td><td><input name='mark_{x['id']}' value='{escape(str(x['marks']))}' type='number' min='0' max='100' step='0.01' style='width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px'></td><td>{_grade(x['marks']) if x['marks']!='' else '—'}</td></tr>" for x in students)
+    body=f"""<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter, update and review marks by examination, class and subject.</div>
+<div class='card section'><form method='get' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><select name='subject_id' class='field'><option value=''>Select subject</option>{sopts}</select><button class='btn'>Load Students</button></form></div>
+<div class='card section'><form method='post' action='/app/academics/marks/save'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'><table><thead><tr><th>Admission</th><th>Student</th><th>Mark / 100</th><th>Grade</th></tr></thead><tbody>{rows or '<tr><td colspan=4>Select an exam, class and subject, then load students.</td></tr>'}</tbody></table>{'<button class="btn" style="margin-top:12px">Save Marks</button>' if students else ''}</form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Marks Entry",body)
+
+@router.post("/app/academics/marks/save")
+async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    form=await request.form()
+    con=_db();cur=con.cursor()
+    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not valid: con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    for st in students:
+        raw=form.get(f"mark_{st['id']}")
+        if raw is None or str(raw).strip()=="":
+            continue
+        try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
+        except Exception: continue
+        if mark<0 or mark>100: continue
+        old=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,st["id"],subject_id,exam_id)).fetchone()
+        if old:
+            cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"]))
+        else:
+            cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
+    _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+@router.get("/app/academics/analysis", response_class=HTMLResponse)
+def new_analysis(request: Request, exam_id:str="", class_id:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    cid=int(class_id) if class_id.isdigit() else 0
+    stats=[]
+    if eid:
+        q="""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
+          COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
+          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?"""
+        params=[eid,sid]
+        if cid:
+            q+=" AND m.class_id=?";params.append(cid)
+        q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name"
+        params.append(sid);stats=cur.execute(q,params).fetchall()
+    con.close()
+    eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams)
+    copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    rows="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in stats)
+    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Subject performance for a selected examination and class.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Academic Analysis",body)
+
+@router.get("/app/report-cards", response_class=HTMLResponse)
+def report_cards(request: Request, exam_id:str="", student_id:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
+    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+    rows=[];comment=""
+    if st and eid:
+        rows=cur.execute("""SELECT sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
+          WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
+        cm=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,stid,eid)).fetchone()
+        comment=cm["comment"] if cm else ""
+    eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
+    sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    total=sum(float(r["marks"] or 0) for r in rows);avg=total/len(rows) if rows else 0
+    markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{r['marks']}</td><td>{_grade(r['marks'])}</td></tr>" for r in rows)
+    report_html=f"""<div class='card section' id='report'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div><table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form><button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button></div>""" if st else "<div class='card section'>Select a student and examination.</div>"
+    body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Report Cards",body)
+
+@router.post("/app/report-cards/comment")
+def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(...), comment:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
+        cur.execute("INSERT INTO report_comments(school_id,student_id,exam_id,comment,created_at) VALUES(?,?,?,?,?)",(sid,student_id,exam_id,comment.strip(),datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+        _audit(cur,sid,request,"REPORT_COMMENT","Updated report comment")
+    con.commit();con.close();return RedirectResponse(f"/app/report-cards?exam_id={exam_id}&student_id={student_id}",303)
+
+@router.get("/app/attendance", response_class=HTMLResponse)
+def attendance_page(request: Request, class_id:str="", date:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    today=date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    cid=int(class_id) if class_id.isdigit() else 0
+    con=_db();cur=con.cursor()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    students=cur.execute("SELECT s.id,s.name,s.admission_no,COALESCE(a.status,'Present') status FROM students s LEFT JOIN attendance a ON a.student_id=s.id AND a.school_id=? AND a.date=? WHERE s.school_id=? AND s.class_id=? ORDER BY s.name",(sid,today,sid,cid)).fetchall() if cid else []
+    con.close()
+    opts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    rows="".join(f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td>{escape(str(s['name']))}</td><td><select name='status_{s['id']}' class='field'><option {'selected' if s['status']=='Present' else ''}>Present</option><option {'selected' if s['status']=='Absent' else ''}>Absent</option><option {'selected' if s['status']=='Late' else ''}>Late</option><option {'selected' if s['status']=='Excused' else ''}>Excused</option></select></td></tr>" for s in students)
+    body=f"""<div class='page'><h1>Attendance</h1><div class='muted'>Daily class register with bulk status saving.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field'><option value=''>Select class</option>{opts}</select><input type='date' name='date' value='{today}' class='field'><button class='btn'>Load Register</button></form></div><div class='card section'><form method='post' action='/app/attendance/save'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='date' value='{today}'><table><thead><tr><th>Admission</th><th>Student</th><th>Status</th></tr></thead><tbody>{rows or '<tr><td colspan=3>Select a class and date.</td></tr>'}</tbody></table>{'<button class="btn" style="margin-top:12px">Save Attendance</button>' if students else ''}</form></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Attendance",body)
+
+@router.post("/app/attendance/save")
+async def attendance_save(request: Request, class_id:int=Form(...), date:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    form=await request.form();con=_db();cur=con.cursor()
+    students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    for s in students:
+        status=str(form.get(f"status_{s['id']}","Present"))
+        old=cur.execute("SELECT id FROM attendance WHERE school_id=? AND student_id=? AND date=?",(sid,s["id"],date)).fetchone()
+        if old: cur.execute("UPDATE attendance SET status=? WHERE id=?",(status,old["id"]))
+        else: cur.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(sid,s["id"],date,status))
+    _audit(cur,sid,request,"ATTENDANCE_SAVE",f"Saved attendance for class {class_id} on {date}")
+    con.commit();con.close();return RedirectResponse(f"/app/attendance?class_id={class_id}&date={date}",303)
