@@ -40,6 +40,13 @@ def ensure_schema_compatibility(con):
             "auth_code": "TEXT",
             "timestamp": "TEXT",
         },
+        "system_audit": {
+            "school_id": "INTEGER",
+            "user_email": "TEXT",
+            "action": "TEXT",
+            "details": "TEXT",
+            "timestamp": "TEXT",
+        },
     }
 
     for table, columns in migrations.items():
