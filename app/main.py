@@ -28,7 +28,7 @@ async def security_headers(request: Request, call_next):
     if SESSION_HTTPS_ONLY:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
-SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "oumadavis62@gmail.com")
+SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
@@ -90,7 +90,14 @@ def init_db():
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (SUPER_ADMIN,hash_password("DaviSchool@2026!"),"super_admin","Davis Ouma",0))
+        legacy_admin = cur.execute("SELECT * FROM users WHERE email=?", ("oumadavis62@gmail.com",)).fetchone()
+        admin_password = os.environ.get("DAVISCHOOL_SUPER_ADMIN_PASSWORD", "DaviSchool@2026!")
+        if legacy_admin:
+            cur.execute("UPDATE users SET email=?, password=?, role=?, full_name=?, school_id=? WHERE id=?",
+                        (SUPER_ADMIN, hash_password(admin_password), "super_admin", "Davis Ouma", 0, legacy_admin["id"]))
+        else:
+            cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
+                        (SUPER_ADMIN,hash_password(admin_password),"super_admin","Davis Ouma",0))
     con.commit(); con.close()
 init_db()
 
