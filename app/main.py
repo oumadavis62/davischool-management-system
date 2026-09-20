@@ -386,6 +386,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     popup=""
     if success=="invalid_code" and pending: popup=f"""<div style="margin-bottom:16px;background:#fff1f2;border:1.5px solid #fb7185;border-radius:12px;padding:16px"><div style="font-weight:800;color:#9f1239">❌ Verification code is incorrect</div><div style="font-size:12px;color:#64748b;margin:6px 0 12px">Enter the 6-digit code again.</div><form method="post" action="/verify-school-code" style="display:flex;gap:10px"><input type="hidden" name="pending_id" value="{pending_id}"><input name="auth_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="Enter 6-digit code" style="flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700;letter-spacing:4px"><button style="background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px">✅ Verify Code</button></form></div>"""
     if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800'>🔓 Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin:12px 0'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>{" ".join(list(pending["auth_code"]))}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Verify</button></form></div>"""
+    elif success=="already_added": popup=f"""<div style='margin-bottom:16px;background:#fff7ed;border:1.5px solid #fdba74;border-radius:12px;padding:16px'><div style='font-weight:800'>ℹ️ School account already exists</div><div style='font-size:12px;color:#64748b;margin-top:6px'>{school_name} • {school_email}</div><div style='margin-top:10px'><a href='/schools/manage' style='background:#0f172a;color:white;padding:9px 14px;border-radius:9px;text-decoration:none'>OK</a></div></div>"""
     elif success=="added" and new_pass: popup=f"""<div style='position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999'><div style='background:white;padding:24px;border-radius:16px;width:420px'><div style='font-size:18px;font-weight:800'>✅ {school_name} Added!</div><div style='background:#f8fafc;padding:12px;border-radius:10px;margin:12px 0;font-size:13px'><div>🏫 {school_name}</div><div>👤 {school_email}</div><div>🔑 {new_pass}</div></div><button onclick="this.closest('div').parentElement.style.display='none'" style='width:100%;background:#0f172a;color:white;padding:10px;border:none;border-radius:10px'>OK</button></div></div>"""
     rows="".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{users_by_school.get(s['id'],{}).get('email','') if users_by_school.get(s['id']) else ''}</td><td style='padding:12px 10px;font-size:12px'>••••••••</td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/super/switch-to-school/{s['id']}' style='background:#0f172a;color:white;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>👁️ View</a><a href='/schools/delete/{s['id']}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px'>🗑️</a></td></tr>" for s in schools]) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1500px;margin:auto'><div><div class='card'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
@@ -398,24 +399,63 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
     if request.session.get("role") != "super_admin":
         return RedirectResponse("/", 303)
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,))
-    pending = cur.fetchone()
-    entered = "".join(ch for ch in auth_code.strip() if ch.isdigit())
-    expected = str(pending["auth_code"]).strip() if pending else ""
-    if not pending or not hmac.compare_digest(entered, expected):
+    con = get_db()
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,))
+        pending = cur.fetchone()
+        entered = "".join(ch for ch in (auth_code or "").strip() if ch.isdigit())
+        expected = str(pending["auth_code"]).strip() if pending else ""
+        if not pending or not hmac.compare_digest(entered, expected):
+            return RedirectResponse(f"/schools/manage?success=invalid_code&pending_id={pending_id}", 303)
+
+        # Prevent duplicate school-admin accounts from being created if a
+        # verification request is accidentally submitted twice.
+        existing = cur.execute(
+            "SELECT id, school_id FROM users WHERE lower(email)=lower(?) AND role='school_admin'",
+            (pending["email"].strip(),)
+        ).fetchone()
+        if existing:
+            cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
+            con.commit()
+            return RedirectResponse(
+                f"/schools/manage?success=already_added&school_email={pending['email']}&school_name={pending['name']}",
+                303
+            )
+
+        school_code = str(random.randint(100000, 999999))
+        unique_pass = generate_unique_password(pending["name"])
+        cur.execute(
+            "INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)",
+            (pending["name"], pending["email"], school_code, pending["location"],
+             pending["phone"], pending["principal"], pending["school_type"])
+        )
+        sid = cur.lastrowid
+        cur.execute(
+            "INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
+            (pending["email"].strip(), hash_password(unique_pass), "school_admin",
+             pending["principal"], sid)
+        )
+        cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
+        con.commit()
+    except sqlite3.Error as exc:
+        con.rollback()
+        safe_message = str(exc).replace("<", "&lt;").replace(">", "&gt;")
+        return HTMLResponse(
+            f"<html><body style='font-family:Arial;padding:30px;background:#f8fafc'>"
+            f"<div style='max-width:620px;margin:auto;background:white;padding:24px;border-radius:16px'>"
+            f"<h2>School verification could not be completed</h2>"
+            f"<p>The database rejected the registration. No partial school account was created.</p>"
+            f"<p style='font-size:12px;color:#64748b'>Technical detail: {safe_message}</p>"
+            f"<a href='/schools/manage'>Return to Manage Schools</a></div></body></html>", 500
+        )
+    finally:
         con.close()
-        return RedirectResponse(f"/schools/manage?success=invalid_code&pending_id={pending_id}", 303)
-    code = str(random.randint(100000,999999))
-    unique_pass = generate_unique_password(pending["name"])
-    cur.execute("INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)",
-                (pending["name"], pending["email"], code, pending["location"], pending["phone"], pending["principal"], pending["school_type"]))
-    sid = cur.lastrowid
-    cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
-                (pending["email"], hash_password(unique_pass), "school_admin", pending["principal"], sid))
-    cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
-    con.commit(); con.close()
-    return RedirectResponse(f"/schools/manage?success=added&new_pass={unique_pass}&school_email={pending['email']}&school_name={pending['name']}", 303)
+
+    return RedirectResponse(
+        f"/schools/manage?success=added&new_pass={unique_pass}"
+        f"&school_email={pending['email']}&school_name={pending['name']}", 303
+    )
 
 @app.get("/schools/delete/{sid}")
 def delete_school(sid: int, request: Request):
