@@ -84,6 +84,67 @@ def install_legacy_school_redirect(app):
 
         response = await call_next(request)
 
+        # Show the requested credential-success prompt after verification.
+        if (
+            path == "/schools/manage"
+            and request.method.upper() == "GET"
+            and request.query_params.get("success") == "added"
+            and request.query_params.get("school_email")
+            and request.query_params.get("school_name")
+            and request.query_params.get("new_pass")
+            and response.status_code == 200
+        ):
+            try:
+                import html as _html
+                school_name = _html.escape(str(request.query_params.get("school_name") or ""))
+                email = _html.escape(str(request.query_params.get("school_email") or ""))
+                password = _html.escape(str(request.query_params.get("new_pass") or ""))
+                body = b""
+                async for chunk in response.body_iterator:
+                    body += chunk
+                page = body.decode("utf-8")
+                success_prompt = f"""
+<style>
+.davi-success-overlay{{position:fixed;inset:0;background:rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999}}
+.davi-success-card{{width:min(760px,96vw);background:#dcfce7;border:3px solid #16a34a;border-radius:18px;padding:28px;box-shadow:0 24px 70px rgba(15,23,42,.25);font-family:Arial,sans-serif}}
+.davi-success-title{{font-size:25px;font-weight:900;color:#166534;margin-bottom:18px}}
+.davi-credentials{{background:#fff;border:1.5px dashed #22c55e;border-radius:14px;padding:18px;margin-bottom:18px}}
+.davi-label{{font-size:15px;color:#64748b;margin-top:8px}}
+.davi-value{{font-size:25px;font-weight:900;color:#166534;word-break:break-word;margin-top:3px}}
+.davi-ok{{display:block;margin-left:auto;background:#0f172a;color:white;border:0;border-radius:12px;padding:13px 30px;font-size:17px;font-weight:900;cursor:pointer}}
+.davi-ok:hover{{opacity:.9}}
+</style>
+<div id="daviSuccessOverlay" class="davi-success-overlay">
+  <div class="davi-success-card" role="dialog" aria-modal="true" aria-labelledby="daviSuccessTitle">
+    <div id="daviSuccessTitle" class="davi-success-title">✅ Success! 🏫 {school_name}</div>
+    <div class="davi-credentials">
+      <div class="davi-label">👤 Username:</div>
+      <div class="davi-value">{email}</div>
+      <div class="davi-label">🔑 Password:</div>
+      <div class="davi-value">{password}</div>
+    </div>
+    <button type="button" class="davi-ok" onclick="closeDaviSuccess()">OK ✅</button>
+  </div>
+</div>
+<script>
+function closeDaviSuccess(){
+  const el=document.getElementById('daviSuccessOverlay');
+  if(el) el.remove();
+  try{history.replaceState({},document.title,'/schools/manage');}catch(e){}
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDaviSuccess();});
+</script>
+"""
+                page = page.replace("</body>", success_prompt + "</body>", 1) if "</body>" in page else page + success_prompt
+                return Response(
+                    content=page,
+                    status_code=response.status_code,
+                    headers={k:v for k,v in response.headers.items() if k.lower() not in ("content-length","content-type")},
+                    media_type="text/html",
+                )
+            except Exception as exc:
+                print("DAVISCHOOL SUCCESS PROMPT RENDER ERROR:", repr(exc), flush=True)
+
         # Restyle the existing code-sent panel to match the supplied design.
         if (
             path == "/schools/manage"
