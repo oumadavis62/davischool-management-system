@@ -398,7 +398,7 @@ def register_school(school_name: str = Form(...), school_email: str = Form(...),
     auth_code = str(random.randint(100000, 999999)); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, auth_code, ts))
     pending_id = cur.lastrowid; con.commit(); con.close(); return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
-@app.post("/verify-school-code")
+@app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
     if request.session.get("role") != "super_admin":
         return RedirectResponse("/", status_code=303)
@@ -407,52 +407,97 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
     try:
         cur = con.cursor()
         pending = cur.execute("SELECT * FROM pending_schools WHERE id=?", (str(pending_id).strip(),)).fetchone()
-        entered = "".join(ch for ch in (auth_code or "") if ch.isdigit())
-        expected = "".join(ch for ch in (str(pending["auth_code"]) if pending else "") if ch.isdigit())
+        if not pending:
+            return RedirectResponse("/schools/manage?success=invalid_code", status_code=303)
 
-        if not pending or not hmac.compare_digest(entered, expected):
+        entered = "".join(ch for ch in (auth_code or "") if ch.isdigit())
+        expected = "".join(ch for ch in str(pending["auth_code"] or "") if ch.isdigit())
+        if not expected or not hmac.compare_digest(entered, expected):
             return RedirectResponse(
                 f"/schools/manage?success=invalid_code&pending_id={pending_id}", status_code=303
             )
 
-        email = str(pending["email"]).strip()
+        email = str(pending["email"] or "").strip()
+        if not email:
+            raise ValueError("School administrator email is missing.")
+
         existing = cur.execute(
             "SELECT id, school_id FROM users WHERE lower(email)=lower(?) AND role='school_admin'",
             (email,)
         ).fetchone()
         if existing:
-            cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
-            con.commit()
             return RedirectResponse(
-                f"/schools/manage?success=already_added&school_email={email}&school_name={pending['name']}",
+                f"/schools/manage?success=already_added&school_email={quote(email)}&school_name={quote(str(pending['name']))}",
                 status_code=303
             )
+
+        # Production databases may have been created by an older version.
+        # Add the columns required by school provisioning before inserting.
+        for table, column, definition in [
+            ("schools", "school_type", "TEXT"),
+            ("users", "full_name", "TEXT"),
+            ("users", "school_id", "INTEGER"),
+        ]:
+            cols = [row["name"] for row in cur.execute(f"PRAGMA table_info({table})").fetchall()]
+            if column not in cols:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
         school_code = str(random.randint(100000, 999999))
         unique_pass = generate_unique_password(str(pending["name"]))
 
         cur.execute(
             "INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)",
-            (pending["name"], email, school_code, pending["location"], pending["phone"],
-             pending["principal"], pending["school_type"])
+            (
+                str(pending["name"] or "").strip(),
+                email,
+                school_code,
+                str(pending["location"] or "").strip(),
+                str(pending["phone"] or "").strip(),
+                str(pending["principal"] or "").strip(),
+                str(pending["school_type"] or "Primary").strip(),
+            )
         )
         school_id = cur.lastrowid
 
         cur.execute(
             "INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
-            (email, hash_password(unique_pass), "school_admin",
-             pending["principal"], school_id)
+            (
+                email,
+                hash_password(unique_pass),
+                "school_admin",
+                str(pending["principal"] or "").strip(),
+                school_id,
+            )
         )
 
         cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
         con.commit()
 
-        from urllib.parse import quote
-        return RedirectResponse(
-            f"/schools/manage?success=added&new_pass={quote(unique_pass)}"
-            f"&school_email={quote(email)}&school_name={quote(str(pending['name']))}",
-            status_code=303
-        )
+        # Return the success screen directly. This avoids losing the generated
+        # credentials during a redirect and guarantees the OK button is shown.
+        safe_name = str(pending["name"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        safe_email = email.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        safe_pass = unique_pass.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        return HTMLResponse(f"""<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>School Created - DaviSchool</title></head>
+<body style="margin:0;font-family:Arial,sans-serif;background:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center">
+<div style="position:fixed;inset:0;background:rgba(15,23,42,.30);display:flex;align-items:center;justify-content:center;padding:20px">
+<div style="width:min(700px,96vw);background:#dcfce7;border:3px solid #16a34a;border-radius:18px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,.20)">
+<div style="font-size:26px;font-weight:900;color:#166534;margin-bottom:20px">✅ School Created Successfully</div>
+<div style="font-size:15px;color:#475569;margin-bottom:16px">The school has been added and its administrator login has been created.</div>
+<div style="font-size:15px;color:#64748b">🏫 School</div>
+<div style="font-size:22px;font-weight:900;color:#166534;margin:4px 0 18px">{safe_name}</div>
+<div style="background:white;border:1.5px dashed #22c55e;border-radius:14px;padding:20px">
+<div style="font-size:14px;color:#64748b">👤 Username / Email</div>
+<div style="font-size:24px;font-weight:900;color:#166534;word-break:break-word;margin:5px 0 16px">{safe_email}</div>
+<div style="font-size:14px;color:#64748b">🔑 Password</div>
+<div style="font-size:24px;font-weight:900;color:#166534;word-break:break-word;margin-top:5px">{safe_pass}</div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+<a href="/schools/manage" style="background:#0f172a;color:white;text-decoration:none;border-radius:12px;padding:13px 30px;font-size:16px;font-weight:900">OK ✅</a>
+</div>
+</div></div></body></html>""")
     except Exception as exc:
         try:
             con.rollback()
