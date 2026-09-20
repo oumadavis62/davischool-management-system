@@ -11,25 +11,38 @@ def _db():
     return get_db()
 
 def _shell(title, name, role, body):
-    nav = [
-        ("/app","⌂","Overview"),
-        ("/app/students","🎓","Students"),
-        ("/app/staff","👩‍🏫","Staff & Teachers"),
-        ("/app/classes","🏫","Classes"),
-        ("/app/subjects","📚","Subjects"),
-        ("/app/exams","🧪","Examinations"),
-        ("/app/academics","📝","Academics"),
-        ("/app/academics/analysis","📊","Academic Analysis"),
-        ("/app/report-cards","📄","Report Cards"),
-        ("/app/attendance","✓","Attendance"),
-        ("/app/timetable","🗓","Timetable"),
-        ("/app/finance","💰","Fees & Finance"),
-        ("/app/accounting","📚","Accounting"),
-        ("/app/announcements","📢","Announcements"),
-        ("/app/users","👤","Users"),
-        ("/app/roles","🔐","Roles & Permissions"),
-        ("/app/audit","🛡","Audit Trail"),
-    ]
+    # Keep the sidebar aligned with the authenticated workspace.
+    # Super Admin users must not be offered school-scoped pages because those
+    # pages intentionally require a school_id and would otherwise redirect
+    # back to the login page.
+    if role == "super_admin":
+        nav = [
+            ("/app","⌂","Platform Overview"),
+            ("/schools/manage","🏫","Manage Schools"),
+            ("/super/global-control/dashboard","🌍","Global Control"),
+            ("/account/change-password","🔑","My Account"),
+            ("/school/system-audit","🛡","Audit & Security"),
+        ]
+    else:
+        nav = [
+            ("/app","⌂","Overview"),
+            ("/app/students","🎓","Students"),
+            ("/app/staff","👩‍🏫","Staff & Teachers"),
+            ("/app/classes","🏫","Classes"),
+            ("/app/subjects","📚","Subjects"),
+            ("/app/exams","🧪","Examinations"),
+            ("/app/academics","📝","Academics"),
+            ("/app/academics/analysis","📊","Academic Analysis"),
+            ("/app/report-cards","📄","Report Cards"),
+            ("/app/attendance","✓","Attendance"),
+            ("/app/timetable","🗓","Timetable"),
+            ("/app/finance","💰","Fees & Finance"),
+            ("/app/accounting","📚","Accounting"),
+            ("/app/announcements","📢","Announcements"),
+            ("/app/users","👤","Users"),
+            ("/app/roles","🔐","Roles & Permissions"),
+            ("/app/audit","🛡","Audit Trail"),
+        ]
     links="".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l in nav)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     return f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
