@@ -577,7 +577,13 @@ def add_student(request: Request, admission_no: str = Form(...), assessment_no: 
     cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_phone, category, guardian_name) VALUES (?,?,?,?,?,?,?,?,?)", (school["id"], admission_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), class_id, gender.strip(), parent_phone.strip(), category.strip(), guardian_name.strip().upper()))
     con.commit(); con.close(); return RedirectResponse("/school/students",303)
 @app.get("/school/students/delete/{sid}")
-def del_stud(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM students WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/students",303)
+def del_stud(sid: int, request: Request):
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/",303)
+    con = get_db(); cur = con.cursor()
+    cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (sid, school["id"]))
+    con.commit(); con.close()
+    return RedirectResponse("/school/students",303)
 
 @app.get("/school/dean-settings", response_class=HTMLResponse)
 def dean_settings(request: Request, tab: str = "terms"):
@@ -630,7 +636,13 @@ def school_classes(request: Request):
 def add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 @app.get("/school/classes/delete/{cid}")
-def del_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
+def del_class(cid: int, request: Request):
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/",303)
+    con = get_db(); cur = con.cursor()
+    cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"]))
+    con.commit(); con.close()
+    return RedirectResponse("/school/classes",303)
 
 # EXAM SETTINGS RESTORED - EXACT — YOUR PART 2
 @app.get("/school/exams", response_class=HTMLResponse)
@@ -682,7 +694,13 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""),
     con.commit(); con.close()
     return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
-def del_teacher(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teachers WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
+def del_teacher(tid: int, request: Request):
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/",303)
+    con = get_db(); cur = con.cursor()
+    cur.execute("DELETE FROM teachers WHERE id=? AND school_id=?", (tid, school["id"]))
+    con.commit(); con.close()
+    return RedirectResponse("/school/teachers",303)
 
 # === ONLY CHANGED PART — RECORD MARKS EXACT PHOTO ===
 @app.get("/school/record-marks", response_class=HTMLResponse)
@@ -1658,9 +1676,9 @@ def school_other(path: str, request: Request):
         classes=cur.execute("SELECT COUNT(*) n FROM classes WHERE school_id=?",(school_id,)).fetchone()["n"]
         fees_total=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM fees WHERE school_id=?",(school_id,)).fetchone()["n"]
         if path=="students":
-            rows=cur.execute("SELECT name,admission_no,class_name,stream,gender FROM students WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Student Directory</b><input class='search' type='search' placeholder='Search students'></div><table><tr><th>Name</th><th>Admission</th><th>Class</th><th>Stream</th><th>Gender</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['admission_no'] or ''}</td><td>{r['class_name'] or ''}</td><td>{r['stream'] or ''}</td><td>{r['gender'] or ''}</td></tr>" for r in rows)+"</table></div>"
+            rows=cur.execute("SELECT s.name,s.admission_no,c.name class_name,c.stream,s.gender FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Student Directory</b><input class='search' type='search' placeholder='Search students'></div><table><tr><th>Name</th><th>Admission</th><th>Class</th><th>Stream</th><th>Gender</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['admission_no'] or ''}</td><td>{r['class_name'] or ''}</td><td>{r['stream'] or ''}</td><td>{r['gender'] or ''}</td></tr>" for r in rows)+"</table></div>"
         elif path=="teachers":
-            rows=cur.execute("SELECT name,email,phone,subject FROM teachers WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Staff Directory</b><input class='search' type='search' placeholder='Search staff'></div><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['email'] or ''}</td><td>{r['phone'] or ''}</td><td>{r['subject'] or ''}</td></tr>" for r in rows)+"</table></div>"
+            rows=cur.execute("SELECT name,email,phone,role FROM teachers WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Staff Directory</b><input class='search' type='search' placeholder='Search staff'></div><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['email'] or ''}</td><td>{r['phone'] or ''}</td><td>{r['role'] or ''}</td></tr>" for r in rows)+"</table></div>"
         elif path=="fees":
             rows=cur.execute("SELECT f.*,s.name student_name FROM fees f LEFT JOIN students s ON s.id=f.student_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Fee Register</b><input class='search' type='search' placeholder='Search fee records'></div><table><tr><th>Student</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['student_name'] or ''}</td><td>{r['amount'] or 0}</td><td>{r['paid'] or 0}</td><td>{(r['amount'] or 0)-(r['paid'] or 0)}</td><td><span class='badge'>{r['status'] or 'Pending'}</span></td></tr>" for r in rows)+"</table></div>"
         elif path=="attendance":
