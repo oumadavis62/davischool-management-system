@@ -400,7 +400,21 @@ def dashboard(request: Request):
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
     rows = "".join([f"<tr><td style='padding:10px 14px;font-size:12px;font-weight:600'>{s['name']}</td><td style='padding:10px 14px;font-size:12px'>{s['location']}</td><td><span style='background:#dcfce7;color:#166534;padding:3px 8px;border-radius:12px;font-size:10px'>Active</span></td><td style='padding:10px 14px;font-size:11px;color:#64748b'>Today</td></tr>" for s in recent]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No schools yet</td></tr>"
     content = f"""<div style='padding:20px;max-width:1400px;margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0;font-size:22px;font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0;color:#64748b;font-size:13px'>Welcome {name}</p></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px;font-weight:900;margin:12px 0 8px'>{total}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px;font-weight:900;margin:12px 0 8px'>{total}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px;font-weight:900;margin:12px 0 8px'>KES {total*15000}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px;font-weight:900;margin:10px 0 8px'>0</div></div></div><div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'><div style='padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='font-weight:800;font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 14px'>Name</th><th>Location</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:10px;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:600;font-size:13px;margin-bottom:10px'>🏫 Manage Schools</a><a href='/super/global-control/dashboard' style='display:block;text-align:center;background:#0f172a;color:white;padding:10px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px'>🌍 Global Control</a></div></div></div></div>"""
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}<script>
+async function viewSchoolPassword(id){{
+  try{{
+    let r=await fetch('/schools/password/'+id);
+    let d=await r.json();
+    if(d.needs_reset){{
+      if(!confirm('This password cannot be recovered because it was created before secure password viewing was enabled. Generate a new password for this school and show it now?')) return;
+      r=await fetch('/schools/password/'+id+'?reset=1');
+      d=await r.json();
+    }}
+    if(d.ok) alert((d.reset?'New password generated and saved.\\n\\n':'School administrator password:\\n\\n')+d.password);
+    else alert(d.message||'Password unavailable.');
+  }}catch(e){{ alert('Unable to retrieve the password right now.'); }}
+}}
+</script>{content}</body></html>")
 
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = "", message: str = ""):
@@ -420,7 +434,14 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800'>🔓 Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin:12px 0'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>{" ".join(list(pending["auth_code"]))}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Verify</button></form></div>"""
     elif success=="added" and new_pass:
         popup=f"""<div id='daviSuccessOverlay' style='position:fixed;inset:0;background:rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999'><div style='width:min(760px,96vw);background:#dcfce7;border:3px solid #16a34a;border-radius:18px;padding:28px;font-family:Arial,sans-serif'><div style='font-size:25px;font-weight:900;color:#166534;margin-bottom:18px'>✅ Success! 🏫 {school_name}</div><div style='background:white;border:1.5px dashed #22c55e;border-radius:14px;padding:18px;margin-bottom:18px'><div style='font-size:15px;color:#64748b'>👤 Username:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{school_email}</div><div style='font-size:15px;color:#64748b;margin-top:12px'>🔑 Password:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{new_pass}</div></div><button type='button' onclick="document.getElementById('daviSuccessOverlay').remove()" style='display:block;margin-left:auto;background:#0f172a;color:white;border:0;border-radius:12px;padding:13px 30px;font-size:17px;font-weight:900;cursor:pointer'>OK ✅</button></div></div>"""
-    rows="".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{users_by_school[s['id']]['email'] if s['id'] in users_by_school else ''}</td><td style='padding:12px 10px;font-size:12px'>••••••••</td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/super/switch-to-school/{s['id']}' style='background:#0f172a;color:white;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>👁️ View</a><a href='/schools/delete/{s['id']}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px'>🗑️</a></td></tr>" for s in schools]) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
+    rows=[]
+    for s in schools:
+        sid=int(s["id"])
+        admin=users_by_school.get(sid)
+        admin_email=admin["email"] if admin else ""
+        school_name_js=str(s["name"] or "this school").replace("\\","\\\\").replace("'","\\'")
+        rows.append(f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/super/switch-to-school/{sid}' style='background:#0f172a;color:white;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>👁️ View</a><a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' onclick="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')" style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️</a></td></tr>")
+    rows="".join(rows) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1500px;margin:auto'><div><div class='card'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -537,6 +558,77 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
 @app.get("/verify-school-code")
 def verify_school_code_get():
     return RedirectResponse("/schools/manage", status_code=303)
+
+@app.get("/schools/password/{sid}")
+def view_school_password(sid: int, request: Request, reset: int = 0):
+    if request.session.get("role") != "super_admin":
+        return JSONResponse({"ok": False, "message": "Not authorized."}, status_code=403)
+    con=get_db(); cur=con.cursor()
+    school=cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    user=cur.execute("SELECT * FROM users WHERE school_id=? AND role='school_admin' ORDER BY id LIMIT 1", (sid,)).fetchone()
+    if not school or not user:
+        con.close()
+        return JSONResponse({"ok": False, "message": "School administrator account not found."}, status_code=404)
+    token=user["credential_secret"] if "credential_secret" in user.keys() else None
+    if token:
+        try:
+            password=decrypt_credential(token)
+            con.close()
+            return JSONResponse({"ok": True, "password": password, "reset": False})
+        except (InvalidToken, ValueError, TypeError):
+            pass
+    stored=str(user["password"] or "")
+    if stored and not stored.startswith(PASSWORD_SCHEME+"$"):
+        con.close()
+        return JSONResponse({"ok": True, "password": stored, "reset": False})
+    if not reset:
+        con.close()
+        return JSONResponse({"ok": False, "needs_reset": True, "message": "Password is securely hashed and cannot be recovered."})
+    new_pass=generate_unique_password(str(school["name"] or "DaviSchool"))
+    cur.execute("UPDATE users SET password=?, credential_secret=? WHERE id=?", (hash_password(new_pass), encrypt_credential(new_pass), user["id"]))
+    con.commit(); con.close()
+    return JSONResponse({"ok": True, "password": new_pass, "reset": True})
+
+@app.get("/schools/edit/{sid}", response_class=HTMLResponse)
+def edit_school(sid: int, request: Request):
+    if request.session.get("role") != "super_admin":
+        return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    school=cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    user=cur.execute("SELECT * FROM users WHERE school_id=? AND role='school_admin' ORDER BY id LIMIT 1", (sid,)).fetchone()
+    con.close()
+    if not school:
+        return RedirectResponse("/schools/manage")
+    email=user["email"] if user else school["email"]
+    full_name=user["full_name"] if user else school["principal"]
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Edit School · DaviSchool</title><style>
+body{{margin:0;font-family:Arial;background:#f8fafc;color:#172033}}.wrap{{max-width:760px;margin:30px auto;padding:16px}}.card{{background:white;border:1px solid #e2e8f0;border-radius:18px;padding:24px}}label{{display:block;font-size:12px;font-weight:800;margin:12px 0 5px;color:#475569}}input,select{{width:100%;box-sizing:border-box;padding:12px;border:1px solid #dbe2ea;border-radius:10px}}.grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}button,a{{display:inline-block;padding:12px 18px;border-radius:10px;font-weight:800;text-decoration:none}}button{{border:0;background:#0f172a;color:white;cursor:pointer}}a{{border:1px solid #e2e8f0;color:#0f172a;background:white}}@media(max-width:650px){{.grid{{grid-template-columns:1fr}}}}</style></head><body><div class='wrap'><div class='card'><h1 style='margin-top:0'>✏️ Edit School</h1><div style='color:#64748b;font-size:13px;margin-bottom:18px'>Update the registered school details and its school administrator account.</div><form method='post' action='/schools/edit/{sid}' onsubmit="return confirm('Save these changes to {escape(str(school['name'] or 'this school')).replace("'","\\'") }?')"><div class='grid'><div><label>School Name</label><input name='school_name' required value='{escape(str(school['name'] or ''))}'></div><div><label>School Email</label><input name='school_email' type='email' required value='{escape(str(school['email'] or ''))}'></div><div><label>Location</label><input name='location' required value='{escape(str(school['location'] or ''))}'></div><div><label>Phone</label><input name='phone' required value='{escape(str(school['phone'] or ''))}'></div><div><label>Principal / Administrator Name</label><input name='principal' required value='{escape(str(school['principal'] or full_name or ''))}'></div><div><label>School Type</label><select name='school_type'><option {'selected' if school['school_type']=='Primary' else ''}>Primary</option><option {'selected' if school['school_type']=='Secondary' else ''}>Secondary</option><option {'selected' if school['school_type']=='Primary & Junior Secondary' else ''}>Primary & Junior Secondary</option></select></div></div><label>New School Administrator Password (optional)</label><input name='new_password' type='password' minlength='8' placeholder='Leave blank to keep current password'><div style='display:flex;gap:10px;justify-content:flex-end;margin-top:20px'><a href='/schools/manage'>Cancel</a><button type='submit'>💾 Save Changes</button></div></form></div></div></body></html>""")
+
+@app.post("/schools/edit/{sid}")
+def update_school(sid: int, request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...), new_password: str = Form("")):
+    if request.session.get("role") != "super_admin":
+        return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    school=cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    user=cur.execute("SELECT * FROM users WHERE school_id=? AND role='school_admin' ORDER BY id LIMIT 1", (sid,)).fetchone()
+    if not school:
+        con.close()
+        return RedirectResponse("/schools/manage")
+    duplicate=cur.execute("SELECT id FROM users WHERE lower(email)=lower(?) AND id<>?", (school_email.strip(), user["id"] if user else -1)).fetchone()
+    if duplicate:
+        con.close()
+        return HTMLResponse("<h3 style='font-family:Arial'>That administrator email is already in use. <a href='/schools/manage'>Back</a></h3>", status_code=400)
+    cur.execute("UPDATE schools SET name=?,email=?,location=?,phone=?,principal=?,school_type=? WHERE id=?", (school_name.strip(),school_email.strip(),location.strip(),phone.strip(),principal.strip(),school_type.strip(),sid))
+    if user:
+        if new_password.strip():
+            cur.execute("UPDATE users SET email=?,full_name=?,password=?,credential_secret=? WHERE id=?", (school_email.strip(),principal.strip(),hash_password(new_password.strip()),encrypt_credential(new_password.strip()),user["id"]))
+        else:
+            cur.execute("UPDATE users SET email=?,full_name=? WHERE id=?", (school_email.strip(),principal.strip(),user["id"]))
+    else:
+        if new_password.strip():
+            cur.execute("INSERT INTO users(email,password,role,full_name,school_id,credential_secret) VALUES(?,?,?,?,?,?)",(school_email.strip(),hash_password(new_password.strip()),"school_admin",principal.strip(),sid,encrypt_credential(new_password.strip())))
+    con.commit(); con.close()
+    return RedirectResponse("/schools/manage?success=updated",303)
 
 @app.get("/schools/delete/{sid}")
 def delete_school(sid: int, request: Request):
