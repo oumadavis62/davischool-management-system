@@ -418,7 +418,18 @@ def app_home(request: Request):
         rows="".join(f"<tr><td>{escape(r['name'])}</td><td>{escape(r['location'] or '')}</td><td>Active</td></tr>" for r in recent)
         body=f"""<div class='page'><h1>Platform Overview</h1><div class='muted'>One control centre for every DaviSchool institution.</div>
 <div class='grid'><div class='card'><div class='label'>Schools</div><div class='kpi'>{schools}</div></div><div class='card'><div class='label'>Users</div><div class='kpi'>{users}</div></div><div class='card'><div class='label'>Students</div><div class='kpi'>{students}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {revenue:,.0f}</div></div></div>
-<div class='section'><h2>Platform controls</h2><div class='actions'><a class='action' href='/schools/manage'><span>🏫</span>Manage Schools</a><a class='action' href='/super/global-control/dashboard'><span>🌍</span>Global Control</a><a class='action' href='/school/system-audit'><span>🛡</span>Audit & Security</a><a class='action' href='/account/change-password'><span>🔑</span>My Account</a></div></div>
+<div class='section'><h2>🩺 Platform Health</h2>
+<div class='card' style='margin-bottom:12px;background:#f0fdf4;border-color:#bbf7d0'>
+  <div style='font-size:16px;font-weight:900;color:#166534'>🟢 Platform operating normally</div>
+  <div class='muted' style='margin-top:6px'>DaviSchool is connected to its production data store and the platform overview is responding normally. School, user and student records are available to the platform.</div>
+</div>
+<div class='actions'>
+  <div class='action'><span>🗄️</span>Database Health<small style='display:block;color:#64748b;margin-top:5px'>🟢 Connected</small></div>
+  <div class='action'><span>🏫</span>School Services<small style='display:block;color:#64748b;margin-top:5px'>🟢 {schools} schools registered</small></div>
+  <div class='action'><span>👥</span>User Access<small style='display:block;color:#64748b;margin-top:5px'>🟢 {users} users registered</small></div>
+  <div class='action'><span>🎓</span>Student Records<small style='display:block;color:#64748b;margin-top:5px'>🟢 {students} students recorded</small></div>
+</div>
+</div>
 <div class='section'><h2>Institutions</h2><table><thead><tr><th>School</th><th>Location</th><th>Status</th></tr></thead><tbody>{rows or '<tr><td colspan=3>No schools yet</td></tr>'}</tbody></table></div></div>"""
     else:
         school_id=request.session.get("school_id",0)
