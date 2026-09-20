@@ -334,7 +334,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         return RedirectResponse("/dashboard", status_code=303)
     if u["role"] in ["teacher", "parent", "student"]:
         return RedirectResponse("/portal", status_code=303)
-    return RedirectResponse("/school/dashboard", status_code=303)
+    return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
@@ -1931,3 +1931,8 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
+
+
+# DaviSchool unified application UI
+from app.new_ui import router as new_ui_router
+app.include_router(new_ui_router)
