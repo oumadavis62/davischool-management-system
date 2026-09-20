@@ -1,18 +1,26 @@
 """DaviSchool package bootstrap.
 
-When Render provides DATABASE_URL, transparently route the legacy sqlite3
-connection calls in app.main to the PostgreSQL compatibility layer. Local
-development continues to use normal SQLite.
+Render production must use managed PostgreSQL. Local development continues
+to use SQLite when DATABASE_URL is absent.
 """
 import os
 
-if os.environ.get("DATABASE_URL"):
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# Never silently fall back to an ephemeral SQLite database on Render.
+if os.environ.get("RENDER") and not DATABASE_URL:
+    raise RuntimeError(
+        "DaviSchool production database is not configured. "
+        "DATABASE_URL must be supplied by the Render PostgreSQL service."
+    )
+
+if DATABASE_URL:
     import sqlite3
     from .db import connect as _postgres_connect
 
     def _connect(database, *args, **kwargs):
         return _postgres_connect(
-            os.environ["DATABASE_URL"],
+            DATABASE_URL,
             connect_timeout=kwargs.pop("connect_timeout", 10),
         )
 
