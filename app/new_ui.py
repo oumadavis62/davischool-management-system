@@ -575,3 +575,116 @@ def accounting_expense(request: Request,category:str=Form(...),description:str=F
     if not sid:return RedirectResponse("/",303)
     con=_db();cur=con.cursor();cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date) VALUES(?,?,?,?,?,?,?)",(sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")))
     _audit(cur,sid,request,"EXPENSE_CREATE",f"{category}: {amount}");con.commit();con.close();return RedirectResponse("/app/accounting",303)
+
+
+def _ensure_assessment_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS assessment_scores(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER,
+        subject_id INTEGER, term TEXT, year TEXT, component TEXT,
+        score REAL, out_of REAL, created_at TEXT)""")
+
+@router.get("/app/academics/allocations", response_class=HTMLResponse)
+def allocations_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    teachers=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    rows=cur.execute("""SELECT ta.*,t.name teacher_name,s.name subject_name,c.name class_name,c.stream
+                        FROM teacher_allocations ta JOIN teachers t ON t.id=ta.teacher_id
+                        JOIN subjects s ON s.id=ta.subject_id JOIN classes c ON c.id=ta.class_id
+                        WHERE ta.school_id=? ORDER BY t.name,s.name,c.name""",(sid,)).fetchall()
+    con.close()
+    opts=lambda xs,label: "".join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' '+escape(str(x['stream'] or ''))) if label=='class' else ''}</option>" for x in xs)
+    tr=_simple_rows(rows,["teacher_name","subject_name","class_name","stream"])
+    body=f"""<div class='page'><h1>Teacher Allocation</h1><div class='muted'>Assign teachers to subjects and classes.</div>
+<div class='card section'><form method='post' action='/app/academics/allocations/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<select name='teacher_id' required class='field'>{opts(teachers,'teacher')}</select><select name='subject_id' required class='field'>{opts(subjects,'subject')}</select><select name='class_id' required class='field'>{opts(classes,'class')}</select><button class='btn'>Save Allocation</button></form></div>
+<div class='card section'><h2>Current allocations ({len(rows)})</h2><table><thead><tr><th>Teacher</th><th>Subject</th><th>Class</th><th>Stream</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Teacher Allocation",body)
+
+@router.post("/app/academics/allocations/add")
+def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=Form(...),class_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    valid=all(cur.execute(q,(x,sid)).fetchone() for q,x in [
+        ("SELECT id FROM teachers WHERE id=? AND school_id=?",teacher_id),
+        ("SELECT id FROM subjects WHERE id=? AND school_id=?",subject_id),
+        ("SELECT id FROM classes WHERE id=? AND school_id=?",class_id)])
+    if valid:
+        if not cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND subject_id=? AND class_id=?",(sid,teacher_id,subject_id,class_id)).fetchone():
+            cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,subject_id,class_id) VALUES(?,?,?,?)",(sid,teacher_id,subject_id,class_id))
+            _audit(cur,sid,request,"TEACHER_ALLOCATION","Created teacher allocation")
+    con.commit();con.close();return RedirectResponse("/app/academics/allocations",303)
+
+@router.get("/app/academics/assessments", response_class=HTMLResponse)
+def assessments_page(request: Request, student_id:str="", subject_id:str="", term:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();_ensure_assessment_table(cur)
+    students=cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    stid=int(student_id) if student_id.isdigit() else 0; subid=int(subject_id) if subject_id.isdigit() else 0
+    rows=cur.execute("""SELECT a.*,s.name subject_name FROM assessment_scores a JOIN subjects s ON s.id=a.subject_id
+                        WHERE a.school_id=? AND (?=0 OR a.student_id=?) AND (?=0 OR a.subject_id=?) AND (?='' OR a.term=?)
+                        ORDER BY a.id DESC LIMIT 300""",(sid,stid,stid,subid,subid,term,term)).fetchall()
+    con.commit();con.close()
+    so="".join(f"<option value='{s['id']}' {'selected' if s['id']==subid else ''}>{escape(str(s['name']))}</option>" for s in subjects)
+    sto="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    tr=_simple_rows(rows,["student_id","subject_name","term","year","component","score","out_of","created_at"])
+    body=f"""<div class='page'><h1>SBA / CBA</h1><div class='muted'>Record continuous assessment components separately from examination marks.</div>
+<div class='card section'><form method='post' action='/app/academics/assessments/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<select name='student_id' required class='field'>{sto}</select><select name='subject_id' required class='field'>{so}</select><input name='term' required placeholder='Term 1' class='field'><input name='year' required value='{datetime.now(ZoneInfo("Africa/Nairobi")).year}' class='field'><input name='component' required placeholder='CAT 1 / Project / SBA' class='field'><input name='score' required type='number' min='0' step='0.01' placeholder='Score' class='field'><input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'><button class='btn'>Save Assessment</button></form></div>
+<div class='card section'><h2>Assessment records</h2><table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th></tr></thead><tbody>{tr or '<tr><td colspan=8>No assessment records yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"SBA / CBA",body)
+
+@router.post("/app/academics/assessments/add")
+def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=Form(...),term:str=Form(...),year:str=Form(...),component:str=Form(...),score:float=Form(...),out_of:float=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if out_of<=0 or score<0 or score>out_of:return HTMLResponse("Invalid assessment score. <a href='/app/academics/assessments'>Back</a>",400)
+    con=_db();cur=con.cursor();_ensure_assessment_table(cur)
+    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if valid:
+        cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,term.strip(),year.strip(),component.strip(),score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+        _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component.strip()} for student {student_id}")
+    con.commit();con.close();return RedirectResponse("/app/academics/assessments",303)
+
+@router.get("/app/academics/student-analysis", response_class=HTMLResponse)
+def student_analysis(request: Request, student_id:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
+    rows=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
+                        FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.student_id=? AND m.school_id=?
+                        WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(stid,sid,sid)).fetchall() if stid else []
+    st=next((x for x in students if x["id"]==stid),None);con.close()
+    vals=[float(x["avg_mark"] or 0) for x in rows if int(x["entries"] or 0)>0];overall=sum(vals)/len(vals) if vals else 0
+    so="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    tr="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Student Analysis</h1><div class='muted'>{escape(str(st['name'] if st else ''))} · {escape(str(st['class_name'] if st else ''))}</div>
+<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'><select name='student_id' class='field'>{so}</select><button class='btn'>Analyse Student</button></form></div>
+<div class='grid'><div class='card'><div class='label'>Overall subject average</div><div class='kpi'>{overall:.2f}%</div></div><div class='card'><div class='label'>Subjects with marks</div><div class='kpi'>{len(vals)}</div></div></div>
+<div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{tr or '<tr><td colspan=5>No marks recorded.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Student Analysis",body)
+
+@router.get("/app/academics/class-analysis", response_class=HTMLResponse)
+def class_analysis(request: Request, exam_id:str="", class_id:str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0);cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+    rows=cur.execute("""SELECT s.id,s.name,s.admission_no,COALESCE(AVG(m.marks),0) average,COUNT(m.id) entries
+                        FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.school_id=?
+                        WHERE s.school_id=? AND s.class_id=? GROUP BY s.id,s.name,s.admission_no ORDER BY average DESC""",(eid,sid,sid,cid)).fetchall() if eid and cid else []
+    con.close(); avg=(sum(float(x["average"] or 0) for x in rows)/len(rows)) if rows else 0
+    eo="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams);co="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    tr="".join(f"<tr><td>{n}</td><td>{escape(str(x['admission_no'] or ''))}</td><td>{escape(str(x['name']))}</td><td>{x['entries']}</td><td>{float(x['average'] or 0):.2f}</td><td>{_grade(x['average'])}</td></tr>" for n,x in enumerate(rows,1))
+    body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Student performance distribution for a selected examination and class.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eo}</select><select name='class_id' class='field'>{co}</select><button class='btn'>Analyse Class</button></form></div><div class='grid'><div class='card'><div class='label'>Class average</div><div class='kpi'>{avg:.2f}%</div></div><div class='card'><div class='label'>Students</div><div class='kpi'>{len(rows)}</div></div></div><div class='card section'><table><thead><tr><th>Pos</th><th>Admission</th><th>Student</th><th>Entries</th><th>Average</th><th>Grade</th></tr></thead><tbody>{tr or '<tr><td colspan=6>No marks recorded.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Class Analysis",body)
