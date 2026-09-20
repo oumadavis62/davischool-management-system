@@ -20,3 +20,11 @@ jobs:
         run: pip install -r requirements.txt
       - name: Compile application
         run: python -m compileall -q app
+      - name: Verify PostgreSQL compatibility layer
+        run: |
+          python - <<'PY'
+          from app.db import translate_sql
+          assert "BIGSERIAL PRIMARY KEY" in translate_sql("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+          assert translate_sql("SELECT * FROM t WHERE id=?") == "SELECT * FROM t WHERE id=%s"
+          print("PostgreSQL compatibility checks passed")
+          PY
