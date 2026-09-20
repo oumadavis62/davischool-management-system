@@ -70,10 +70,77 @@ def install_legacy_school_redirect(app):
                         status_code=303
                     )
                 except Exception as exc:
-                    con.rollback()
+                    try:
+                        con.rollback()
+                    except Exception:
+                        pass
+                    error_text = str(exc)
                     print("DAVISCHOOL SCHOOL VERIFICATION ERROR:", repr(exc), flush=True)
+
+                    # SQLite can briefly be locked when Render has multiple
+                    # workers. Retry the complete write transaction a few times.
+                    if "locked" in error_text.lower() or "busy" in error_text.lower():
+                        import time
+                        for attempt in range(3):
+                            try:
+                                time.sleep(0.35 * (attempt + 1))
+                                con.close()
+                                con = core.get_db()
+                                cur = con.cursor()
+                                pending = cur.execute(
+                                    "SELECT * FROM pending_schools WHERE id=?",
+                                    (pending_id,)
+                                ).fetchone()
+                                if not pending:
+                                    break
+
+                                existing = cur.execute(
+                                    "SELECT id FROM users WHERE lower(email)=lower(?) AND role='school_admin'",
+                                    (str(pending["email"]).strip(),)
+                                ).fetchone()
+                                if existing:
+                                    con.commit()
+                                    return RedirectResponse(
+                                        "/schools/manage?success=already_added"
+                                        f"&school_email={quote(str(pending['email']))}"
+                                        f"&school_name={quote(str(pending['name']))}",
+                                        status_code=303
+                                    )
+
+                                school_code = str(core.random.randint(100000, 999999))
+                                unique_pass = core.generate_unique_password(str(pending["name"]))
+                                cur.execute(
+                                    "INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)",
+                                    (pending["name"], pending["email"], school_code,
+                                     pending["location"], pending["phone"], pending["principal"],
+                                     pending["school_type"])
+                                )
+                                school_id = cur.lastrowid
+                                cur.execute(
+                                    "INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
+                                    (str(pending["email"]).strip(), core.hash_password(unique_pass),
+                                     "school_admin", pending["principal"], school_id)
+                                )
+                                cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,))
+                                con.commit()
+                                return RedirectResponse(
+                                    "/schools/manage?success=added"
+                                    f"&new_pass={quote(unique_pass)}"
+                                    f"&school_email={quote(str(pending['email']))}"
+                                    f"&school_name={quote(str(pending['name']))}",
+                                    status_code=303
+                                )
+                            except Exception as retry_exc:
+                                try:
+                                    con.rollback()
+                                except Exception:
+                                    pass
+                                print("DAVISCHOOL SCHOOL VERIFICATION RETRY ERROR:", repr(retry_exc), flush=True)
+
                     return RedirectResponse(
-                        f"/schools/manage?success=code_sent&pending_id={quote(pending_id)}",
+                        f"/schools/manage?success=verify_error"
+                        f"&pending_id={quote(pending_id)}"
+                        f"&message={quote(error_text[:180])}",
                         status_code=303
                     )
                 finally:
