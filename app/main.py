@@ -1,4 +1,3 @@
-import html
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -618,7 +617,9 @@ body{margin:0;font-family:Arial;background:#f8fafc;color:#172033}.wrap{max-width
 </div>
 <label>New School Administrator Password (optional)</label><input name='new_password' type='password' minlength='8' placeholder='Leave blank to keep current password'>
 <div style='display:flex;gap:10px;justify-content:flex-end;margin-top:20px'><a href='/schools/manage'>Cancel</a><button type='submit'>💾 Save Changes</button></div></form></div></div></body></html>"""
-    page=page.replace("__SID__",str(sid)).replace("__NAME__",html.escape(str(school["name"] or ""))).replace("__EMAIL__",html.escape(str(school["email"] or ""))).replace("__LOCATION__",html.escape(str(school["location"] or ""))).replace("__PHONE__",html.escape(str(school["phone"] or ""))).replace("__PRINCIPAL__",html.escape(str(school["principal"] or full_name or ""))).replace("__PRIMARY__",primary_selected).replace("__SECONDARY__",secondary_selected).replace("__PJS__",pjs_selected)
+    def _safe(value):
+        return str(value or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
+    page=page.replace("__SID__",str(sid)).replace("__NAME__",_safe(school["name"])).replace("__EMAIL__",_safe(school["email"])).replace("__LOCATION__",_safe(school["location"])).replace("__PHONE__",_safe(school["phone"])).replace("__PRINCIPAL__",_safe(school["principal"] or full_name)).replace("__PRIMARY__",primary_selected).replace("__SECONDARY__",secondary_selected).replace("__PJS__",pjs_selected)
     return HTMLResponse(page)
 
 @app.post("/schools/edit/{sid}")
