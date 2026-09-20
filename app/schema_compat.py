@@ -44,8 +44,15 @@ def ensure_schema_compatibility(con):
 
     for table, columns in migrations.items():
         for column, definition in columns.items():
-            cur.execute(
-                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"
-            )
+            try:
+                cur.execute(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"
+                )
+            except Exception:
+                # SQLite does not support IF NOT EXISTS on ADD COLUMN.
+                try:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                except Exception:
+                    pass
 
     con.commit()
