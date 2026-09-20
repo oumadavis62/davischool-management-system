@@ -1,18 +1,11 @@
 """DaviSchool database compatibility layer.
 
-Production: uses Render-managed PostgreSQL when DATABASE_URL is present.
-Development: falls back to the existing SQLite database.
-
-The application was originally written against sqlite3. This module keeps
-that DB-API surface while translating the small SQLite-specific SQL subset
-used by DaviSchool to PostgreSQL, so existing routes can continue to use
-con.execute(), con.cursor(), ?, row["field"], and row[0].
+Production uses Render-managed PostgreSQL when DATABASE_URL is present.
+Development falls back to the existing SQLite database.
 """
 from __future__ import annotations
 
 import re
-from typing import Any
-
 import psycopg
 
 
@@ -30,7 +23,9 @@ class CompatRow(dict):
 
 
 def _row_factory(cursor):
-    columns = []\n    for col in (cursor.description or []):\n        columns.append(getattr(col, "name", None) or col[0])
+    columns = []
+    for col in (cursor.description or []):
+        columns.append(getattr(col, "name", None) or col[0])
 
     def make_row(values):
         return CompatRow(columns, values)
@@ -69,8 +64,6 @@ def _replace_qmarks(sql: str) -> str:
 def translate_sql(sql: str) -> str:
     q = _replace_qmarks(sql)
 
-    # SQLite's INTEGER PRIMARY KEY is an auto-generated row id. BIGSERIAL
-    # preserves that behavior in PostgreSQL for the existing application.
     q = re.sub(
         r"\bINTEGER\s+PRIMARY\s+KEY(?:\s+AUTOINCREMENT)?\b",
         "BIGSERIAL PRIMARY KEY",
@@ -78,7 +71,6 @@ def translate_sql(sql: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Make the additive schema upgrades idempotent on PostgreSQL.
     q = re.sub(
         r"\bALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)",
         r"ALTER TABLE \1 ADD COLUMN IF NOT EXISTS ",
@@ -86,20 +78,19 @@ def translate_sql(sql: str) -> str:
         flags=re.IGNORECASE,
     )
 
-    # Common SQLite spelling occasionally used by older code.
-    q = re.sub(
-        r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+",
-        "INSERT INTO ",
-        q,
-        flags=re.IGNORECASE,
-    )
-    if re.match(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+", sql, flags=re.IGNORECASE):
+    if re.match(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+", q, flags=re.IGNORECASE):
+        q = re.sub(
+            r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\s+",
+            "INSERT INTO ",
+            q,
+            flags=re.IGNORECASE,
+        )
         if "ON CONFLICT" not in q.upper():
             q = q.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
 
-    # PRAGMA statements are SQLite-only. They are not needed with PostgreSQL.
     if re.match(r"^\s*PRAGMA\b", q, flags=re.IGNORECASE):
         return "SELECT 1 AS pragma_ignored"
+
     return q
 
 
@@ -109,8 +100,7 @@ class CompatCursor:
         self._lastrowid = None
 
     def execute(self, sql, params=None):
-        translated = translate_sql(sql)
-        self._cursor.execute(translated, params)
+        self._cursor.execute(translate_sql(sql), params)
         self._lastrowid = None
         return self
 
@@ -155,16 +145,14 @@ class CompatConnection:
 
     @row_factory.setter
     def row_factory(self, value):
-        # main.py assigns sqlite3.Row. PostgreSQL already uses our compatible
-        # row factory, so retain the assignment only as metadata.
+        # main.py assigns sqlite3.Row. PostgreSQL already uses CompatRow.
         self._row_factory = value
 
     def cursor(self):
         return CompatCursor(self._conn.cursor())
 
     def execute(self, sql, params=None):
-        cur = CompatCursor(self._conn.cursor())
-        return cur.execute(sql, params)
+        return CompatCursor(self._conn.cursor()).execute(sql, params)
 
     def commit(self):
         return self._conn.commit()
