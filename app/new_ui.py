@@ -169,22 +169,251 @@ def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=F
     con=_db();cur=con.cursor();cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type) VALUES(?,?,?,?,?,?,?,?,?)",(sid,name.strip(),email.strip(),phone.strip(),tsc_no.strip(),gender.strip(),id_no.strip(),role.strip(),employment_type.strip()));_audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}");con.commit();con.close();return RedirectResponse("/app/staff",303)
 
 @router.get("/app/academics", response_class=HTMLResponse)
-def academics_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor()
-    terms=cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    marks=cur.execute("SELECT COUNT(*) c,COALESCE(AVG(mark),0) a FROM marks WHERE school_id=?",(sid,)).fetchone();con.close()
-    term_rows="".join(f"<tr><td>{escape(str(t['term_name']))}</td><td>{escape(str(t['year'] or ''))}</td><td>{escape(str(t['start_date'] or ''))}</td><td>{escape(str(t['end_date'] or ''))}</td></tr>" for t in terms)
-    exam_rows="".join(f"<tr><td>{escape(str(e['name']))}</td><td>{escape(str(e['term'] or ''))}</td><td>{escape(str(e['year'] or ''))}</td><td>{escape(str(e['exam_type'] or ''))}</td></tr>" for e in exams)
-    body=f"""<div class='page'><h1>Academic Management</h1><div class='muted'>Terms, examinations, subjects, marks and academic intelligence.</div>
-<div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(subjects)}</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>{len(exams)}</div></div><div class='card'><div class='label'>Terms</div><div class='kpi'>{len(terms)}</div></div><div class='card'><div class='label'>Average mark</div><div class='kpi'>{float(marks['a'] or 0):.1f}</div></div></div>
-<div class='section'><div class='actions'><a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a><a class='action' href='/app/academics/marks'><span>⚙</span>Set Marks</a><a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a><a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a></div></div>
-<div class='card section'><h2>Examinations</h2><table><thead><tr><th>Name</th><th>Term</th><th>Year</th><th>Type</th></tr></thead><tbody>{exam_rows or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>Terms</h2><table><thead><tr><th>Term</th><th>Year</th><th>Start</th><th>End</th></tr></thead><tbody>{term_rows or '<tr><td colspan=4>No terms.</td></tr>'}</tbody></table></div></div>"""
-    return _school_page(request,"Academic Management",body)
+def academics_page(request: Request, exam_id: str = "", class_id: str = "", subject_id: str = "", term: str = "", year: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    con = _db()
+    cur = con.cursor()
+    terms = cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+    exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+    teachers = cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    marks_stats = cur.execute(
+        "SELECT COUNT(*) c,COALESCE(AVG(marks),0) a FROM marks WHERE school_id=?", (sid,)
+    ).fetchone()
+
+    eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    cid = int(class_id) if class_id.isdigit() else 0
+    subid = int(subject_id) if subject_id.isdigit() else 0
+    selected_term = term.strip()
+    selected_year = year.strip()
+
+    # Load the selected academic slice so every control on this page actually
+    # changes the data displayed below it.
+    params = [sid]
+    q = """SELECT COUNT(m.id) entries, COALESCE(AVG(m.marks),0) avg_mark,
+                  COALESCE(MAX(m.marks),0) high, COALESCE(MIN(m.marks),0) low
+           FROM marks m WHERE m.school_id=?"""
+    if eid:
+        q += " AND m.exam_id=?"; params.append(eid)
+    if cid:
+        q += " AND m.class_id=?"; params.append(cid)
+    if subid:
+        q += " AND m.subject_id=?"; params.append(subid)
+    if selected_term:
+        q += " AND m.term=?"; params.append(selected_term)
+    if selected_year:
+        q += " AND m.year=?"; params.append(selected_year)
+    stats = cur.execute(q, params).fetchone()
+
+    con.close()
+
+    eopts = "".join(
+        f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} ({escape(str(e['year'] or ''))})</option>"
+        for e in exams
+    )
+    copts = "".join(
+        f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
+        for c in classes
+    )
+    sopts = "".join(
+        f"<option value='{s['id']}' {'selected' if s['id']==subid else ''}>{escape(str(s['name']))}</option>"
+        for s in subjects
+    )
+    topts = "".join(
+        f"<option value='{escape(str(t['term_name'] or t['term'] or ''))}' {'selected' if str(t['term_name'] or t['term'] or '')==selected_term else ''}>{escape(str(t['term_name'] or t['term'] or ''))}</option>"
+        for t in terms
+    ) or "".join(
+        f"<option {'selected' if x==selected_term else ''}>{x}</option>" for x in TERM_OPTIONS
+    )
+    yopts = "".join(
+        f"<option value='{y}' {'selected' if y==selected_year else ''}>{y}</option>" for y in YEAR_OPTIONS
+    )
+
+    body = f"""<div class='page'>
+<h1>Academic Management</h1>
+<div class='muted'>Complete academic workspace. Use the selectors below to load the exact term, year, exam, class and subject you want to work with.</div>
+
+<div class='grid'>
+  <div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(subjects)}</div></div>
+  <div class='card'><div class='label'>Exams</div><div class='kpi'>{len(exams)}</div></div>
+  <div class='card'><div class='label'>Classes</div><div class='kpi'>{len(classes)}</div></div>
+  <div class='card'><div class='label'>Marks Average</div><div class='kpi'>{float(marks_stats['a'] or 0):.1f}%</div></div>
+</div>
+
+<div class='card section'>
+  <h2>Academic Selection</h2>
+  <div class='muted' style='margin-bottom:12px'>Select an option and click Load Selection. The buttons below open the corresponding functional workspace with your selections.</div>
+  <form method='get' action='/app/academics' style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>
+    <select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>{yopts}</select>
+    <select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>{topts}</select>
+    <select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>All Exams</option>{eopts}</select>
+    <select name='class_id' class='field' onchange='this.form.submit()'><option value=''>All Classes</option>{copts}</select>
+    <select name='subject_id' class='field' onchange='this.form.submit()'><option value=''>All Subjects</option>{sopts}</select>
+  </form>
+</div>
+
+<div class='section'>
+  <div class='actions'>
+    <a class='action' href='/app/academics/marks'><span>📝</span>Marks Entry<small>Enter and update learner marks</small></a>
+    <a class='action' href='/app/academics/marksheets'><span>📋</span>Class Marksheets<small>View class subject marks</small></a>
+    <a class='action' href='/app/academics/analysis'><span>📊</span>Subject Analysis<small>Compare subject performance</small></a>
+    <a class='action' href='/app/academics/student-analysis'><span>👤</span>Student Analysis<small>Analyse an individual learner</small></a>
+    <a class='action' href='/app/academics/class-analysis'><span>🏫</span>Class Analysis<small>Analyse class performance</small></a>
+    <a class='action' href='/app/academics/assessments'><span>🧪</span>SBA / CBA<small>Record continuous assessment</small></a>
+    <a class='action' href='/app/academics/allocations'><span>👩‍🏫</span>Teacher Allocation<small>Assign teachers to subjects</small></a>
+    <a class='action' href='/app/report-cards'><span>📄</span>Report Cards<small>Generate learner reports</small></a>
+    <a class='action' href='/app/exams'><span>⚙</span>Examinations<small>Create and manage exams</small></a>
+    <a class='action' href='/app/subjects'><span>📚</span>Subjects<small>Create and manage subjects</small></a>
+    <a class='action' href='/app/classes'><span>🏷</span>Classes & Streams<small>Create classes and streams</small></a>
+    <a class='action' href='/app/academics/marksheets?view=summary'><span>📈</span>Marks Summary<small>Class totals and averages</small></a>
+  </div>
+</div>
+
+<div class='card section'>
+  <h2>Selected Academic Snapshot</h2>
+  <div class='grid' style='margin:0'>
+    <div class='card'><div class='label'>Entries</div><div class='kpi'>{int(stats['entries'] or 0)}</div></div>
+    <div class='card'><div class='label'>Average</div><div class='kpi'>{float(stats['avg_mark'] or 0):.1f}%</div></div>
+    <div class='card'><div class='label'>Highest</div><div class='kpi'>{float(stats['high'] or 0):.1f}</div></div>
+    <div class='card'><div class='label'>Lowest</div><div class='kpi'>{float(stats['low'] or 0):.1f}</div></div>
+  </div>
+</div>
+
+<div class='card section'>
+  <h2>Quick Academic Lists</h2>
+  <table><thead><tr><th>Examination</th><th>Term</th><th>Year</th><th>Type</th><th>Action</th></tr></thead>
+  <tbody>{''.join(f"<tr><td>{escape(str(e['name']))}</td><td>{escape(str(e['term'] or ''))}</td><td>{escape(str(e['year'] or ''))}</td><td>{escape(str(e['exam_type'] or ''))}</td><td><a class='action' href='/app/academics/marks?exam_id={e['id']}'>Open Marks</a></td></tr>" for e in exams) or '<tr><td colspan=5>No examinations yet. Create one from Examinations.</td></tr>'}</tbody></table>
+</div>
+</div>
+<style>
+.field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white;cursor:pointer}
+.action small{display:block;color:#64748b;font-weight:500;margin-top:5px}
+.action:hover{border-color:#94a3b8;box-shadow:0 4px 12px #0000000b}
+</style>"""
+    return _school_page(request, "Academic Management", body)
+
+
+@router.get("/app/academics/marksheets", response_class=HTMLResponse)
+def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", subject_id: str = "", term: str = "", year: str = "", stream: str = "", view: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    con = _db()
+    cur = con.cursor()
+    exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    students = cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+
+    eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+    subid = int(subject_id) if subject_id.isdigit() else 0
+    selected_term = term.strip()
+    selected_year = year.strip()
+    selected_stream = stream.strip()
+
+    class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
+    if not selected_stream and class_row:
+        selected_stream = str(class_row["stream"] or "")
+
+    class_students = [s for s in students if int(s["class_id"] or 0) == cid]
+    if selected_stream:
+        class_students = [s for s in class_students if str(s["stream"] or class_row["stream"] if class_row else "") == selected_stream]
+
+    # Restrict the displayed marks to the chosen academic filters.
+    marks = {}
+    if eid and cid:
+        q = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"
+        params = [sid, eid, cid]
+        if selected_term:
+            q += " AND term=?"; params.append(selected_term)
+        if selected_year:
+            q += " AND year=?"; params.append(selected_year)
+        if subid:
+            q += " AND subject_id=?"; params.append(subid)
+        for row in cur.execute(q, params).fetchall():
+            marks[(int(row["student_id"]), int(row["subject_id"]))] = row["marks"]
+
+    # If no term/year was explicitly chosen, the exam selection supplies them.
+    if eid:
+        exam_row = cur.execute("SELECT term,year FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone()
+        if exam_row:
+            if not selected_term: selected_term = str(exam_row["term"] or "")
+            if not selected_year: selected_year = str(exam_row["year"] or "")
+
+    con.close()
+
+    eopts = "".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} ({escape(str(e['year'] or ''))})</option>" for e in exams)
+    copts = "".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    subjopts = "".join(f"<option value='{s['id']}' {'selected' if s['id']==subid else ''}>{escape(str(s['name']))}</option>" for s in subjects)
+    stream_values = sorted({str(c["stream"] or "") for c in classes if str(c["stream"] or "")} | {str(s["stream"] or "") for s in class_students if str(s["stream"] or "")})
+    streamopts = "".join(f"<option value='{escape(v)}' {'selected' if v==selected_stream else ''}>{escape(v)}</option>" for v in stream_values)
+    termopts = "".join(f"<option value='{x}' {'selected' if x==selected_term else ''}>{x}</option>" for x in TERM_OPTIONS)
+    yearopts = "".join(f"<option value='{y}' {'selected' if y==selected_year else ''}>{y}</option>" for y in YEAR_OPTIONS)
+
+    # Subject columns for a complete class marksheet. If a subject is selected,
+    # show only that subject; otherwise show all school subjects.
+    display_subjects = [s for s in subjects if not subid or int(s["id"]) == subid]
+    header = "".join(f"<th>{escape(str(s['name']))}</th>" for s in display_subjects)
+    body_rows = []
+    for idx, student in enumerate(class_students, 1):
+        cells = []
+        total = 0.0
+        count = 0
+        for subj in display_subjects:
+            val = marks.get((int(student["id"]), int(subj["id"])))
+            if val is not None:
+                total += float(val or 0); count += 1
+                cells.append(f"<td>{float(val):.1f}</td>")
+            else:
+                cells.append("<td>—</td>")
+        avg = total / count if count else 0
+        body_rows.append(f"<tr><td>{idx}</td><td>{escape(str(student['admission_no'] or ''))}</td><td><b>{escape(str(student['name'] or ''))}</b></td>{''.join(cells)}<td>{total:.1f}</td><td>{avg:.1f}%</td><td>{_grade(avg) if count else '—'}</td></tr>")
+    rows_html = "".join(body_rows)
+
+    title = "Class Marks Summary" if view == "summary" else "Class Marksheets"
+    body = f"""<div class='page'><h1>{title}</h1>
+<div class='muted'>Select class, stream, term, year, examination and subject. Changing a selection reloads the marksheet immediately.</div>
+<div class='card section'>
+<form method='get' action='/app/academics/marksheets' style='display:grid;grid-template-columns:repeat(6,1fr);gap:10px'>
+<select name='class_id' class='field' onchange='this.form.submit()'><option value=''>Select class</option>{copts}</select>
+<select name='stream' class='field' onchange='this.form.submit()'><option value=''>All streams</option>{streamopts}</select>
+<select name='term' class='field' onchange='this.form.submit()'><option value=''>All terms</option>{termopts}</select>
+<select name='year' class='field' onchange='this.form.submit()'><option value=''>All years</option>{yearopts}</select>
+<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select examination</option>{eopts}</select>
+<select name='subject_id' class='field' onchange='this.form.submit()'><option value=''>All subjects</option>{subjopts}</select>
+</form>
+<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:12px'>
+<a class='btnlink' href='/app/academics/marksheets?class_id={cid}&exam_id={eid}&term={escape(selected_term)}&year={escape(selected_year)}'>All Subjects</a>
+<a class='btnlink' href='/app/academics/marks?class_id={cid}&exam_id={eid}'>Enter / Edit Marks</a>
+<button class='btnlink' onclick='window.print()'>Print Marksheet</button>
+<button class='btnlink' onclick='downloadMarksheet()'>Download CSV</button>
+</div>
+</div>
+<div class='card section'>
+<div style='display:flex;justify-content:space-between;align-items:center'><div><h2>{escape(str(class_row['name'] if class_row else 'Select a class'))} {escape(str(selected_stream))}</h2><div class='muted'>{escape(selected_term or 'All terms')} · {escape(selected_year or 'All years')} · {escape(str(next((e['name'] for e in exams if e['id']==eid), 'All exams')))}</div></div><strong>{len(class_students)} students</strong></div>
+<div style='overflow:auto;margin-top:12px'><table id='marksheetTable'><thead><tr><th>Pos</th><th>Admission</th><th>Student</th>{header}<th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{rows_html or '<tr><td colspan=10>No students or marks found for the selected class.</td></tr>'}</tbody></table></div>
+</div></div>
+<style>
+.field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white;cursor:pointer}
+.btnlink{display:inline-block;padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:white;color:#172033;text-decoration:none;font-weight:800;cursor:pointer}
+@media print{.side,.top,.card:first-child{display:none!important}.page{padding:0}.card{border:0;box-shadow:none}}
+</style>
+<script>
+function downloadMarksheet(){
+ const table=document.getElementById('marksheetTable');
+ if(!table)return;
+ const rows=[...table.querySelectorAll('tr')].map(r=>[...r.querySelectorAll('th,td')].map(c=>'"'+c.innerText.replace(/"/g,'""')+'"').join(','));
+ const blob=new Blob([rows.join('\\n')],{type:'text/csv'});
+ const url=URL.createObjectURL(blob); const a=document.createElement('a');
+ a.href=url; a.download='class-marksheet.csv'; a.click(); URL.revokeObjectURL(url);
+}
+</script>"""
+    return _school_page(request, title, body)
+
 
 @router.get("/app/finance", response_class=HTMLResponse)
 def finance_page(request: Request):
