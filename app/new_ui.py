@@ -290,10 +290,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
                cells, total, total_points, escape(str(overall_grade)))
         )
 
-    school_name = ""
-    if class_row:
-        school = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone() if False else None
-    # Re-open only for the school name is unnecessary; the page title already identifies the workspace.
+    school_row = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
+    school_name = escape(str(school_row["name"])) if school_row else "DaviSchool"
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
     colspan = 3 + len(subjects) * 3 + 3
@@ -322,7 +320,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "@media print{body{background:#fff}.side,.top,.no-print{display:none!important}.main{margin-left:0}.page{padding:0;max-width:none}.marksheet-card{border:0;box-shadow:none}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
     ) % (
-        class_title, class_title, exam_name, escape(term or "All"), escape(year or "All"),
+        school_name, class_title, exam_name, escape(term or "All"), escape(year or "All"),
         header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan
     )
     con.close()
