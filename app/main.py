@@ -1,3 +1,4 @@
+from html import escape
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
