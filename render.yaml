@@ -20,7 +20,7 @@ services:
       - key: DAVISCHOOL_SUPER_ADMIN_PASSWORD
         sync: false
       - key: WEB_CONCURRENCY
-        value: "2"
+        value: "1"
 
 databases:
   - name: davischool-db
