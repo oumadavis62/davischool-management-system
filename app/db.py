@@ -98,18 +98,37 @@ class CompatCursor:
     def __init__(self, cursor):
         self._cursor = cursor
         self._lastrowid = None
+        self._pending_row = None
 
     def execute(self, sql, params=None):
-        self._cursor.execute(translate_sql(sql), params)
+        translated = translate_sql(sql)
+        # The legacy application uses sqlite3.Cursor.lastrowid after INSERTs.
+        # PostgreSQL has no DB-API lastrowid, so request the generated id from
+        # the same INSERT statement without changing application behavior.
+        if re.match(r"^\s*INSERT\b", translated, flags=re.IGNORECASE) and re.search(r"\bRETURNING\b", translated, flags=re.IGNORECASE) is None:
+            candidate = translated.rstrip().rstrip(";")
+            if re.search(r"\bINTO\s+[A-Za-z_][A-Za-z0-9_]*\s*\(", candidate, flags=re.IGNORECASE):
+                translated = candidate + " RETURNING id"
+        self._cursor.execute(translated, params)
         self._lastrowid = None
+        self._pending_row = None
+        if translated != translate_sql(sql) and re.search(r"\bRETURNING\s+id\s*$", translated, flags=re.IGNORECASE):
+            self._pending_row = self._cursor.fetchone()
+            if self._pending_row:
+                self._lastrowid = self._pending_row[0]
         return self
 
     def executemany(self, sql, seq_of_params):
         self._cursor.executemany(translate_sql(sql), seq_of_params)
         self._lastrowid = None
+        self._pending_row = None
         return self
 
     def fetchone(self):
+        if self._pending_row is not None:
+            row = self._pending_row
+            self._pending_row = None
+            return row
         return self._cursor.fetchone()
 
     def fetchmany(self, size=1):
