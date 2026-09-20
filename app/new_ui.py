@@ -352,13 +352,13 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
           %(index,escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
-    school_row = cur.execute("SELECT name,email,phone,postal_address,postal_code,logo_data FROM schools WHERE id=?", (sid,)).fetchone()
+    school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
     school_name = escape(str(school_row["name"])) if school_row else "DaviSchool"
     school_email = escape(str(school_row["email"] or "")) if school_row else ""
     school_phone = escape(str(school_row["phone"] or "")) if school_row else ""
-    school_postal = escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and school_row["postal_address"] else ""
-    school_postal_code = escape(str(school_row["postal_code"] or "")) if school_row else ""
-    school_logo = str(school_row["logo_data"] or "") if school_row else ""
+    school_postal = escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and "postal_address" in school_row.keys() and school_row["postal_address"] else ""
+    school_postal_code = escape(str(school_row["postal_code"] or "")) if school_row and "postal_code" in school_row.keys() else ""
+    school_logo = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
@@ -811,13 +811,13 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     total=sum(float(r["marks"] or 0) for r in rows);avg=total/len(rows) if rows else 0
     markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{r['marks']}</td><td>{_grade(r['marks'])}</td></tr>" for r in rows)
-    school_row=cur.execute("SELECT name,email,phone,postal_address,postal_code,logo_data FROM schools WHERE id=?",(sid,)).fetchone()
+    school_row=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     school_name=escape(str(school_row["name"] or "DaviSchool")) if school_row else "DaviSchool"
     school_email=escape(str(school_row["email"] or "")) if school_row else ""
     school_phone=escape(str(school_row["phone"] or "")) if school_row else ""
-    school_postal=escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and school_row["postal_address"] else ""
-    school_postal_code=escape(str(school_row["postal_code"] or "")) if school_row else ""
-    school_logo=str(school_row["logo_data"] or "") if school_row else ""
+    school_postal=escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and "postal_address" in school_row.keys() and school_row["postal_address"] else ""
+    school_postal_code=escape(str(school_row["postal_code"] or "")) if school_row and "postal_code" in school_row.keys() else ""
+    school_logo=str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     doc_brand="<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div><table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form><button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button></div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
