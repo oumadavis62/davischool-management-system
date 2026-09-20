@@ -412,7 +412,7 @@ def app_home(request: Request):
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         platform_users=cur.execute("SELECT full_name,email,role FROM users ORDER BY id").fetchall()
-                students=cur.execute("SELECT COUNT(*) c FROM students").fetchone()["c"]
+        students=cur.execute("SELECT COUNT(*) c FROM students").fetchone()["c"]
         revenue=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments").fetchone()["v"]
         recent=cur.execute("SELECT name,location FROM schools ORDER BY id DESC LIMIT 8").fetchall()
         con.close()
