@@ -1,20 +1,60 @@
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import sqlite3
 import os
 import hashlib
+import hmac
+import base64
+import secrets
+import re
 from starlette.middleware.sessions import SessionMiddleware
 import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key=os.environ.get("DAVISCHOOL_SECRET_KEY", "davischool-v60-full-two-parts"))
+SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
+SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if SESSION_HTTPS_ONLY:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "oumadavis62@gmail.com")
+DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
+
+PASSWORD_SCHEME = "pbkdf2_sha256"
+PASSWORD_ITERATIONS = 310000
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_ITERATIONS)
+    return f"{PASSWORD_SCHEME}${PASSWORD_ITERATIONS}${base64.urlsafe_b64encode(salt).decode()}${base64.urlsafe_b64encode(digest).decode()}"
+
+def verify_password(password: str, stored: str) -> tuple[bool, bool]:
+    if not stored:
+        return False, False
+    if not stored.startswith(PASSWORD_SCHEME + "$"):
+        return hmac.compare_digest(password, stored), True
+    try:
+        _, iterations, salt_b64, digest_b64 = stored.split("$", 3)
+        salt = base64.urlsafe_b64decode(salt_b64.encode())
+        expected = base64.urlsafe_b64decode(digest_b64.encode())
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations))
+        return hmac.compare_digest(actual, expected), False
+    except (ValueError, TypeError):
+        return False, False
 
 def get_db():
-    con = sqlite3.connect(os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db"))
+    con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     return con
 
@@ -44,7 +84,7 @@ def init_db():
     except: pass
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (SUPER_ADMIN,"DaviSchool@2026!","super_admin","Davis Ouma",0))
+        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (SUPER_ADMIN,hash_password("DaviSchool@2026!"),"super_admin","Davis Ouma",0))
     con.commit(); con.close()
 init_db()
 
@@ -64,6 +104,8 @@ def init_extended_db():
     cur.execute("CREATE TABLE IF NOT EXISTS payment_vouchers (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, voucher_no TEXT, payee TEXT, description TEXT, amount REAL, date TEXT, status TEXT DEFAULT 'Approved')")
     cur.execute("CREATE TABLE IF NOT EXISTS lpos (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, lpo_no TEXT, supplier TEXT, description TEXT, amount REAL, date TEXT, status TEXT DEFAULT 'Open')")
     cur.execute("CREATE TABLE IF NOT EXISTS cashbook (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, date TEXT, reference TEXT, description TEXT, debit REAL DEFAULT 0, credit REAL DEFAULT 0, account TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS fee_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER, amount REAL, reference TEXT, method TEXT, date TEXT, received_by TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS finance_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, code TEXT, name TEXT, type TEXT, opening_balance REAL DEFAULT 0)")
     try: cur.execute("ALTER TABLE users ADD COLUMN student_id INTEGER")
     except: pass
     try: cur.execute("ALTER TABLE users ADD COLUMN teacher_id INTEGER")
@@ -112,7 +154,7 @@ def school_header(school, name, active="dashboard", is_impersonating=False):
     banner = f"""<div style='background:#f59e0b;color:#0f172a;padding:8px 20px;text-align:center;font-weight:800;font-size:12px'>⚠️ Viewing as {school['name']} — <a href='/super/back-to-admin' style='background:#0f172a;color:white;padding:6px 12px;border-radius:8px;text-decoration:none;font-size:11px'>🔙 Back to Super Admin</a></div>""" if is_impersonating else ""
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM global_notices ORDER BY id DESC LIMIT 1"); notice = cur.fetchone(); con.close()
     notice_banner = f"""<div style='background:#0f172a;color:white;padding:8px 20px;text-align:center;font-size:12px'>📢 {notice['message']}</div>""" if notice else ""
-    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.section-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px}}.academic-header{{ {acad_bg} }}.comm-header{{ {comm_bg} }}.system-header{{ {sys_bg} }}.section-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20].upper()}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {school['location']}</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='section-header academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{acad_arrow}</span></div><div id='academicDropdown' style='display:{acad_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('set-marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('record-marks','✏️','Record Marks')}{sub_nav('edit-marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}{sub_nav('report-cards','📄','Report Cards')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('attendance','🗓️','Attendance')}{nav('fees','💰','Fees & Finance')}<div style='margin-bottom:4px'><div class='section-header comm-header' onclick='toggleComm()'><span>💬 Communication</span><span id='commArrow'>{comm_arrow}</span></div><div id='commDropdown' style='display:{comm_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('sms','💬','Bulk SMS Parents')}{sub_nav('communication','📢','Announcements')}</div></div><div style='margin-bottom:4px;margin-top:6px'><div class='section-header system-header' onclick='toggleSystem()'><span>⚙️ System Settings</span><span id='systemArrow'>{sys_arrow}</span></div><div id='systemDropdown' style='display:{sys_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('system-settings/school-profile','🏢','School Profile')}{sub_nav('system-settings/classes','🏫','Classes')}{sub_nav('system-settings/user-management','👤+','User Management')}{sub_nav('system-settings/roles-permissions','🛡️','Roles & Permissi...')}{sub_nav('system-settings/database-backup','💾','Database Backup')}{sub_nav('system-settings/system-audit','📈','System Audit')}{sub_nav('system-settings/integrations','🔌','Integrations')}{sub_nav('system-settings/billing-payments','💳','Billing & Payments')}</div></div>{nav('my-profile','👤','My Profile')}<div style='margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9'><div style='font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:8px'>Help</div>{nav('user-manual','❓','User Manual')}<div style='margin-top:12px;padding:10px;background:#f8fafc;border-radius:10px;border:1px solid #f1f5f9'><div style='font-size:12px;font-weight:700'>{name}</div><div style='font-size:10px;color:#64748b'>{school['email']}</div><div style='margin-top:8px;font-size:11px'>🌤️ 24°C<br><span style='color:#64748b'>Mostly cloudy</span></div></div></div><div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{banner}{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>{school['name']} (Code: {school['code']})</b></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleComm(){{let d=document.getElementById('commDropdown'); let a=document.getElementById('commArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleSystem(){{let d=document.getElementById('systemDropdown'); let a=document.getElementById('systemArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
+    return f"""<style>.nav-item:hover{{background:#f1f5f9!important;color:#0f172a!important}}.ds-card{{background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#0f172a;display:block}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}.section-header{{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:800;margin-bottom:4px}}.academic-header{{ {acad_bg} }}.comm-header{{ {comm_bg} }}.system-header{{ {sys_bg} }}.section-header:hover{{background:#f1f5f9!important}}</style><div style='display:flex;min-height:100vh'><div style='width:260px;background:white;border-right:1px solid #e2e8f0;padding:16px;position:sticky;top:0;height:100vh;overflow-y:auto'><div style='padding:10px 6px 16px;border-bottom:1px solid #f1f5f9;margin-bottom:12px'><div style='display:flex;align-items:center;gap:10px'><div style='width:40px;height:40px;background:#0f172a;color:white;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800'>🏫</div><div><b style='font-size:13px'>{school['name'][:20].upper()}</b><div style='font-size:10px;color:#64748b'>🔑 {school['code']} | {school['location']}</div></div></div></div>{nav('dashboard','📊','School Overview')}{nav('students','🎓','Students Manager')}{nav('classes','🏫','Classes & Streams')}<div style='margin-bottom:4px'><div class='section-header academic-header' onclick='toggleAcademic()'><span>📖 Academic Manager</span><span id='academicArrow'>{acad_arrow}</span></div><div id='academicDropdown' style='display:{acad_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('dean-settings','⚙️','Dean Settings')}{sub_nav('exams','🔧','Exam Settings')}{sub_nav('set-marks','📄','Set Marks')}{sub_nav('subject-allocation','📋','Subject Allocation')}{sub_nav('record-marks','✏️','Record Marks')}{sub_nav('edit-marks','📄','Edit Marks')}{sub_nav('marksheets','☰','Marks Status')}{sub_nav('analysis','📊','Exam Analysis')}{sub_nav('spreadsheet','📄','Spreadsheet')}{sub_nav('sba','📋','SBA (KNEC CBA)')}{sub_nav('academics','📚','Academics Workspace')}{sub_nav('terms','📅','Academic Terms')}{sub_nav('exams/new','➕','Add Examination')}{sub_nav('report-cards','📄','Report Cards')}</div></div>{nav('teachers','👨‍🏫','Staff Manager')}{nav('timetable','🗓️','Smart Timetable')}{nav('attendance','🗓️','Attendance')}{nav('fees','💰','Fees & Finance')}<div style='margin-bottom:4px'><div class='section-header comm-header' onclick='toggleComm()'><span>💬 Communication</span><span id='commArrow'>{comm_arrow}</span></div><div id='commDropdown' style='display:{comm_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('sms','💬','Bulk SMS Parents')}{sub_nav('communication','📢','Announcements')}</div></div><div style='margin-bottom:4px;margin-top:6px'><div class='section-header system-header' onclick='toggleSystem()'><span>⚙️ System Settings</span><span id='systemArrow'>{sys_arrow}</span></div><div id='systemDropdown' style='display:{sys_display};margin-left:8px;border-left:1px solid #e2e8f0;padding-left:10px;margin-bottom:6px'>{sub_nav('system-settings/school-profile','🏢','School Profile')}{sub_nav('system-settings/classes','🏫','Classes')}{sub_nav('system-settings/user-management','👤+','User Management')}{sub_nav('system-settings/roles-permissions','🛡️','Roles & Permissi...')}{sub_nav('system-settings/database-backup','💾','Database Backup')}{sub_nav('system-settings/system-audit','📈','System Audit')}{sub_nav('system-settings/integrations','🔌','Integrations')}{sub_nav('system-settings/billing-payments','💳','Billing & Payments')}</div></div>{nav('my-profile','👤','My Profile')}<div style='margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9'><div style='font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:8px'>Help</div>{nav('user-manual','❓','User Manual')}<div style='margin-top:12px;padding:10px;background:#f8fafc;border-radius:10px;border:1px solid #f1f5f9'><div style='font-size:12px;font-weight:700'>{name}</div><div style='font-size:10px;color:#64748b'>{school['email']}</div><div style='margin-top:8px;font-size:11px'>🌤️ 24°C<br><span style='color:#64748b'>Mostly cloudy</span></div></div></div><div style='margin-top:16px;border-top:1px solid #f1f5f9;padding-top:12px'><a href='/logout' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;color:#dc2626'>🚪 Logout</a></div></div><div style='flex:1;background:#f8fafc'>{banner}{notice_banner}<div style='background:white;border-bottom:1px solid #e2e8f0;padding:12px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:13px'>{school['name']} (Code: {school['code']})</b></div><div style='display:flex;align-items:center;gap:12px'><div style='width:28px;height:28px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px'>{initials}</div><div style='font-size:11px'><b>{name}</b></div></div></div><script>function toggleAcademic(){{let d=document.getElementById('academicDropdown'); let a=document.getElementById('academicArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleComm(){{let d=document.getElementById('commDropdown'); let a=document.getElementById('commArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}function toggleSystem(){{let d=document.getElementById('systemDropdown'); let a=document.getElementById('systemArrow'); if(d.style.display==='none'||d.style.display===''){{d.style.display='block'; a.innerText='⌃';}} else {{d.style.display='none'; a.innerText='⌄';}}}}</script>"""
 
 def global_header(name, active="dashboard"):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "DO"
@@ -276,17 +318,37 @@ def home_head(): return PlainTextResponse("OK")
 def health(): return PlainTextResponse("OK")
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...)):
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE email=? AND password=?", (email,password)); u = cur.fetchone()
-    if not u: con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM users WHERE lower(email)=lower(?)", (email.strip(),)); u = cur.fetchone()
+    if not u:
+        con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
+    valid, needs_migration = verify_password(password, u["password"])
+    if not valid:
+        con.close(); return HTMLResponse("❌ Invalid <a href='/'>Back</a>")
+    if needs_migration:
+        cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), u["id"]))
     ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO system_audit (school_id, user_email, action, details, timestamp) VALUES (?,?,?,?,?)", (u["school_id"] or 0, u["email"], "LOGIN", f"Login as {u['role']}", ts))
     con.commit(); con.close()
-    request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
+    request.session["user_id"]=u["id"]; request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
     if u["role"] == "super_admin":
         return RedirectResponse("/dashboard", status_code=303)
     if u["role"] in ["teacher", "parent", "student"]:
         return RedirectResponse("/portal", status_code=303)
     return RedirectResponse("/school/dashboard", status_code=303)
+@app.get("/account/change-password", response_class=HTMLResponse)
+def change_password_page(request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    return HTMLResponse("""<html><body style='font-family:Arial;background:#f8fafc;padding:30px'><div style='max-width:520px;margin:auto;background:white;padding:24px;border-radius:16px;border:1px solid #e2e8f0'><h2>Change Password</h2><form method='post'><input name='current_password' type='password' required placeholder='Current password' style='width:100%;padding:12px;margin:6px 0;box-sizing:border-box'><input name='new_password' type='password' required minlength='10' placeholder='New password (10+ characters)' style='width:100%;padding:12px;margin:6px 0;box-sizing:border-box'><input name='confirm_password' type='password' required minlength='10' placeholder='Confirm new password' style='width:100%;padding:12px;margin:6px 0;box-sizing:border-box'><button style='background:#0f172a;color:white;border:0;border-radius:10px;padding:12px 18px;margin-top:8px'>Update Password</button></form></div></body></html>""")
+@app.post("/account/change-password")
+def change_password(request: Request,current_password:str=Form(...),new_password:str=Form(...),confirm_password:str=Form(...)):
+    if "email" not in request.session: return RedirectResponse("/",303)
+    if len(new_password) < 10 or new_password != confirm_password: return HTMLResponse("Invalid new password. Use at least 10 characters and ensure both fields match. <a href='/account/change-password'>Back</a>",400)
+    con=get_db(); cur=con.cursor(); u=cur.execute("SELECT * FROM users WHERE id=?",(request.session.get('user_id',0),)).fetchone()
+    if not u: u=cur.execute("SELECT * FROM users WHERE lower(email)=lower(?)",(request.session.get('email',''),)).fetchone()
+    if not u or not verify_password(current_password,u['password'])[0]: con.close(); return HTMLResponse("Current password is incorrect. <a href='/account/change-password'>Back</a>",403)
+    cur.execute("UPDATE users SET password=? WHERE id=?",(hash_password(new_password),u['id']))
+    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close(); return RedirectResponse('/account/change-password',303)
+
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/")
 
@@ -310,7 +372,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     popup=""
     if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800'>🔓 Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin:12px 0'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>{" ".join(list(pending["auth_code"]))}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Verify</button></form></div>"""
     elif success=="added" and new_pass: popup=f"""<div style='position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999'><div style='background:white;padding:24px;border-radius:16px;width:420px'><div style='font-size:18px;font-weight:800'>✅ {school_name} Added!</div><div style='background:#f8fafc;padding:12px;border-radius:10px;margin:12px 0;font-size:13px'><div>🏫 {school_name}</div><div>👤 {school_email}</div><div>🔑 {new_pass}</div></div><button onclick="this.closest('div').parentElement.style.display='none'" style='width:100%;background:#0f172a;color:white;padding:10px;border:none;border-radius:10px'>OK</button></div></div>"""
-    rows="".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{users_by_school.get(s['id'],{}).get('email','') if users_by_school.get(s['id']) else ''}</td><td style='padding:12px 10px;font-size:12px'>{users_by_school.get(s['id'],{}).get('password','') if users_by_school.get(s['id']) else ''}</td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/super/switch-to-school/{s['id']}' style='background:#0f172a;color:white;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>👁️ View</a><a href='/schools/delete/{s['id']}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px'>🗑️</a></td></tr>" for s in schools]) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
+    rows="".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{users_by_school.get(s['id'],{}).get('email','') if users_by_school.get(s['id']) else ''}</td><td style='padding:12px 10px;font-size:12px'>••••••••</td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/super/switch-to-school/{s['id']}' style='background:#0f172a;color:white;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>👁️ View</a><a href='/schools/delete/{s['id']}' style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px'>🗑️</a></td></tr>" for s in schools]) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1500px;margin:auto'><div><div class='card'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
 @app.post("/register-school")
 def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
@@ -323,7 +385,7 @@ def verify_school_code(pending_id: str = Form(...), auth_code: str = Form(...)):
     if not pending or pending["auth_code"]!=auth_code.strip(): con.close(); return HTMLResponse(f"❌ Wrong <a href='/schools/manage?success=code_sent&pending_id={pending_id}'>Back</a>")
     code = str(random.randint(100000,999999)); unique_pass = generate_unique_password(pending["name"])
     cur.execute("INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)", (pending["name"], pending["email"], code, pending["location"], pending["phone"], pending["principal"], pending["school_type"]))
-    sid = cur.lastrowid; cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (pending["email"], unique_pass, "school_admin", pending["principal"], sid)); cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,)); con.commit(); con.close()
+    sid = cur.lastrowid; cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (pending["email"], hash_password(unique_pass), "school_admin", pending["principal"], sid)); cur.execute("DELETE FROM pending_schools WHERE id=?", (pending_id,)); con.commit(); con.close()
     return RedirectResponse(f"/schools/manage?success=added&new_pass={unique_pass}&school_email={pending['email']}&school_name={pending['name']}",303)
 @app.get("/schools/delete/{sid}")
 def delete_school(sid: int, request: Request):
@@ -768,14 +830,27 @@ def sys_update_profile(request: Request, name: str = Form(...), email: str = For
 def sys_add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (school_obj["id"], class_name.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
 @app.get("/school/system-settings/delete-class/{cid}")
-def sys_del_class(cid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE id=?", (cid,)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
+def sys_del_class(request: Request, cid: int):
+    school_obj=get_school_obj(request)
+    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/",303)
+    con=get_db(); con.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
 @app.post("/school/system-settings/add-user")
 def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...), teacher_id: str = Form(""), student_id: str = Form("")):
-    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id) VALUES (?,?,?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), school_obj["id"], int(teacher_id) if teacher_id.strip() else None, int(student_id) if student_id.strip() else None)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id) VALUES (?,?,?,?,?,?,?)", (email.strip(), hash_password(password.strip()), role.strip(), full_name.strip(), school_obj["id"], int(teacher_id) if teacher_id.strip() else None, int(student_id) if student_id.strip() else None)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/delete-user/{uid}")
-def sys_del_user(uid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM users WHERE id=?", (uid,)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+def sys_del_user(request: Request, uid: int):
+    school_obj=get_school_obj(request)
+    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/",303)
+    con=get_db(); con.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/backup/download")
-def sys_backup_download(request: Request): return RedirectResponse("/school/system-settings/database-backup",303)
+def sys_backup_download(request: Request):
+    school_obj=get_school_obj(request)
+    if not school_obj: return RedirectResponse("/",303)
+    # SQLite backup is generated from the live DB without modifying the source database.
+    backup_dir=os.path.join(os.path.dirname(DB_PATH) or ".", "backups"); os.makedirs(backup_dir,exist_ok=True)
+    stamp=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y%m%d_%H%M%S'); out=os.path.join(backup_dir,f"davischool_backup_{stamp}.db")
+    src=get_db(); dst=sqlite3.connect(out); src.backup(dst); dst.close(); src.close()
+    return FileResponse(out,filename=os.path.basename(out),media_type='application/octet-stream')
 @app.get("/school/system-settings/audit/clear")
 def sys_audit_clear(request: Request):
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?", (school_obj["id"],)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/system-audit",303)
@@ -1000,7 +1075,7 @@ def global_sys_add_user(request: Request, full_name: str = Form(...), email: str
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
     for sch in schools:
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), password.strip(), role.strip(), full_name.strip(), sch["id"]))
+        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), hash_password(password.strip()), role.strip(), full_name.strip(), sch["id"]))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
 @app.get("/super/global-control/system-settings/delete-user/{uid}")
 def global_sys_del_user(uid: int, request: Request):
@@ -1167,12 +1242,20 @@ def school_finance(request: Request):
     pledge=cur.execute("SELECT COALESCE(SUM(amount),0) total,COALESCE(SUM(paid),0) paid FROM pledges WHERE school_id=?",(school_id,)).fetchone()
     expenses=cur.execute("SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall()
     pledges=cur.execute("SELECT * FROM pledges WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall()
-    vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall(); con.close()
+    vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall()
+    lpos=cur.execute("SELECT * FROM lpos WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall()
+    cashbook=cur.execute("SELECT * FROM cashbook WHERE school_id=? ORDER BY id DESC LIMIT 100",(school_id,)).fetchall()
+    payments=cur.execute("SELECT fp.*,st.name student_name FROM fee_payments fp LEFT JOIN students st ON st.id=fp.student_id WHERE fp.school_id=? ORDER BY fp.id DESC LIMIT 100",(school_id,)).fetchall()
+    student_opts=''.join(f"<option value='{st['id']}'>{st['name']} ({st['admission_no']})</option>" for st in cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(school_id,)).fetchall())
+    con.close()
     er=''.join(f"<tr><td>{e['date']}</td><td>{e['category']}</td><td>{e['description']}</td><td>{e['paid_to']}</td><td>{e['amount']}</td><td>{e['voucher_no']}</td></tr>" for e in expenses) or '<tr><td colspan=6>No expenses.</td></tr>'
     pr=''.join(f"<tr><td>{p['parent_name']}</td><td>{p['purpose']}</td><td>{p['amount']}</td><td>{p['paid']}</td><td>{float(p['amount'] or 0)-float(p['paid'] or 0)}</td><td>{p['status']}</td></tr>" for p in pledges) or '<tr><td colspan=6>No pledges.</td></tr>'
     vr=''.join(f"<tr><td>{v['date']}</td><td>{v['voucher_no']}</td><td>{v['payee']}</td><td>{v['description']}</td><td>{v['amount']}</td><td>{v['status']}</td></tr>" for v in vouchers) or '<tr><td colspan=6>No vouchers.</td></tr>'
+    lr=''.join(f"<tr><td>{x['date']}</td><td>{x['lpo_no']}</td><td>{x['supplier']}</td><td>{x['description']}</td><td>{x['amount']}</td><td>{x['status']}</td></tr>" for x in lpos) or '<tr><td colspan=6>No LPOs.</td></tr>'
+    cr=''.join(f"<tr><td>{x['date']}</td><td>{x['reference']}</td><td>{x['description']}</td><td>{x['debit']}</td><td>{x['credit']}</td><td>{x['account']}</td></tr>" for x in cashbook) or '<tr><td colspan=6>No cashbook entries.</td></tr>'
+    fpr=''.join(f"<tr><td>{x['date']}</td><td>{x['student_name'] or ''}</td><td>{x['amount']}</td><td>{x['reference']}</td><td>{x['method']}</td><td>{x['received_by']}</td></tr>" for x in payments) or '<tr><td colspan=6>No fee payments.</td></tr>'
     balance=float(fee['expected'] or 0)-float(fee['paid'] or 0); net=float(fee['paid'] or 0)-float(exp['total'] or 0)
-    body=f"""<div class='card'><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><div><b>Fees Expected</b><h2>{fee['expected']}</h2></div><div><b>Fees Collected</b><h2>{fee['paid']}</h2></div><div><b>Outstanding</b><h2>{balance}</h2></div><div><b>Net Cash Movement</b><h2>{net}</h2></div></div></div><div class='card'><h3>➕ Expense / Payment Voucher</h3><form method='post' action='/school/modules/finance/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='category' required placeholder='Category' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='paid_to' placeholder='Payee' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='voucher_no' placeholder='Voucher No.' class='input-field'><input name='date' required type='date' class='input-field'><button class='btn'>Save Expense</button></form></div><div class='card'><h3>📒 Expenses</h3><table><tr><th>Date</th><th>Category</th><th>Description</th><th>Payee</th><th>Amount</th><th>Voucher</th></tr>{er}</table></div><div class='card'><h3>🤝 Pledges</h3><form method='post' action='/school/modules/finance/pledge' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='parent_name' required placeholder='Parent/Guardian' class='input-field'><input name='phone' placeholder='Phone' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='purpose' placeholder='Purpose' class='input-field'><input name='due_date' type='date' class='input-field'><button class='btn'>Save Pledge</button></form><table style='margin-top:15px'><tr><th>Parent</th><th>Purpose</th><th>Pledged</th><th>Paid</th><th>Balance</th><th>Status</th></tr>{pr}</table></div><div class='card'><h3>🧾 Payment Vouchers</h3><table><tr><th>Date</th><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Status</th></tr>{vr}</table></div><div class='card'><h3>📊 Accounting Summary</h3><p>Fee collection and expense data are stored per school and can be extended into cashbooks/trial balances. Current collected fees: <b>{fee['paid']}</b>; expenses: <b>{exp['total']}</b>; pledge balance: <b>{float(pledge['total'] or 0)-float(pledge['paid'] or 0)}</b>.</p></div>"""
+    body=f"""<div class='card'><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><div><b>Fees Expected</b><h2>{fee['expected']}</h2></div><div><b>Fees Collected</b><h2>{fee['paid']}</h2></div><div><b>Outstanding</b><h2>{balance}</h2></div><div><b>Net Cash Movement</b><h2>{net}</h2></div></div></div><div class='card'><h3>➕ Expense / Payment Voucher</h3><form method='post' action='/school/modules/finance/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='category' required placeholder='Category' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='paid_to' placeholder='Payee' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='voucher_no' placeholder='Voucher No.' class='input-field'><input name='date' required type='date' class='input-field'><button class='btn'>Save Expense</button></form></div><div class='card'><h3>📒 Expenses</h3><table><tr><th>Date</th><th>Category</th><th>Description</th><th>Payee</th><th>Amount</th><th>Voucher</th></tr>{er}</table></div><div class='card'><h3>🤝 Pledges</h3><form method='post' action='/school/modules/finance/pledge' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='parent_name' required placeholder='Parent/Guardian' class='input-field'><input name='phone' placeholder='Phone' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='purpose' placeholder='Purpose' class='input-field'><input name='due_date' type='date' class='input-field'><button class='btn'>Save Pledge</button></form><table style='margin-top:15px'><tr><th>Parent</th><th>Purpose</th><th>Pledged</th><th>Paid</th><th>Balance</th><th>Status</th></tr>{pr}</table></div><div class='card'><h3>🧾 Payment Vouchers</h3><form method='post' action='/school/modules/finance/voucher' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='voucher_no' required placeholder='Voucher No.' class='input-field'><input name='payee' required placeholder='Payee' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='date' required type='date' class='input-field'><select name='status' class='input-field'><option>Draft</option><option>Approved</option><option>Paid</option></select><button class='btn'>Create Voucher</button></form><table><tr><th>Date</th><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Status</th></tr>{vr}</table></div><div class='card'><h3>🛒 Local Purchase Orders (LPO)</h3><form method='post' action='/school/modules/finance/lpo' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='lpo_no' required placeholder='LPO No.' class='input-field'><input name='supplier' required placeholder='Supplier' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='date' required type='date' class='input-field'><select name='status' class='input-field'><option>Open</option><option>Approved</option><option>Closed</option></select><button class='btn'>Create LPO</button></form><table><tr><th>Date</th><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Status</th></tr>{lr}</table></div><div class='card'><h3>📚 Cashbook</h3><form method='post' action='/school/modules/finance/cashbook' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><input name='date' required type='date' class='input-field'><input name='reference' required placeholder='Reference' class='input-field'><input name='description' required placeholder='Description' class='input-field'><input name='debit' type='number' step='0.01' value='0' placeholder='Debit' class='input-field'><input name='credit' type='number' step='0.01' value='0' placeholder='Credit' class='input-field'><input name='account' required placeholder='Account' class='input-field'><button class='btn'>Post Cashbook Entry</button></form><table><tr><th>Date</th><th>Reference</th><th>Description</th><th>Debit</th><th>Credit</th><th>Account</th></tr>{cr}</table></div><div class='card'><h3>💳 Fee Payments</h3><form method='post' action='/school/modules/finance/fee-payment' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><select name='student_id' required class='input-field'><option value=''>Select Student</option>{''.join(f"<option value='{st['id']}'>{st['name']} ({st['admission_no']})</option>" for st in cur.execute('SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name',(school_id,)).fetchall())}</select><input name='amount' required type='number' step='0.01' placeholder='Amount' class='input-field'><input name='reference' required placeholder='Receipt/Reference' class='input-field'><select name='method' class='input-field'><option>Cash</option><option>MPesa</option><option>Bank</option><option>Cheque</option></select><input name='date' required type='date' class='input-field'><button class='btn'>Record Payment</button></form><table><tr><th>Date</th><th>Student</th><th>Amount</th><th>Reference</th><th>Method</th><th>Received By</th></tr>{fpr}</table></div><div class='card'><h3>📊 Accounting Summary</h3><p>Fee collection and expense data are stored per school and can be extended into cashbooks/trial balances. Current collected fees: <b>{fee['paid']}</b>; expenses: <b>{exp['total']}</b>; pledge balance: <b>{float(pledge['total'] or 0)-float(pledge['paid'] or 0)}</b>.</p></div>"""
     return module_page(request,'💰 Fees & Finance — Complete Workspace','fees',body)
 
 @app.post("/school/modules/finance/expense")
@@ -1181,6 +1264,29 @@ def finance_expense(request:Request,category:str=Form(...),description:str=Form(
 @app.post("/school/modules/finance/pledge")
 def finance_pledge(request:Request,parent_name:str=Form(...),phone:str=Form(''),amount:float=Form(...),purpose:str=Form(''),due_date:str=Form('')):
     con=get_db(); con.execute("INSERT INTO pledges(school_id,parent_name,phone,amount,purpose,due_date) VALUES(?,?,?,?,?,?)",(sid(request),parent_name,phone,amount,purpose,due_date)); con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.post("/school/modules/finance/voucher")
+def finance_voucher(request:Request,voucher_no:str=Form(...),payee:str=Form(...),description:str=Form(...),amount:float=Form(...),date:str=Form(...),status:str=Form(...)):
+    con=get_db(); con.execute("INSERT INTO payment_vouchers(school_id,voucher_no,payee,description,amount,date,status) VALUES(?,?,?,?,?,?,?)",(sid(request),voucher_no.strip(),payee.strip(),description.strip(),amount,date,status)); con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.post("/school/modules/finance/lpo")
+def finance_lpo(request:Request,lpo_no:str=Form(...),supplier:str=Form(...),description:str=Form(...),amount:float=Form(...),date:str=Form(...),status:str=Form(...)):
+    con=get_db(); con.execute("INSERT INTO lpos(school_id,lpo_no,supplier,description,amount,date,status) VALUES(?,?,?,?,?,?,?)",(sid(request),lpo_no.strip(),supplier.strip(),description.strip(),amount,date,status)); con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.post("/school/modules/finance/cashbook")
+def finance_cashbook(request:Request,date:str=Form(...),reference:str=Form(...),description:str=Form(...),debit:float=Form(0),credit:float=Form(0),account:str=Form(...)):
+    if debit < 0 or credit < 0 or (debit == 0 and credit == 0) or (debit > 0 and credit > 0): return HTMLResponse("Invalid cashbook entry. Enter either debit or credit.",400)
+    con=get_db(); con.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",(sid(request),date,reference.strip(),description.strip(),debit,credit,account.strip())); con.commit(); con.close(); return RedirectResponse('/school/finance',303)
+
+@app.post("/school/modules/finance/fee-payment")
+def finance_fee_payment(request:Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(...),method:str=Form(...),date:str=Form(...)):
+    school_id=sid(request)
+    if amount <= 0: return HTMLResponse("Payment amount must be positive.",400)
+    con=get_db(); cur=con.cursor(); st=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,school_id)).fetchone()
+    if not st: con.close(); return HTMLResponse("Invalid student for this school.",403)
+    cur.execute("INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)",(school_id,student_id,amount,reference.strip(),method,date,request.session.get('email','')))
+    cur.execute("UPDATE fees SET paid=COALESCE(paid,0)+? WHERE student_id=? AND school_id=? AND COALESCE(paid,0)<amount ORDER BY id LIMIT 1",(amount,student_id,school_id))
+    con.commit(); con.close(); return RedirectResponse('/school/finance',303)
 
 # === ADDITIVE WORKING MODULE WINDOWS ===
 def module_page(request, title, active, body, global_mode=False):
@@ -1193,7 +1299,19 @@ def module_page(request, title, active, body, global_mode=False):
         school = get_school_obj(request)
         if not school: return RedirectResponse("/dashboard")
         header = school_header(school, request.session.get("name",""), active, request.session.get("is_impersonating",False))
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.mod{{padding:20px;max-width:1500px;margin:auto}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px;margin-bottom:14px}}.input-field{{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:5px 0;font-size:13px}}.btn{{background:#0f172a;color:white;padding:10px 14px;border:0;border-radius:10px;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;border-bottom:1px solid #f1f5f9;text-align:left;font-size:12px}}h1{{font-size:24px;margin:0 0 6px}}p{{color:#64748b;font-size:13px}}</style></head><body>{header}<div class='mod'><h1>{title}</h1><p>Working DaviSchool module. Existing design and data are preserved.</p>{body}</div></div></div></body></html>")
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
+*{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#0f172a}}.mod{{padding:24px;max-width:1600px;margin:auto}}
+.page-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}}.eyebrow{{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:800}}
+h1{{font-size:26px;margin:2px 0 5px;letter-spacing:-.02em}}h2,h3{{margin-top:0}}p{{color:#64748b;font-size:13px}}.card{{background:white;border:1px solid #e5eaf1;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px rgba(15,23,42,.03)}}
+.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}}.kpi{{background:white;border:1px solid #e5eaf1;border-radius:14px;padding:16px}}.kpi b{{font-size:24px;display:block;margin-top:7px}}.kpi span{{font-size:11px;color:#64748b}}
+.toolbar{{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}}.input-field,select,input,textarea{{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #dbe2ea;border-radius:10px;font-size:13px;background:white}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#0f172a;color:white;padding:10px 14px;border:0;border-radius:10px;font-weight:700;cursor:pointer;text-decoration:none;font-size:12px}}.btn.secondary{{background:#eef2f7;color:#0f172a}}.btn.success{{background:#15803d}}.btn.danger{{background:#dc2626}}
+table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#f8fafc;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.04em}}th,td{{padding:11px 10px;border-bottom:1px solid #edf1f5;text-align:left;font-size:12px;vertical-align:middle}}tr:hover td{{background:#fafcff}}
+.grid-2{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}.grid-3{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.badge{{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:800}}.search{{max-width:280px}}
+@media(max-width:900px){{.kpis{{grid-template-columns:repeat(2,1fr)}}.grid-2,.grid-3{{grid-template-columns:1fr}}.mod{{padding:14px}}table{{display:block;overflow-x:auto;white-space:nowrap}}}}@media(max-width:600px){{.kpis{{grid-template-columns:1fr 1fr}}h1{{font-size:21px}}.search{{max-width:100%}}}}
+</style></head><body>{header}<div class='mod'><div class='page-head'><div><div class='eyebrow'>DaviSchool Management System</div><h1>{title}</h1><p>Manage, analyse and act on your school's data from one workspace.</p></div><div style='display:flex;gap:8px'><a class='btn secondary' href='/school/dashboard'>← Dashboard</a><a class='btn' href='/school/my-profile'>👤 Profile</a></div></div>{body}</div></div></div>
+<script>document.querySelectorAll('table').forEach(function(t){{var w=document.createElement('div');w.style.overflowX='auto';t.parentNode.insertBefore(w,t);w.appendChild(t);}});document.querySelectorAll('input[type=search]').forEach(function(input){{input.addEventListener('input',function(){{var q=this.value.toLowerCase();var table=this.closest('.card')?.querySelector('table')||document.querySelector('table');if(!table)return;table.querySelectorAll('tr').forEach(function(r,i){{if(i===0)return;r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';}})}})}});</script></body></html>""")
+
 def sid(request):
     s=get_school_obj(request); return s["id"] if s else 0
 
@@ -1387,18 +1505,6 @@ def global_other(path: str, request: Request):
     body=f"<div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:30px'><h3 style='margin:0'>{path.replace('-', ' ').title()}</h3><p style='color:#64748b;font-size:13px'>This navigation window is active and reserved for the module's detailed workspace. Existing data modules remain available from the sidebar.</p></div>"
     return HTMLResponse(f"<html><body>{header}<div style='padding:30px'>{body}</div></div></div></body></html>")
 
-@app.get("/school/{path}", response_class=HTMLResponse)
-def school_other(path: str, request: Request):
-    if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
-    school = get_school_obj(request)
-    if not school: return RedirectResponse("/dashboard")
-    name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
-    header = school_header(school, name, path, is_impersonating=is_imp)
-    body=f"<div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:30px'><h3>{path.replace('-', ' ').title()}</h3><p style='color:#64748b;font-size:13px'>This navigation window is active. The module workspace is ready for the school's data.</p></div>"
-    return HTMLResponse(f"<html><body>{header}<div style='padding:30px'>{body}</div></div></div></body></html>")
-
-
 # ============================================================
 # DAVISCHOOL COMPLETE RECORD MANAGEMENT EXTENSION
 # These routes are additive: existing working routes/design are preserved.
@@ -1415,7 +1521,7 @@ def _safe_school_redirect(request: Request, fallback="/school/dashboard"):
 
 @app.get("/school/staff", response_class=HTMLResponse)
 def school_staff_alias(request: Request):
-    return school_teachers(request)
+    return teachers_page(request)
 
 @app.get("/school/students/{student_id}", response_class=HTMLResponse)
 def school_student_profile(student_id: int, request: Request):
@@ -1536,6 +1642,33 @@ def school_academics(request:Request):
     grid=''.join(f"<a href='{u}' class='card' style='text-decoration:none;color:inherit'><h3 style='margin:0 0 8px'>{t}</h3><p style='color:#64748b;margin:0'>{d}</p></a>" for t,u,d in cards)
     return module_page(request,"📚 Academics Workspace","analysis",f"<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px'>{grid}</div>")
 
+
+@app.get("/school/{path:path}", response_class=HTMLResponse)
+def school_other(path: str, request: Request):
+    if "email" not in request.session: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/dashboard")
+    con=get_db(); cur=con.cursor(); school_id=sid(request)
+    configs={"finance":("💰 Fees & Finance","/school/modules/finance/fee-payment","Record Payment"),"fees":("💳 Fees Management","/school/modules/fees/add","Create Fee Charge"),"teachers":("👨‍🏫 Staff Manager","/school/teachers/add","Add Staff"),"students":("🎓 Students Manager","/school/students/add","Add Student"),"attendance":("🗓️ Attendance","/school/attendance/record","Record Attendance"),"communication":("📢 Announcements","/school/modules/announcements/add","Create Announcement"),"sms":("💬 Bulk SMS Parents","/school/modules/sms/send","Send SMS")}
+    if path in configs:
+        title,action,label=configs[path]
+        students=cur.execute("SELECT COUNT(*) n FROM students WHERE school_id=?",(school_id,)).fetchone()["n"]
+        teachers=cur.execute("SELECT COUNT(*) n FROM teachers WHERE school_id=?",(school_id,)).fetchone()["n"]
+        classes=cur.execute("SELECT COUNT(*) n FROM classes WHERE school_id=?",(school_id,)).fetchone()["n"]
+        fees_total=cur.execute("SELECT COALESCE(SUM(amount),0) n FROM fees WHERE school_id=?",(school_id,)).fetchone()["n"]
+        if path=="students":
+            rows=cur.execute("SELECT name,admission_no,class_name,stream,gender FROM students WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Student Directory</b><input class='search' type='search' placeholder='Search students'></div><table><tr><th>Name</th><th>Admission</th><th>Class</th><th>Stream</th><th>Gender</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['admission_no'] or ''}</td><td>{r['class_name'] or ''}</td><td>{r['stream'] or ''}</td><td>{r['gender'] or ''}</td></tr>" for r in rows)+"</table></div>"
+        elif path=="teachers":
+            rows=cur.execute("SELECT name,email,phone,subject FROM teachers WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Staff Directory</b><input class='search' type='search' placeholder='Search staff'></div><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th></tr>"+''.join(f"<tr><td>{r['name']}</td><td>{r['email'] or ''}</td><td>{r['phone'] or ''}</td><td>{r['subject'] or ''}</td></tr>" for r in rows)+"</table></div>"
+        elif path=="fees":
+            rows=cur.execute("SELECT f.*,s.name student_name FROM fees f LEFT JOIN students s ON s.id=f.student_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Fee Register</b><input class='search' type='search' placeholder='Search fee records'></div><table><tr><th>Student</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['student_name'] or ''}</td><td>{r['amount'] or 0}</td><td>{r['paid'] or 0}</td><td>{(r['amount'] or 0)-(r['paid'] or 0)}</td><td><span class='badge'>{r['status'] or 'Pending'}</span></td></tr>" for r in rows)+"</table></div>"
+        elif path=="attendance":
+            rows=cur.execute("SELECT a.date,s.name student,a.status FROM attendance a JOIN students s ON s.id=a.student_id WHERE a.school_id=? ORDER BY a.id DESC LIMIT 100",(school_id,)).fetchall(); table="<div class='card'><div class='toolbar'><b>Recent Attendance</b><input class='search' type='search' placeholder='Search attendance'></div><table><tr><th>Date</th><th>Student</th><th>Status</th></tr>"+''.join(f"<tr><td>{r['date']}</td><td>{r['student']}</td><td><span class='badge'>{r['status']}</span></td></tr>" for r in rows)+"</table></div>"
+        else: table="<div class='card'><h3>Workspace</h3><p>Use the action above to create a new record. Existing records will appear here as soon as they are saved.</p></div>"
+        con.close(); body=f"<div class='kpis'><div class='kpi'><span>STUDENTS</span><b>{students}</b></div><div class='kpi'><span>STAFF</span><b>{teachers}</b></div><div class='kpi'><span>CLASSES</span><b>{classes}</b></div><div class='kpi'><span>FEES CHARGED</span><b>{fees_total:,.0f}</b></div></div><div class='card toolbar'><div><b>Quick action</b><div style='font-size:12px;color:#64748b'>Create and manage {path.replace('-',' ')} records.</div></div><a class='btn' href='{action}'>＋ {label}</a></div>{table}"
+        return module_page(request,title,path,body)
+    con.close(); title=path.replace('/',' • ').replace('-',' ').title(); body=f"<div class='grid-3'><a class='ds-card' href='/school/dashboard'><b>📊 Overview</b><p>Return to the school performance dashboard.</p></a><a class='ds-card' href='/school/students'><b>🎓 Student Records</b><p>Manage enrolment, profiles and academic history.</p></a><a class='ds-card' href='/school/analysis'><b>📈 Analytics</b><p>Review subject, student and class performance.</p></a></div><div class='card'><h3>{title} workspace</h3><p>This workspace is connected to the DaviSchool data model. Use the related module links above to create records and review live school data.</p></div>"; return module_page(request,title,path,body)
 
 @app.exception_handler(StarletteHTTPException)
 async def custom_404_handler(request: Request, exc: StarletteHTTPException):
