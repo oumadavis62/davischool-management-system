@@ -23,7 +23,7 @@ def _ensure_live_postgres_schema():
         "users": {
             "email": "TEXT", "password": "TEXT", "role": "TEXT",
             "full_name": "TEXT", "school_id": "INTEGER",
-            "student_id": "INTEGER", "teacher_id": "INTEGER",
+            "student_id": "INTEGER", "teacher_id": "INTEGER", "credential_secret": "TEXT",
         },
         "schools": {
             "name": "TEXT", "email": "TEXT", "code": "TEXT",
