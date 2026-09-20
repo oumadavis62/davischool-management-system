@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from html import escape
+import base64
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -351,8 +352,14 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
           %(index,escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
-    school_row = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
+    school_row = cur.execute("SELECT name,email,phone,postal_address,postal_code,logo_data FROM schools WHERE id=?", (sid,)).fetchone()
     school_name = escape(str(school_row["name"])) if school_row else "DaviSchool"
+    school_email = escape(str(school_row["email"] or "")) if school_row else ""
+    school_phone = escape(str(school_row["phone"] or "")) if school_row else ""
+    school_postal = escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and school_row["postal_address"] else ""
+    school_postal_code = escape(str(school_row["postal_code"] or "")) if school_row else ""
+    school_logo = str(school_row["logo_data"] or "") if school_row else ""
+    doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
     colspan = 3 + len(subjects) * 3 + 5
@@ -369,19 +376,19 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<button type='button' class='btn' onclick='window.print()'>Print Marksheet</button>"
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> <a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
-        "<div class='card section marksheet-card'><div class='marksheet-title'>DAVISCHOOL MANAGEMENT SYSTEM</div>"
+        "<div class='card section marksheet-card'>{doc_brand}<div class='marksheet-title'>DAVISCHOOL MANAGEMENT SYSTEM</div>"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
         "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
         "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
         "<style>"
         ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
-        ".marksheet-card{background:#fff}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}"
+        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.side,.top,.no-print{display:none!important}.main{margin-left:0}.page{padding:0;max-width:none}.marksheet-card{border:0;box-shadow:none}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
     ) % (
-        school_name, class_title, exam_name, escape(term or "All"), escape(year or "All"),
+        doc_brand, school_name, class_title, exam_name, escape(term or "All"), escape(year or "All"),
         header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan
     )
     con.close()
@@ -411,27 +418,43 @@ def school_settings_page(request: Request):
     if not school:return RedirectResponse("/app")
     def val(key):
         return escape(str(school[key] or ""))
-    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile and identity details for this school.</div>
-<div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
+    logo=str(school["logo_data"] or "") if "logo_data" in school.keys() else ""
+    logo_preview=f"<img src='{escape(logo)}' alt='School logo' style='max-width:140px;max-height:100px;object-fit:contain;border:1px solid #dbe2ea;border-radius:10px;padding:6px;background:white'>" if logo else "<div style='width:140px;height:100px;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px'>No logo uploaded</div>"
+    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile, contact details and document identity for this school.</div>
+<div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' enctype='multipart/form-data' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
 <label>School Name<input name='school_name' required value='{val("name")}' class='field'></label>
 <label>School Email<input name='school_email' type='email' required value='{val("email")}' class='field'></label>
 <label>Location<input name='location' required value='{val("location")}' class='field'></label>
 <label>Phone<input name='phone' required value='{val("phone")}' class='field'></label>
+<label>Postal Address<input name='postal_address' placeholder='P.O. Box 123' value='{val("postal_address")}' class='field'></label>
+<label>Postal Code<input name='postal_code' placeholder='00100' value='{val("postal_code")}' class='field'></label>
 <label>Principal / Administrator<input name='principal' required value='{val("principal")}' class='field'></label>
 <label>School Type<select name='school_type' class='field'><option {'selected' if school["school_type"]=="Primary" else ''}>Primary</option><option {'selected' if school["school_type"]=="Secondary" else ''}>Secondary</option><option {'selected' if school["school_type"]=="Primary & Junior Secondary" else ''}>Primary & Junior Secondary</option></select></label>
+<div style='grid-column:1/-1'><div style='font-size:12px;font-weight:800;color:#475569;margin-bottom:7px'>School Logo</div>{logo_preview}<input name='school_logo' type='file' accept='image/png,image/jpeg,image/webp,image/gif' class='field' style='margin-top:8px'><div class='muted' style='margin-top:5px'>Upload PNG, JPG, WEBP or GIF. The logo will appear on school printouts, including report cards and marksheets.</div></div>
 <div style='grid-column:1/-1'><button class='btn'>Save School Settings</button></div></form></div></div>
 <style>label{{display:block;font-size:12px;font-weight:800;color:#475569}}.field{{width:100%;margin-top:6px;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request,"School Settings",body)
 
 @router.post("/app/school-settings")
-def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...)):
+async def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...), postal_address:str=Form(""), postal_code:str=Form(""), school_logo:UploadFile|None=File(None)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     allowed={"Primary","Secondary","Primary & Junior Secondary"}
     if school_type not in allowed:return HTMLResponse("Invalid school type. <a href='/app/school-settings'>Back</a>",400)
+    logo_data=None
+    if school_logo and school_logo.filename:
+        raw=await school_logo.read()
+        if len(raw)>2*1024*1024:return HTMLResponse("School logo is too large. Maximum size is 2 MB. <a href='/app/school-settings'>Back</a>",400)
+        content_type=(school_logo.content_type or "").lower()
+        allowed_types={"image/png","image/jpeg","image/webp","image/gif"}
+        if content_type not in allowed_types:return HTMLResponse("Invalid logo format. Use PNG, JPG, WEBP or GIF. <a href='/app/school-settings'>Back</a>",400)
+        logo_data=f"data:{content_type};base64,{base64.b64encode(raw).decode('ascii')}"
     con=_db();cur=con.cursor()
-    cur.execute("UPDATE schools SET name=?,email=?,location=?,phone=?,principal=?,school_type=? WHERE id=?",(school_name.strip(),school_email.strip(),location.strip(),phone.strip(),principal.strip(),school_type,sid))
-    _audit(cur,sid,request,"SCHOOL_PROFILE_UPDATE",f"Updated school profile for {school_name.strip()}")
+    if logo_data:
+        cur.execute("UPDATE schools SET name=?,email=?,location=?,phone=?,principal=?,school_type=?,postal_address=?,postal_code=?,logo_data=? WHERE id=?",(school_name.strip(),school_email.strip(),location.strip(),phone.strip(),principal.strip(),school_type,postal_address.strip(),postal_code.strip(),logo_data,sid))
+    else:
+        cur.execute("UPDATE schools SET name=?,email=?,location=?,phone=?,principal=?,school_type=?,postal_address=?,postal_code=? WHERE id=?",(school_name.strip(),school_email.strip(),location.strip(),phone.strip(),principal.strip(),school_type,postal_address.strip(),postal_code.strip(),sid))
+    _audit(cur,sid,request,"SCHOOL_PROFILE_UPDATE",f"Updated school profile and document identity for {school_name.strip()}")
     con.commit();con.close()
     return RedirectResponse("/app/school-settings?saved=1",303)
 
@@ -788,7 +811,15 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     total=sum(float(r["marks"] or 0) for r in rows);avg=total/len(rows) if rows else 0
     markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{r['marks']}</td><td>{_grade(r['marks'])}</td></tr>" for r in rows)
-    report_html=f"""<div class='card section' id='report'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div><table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form><button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button></div>""" if st else "<div class='card section'>Select a student and examination.</div>"
+    school_row=cur.execute("SELECT name,email,phone,postal_address,postal_code,logo_data FROM schools WHERE id=?",(sid,)).fetchone()
+    school_name=escape(str(school_row["name"] or "DaviSchool")) if school_row else "DaviSchool"
+    school_email=escape(str(school_row["email"] or "")) if school_row else ""
+    school_phone=escape(str(school_row["phone"] or "")) if school_row else ""
+    school_postal=escape("P.O. Box %s" % str(school_row["postal_address"] or "")) if school_row and school_row["postal_address"] else ""
+    school_postal_code=escape(str(school_row["postal_code"] or "")) if school_row else ""
+    school_logo=str(school_row["logo_data"] or "") if school_row else ""
+    doc_brand="<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
+    report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div><table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form><button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button></div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Report Cards",body)
 
