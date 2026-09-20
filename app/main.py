@@ -332,6 +332,9 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     request.session["user_id"]=u["id"]; request.session["email"]=u["email"]; request.session["role"]=u["role"]; request.session["name"]=u["full_name"]; request.session["school_id"]=u["school_id"] or 0; request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None; request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None; request.session["is_impersonating"]=False
     if u["role"] == "super_admin":
         return RedirectResponse("/dashboard", status_code=303)
+    # All school users now enter the new DaviSchool interface automatically.
+    if u["school_id"]:
+        return RedirectResponse("/app", status_code=303)
     if u["role"] in ["teacher", "parent", "student"]:
         return RedirectResponse("/portal", status_code=303)
     return RedirectResponse("/app", status_code=303)
