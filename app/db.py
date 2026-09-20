@@ -112,16 +112,6 @@ class CompatCursor:
         translated = translate_sql(sql)
         self._cursor.execute(translated, params)
         self._lastrowid = None
-        if re.match(r"^\s*INSERT\b", translated, flags=re.IGNORECASE):
-            try:
-                self._cursor.execute("SELECT lastval()")
-                row = self._cursor.fetchone()
-                self._lastrowid = row[0] if row else None
-            except Exception:
-                # Not every INSERT uses a serial sequence.
-                self._cursor.connection.rollback()
-                # Re-run the original INSERT after the harmless lastval failure.
-                self._cursor.execute(translated, params)
         return self
 
     def executemany(self, sql, seq_of_params):
