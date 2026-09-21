@@ -437,6 +437,12 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         if not valid:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         user_id=u["id"]; user_email=u["email"]; role=u["role"]; full_name=u["full_name"]; school_id=u["school_id"] or 0
+        # A suspended school must not be able to start a new session.
+        if role == "school_admin" and school_id:
+            school = cur.execute("SELECT status FROM schools WHERE id=?", (school_id,)).fetchone()
+            school_status = str(school["status"] or "active").strip().lower() if school else "suspended"
+            if school_status not in ("active", "enabled"):
+                return HTMLResponse("❌ This school account is suspended. Please contact the DaviSchool administrator. <a href='/'>Back</a>", status_code=403)
     except Exception as exc:
         print("DAVISCHOOL LOGIN ERROR:", repr(exc), flush=True)
         return HTMLResponse("DaviSchool could not complete the sign-in request. Please try again.", status_code=500)
@@ -1084,20 +1090,17 @@ def school_record_load(request: Request, class_name: str = Form(...), stream: st
     if "email" not in request.session: return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor()
-    # Validate every academic reference against the logged-in school before
-    # accepting a mark. This prevents cross-school writes and invalid scores.
-    if out_of <= 0:
+    if not school:
         con.close()
-        return JSONResponse({"ok":False,"message":"Invalid maximum mark."}, status_code=400)
-    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?", (student_id, school["id"])).fetchone():
-        con.close()
-        return JSONResponse({"ok":False,"message":"Student is not part of this school."}, status_code=403)
+        return RedirectResponse("/",303)
+    # Validate the selected academic references before loading the marks window.
+    # This is read-time validation: it must use only values available to this route.
     if not cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, school["id"])).fetchone():
         con.close()
-        return JSONResponse({"ok":False,"message":"Subject is not part of this school."}, status_code=403)
+        return HTMLResponse("Invalid subject for this school. <a href='/school/record-marks'>Back</a>", status_code=403)
     if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?", (exam_id, school["id"])).fetchone():
         con.close()
-        return JSONResponse({"ok":False,"message":"Examination is not part of this school."}, status_code=403)
+        return HTMLResponse("Invalid examination for this school. <a href='/school/record-marks'>Back</a>", status_code=403)
     cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (school["id"], class_name.upper(), stream.upper()))
     cl = cur.fetchone()
     if not cl:
@@ -1137,6 +1140,19 @@ def school_record_auto_save(request: Request, student_id: int = Form(...), exam_
         cl = cur.fetchone()
     class_id = cl["id"] if cl else 0
     try:
+        # The write endpoint is the authoritative place for mark validation.
+        if out_of <= 0:
+            con.close()
+            return JSONResponse({"ok":False,"message":"Invalid maximum mark."}, status_code=400)
+        if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?", (student_id, school["id"])).fetchone():
+            con.close()
+            return JSONResponse({"ok":False,"message":"Student is not part of this school."}, status_code=403)
+        if not cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, school["id"])).fetchone():
+            con.close()
+            return JSONResponse({"ok":False,"message":"Subject is not part of this school."}, status_code=403)
+        if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?", (exam_id, school["id"])).fetchone():
+            con.close()
+            return JSONResponse({"ok":False,"message":"Examination is not part of this school."}, status_code=403)
         if marks.strip()=="": cur.close(); con.close(); return JSONResponse({"ok":True})
         m = int(float(marks.strip()))
         if m < 0 or m > out_of:
