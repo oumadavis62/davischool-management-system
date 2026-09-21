@@ -61,43 +61,48 @@ def _db():
     from app.main import get_db
     return get_db()
 
-def _shell(title, name, role, body):
-    # Keep the sidebar aligned with the authenticated workspace.
-    # Super Admin users must not be offered school-scoped pages because those
-    # pages intentionally require a school_id and would otherwise redirect
-    # back to the login page.
+def _shell(title, name, role, body, school_id=None):
+    # Sidebar visibility follows the same permission vocabulary enforced by
+    # protected routes. Super Admin remains on platform-level navigation.
     if role == "super_admin":
         nav = [
-            ("/app","⌂","Platform Overview"),
-            ("/schools/manage","🏫","Manage Schools"),
-            ("/super/global-control/dashboard","🌍","Global Control"),
-            ("/account/change-password","🔑","My Account"),
-            ("/school/system-audit","🛡","Audit & Security"),
+            ("/app","⌂","Platform Overview",None),
+            ("/schools/manage","🏫","Manage Schools",None),
+            ("/super/global-control/dashboard","🌍","Global Control",None),
+            ("/account/change-password","🔑","My Account",None),
+            ("/school/system-audit","🛡","Audit & Security",None),
         ]
     else:
         nav = [
-            ("/app","⌂","Overview"),
-            ("/app/students","🎓","Students"),
-            ("/app/staff","👩‍🏫","Staff & Teachers"),
-            ("/app/classes","🏫","Classes"),
-            ("/app/subjects","📚","Subjects"),
-            ("/app/exams","🧪","Examinations"),
-            ("/app/academics","📝","Academics"),
-            ("/app/academics/allocations","👩‍🏫","Teacher Allocations"),
-            ("/app/academics/assessments","📋","SBA / CBA"),
-            ("/app/academics/analysis","📊","Academic Analysis"),
-            ("/app/report-cards","📄","Report Cards"),
-            ("/app/attendance","✓","Attendance"),
-            ("/app/timetable","🗓","Timetable"),
-            ("/app/finance","💰","Fees & Finance"),
-            ("/app/accounting","📚","Accounting"),
-            ("/app/announcements","📢","Announcements"),
-            ("/app/users","👤","Users"),
-            ("/app/roles","🔐","Roles & Permissions"),
-            ("/app/school-settings","⚙","School Settings"),
-            ("/app/audit","🛡","Audit Trail"),
+            ("/app","⌂","Overview",None),
+            ("/app/students","🎓","Students","students.view"),
+            ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
+            ("/app/classes","🏫","Classes","classes.view"),
+            ("/app/subjects","📚","Subjects","subjects.view"),
+            ("/app/exams","🧪","Examinations","exams.view"),
+            ("/app/academics","📝","Academics","marks.view"),
+            ("/app/academics/allocations","👩‍🏫","Teacher Allocations","staff.edit"),
+            ("/app/academics/assessments","📋","SBA / CBA","marks.edit"),
+            ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
+            ("/app/report-cards","📄","Report Cards","reports.view"),
+            ("/app/attendance","✓","Attendance","attendance.view"),
+            ("/app/timetable","🗓","Timetable","timetable.view"),
+            ("/app/finance","💰","Fees & Finance","fees.view"),
+            ("/app/accounting","📚","Accounting","finance.view"),
+            ("/app/announcements","📢","Announcements","communications.view"),
+            ("/app/users","👤","Users","users.manage"),
+            ("/app/roles","🔐","Roles & Permissions","settings.manage"),
+            ("/app/school-settings","⚙","School Settings","settings.view"),
+            ("/app/audit","🛡","Audit Trail","audit.view"),
         ]
-    links="".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l in nav)
+        if role != "school_admin" and school_id:
+            con = _db()
+            try:
+                cur = con.cursor()
+                nav = [item for item in nav if item[3] is None or _permission_enabled(cur, int(school_id), role, item[3])]
+            finally:
+                con.close()
+    links="".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     return f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>{escape(title)} · DaviSchool</title>
@@ -116,7 +121,6 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a></aside>
 <main class='main'><header class='top'><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}</main></div></body></html>"""
-
 def _school_session(request):
     # The /app workspace is the school administration workspace. Other
     # accounts use their dedicated portal so they cannot inherit admin access.
@@ -160,7 +164,7 @@ def _require_permission(request, school_id, permission):
 def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
-    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body))
+    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid))
 
 @router.get("/app/students", response_class=HTMLResponse)
 def students_page(request: Request):
