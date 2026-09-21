@@ -1009,7 +1009,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         if mark<0 or mark>out_of: continue
         old=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,st["id"],subject_id,exam_id)).fetchone()
         if old:
-            cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"]))
+            cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"],sid))
         else:
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
         # Subject performance comment is saved with the same student/exam/subject scope.
@@ -1019,7 +1019,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             comment=str(form.get(f"comment_{st['id']}") or "").strip()
             existing_comment=cur.execute("SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,st["id"],exam_id,subject_id)).fetchone()
             if existing_comment:
-                cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=?",(comment,now,existing_comment["id"]))
+                cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
             else:
                 cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,st["id"],exam_id,subject_id,comment,now))
     _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
@@ -1441,7 +1441,7 @@ def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...)
         for f in charges:
             if remaining<=0:break
             applied=min(remaining,float(f["amount"])-float(f["paid"] or 0)); newpaid=float(f["paid"] or 0)+applied; remaining-=applied
-            cur.execute("UPDATE fees SET paid=?,status=? WHERE id=?",(newpaid,"Paid" if newpaid>=float(f["amount"]) else "Partial",f["id"]))
+            cur.execute("UPDATE fees SET paid=?,status=? WHERE id=? AND school_id=?",(newpaid,"Paid" if newpaid>=float(f["amount"]) else "Partial",f["id"],sid))
         cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",(sid,now,reference,"School fee receipt",0,amount,"Fees"))
         _audit(cur,sid,request,"FEE_PAYMENT",f"Received {amount} from student {student_id}")
     con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
