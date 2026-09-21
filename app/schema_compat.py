@@ -52,9 +52,9 @@ def _ensure_live_postgres_schema():
         "teachers": {
             "school_id": "INTEGER", "name": "TEXT", "email": "TEXT", "phone": "TEXT",
             "tsc_no": "TEXT", "gender": "TEXT", "id_no": "TEXT", "role": "TEXT",
-            "employment_type": "TEXT",
+            "employment_type": "TEXT", "status": "TEXT", "department": "TEXT",
         },
-        "teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER"},
+        "teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER", "responsibility": "TEXT"},
         "billing": {"school_id": "INTEGER", "amount": "TEXT", "status": "TEXT", "due_date": "TEXT", "created_at": "TEXT"},
         "marks": {
             "school_id": "INTEGER", "student_id": "INTEGER", "subject_id": "INTEGER",
