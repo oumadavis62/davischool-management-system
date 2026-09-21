@@ -198,6 +198,8 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/school-settings","⚙","School Settings","settings.view"),
             ("/app/audit","🛡","Audit Trail","audit.view"),
         ]
+        if role == "school_admin":
+            nav.insert(7, ("/app/academics/marks-corrections","🔓","Marks Corrections",None))
         if role not in ("school_admin", "teacher") and school_id:
             con = _db()
             try:
