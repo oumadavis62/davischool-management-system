@@ -177,7 +177,8 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
     admission=admission_no.strip()
     if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
         con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
-    cid=int(class_id) if class_id.isdigit() else None    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
+    cid=int(class_id) if class_id.isdigit() else None
+    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
     cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),"","active"))
     student_id=cur.lastrowid
     _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
