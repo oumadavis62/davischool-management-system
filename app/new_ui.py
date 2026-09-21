@@ -1157,28 +1157,56 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     out_of=100.0
     subject_comments={}
     if eid and cid and subid:
-        students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
-          FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
-          WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
-        cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
-        out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
-        _ensure_report_card_fields(cur)
-        for strow in students:
-            sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,strow["id"],eid,subid)).fetchone()
-            subject_comments[int(strow["id"])]=sc["comment"] if sc else ""
+        # Load the learner list first. The fallback query deliberately reads
+        # only student data, so a legacy marks schema can never prevent the
+        # Marks Entry screen from opening.
+        try:
+            students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
+              FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
+              WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+        except Exception as exc:
+            print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
+            students=cur.execute("""SELECT id,admission_no,name,'' AS marks
+              FROM students WHERE school_id=? AND class_id=? ORDER BY name""",(sid,cid)).fetchall()
+        try:
+            cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
+            out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+        except Exception as exc:
+            print("DAVISCHOOL MARKS CONFIG FALLBACK:", repr(exc), flush=True)
+            out_of=100.0
+        try:
+            _ensure_report_card_fields(cur)
+            for strow in students:
+                try:
+                    sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,strow["id"],eid,subid)).fetchone()
+                    subject_comments[int(strow["id"])]=sc["comment"] if sc else ""
+                except Exception as exc:
+                    print("DAVISCHOOL MARKS COMMENT READ FALLBACK:", repr(exc), flush=True)
+                    subject_comments[int(strow["id"])]=""
+        except Exception as exc:
+            print("DAVISCHOOL MARKS COMMENT TABLE FALLBACK:", repr(exc), flush=True)
     grading_rules=[]
     if subid:
-        _ensure_grading_table(cur)
-        grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
-          WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall()
+        try:
+            _ensure_grading_table(cur)
+            grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
+              WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall()
+        except Exception as exc:
+            print("DAVISCHOOL GRADING RULES FALLBACK:", repr(exc), flush=True)
+            grading_rules=[]
     js_rules="["+",".join("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"]),float(r["points"] or 0)) for r in grading_rules)+"]"
     eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     locked = False
     if eid and cid and subid:
-        _ensure_academic_locks_table(cur)
-        locked = bool(_academic_lock(cur,sid,eid,cid,subid))
+        try:
+            _ensure_academic_locks_table(cur)
+            locked = bool(_academic_lock(cur,sid,eid,cid,subid))
+        except Exception as exc:
+            # A legacy lock table must never make existing marks inaccessible.
+            print("DAVISCHOOL MARKS LOCK FALLBACK:", repr(exc), flush=True)
+            locked = False
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     rows=""
     for x in students:
@@ -1186,7 +1214,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         if mark=="":
             grade,points="—","—"
         else:
-            grade,points=_subject_grade_points(cur,sid,subid,mark)
+            try:
+                grade,points=_subject_grade_points(cur,sid,subid,mark)
+            except Exception as exc:
+                print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
+                grade,points=_default_grade_points(float(mark))
         rows+="<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment' %s></td></tr>"%(escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],escape(str(mark)),out_of,"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))),"disabled" if locked else "")
     con.close()
     body=(
