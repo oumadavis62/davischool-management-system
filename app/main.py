@@ -992,9 +992,27 @@ def school_students(request: Request):
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
 @app.post("/school/students/add")
 def add_student(request: Request, admission_no: str = Form(...), assessment_no: str = Form(""), student_name: str = Form(...), class_id: int = Form(...), gender: str = Form(...), category: str = Form("Day"), guardian_name: str = Form(""), parent_phone: str = Form("")):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_phone, category, guardian_name) VALUES (?,?,?,?,?,?,?,?,?)", (school["id"], admission_no.strip().upper(), assessment_no.strip().upper(), student_name.strip().upper(), class_id, gender.strip(), parent_phone.strip(), category.strip(), guardian_name.strip().upper()))
-    con.commit(); con.close(); return RedirectResponse("/school/students",303)
+    school = get_school_obj(request)
+    if not school or not _role_permission(request,"students.create"):
+        return RedirectResponse("/portal",303)
+    con = get_db(); cur = con.cursor()
+    if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,school["id"])).fetchone():
+        con.close()
+        return HTMLResponse("Invalid class for this school.",403)
+    adm=admission_no.strip().upper()
+    ass=assessment_no.strip().upper()
+    if not student_name.strip() or not adm:
+        con.close()
+        return HTMLResponse("Student name and admission number are required.",400)
+    if cur.execute("SELECT id FROM students WHERE school_id=? AND upper(admission_no)=?",(school["id"],adm)).fetchone():
+        con.close()
+        return HTMLResponse("Admission number already exists in this school.",409)
+    if ass and cur.execute("SELECT id FROM students WHERE school_id=? AND upper(assessment_no)=?",(school["id"],ass)).fetchone():
+        con.close()
+        return HTMLResponse("Assessment number already exists in this school.",409)
+    cur.execute("INSERT INTO students (school_id, admission_no, assessment_no, name, class_id, gender, parent_phone, category, guardian_name) VALUES (?,?,?,?,?,?,?,?,?)",(school["id"],adm,ass,student_name.strip().upper(),class_id,gender.strip(),category.strip(),guardian_name.strip().upper(),parent_phone.strip()))
+    con.commit(); con.close()
+    return RedirectResponse("/school/students",303)
 @app.get("/school/students/delete/{sid}")
 def del_stud(sid: int, request: Request):
     school = get_school_obj(request)
@@ -1327,7 +1345,30 @@ def sys_del_class(request: Request, cid: int):
     con=get_db(); con.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
 @app.post("/school/system-settings/add-user")
 def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...), teacher_id: str = Form(""), student_id: str = Form("")):
-    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id) VALUES (?,?,?,?,?,?,?)", (email.strip(), hash_password(password.strip()), role.strip(), full_name.strip(), school_obj["id"], int(teacher_id) if teacher_id.strip() else None, int(student_id) if student_id.strip() else None)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+    school_obj = get_school_obj(request)
+    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"] or not _role_permission(request,"users.manage"):
+        return RedirectResponse("/",303)
+    role_v=role.strip().lower()
+    allowed={"teacher","parent","student","school_admin","accountant","registrar"}
+    if role_v not in allowed or not full_name.strip() or not email.strip() or not password.strip():
+        return HTMLResponse("Invalid user details.",400)
+    con=get_db(); cur=con.cursor()
+    if cur.execute("SELECT id FROM users WHERE lower(email)=lower(?)",(email.strip(),)).fetchone():
+        con.close()
+        return HTMLResponse("That email is already registered.",409)
+    tid=int(teacher_id) if teacher_id.strip() else None
+    stid=int(student_id) if student_id.strip() else None
+    if tid is not None and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,school_obj["id"])).fetchone():
+        con.close(); return HTMLResponse("Invalid teacher for this school.",403)
+    if stid is not None and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,school_obj["id"])).fetchone():
+        con.close(); return HTMLResponse("Invalid student for this school.",403)
+    if role_v=="teacher" and tid is None:
+        con.close(); return HTMLResponse("A teacher account must be linked to a teacher.",400)
+    if role_v in ("student","parent") and stid is None:
+        con.close(); return HTMLResponse("A student/parent account must be linked to a student.",400)
+    cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id) VALUES (?,?,?,?,?,?,?)",(email.strip(),hash_password(password.strip()),role_v,full_name.strip(),school_obj["id"],tid,stid))
+    con.commit(); con.close()
+    return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/delete-user/{uid}")
 def sys_del_user(request: Request, uid: int):
     school_obj=get_school_obj(request)
@@ -1344,7 +1385,11 @@ def sys_backup_download(request: Request):
     return FileResponse(out,filename=os.path.basename(out),media_type='application/octet-stream')
 @app.get("/school/system-settings/audit/clear")
 def sys_audit_clear(request: Request):
-    school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?", (school_obj["id"],)); con.commit(); con.close(); return RedirectResponse("/school/system-settings/system-audit",303)
+    school_obj = get_school_obj(request)
+    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"] or not _role_permission(request,"settings.manage"):
+        return RedirectResponse("/",303)
+    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?",(school_obj["id"],)); con.commit(); con.close()
+    return RedirectResponse("/school/system-settings/system-audit",303)
 @app.post("/school/system-settings/billing/add")
 def sys_billing_add(request: Request, amount: str = Form(...), status: str = Form(...), due_date: str = Form(...)):
     school_obj = get_school_obj(request); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
