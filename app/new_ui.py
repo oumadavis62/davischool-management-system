@@ -416,7 +416,8 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if min_total<0 or max_total<min_total:
-        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)
+    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
     _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f total marks"%(grade.strip(),min_total,max_total))
     con.commit();con.close()
