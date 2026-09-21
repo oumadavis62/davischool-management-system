@@ -795,6 +795,19 @@ def _ensure_academic_locks_table(cur):
         finalized_by TEXT,
         finalized_at TEXT
     )""")
+    for col, definition in [
+        ("school_id","INTEGER"),
+        ("exam_id","INTEGER"),
+        ("class_id","INTEGER"),
+        ("subject_id","INTEGER"),
+        ("status","TEXT"),
+        ("finalized_by","TEXT"),
+        ("finalized_at","TEXT"),
+    ]:
+        try:
+            cur.execute("ALTER TABLE academic_locks ADD COLUMN %s %s" % (col, definition))
+        except Exception:
+            pass
 
 def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
     _ensure_academic_locks_table(cur)
@@ -803,7 +816,8 @@ def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
         (school_id, exam_id, class_id, subject_id)
     ).fetchone()
 
-def _ensure_grading_table(cur):    cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
+def _ensure_grading_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER,
         subject_id INTEGER,
@@ -812,6 +826,19 @@ def _ensure_grading_table(cur):    cur.execute("""CREATE TABLE IF NOT EXISTS sub
         grade TEXT,
         points REAL
     )""")
+    # Additive compatibility for older production databases.
+    for col, definition in [
+        ("school_id","INTEGER"),
+        ("subject_id","INTEGER"),
+        ("min_mark","REAL"),
+        ("max_mark","REAL"),
+        ("grade","TEXT"),
+        ("points","REAL"),
+    ]:
+        try:
+            cur.execute("ALTER TABLE subject_grading_rules ADD COLUMN %s %s" % (col, definition))
+        except Exception:
+            pass
 
 def _default_grade_points(mark):
     grade = _grade(mark)
