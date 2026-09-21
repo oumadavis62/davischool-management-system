@@ -1351,14 +1351,23 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     con=_db();cur=con.cursor()
-    if cur.execute("SELECT id FROM users WHERE email=?",(email.strip(),)).fetchone():
+    email_v=email.strip().lower()
+    if cur.execute("SELECT id FROM users WHERE lower(email)=?",(email_v,)).fetchone():
         con.close();return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",400)
     tid=int(teacher_id) if teacher_id.isdigit() else None
     stid=int(student_id) if student_id.isdigit() else None
-    if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): tid=None
-    if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): stid=None
+    if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
+        con.close();return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
+    if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
+        con.close();return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
+    if role=="teacher" and not tid:
+        con.close();return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
+    if role in ("student","parent") and not stid:
+        con.close();return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
+    if role not in ("teacher","student","parent") and (tid or stid):
+        con.close();return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
     from app.main import hash_password
-    cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email.strip(),hash_password(password),role,full_name.strip(),sid,tid,stid))
+    cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
     _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
