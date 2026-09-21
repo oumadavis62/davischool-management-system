@@ -1,5 +1,5 @@
 from fastapi import Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, HTMLResponse, PlainTextResponse
 from urllib.parse import quote
 
 def install_legacy_school_redirect(app):
@@ -118,19 +118,26 @@ def install_legacy_school_redirect(app):
                         points = "%.1f" % float(points)
                 rows += (
                     "<tr><td>%s</td><td><b>%s</b></td>"
-                    "<td><input name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput'></td>"
+                    "<td><input id='recovery-mark-%s' name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput'></td>"
                     "<td>%s</td><td>%s</td>"
-                    "<td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment'></td></tr>"
+                    "<td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment'></td>"
+                    "<td style='white-space:nowrap'><button type='button' class='editbtn' onclick="document.getElementById('recovery-mark-%s').focus();document.getElementById('recovery-mark-%s').select();">✏️ Edit</button>"
+                    "<button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick="return confirm('Delete this mark for %s? This cannot be undone.');">🗑️ Delete</button></td></tr>"
                     % (
                         ui.escape(str(st["admission_no"] or "")),
                         ui.escape(str(st["name"] or "")),
+                        st["id"],
                         st["id"],
                         ui.escape(str(mark)),
                         out_of,
                         ui.escape(str(grade)),
                         points,
                         st["id"],
-                        ui.escape(str(comments.get(int(st["id"]), "")))
+                        ui.escape(str(comments.get(int(st["id"]), ""))),
+                        st["id"],
+                        st["id"],
+                        st["id"],
+                        ui.escape(str(st["name"] or "")).replace("'", "&#39;")
                     )
                 )
 
@@ -144,9 +151,9 @@ def install_legacy_school_redirect(app):
                 "<button class='btn'>Load Students</button></form></div>"
                 "<div class='card section'><form method='post' action='/app/academics/marks/save'>"
                 "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
-                "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead>"
+                "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead>"
                 "<tbody>%s</tbody></table>%s</form></div></div>"
-                "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
+                "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
                 % (
                     eopts, copts, sopts, eid, cid, subid, out_of,
                     rows or "<tr><td colspan='6'>Select an examination, class and subject, then load students.</td></tr>",
