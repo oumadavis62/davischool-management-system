@@ -142,6 +142,8 @@ def ensure_schema_compatibility(con):
             "details": "TEXT",
             "timestamp": "TEXT",
         },
+        "teachers": {"status": "TEXT", "department": "TEXT"},
+        "teacher_allocations": {"responsibility": "TEXT"},
     }
 
     for table, columns in migrations.items():
