@@ -225,6 +225,30 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     return _school_page(request,"Academic Management",body)
 
 
+def _student_result(cur, school_id, student_id, exam_id):
+    """Single source of truth for a student's academic totals."""
+    rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks
+        FROM marks m JOIN subjects sub ON sub.id=m.subject_id
+        WHERE m.school_id=? AND m.student_id=? AND m.exam_id=?
+        ORDER BY sub.name""",(school_id,student_id,exam_id)).fetchall()
+    total=0.0
+    points=0.0
+    graded=0
+    details=[]
+    for r in rows:
+        if r["marks"] is None or str(r["marks"])=="":
+            continue
+        mark=float(r["marks"])
+        grade,pt=_subject_grade_points(cur,school_id,int(r["subject_id"]),mark)
+        total += mark
+        points += float(pt or 0)
+        graded += 1
+        details.append((r,mark,grade,float(pt or 0)))
+    average=(total/graded) if graded else 0.0
+    overall=_overall_grade(cur,school_id,total) if graded else "—"
+    return {"rows":rows,"details":details,"total":total,"points":points,
+            "count":graded,"average":average,"overall_grade":overall}
+
 def _ensure_overall_grading_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS overall_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -906,8 +930,9 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
         comment=cm["comment"] if cm else ""
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    total=sum(float(r["marks"] or 0) for r in rows);avg=total/len(rows) if rows else 0
-    markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{r['marks']}</td><td>{_grade(r['marks'])}</td></tr>" for r in rows)
+    result=_student_result(cur,sid,stid,eid) if st and eid else {"rows":[],"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
+    total=result["total"];avg=result["average"]
+    markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td></tr>" for r,mark,grade,points in result["details"])
     school_row=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     school_name=escape(str(school_row["name"] or "DaviSchool")) if school_row else "DaviSchool"
     school_email=escape(str(school_row["email"] or "")) if school_row else ""
@@ -918,7 +943,7 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
     doc_brand="<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     final_banner=("<div style='padding:10px;background:#dcfce7;color:#166534;border-radius:9px;font-weight:800'>✅ FINAL REPORT — all recorded subjects are finalized.</div>" if report_final else "<div style='padding:10px;background:#fef3c7;color:#92400e;border-radius:9px;font-weight:800'>📝 DRAFT REPORT — finalize all recorded subject marks before printing the final report.</div>")
     print_btn="<button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button>" if report_final else ""
-    report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form>{print_btn}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
+    report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'>Points</div><div class='kpi'>{result["points"]:.1f}</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form>{print_btn}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Report Cards",body)
 
