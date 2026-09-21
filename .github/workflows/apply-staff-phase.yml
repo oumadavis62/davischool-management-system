@@ -1,0 +1,172 @@
+name: Apply Staff Teacher Phase
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, 'Apply staff teacher phase')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply changes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path("app/new_ui.py")
+          s = p.read_text(encoding="utf-8")
+
+          start = s.index('@router.get("/app/staff", response_class=HTMLResponse)')
+          end = s.index('@router.get("/app/academics", response_class=HTMLResponse)', start)
+
+          block = r'''@router.get("/app/staff", response_class=HTMLResponse)
+def staff_page(request: Request):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    con=_db(); cur=con.cursor()
+    staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    con.close()
+    def val(t,key,default=""):
+        try: return str(t[key] if t[key] is not None else default)
+        except Exception: return default
+    rows="".join(f"""<tr>
+      <td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td>
+      <td>{escape(val(t,'role'))}</td><td>{escape(val(t,'email'))}</td><td>{escape(val(t,'phone'))}</td>
+      <td>{escape(val(t,'employment_type'))}</td>
+      <td><span class='status'>{escape(val(t,'status','active').title())}</span></td>
+      <td><a class='action' href='/app/staff/edit/{t["id"]}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={t["id"]}'>Teaching</a></td>
+    </tr>""" for t in staff)
+    body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory, employment status, teacher profiles and academic responsibilities.</div>
+<div class='card section'><h2>Add staff member</h2><form method='post' action='/app/staff/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'>
+<input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'>
+<select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select>
+<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select>
+<select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select>
+<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select>
+<input name='department' placeholder='Department / responsibility' class='field'><button class='btn'>Save Staff</button></form></div>
+<div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><h2>Staff register ({len(staff)})</h2><a class='action' href='/app/academics/allocations'>Teacher Allocation</a></div>
+<table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
+    return _school_page(request,"Staff & Teachers",body)
+
+@router.post("/app/staff/add")
+def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    allowed_status=("active","inactive","on_leave","left")
+    new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
+    con=_db();cur=con.cursor()
+    email_v=email.strip(); tsc_v=tsc_no.strip(); id_v=id_no.strip()
+    if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?)",(sid,email_v)).fetchone():
+        con.close(); return HTMLResponse("A staff member with that email already exists. <a href='/app/staff'>Back</a>",400)
+    if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?)",(sid,tsc_v)).fetchone():
+        con.close(); return HTMLResponse("That TSC number already exists. <a href='/app/staff'>Back</a>",400)
+    if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?)",(sid,id_v)).fetchone():
+        con.close(); return HTMLResponse("That ID number already exists. <a href='/app/staff'>Back</a>",400)
+    cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,status,department) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (sid,name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip()))
+    _audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}")
+    con.commit();con.close();return RedirectResponse("/app/staff",303)
+
+@router.get("/app/staff/edit/{teacher_id}",response_class=HTMLResponse)
+def staff_edit_page(request: Request,teacher_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    con.close()
+    if not t:return HTMLResponse("Staff member not found.",404)
+    def val(key,default=""):
+        try:return str(t[key] if t[key] is not None else default)
+        except Exception:return default
+    status=val("status","active")
+    body=f"""<div class='page'><h1>Edit Staff / Teacher</h1><div class='card section'><form method='post' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+<label>Full name<input name='name' value='{escape(val("name"))}' required class='field'></label>
+<label>Email<input name='email' type='email' value='{escape(val("email"))}' class='field'></label>
+<label>Phone<input name='phone' value='{escape(val("phone"))}' class='field'></label>
+<label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"))}' class='field'></label>
+<label>ID number<input name='id_no' value='{escape(val("id_no"))}' class='field'></label>
+<label>Role<select name='role' class='field'><option>{escape(val("role","Teacher"))}</option><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select></label>
+<label>Gender<select name='gender' class='field'><option>{escape(val("gender"))}</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+<label>Employment type<select name='employment_type' class='field'><option>{escape(val("employment_type","Permanent"))}</option><option>Permanent</option><option>Contract</option><option>Part-time</option></select></label>
+<label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
+<label>Department / responsibility<input name='department' value='{escape(val("department"))}' class='field'></label>
+<div><button class='btn'>Save Changes</button> <a class='action' href='/app/staff'>Cancel</a></div></form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin-top:5px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Edit Staff / Teacher",body)
+
+@router.post("/app/staff/edit/{teacher_id}")
+def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    allowed_status=("active","inactive","on_leave","left")
+    new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
+    con=_db();cur=con.cursor()
+    t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    if not t:con.close();return HTMLResponse("Staff member not found.",404)
+    email_v=email.strip();tsc_v=tsc_no.strip();id_v=id_no.strip()
+    if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?) AND id<>?",(sid,email_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("A staff member with that email already exists.",400)
+    if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?) AND id<>?",(sid,tsc_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("That TSC number already exists.",400)
+    if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?) AND id<>?",(sid,id_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("That ID number already exists.",400)
+    cur.execute("UPDATE teachers SET name=?,email=?,phone=?,tsc_no=?,gender=?,id_no=?,role=?,employment_type=?,status=?,department=? WHERE id=? AND school_id=?",
+                (name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip(),teacher_id,sid))
+    _audit(cur,sid,request,"STAFF_UPDATE",f"Updated staff member {name.strip()} ({teacher_id})")
+    con.commit();con.close();return RedirectResponse("/app/staff",303)
+
+'''
+          s = s[:start] + block + s[end:]
+
+          sc = Path("app/schema_compat.py")
+          x = sc.read_text(encoding="utf-8")
+          x = x.replace('"employment_type": "TEXT",\n        },', '"employment_type": "TEXT", "status": "TEXT", "department": "TEXT",\n        },')
+          x = x.replace('"teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER"},',
+                        '"teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER", "responsibility": "TEXT"},')
+          sc.write_text(x, encoding="utf-8")
+
+          # Make allocation page filterable by teacher and record academic responsibility.
+          a = Path("app/new_ui.py")
+          s = a.read_text(encoding="utf-8")
+          s = s.replace('@router.get("/app/academics/allocations", response_class=HTMLResponse)\ndef allocations_page(request: Request):',
+                        '@router.get("/app/academics/allocations", response_class=HTMLResponse)\ndef allocations_page(request: Request, teacher_id: str = ""):')
+          s = s.replace('rows=cur.execute("""SELECT ta.*,t.name teacher_name,s.name subject_name,c.name class_name,c.stream',
+                        'tid=int(teacher_id) if teacher_id.isdigit() else 0\n    rows=cur.execute("""SELECT ta.*,t.name teacher_name,s.name subject_name,c.name class_name,c.stream')
+          s = s.replace('WHERE ta.school_id=? ORDER BY t.name,s.name,c.name""",(sid,)).fetchall()',
+                        'WHERE ta.school_id=? AND (?=0 OR ta.teacher_id=?) ORDER BY t.name,s.name,c.name""",(sid,tid,tid)).fetchall()')
+          s = s.replace('<select name="teacher_id" required class="field">{opts(teachers,\'teacher\')}</select><select name="subject_id"',
+                        '<select name="teacher_id" required class="field">{opts(teachers,\'teacher\')}</select><select name="subject_id"')
+          s = s.replace('<select name="class_id" required class="field">{opts(classes,\'class\')}</select><button class="btn">Save Allocation</button>',
+                        '<select name="class_id" required class="field">{opts(classes,\'class\')}</select><select name="responsibility" class="field"><option>Subject Teacher</option><option>Class Teacher</option><option>Head of Department</option><option>Academic Responsibility</option></select><button class="btn">Save Allocation</button>')
+          s = s.replace('<th>Teacher</th><th>Subject</th><th>Class</th><th>Stream</th>',
+                        '<th>Teacher</th><th>Subject</th><th>Class</th><th>Stream</th><th>Responsibility</th>',1)
+          s = s.replace('tr=_simple_rows(rows,["teacher_name","subject_name","class_name","stream"])',
+                        'tr=_simple_rows(rows,["teacher_name","subject_name","class_name","stream","responsibility"])')
+          s = s.replace('def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=Form(...),class_id:int=Form(...)):',
+                        'def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=Form(...),class_id:int=Form(...),responsibility:str=Form("Subject Teacher")):')
+          s = s.replace('cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,subject_id,class_id) VALUES(?,?,?,?)",(sid,teacher_id,subject_id,class_id))',
+                        'cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,subject_id,class_id,responsibility) VALUES(?,?,?,?,?)",(sid,teacher_id,subject_id,class_id,responsibility.strip()))')
+          s = s.replace('<th>Stream</th></tr></thead><tbody>{tr or \'<tr><td colspan=4>No allocations yet.</td></tr>\'}',
+                        '<th>Stream</th><th>Responsibility</th></tr></thead><tbody>{tr or \'<tr><td colspan=5>No allocations yet.</td></tr>\'}')
+          a.write_text(s, encoding="utf-8")
+
+          # Add additive indexes only if the database already has the relevant columns.
+          # (Schema compatibility creates the new teacher columns before runtime use.)
+          print("Staff/Teacher phase applied.")
+
+      - name: Commit changes
+        run: |
+          git config user.name "DaviSchool Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/new_ui.py app/schema_compat.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Apply staff teacher phase [skip ci]"
+          git push
