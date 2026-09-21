@@ -93,11 +93,30 @@ def _ensure_live_postgres_schema():
                     (table,),
                 )
                 existing = {row[0] for row in cur.fetchall()}
+                # Older installations may legitimately not have every optional
+                # table yet. Never let one missing table abort all migrations.
+                if not existing:
+                    continue
                 for column, definition in columns.items():
                     if column not in existing:
-                        cur.execute(
-                            f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'
-                        )
+                        try:
+                            cur.execute(
+                                f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{column}" {definition}'
+                            )
+                        except Exception as exc:
+                            pg.rollback()
+                            print(
+                                f"DAVISCHOOL POSTGRES COLUMN MIGRATION SKIPPED: {table}.{column}: {exc!r}",
+                                flush=True,
+                            )
+                            # Re-open the transaction after a failed DDL statement.
+                            cur = pg.cursor()
+                            cur.execute(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_schema='public' AND table_name=%s",
+                                (table,),
+                            )
+                            existing = {row[0] for row in cur.fetchall()}
         pg.commit()
 
 
@@ -114,6 +133,7 @@ def ensure_schema_compatibility(con):
             "school_id": "INTEGER",
             "student_id": "INTEGER",
             "teacher_id": "INTEGER",
+            "credential_secret": "TEXT",
         },
         "schools": {
             "name": "TEXT",
