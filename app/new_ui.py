@@ -1161,6 +1161,8 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
 def save_subject_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), subject_id:int=Form(...), comment:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit report comments.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone() and cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
     if not valid: con.close(); return HTMLResponse("Invalid report selection.",400)
@@ -1174,6 +1176,8 @@ def save_subject_comment(request: Request, student_id:int=Form(...), exam_id:int
 def save_class_teacher_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), comment:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit report comments.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
     if not valid: con.close(); return HTMLResponse("Invalid report selection.",400)
@@ -1187,6 +1191,8 @@ def save_class_teacher_comment(request: Request, student_id:int=Form(...), exam_
 def report_card_settings(request: Request, exam_id:int=0):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to manage report card dates.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     exams=cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     selected=cur.execute("SELECT * FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,exam_id)).fetchone() if exam_id else None
@@ -1198,6 +1204,8 @@ def report_card_settings(request: Request, exam_id:int=0):
 def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_date:str=Form(""), closing_date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to manage report card dates.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone():
         con.close();return HTMLResponse("Invalid examination.",400)
@@ -1210,6 +1218,8 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
 def report_cards(request: Request, exam_id:str="", student_id:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view report cards.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
@@ -1362,6 +1372,8 @@ def student_promotion_page(request: Request, class_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to promote or transfer students.", 403)
     con = _db()
     cur = con.cursor()
     _ensure_student_history_table(cur)
@@ -1415,6 +1427,8 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to promote or transfer students.", 403)
     form = await request.form()
     con = _db()
     cur = con.cursor()
