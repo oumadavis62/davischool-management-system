@@ -265,6 +265,8 @@ def student_history(request: Request,student_id:int):
 def staff_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
+    if not _require_permission(request, sid, "staff.view"):
+        return HTMLResponse("You do not have permission to view staff records.", 403)
     con=_db(); cur=con.cursor()
     staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     con.close()
@@ -288,6 +290,8 @@ def staff_page(request: Request):
 def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "staff.create"):
+        return HTMLResponse("You do not have permission to add staff.", 403)
     allowed_status=("active","inactive","on_leave","left")
     new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
     con=_db();cur=con.cursor(); email_v=email.strip(); tsc_v=tsc_no.strip(); id_v=id_no.strip()
@@ -305,6 +309,8 @@ def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=F
 def staff_edit_page(request: Request,teacher_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "staff.edit"):
+        return HTMLResponse("You do not have permission to edit staff records.", 403)
     con=_db();cur=con.cursor(); t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone(); con.close()
     if not t:return HTMLResponse("Staff member not found.",404)
     def val(key,default=""):
@@ -325,6 +331,8 @@ def staff_edit_page(request: Request,teacher_id:int):
 def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "staff.edit"):
+        return HTMLResponse("You do not have permission to edit staff records.", 403)
     allowed_status=("active","inactive","on_leave","left"); new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
     con=_db();cur=con.cursor(); t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
     if not t:con.close();return HTMLResponse("Staff member not found.",404)
@@ -1824,6 +1832,8 @@ def _ensure_assessment_table(cur):
 def allocations_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "staff.edit"):
+        return HTMLResponse("You do not have permission to manage teacher allocations.", 403)
     con=_db();cur=con.cursor()
     teachers=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -1846,6 +1856,8 @@ def allocations_page(request: Request):
 def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=Form(...),class_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "staff.edit"):
+        return HTMLResponse("You do not have permission to manage teacher allocations.", 403)
     con=_db();cur=con.cursor()
     valid=all(cur.execute(q,(x,sid)).fetchone() for q,x in [
         ("SELECT id FROM teachers WHERE id=? AND school_id=?",teacher_id),
