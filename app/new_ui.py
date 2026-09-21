@@ -553,11 +553,15 @@ def _ensure_overall_grading_table(cur):
     )""")
 
 def _overall_grade(cur, school_id, total):
-    _ensure_overall_grading_table(cur)
-    rule=cur.execute("""SELECT grade FROM overall_grading_rules
-        WHERE school_id=? AND ? BETWEEN min_total AND max_total
-        ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,total)).fetchone()
-    return str(rule["grade"]) if rule else _default_grade_points(total)[0]
+    try:
+        _ensure_overall_grading_table(cur)
+        rule=cur.execute("""SELECT grade FROM overall_grading_rules
+            WHERE school_id=? AND ? BETWEEN min_total AND max_total
+            ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,total)).fetchone()
+        return str(rule["grade"]) if rule else _default_grade_points(total)[0]
+    except Exception as exc:
+        print("DAVISCHOOL OVERALL GRADING FALLBACK:", repr(exc), flush=True)
+        return _default_grade_points(total)[0]
 
 @router.get("/app/academics/overall-grading", response_class=HTMLResponse)
 def overall_grading(request: Request):
@@ -628,7 +632,10 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         return HTMLResponse("You do not have permission to view marksheets.", 403)
     con = _db()
     cur = con.cursor()
-    _ensure_grading_table(cur)
+    try:
+        _ensure_grading_table(cur)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET GRADING TABLE FALLBACK:", repr(exc), flush=True)
     exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
     classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
     subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
@@ -1059,19 +1066,22 @@ def _default_grade_points(mark):
     return grade, points
 
 def _subject_grade_points(cur, school_id, subject_id, mark):
-    _ensure_grading_table(cur)
     try:
         value = float(mark)
     except Exception:
         return "—", 0
-    rule = cur.execute(
-        """SELECT grade,points FROM subject_grading_rules
-           WHERE school_id=? AND subject_id=? AND ? BETWEEN min_mark AND max_mark
-           ORDER BY min_mark DESC, id DESC LIMIT 1""",
-        (school_id, subject_id, value)
-    ).fetchone()
-    if rule:
-        return str(rule["grade"]), float(rule["points"] or 0)
+    try:
+        _ensure_grading_table(cur)
+        rule = cur.execute(
+            """SELECT grade,points FROM subject_grading_rules
+               WHERE school_id=? AND subject_id=? AND ? BETWEEN min_mark AND max_mark
+               ORDER BY min_mark DESC, id DESC LIMIT 1""",
+            (school_id, subject_id, value)
+        ).fetchone()
+        if rule:
+            return str(rule["grade"]), float(rule["points"] or 0)
+    except Exception as exc:
+        print("DAVISCHOOL SUBJECT GRADING FALLBACK:", repr(exc), flush=True)
     return _default_grade_points(value)
 
 @router.get("/app/academics/grading", response_class=HTMLResponse)
@@ -2488,7 +2498,11 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
     from reportlab.lib.pagesizes import A3, landscape
     from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.units import mm
-    con = _db(); cur = con.cursor(); _ensure_grading_table(cur)
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_grading_table(cur)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET PDF GRADING TABLE FALLBACK:", repr(exc), flush=True)
     exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -2516,7 +2530,11 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
             if value is None:
                 vals.extend(["—","—","—"])
             else:
-                grade,pts=_subject_grade_points(cur,sid,int(sub["id"]),value)
+                try:
+                    grade,pts=_subject_grade_points(cur,sid,int(sub["id"]),value)
+                except Exception as exc:
+                    print("DAVISCHOOL MARKSHEET PDF GRADE FALLBACK:", repr(exc), flush=True)
+                    grade,pts=_default_grade_points(float(value or 0))
                 total+=float(value or 0); points+=float(pts or 0); count+=1
                 vals.extend([f"{float(value):.1f}",str(grade),f"{float(pts):.1f}"])
         computed.append((st,total,points,count,vals,_overall_grade(cur,sid,total) if count else "—"))
