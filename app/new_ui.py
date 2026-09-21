@@ -565,6 +565,25 @@ def _grade(mark, out_of=100):
     return "E"
 
 
+def _ensure_academic_locks_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS academic_locks(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'finalized',
+        finalized_by TEXT,
+        finalized_at TEXT
+    )""")
+
+def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
+    _ensure_academic_locks_table(cur)
+    return cur.execute(
+        "SELECT * FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? LIMIT 1",
+        (school_id, exam_id, class_id, subject_id)
+    ).fetchone()
+
 def _ensure_grading_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -718,7 +737,7 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor();_ensure_grading_table(cur)
+    con=_db();cur=con.cursor();_ensure_grading_table(cur);_ensure_academic_locks_table(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -736,6 +755,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
+    locked = bool(_academic_lock(cur,sid,eid,cid,subid)) if eid and cid and subid else False
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     rows=""
     for x in students:
@@ -744,7 +764,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             grade,points="—","—"
         else:
             grade,points=_subject_grade_points(cur,sid,subid,mark)
-        rows+="<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='100' step='0.01' class='markinput'></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td></tr>"%(escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],escape(str(mark)),escape(str(grade)),points if points=="—" else "%.1f"%float(points))
+        rows+="<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='100' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td></tr>"%(escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],escape(str(mark)),"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points))
     con.close()
     body=(
       "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
@@ -755,10 +775,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<button class='btn'>Load Students</button></form>"
       "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "
       "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a></div></div>"%subid+
-      "<div class='card section'><form method='post' action='/app/academics/marks/save'>"
+      "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div><form method='post' action='/app/academics/marks/save'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / 100</th><th>Grade</th><th>Points</th></tr></thead><tbody>%s</tbody></table>%s"
-      "</form></div></div>"%(eid,cid,subid,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else "")+
+      "</form></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked. Further changes are disabled." if locked else "🟢 Marks are open for editing."),eid,cid,subid,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","" if locked else ("<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""))+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
     )
@@ -769,9 +789,12 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     form=await request.form()
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid: con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if _academic_lock(cur,sid,exam_id,class_id,subject_id):
+        con.close()
+        return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
     exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
     for st in students:
@@ -787,6 +810,33 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         else:
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
     _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+@router.post("/app/academics/marks/finalize")
+def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
+    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not valid:
+        con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if not _academic_lock(cur,sid,exam_id,class_id,subject_id):
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
+        _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+@router.post("/app/academics/marks/unfinalize")
+def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
+    row=_academic_lock(cur,sid,exam_id,class_id,subject_id)
+    if row:
+        cur.execute("DELETE FROM academic_locks WHERE id=? AND school_id=?",(row["id"],sid))
+        _audit(cur,sid,request,"MARKS_UNFINALIZE",f"Reopened marks for exam {exam_id}, class {class_id}, subject {subject_id}")
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
