@@ -1644,6 +1644,8 @@ def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:st
 def fees_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "fees.view"):
+        return HTMLResponse("You do not have permission to view fees.", 403)
     con=_db();cur=con.cursor()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     fees=cur.execute("""SELECT f.*,s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
@@ -1658,6 +1660,8 @@ def fees_page(request: Request):
 def fees_add(request: Request,student_id:int=Form(...),amount:float=Form(...),description:str=Form(...),due_date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "fees.edit"):
+        return HTMLResponse("You do not have permission to post fee charges.", 403)
     if amount <= 0:
         return HTMLResponse("Fee amount must be greater than zero. <a href='/app/finance/fees'>Back</a>",400)
     if not description.strip():
@@ -1673,6 +1677,8 @@ def fees_add(request: Request,student_id:int=Form(...),amount:float=Form(...),de
 def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(""),method:str=Form("Cash")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "fees.edit"):
+        return HTMLResponse("You do not have permission to record fee payments.", 403)
     if amount <= 0:return HTMLResponse("Payment amount must be greater than zero. <a href='/app/finance/fees'>Back</a>",400)
     con=_db();cur=con.cursor()
     if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
@@ -1810,6 +1816,8 @@ def audit_page(request: Request):
 def accounting_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "finance.view"):
+        return HTMLResponse("You do not have permission to view accounting.", 403)
     con=_db();cur=con.cursor()
     expenses=cur.execute("SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
     vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
@@ -1830,6 +1838,8 @@ def accounting_page(request: Request):
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "finance.edit"):
+        return HTMLResponse("You do not have permission to record expenses.", 403)
     if amount <= 0:
         return HTMLResponse("Expense amount must be greater than zero. <a href='/app/accounting'>Back</a>",400)
     con=_db();cur=con.cursor();cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date) VALUES(?,?,?,?,?,?,?)",(sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")))
