@@ -917,8 +917,8 @@ def grading_setup(request: Request, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
-    if not _require_permission(request, sid, "reports.edit"):
-        return HTMLResponse("You do not have permission to manage grading.", 403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage subject grading.", 403)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
@@ -985,7 +985,7 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if not _require_permission(request, sid, "reports.edit"):
+    if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
     if min_mark < 0 or max_mark > 100 or min_mark > max_mark or points < 0:
         return HTMLResponse("Invalid grading range. <a href='/app/academics/grading'>Back</a>", 400)
@@ -1026,7 +1026,7 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if not _require_permission(request, sid, "reports.edit"):
+    if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
     con = _db()
     cur = con.cursor()
@@ -1049,8 +1049,6 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "marks.view"):
         return HTMLResponse("You do not have permission to view marks.", 403)
-    if not _require_permission(request, sid, "reports.edit"):
-        return HTMLResponse("You do not have permission to manage grading.", 403)
     con=_db();cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
