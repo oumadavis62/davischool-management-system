@@ -1,0 +1,10 @@
+DaviSchool Python syntax validation
+Commit: d1546396b0d28a6d6f4b89f4eb1744b03573f641
+Python: Python 3.14.7
+compileall exit code: 1
+*** Error compiling 'app/new_ui.py'...
+  File "app/new_ui.py", line 460
+    rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'><button class='btnlink' type='submit' onclick="return confirm('Delete this overall grading rule?')">Delete</button></form></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
+                                                                                                                                                                                                                  ^^^^^^
+SyntaxError: invalid syntax
+
