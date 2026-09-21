@@ -44,7 +44,7 @@ def _ensure_live_postgres_schema():
             "school_id": "INTEGER", "admission_no": "TEXT", "assessment_no": "TEXT",
             "name": "TEXT", "class_id": "INTEGER", "gender": "TEXT", "status": "TEXT",
             "parent_phone": "TEXT", "stream": "TEXT", "category": "TEXT",
-            "guardian_name": "TEXT", "status": "TEXT",
+            "guardian_name": "TEXT",
         },
         "subjects": {"school_id": "INTEGER", "name": "TEXT", "code": "TEXT", "initial": "TEXT"},
         "exams": {"school_id": "INTEGER", "name": "TEXT", "term": "TEXT", "year": "TEXT", "exam_type": "TEXT"},
