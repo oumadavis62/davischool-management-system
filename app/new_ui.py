@@ -1524,6 +1524,8 @@ def attendance_page(request: Request, class_id:str="", date:str=""):
 async def attendance_save(request: Request, class_id:int=Form(...), date:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "attendance.edit"):
+        return HTMLResponse("You do not have permission to edit attendance.", 403)
     form=await request.form();con=_db();cur=con.cursor()
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
     for s in students:
@@ -1539,6 +1541,8 @@ async def attendance_save(request: Request, class_id:int=Form(...), date:str=For
 def users_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "users.manage"):
+        return HTMLResponse("You do not have permission to manage users.", 403)
     con=_db();cur=con.cursor()
     users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
         FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id LEFT JOIN students s ON s.id=u.student_id
@@ -1563,6 +1567,8 @@ def users_page(request: Request):
 def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "users.manage"):
+        return HTMLResponse("You do not have permission to manage users.", 403)
     if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
@@ -1756,6 +1762,8 @@ def timetable_page(request: Request):
 def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(""),stream:str=Form(""),subject:str=Form(""),teacher:str=Form(""),room:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "timetable.view"):
+        return HTMLResponse("You do not have permission to edit the timetable.", 403)
     if day not in ("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"):
         return HTMLResponse("Invalid timetable day. <a href='/app/timetable'>Back</a>",400)
     if not start_time or not end_time or end_time <= start_time:
@@ -1925,6 +1933,8 @@ def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=For
 def assessments_page(request: Request, student_id:str="", subject_id:str="", term:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "marks.view"):
+        return HTMLResponse("You do not have permission to view assessments.", 403)
     con=_db();cur=con.cursor();_ensure_assessment_table(cur)
     students=cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -1947,6 +1957,8 @@ def assessments_page(request: Request, student_id:str="", subject_id:str="", ter
 def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=Form(...),term:str=Form(...),year:str=Form(...),component:str=Form(...),score:float=Form(...),out_of:float=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to edit assessments.", 403)
     term_v=term.strip()
     year_v=year.strip()
     component_v=component.strip()
