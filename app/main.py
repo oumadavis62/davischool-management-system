@@ -8,6 +8,7 @@ import hmac
 import base64
 import secrets
 import re
+import traceback
 from starlette.middleware.sessions import SessionMiddleware
 import random
 from datetime import datetime
@@ -2486,6 +2487,32 @@ def role_portal(request:Request):
         fee=cur.execute('SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE student_id=? AND school_id=?',(student_id,school['id'])).fetchone() if student_id else {'expected':0,'paid':0}
         body=f"<div class='card'><h2>🎓 {'Parent' if role=='parent' else 'Student'} Portal</h2><p>{st['name'] if st else 'Linked student account'}</p><p>Fee balance: <b>KES {float(fee['expected'] or 0)-float(fee['paid'] or 0):,.2f}</b></p><table><tr><th>Subject</th><th>Exam</th><th>Marks</th><th>Term</th></tr>"+''.join(f"<tr><td>{m['subject']}</td><td>{m['exam']}</td><td>{m['marks']}</td><td>{m['term']} {m['year']}</td></tr>" for m in marks)+"</table></div>"
     con.close(); return module_page(request,role.title()+' Portal','dashboard',body)
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Never expose database/stack-trace details to users. Keep the full
+    # traceback in Render logs for diagnosis and return a stable response.
+    request_id = secrets.token_hex(8)
+    print(
+        f"DAVISCHOOL UNHANDLED ERROR [{request_id}] "
+        f"{request.method} {request.url.path}: {exc!r}",
+        flush=True,
+    )
+    traceback.print_exc()
+    if request.url.path.startswith("/api") or "application/json" in request.headers.get("accept", ""):
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error.", "request_id": request_id},
+        )
+    else:
+        response = HTMLResponse(
+            f"<div style='font-family:system-ui;padding:30px'><h2>Something went wrong</h2>"
+            f"<p>The request could not be completed.</p><p>Reference: <code>{request_id}</code></p>"
+            f"<p><a href='/app'>Return to DaviSchool</a></p></div>",
+            status_code=500,
+        )
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 @app.exception_handler(StarletteHTTPException)
 async def custom_404_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 404:
