@@ -105,7 +105,7 @@ def get_db():
 
 def init_db():
     con = get_db(); cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, status TEXT DEFAULT 'active')")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
     cur.execute("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, action TEXT, details TEXT, timestamp TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS pending_schools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, auth_code TEXT, timestamp TEXT)")
@@ -130,6 +130,11 @@ def init_db():
     # Upgrade legacy PostgreSQL schemas before any query that depends on
     # columns introduced by the current application.
     ensure_schema_compatibility(con)
+    try:
+        cur.execute("UPDATE schools SET status='active' WHERE status IS NULL OR trim(status)=''")
+        con.commit()
+    except Exception:
+        pass
 
     cur.execute("SELECT * FROM users WHERE email=?", (SUPER_ADMIN,))
     if not cur.fetchone():
@@ -208,7 +213,17 @@ def get_school_obj(req):
     if sid==0: return None
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT * FROM schools WHERE id=?", (sid,))
-    s = cur.fetchone(); con.close(); return s
+    s = cur.fetchone()
+    con.close()
+    if not s:
+        return None
+    try:
+        status = str(s["status"] or "active").strip().lower()
+    except Exception:
+        status = "active"
+    if status not in ("active", "enabled"):
+        return None
+    return s
 
 def generate_unique_password(name):
     p = "".join([c for c in name.upper() if c.isalpha()])[:4]
@@ -477,9 +492,13 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         sid=int(s["id"])
         admin=users_by_school.get(sid)
         admin_email=admin["email"] if admin else ""
+        school_status = str(s["status"] or "active").strip().lower() if "status" in s.keys() else "active"
+        status_text = "🟢 Active" if school_status in ("active", "enabled") else "🔴 Suspended"
+        status_bg = "#dcfce7" if school_status in ("active", "enabled") else "#fee2e2"
+        status_fg = "#166534" if school_status in ("active", "enabled") else "#991b1b"
         school_name_js=str(s["name"] or "this school").replace("\\","\\\\").replace("'","\\'")
-        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' onclick="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')" style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️</a></td></tr>""")
-    rows="".join(rows) or "<tr><td colspan='7' style='padding:40px;text-align:center'>No schools</td></tr>"
+        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px'><form method='post' action='/schools/status/{sid}' style='display:inline'><button type='submit' style='border:0;background:{status_bg};color:{status_fg};border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:800'>{status_text}</button></form></td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' onclick="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')" style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️</a></td></tr>""")
+    rows="".join(rows) or "<tr><td colspan='8' style='padding:40px;text-align:center'>No schools</td></tr>"
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<script>
 async function viewSchoolPassword(id){{
   try{{
@@ -540,7 +559,7 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
         unique_pass = generate_unique_password(str(pending["name"]))
 
         cur.execute(
-            "INSERT INTO schools (name,email,code,location,phone,principal,school_type) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO schools (name,email,code,location,phone,principal,school_type,status) VALUES (?,?,?,?,?,?,?,?)",
             (
                 str(pending["name"] or "").strip(),
                 email,
@@ -549,6 +568,7 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
                 str(pending["phone"] or "").strip(),
                 str(pending["principal"] or "").strip(),
                 str(pending["school_type"] or "Primary").strip(),
+                "active",
             )
         )
         school_id = cur.lastrowid
@@ -610,6 +630,21 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
 @app.get("/verify-school-code")
 def verify_school_code_get():
     return RedirectResponse("/schools/manage", status_code=303)
+
+@app.post("/schools/status/{sid}")
+def update_school_status(sid: int, request: Request):
+    if request.session.get("role") != "super_admin":
+        return RedirectResponse("/", status_code=303)
+    con = get_db(); cur = con.cursor()
+    school = cur.execute("SELECT id, name, status FROM schools WHERE id=?", (sid,)).fetchone()
+    if not school:
+        con.close()
+        return RedirectResponse("/schools/manage", status_code=303)
+    current = str(school["status"] or "active").strip().lower()
+    new_status = "suspended" if current in ("active", "enabled") else "active"
+    cur.execute("UPDATE schools SET status=? WHERE id=?", (new_status, sid))
+    con.commit(); con.close()
+    return RedirectResponse("/schools/manage?success=status_updated", status_code=303)
 
 @app.get("/schools/password/{sid}")
 def view_school_password(sid: int, request: Request, reset: int = 0):
