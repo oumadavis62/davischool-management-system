@@ -1801,6 +1801,8 @@ def announcements_add(request: Request,title:str=Form(...),message:str=Form(...)
 def roles_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall();con.close()
     tr=_simple_rows(rows,["role","permission","enabled"])
     body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
@@ -1812,6 +1814,8 @@ def roles_page(request: Request):
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
     allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","settings.manage"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
