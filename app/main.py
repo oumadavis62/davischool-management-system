@@ -464,7 +464,11 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         con.close()
     request.session["user_id"]=user_id; request.session["email"]=user_email; request.session["role"]=role
     request.session["name"]=full_name; request.session["school_id"]=school_id
-    request.session["teacher_id"]=None; request.session["student_id"]=None; request.session["is_impersonating"]=False
+    # Preserve the linked profile created in School Users so dedicated portals
+    # can identify the correct teacher/student/parent after sign-in.
+    request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None
+    request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None
+    request.session["is_impersonating"]=False
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
