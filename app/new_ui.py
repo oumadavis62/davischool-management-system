@@ -147,17 +147,25 @@ def _school_page(request, title, body):
 def students_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
-    con=_db(); cur=con.cursor()
-    students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.id DESC",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall(); con.close()
-    rows="".join(f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td></tr>" for s in students)
+    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
+    students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
+        FROM students s LEFT JOIN classes c ON c.id=s.class_id
+        WHERE s.school_id=? ORDER BY s.id DESC""",(sid,)).fetchall()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    con.close()
+    rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
+      <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
+      <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] if 'status' in s.keys() and s['status'] else 'Active'))}</td>
+      <td><a class='action' href='/app/students/edit/{s["id"]}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}'>History</a></td></tr>""" for s in students)
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    body=f"""<div class='page'><h1>Students</h1><div class='muted'>Complete student register and admissions workspace.</div>
+    body=f"""<div class='page'><h1>Students</h1><div class='muted'>Student register, admissions, transfers and academic-history management.</div>
 <div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
 <input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
 <select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
 <button class='btn'>Save Student</button></form></div>
-<div class='card section'><div style='display:flex;justify-content:space-between'><h2>Student register ({len(students)})</h2><a class='action' href='/app/students'>Refresh</a></div><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No students yet.</td></tr>'}</tbody></table></div></div>
+<div class='card section'><div style='display:flex;justify-content:space-between'><h2>Student register ({len(students)})</h2><a class='action' href='/app/students'>Refresh</a></div>
+<table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{rows or '<tr><td colspan=7>No students yet.</td></tr>'}</tbody></table></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request,"Students",body)
 
@@ -165,14 +173,74 @@ def students_page(request: Request):
 def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/",303)
-    con=_db(); cur=con.cursor()
-    exists=cur.execute("SELECT id FROM students WHERE school_id=? AND admission_no=?",(sid,admission_no.strip())).fetchone()
-    if exists: con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
+    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
+    admission=admission_no.strip()
+    if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
+        con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
     cid=int(class_id) if class_id.isdigit() else None
     if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
-    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream) VALUES(?,?,?,?,?,?,?,?)",(sid,admission_no.strip(),assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),""))
-    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission_no.strip()})")
+    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),"","active"))
+    student_id=cur.lastrowid
+    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
     con.commit(); con.close(); return RedirectResponse("/app/students",303)
+
+@router.get("/app/students/edit/{student_id}",response_class=HTMLResponse)
+def student_edit_page(request: Request,student_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor()
+    st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    con.close()
+    if not st:return HTMLResponse("Student not found.",404)
+    opts="".join(f"<option value='{c['id']}' {'selected' if st['class_id'] and int(st['class_id'])==int(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+<label>Admission number<input name='admission_no' value='{escape(str(st['admission_no'] or ''))}' required class='field'></label>
+<label>Full name<input name='name' value='{escape(str(st['name'] or ''))}' required class='field'></label>
+<label>Assessment number<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''))}' class='field'></label>
+<label>Class<select name='class_id' class='field'><option value=''>Unassigned</option>{opts}</select></label>
+<label>Gender<select name='gender' class='field'><option>{escape(str(st['gender'] or ''))}</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+<label>Parent phone<input name='parent_phone' value='{escape(str(st['parent_phone'] or ''))}' class='field'></label>
+<label>Status<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='graduated'>Graduated</option><option value='transferred'>Transferred</option></select></label>
+<div><button class='btn'>Save Changes</button> <a class='action' href='/app/students'>Cancel</a></div></form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin-top:5px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Edit Student",body)
+
+@router.post("/app/students/edit/{student_id}")
+def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name:str=Form(...),assessment_no:str=Form(""),class_id:str=Form(""),gender:str=Form(""),parent_phone:str=Form(""),status:str=Form("active")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_student_history_table(cur)
+    st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    if not st:con.close();return HTMLResponse("Student not found.",404)
+    admission=admission_no.strip()
+    dup=cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) AND id<>?",(sid,admission,student_id)).fetchone()
+    if dup:con.close();return HTMLResponse("Admission number already exists.",400)
+    cid=int(class_id) if class_id.isdigit() else None
+    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone():con.close();return HTMLResponse("Invalid class.",400)
+    old_class=st["class_id"];new_status=status.strip().lower() if status.strip().lower() in ("active","inactive","graduated","transferred") else "active"
+    cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),new_status,student_id,sid))
+    if (old_class or None)!=(cid or None):
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO student_class_history(school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason) VALUES(?,?,?,?,?,?,?)",(sid,student_id,old_class,cid,now,request.session.get("email",""),"Student class/stream transfer"))
+        _audit(cur,sid,request,"STUDENT_TRANSFER",f"Transferred {name.strip()} from class {old_class or 'Unassigned'} to {cid or 'Unassigned'}")
+    _audit(cur,sid,request,"STUDENT_UPDATE",f"Updated student {name.strip()} ({admission})")
+    con.commit();con.close();return RedirectResponse("/app/students",303)
+
+@router.get("/app/students/history/{student_id}",response_class=HTMLResponse)
+def student_history(request: Request,student_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor();_ensure_student_history_table(cur)
+    st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    hist=cur.execute("""SELECT h.*,f.name from_class,t.name to_class
+        FROM student_class_history h LEFT JOIN classes f ON f.id=h.from_class_id LEFT JOIN classes t ON t.id=h.to_class_id
+        WHERE h.student_id=? AND h.school_id=? ORDER BY h.id DESC""",(student_id,sid)).fetchall()
+    con.close()
+    if not st:return HTMLResponse("Student not found.",404)
+    rows="".join(f"<tr><td>{escape(str(h['changed_at'] or ''))}</td><td>{escape(str(h['from_class'] or 'Unassigned'))}</td><td>{escape(str(h['to_class'] or 'Unassigned'))}</td><td>{escape(str(h['changed_by'] or ''))}</td><td>{escape(str(h['reason'] or ''))}</td></tr>" for h in hist)
+    body=f"""<div class='page'><h1>Student History</h1><div class='card section'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))}</div><table><thead><tr><th>Date</th><th>From Class</th><th>To Class</th><th>Changed By</th><th>Reason</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No class transfer history recorded yet.</td></tr>'}</tbody></table></div></div>"""
+    return _school_page(request,"Student History",body)
 
 @router.get("/app/staff", response_class=HTMLResponse)
 def staff_page(request: Request):
@@ -588,6 +656,18 @@ def _grade(mark, out_of=100):
     if p>=30: return "D"
     return "E"
 
+
+def _ensure_student_history_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_class_history(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        from_class_id INTEGER,
+        to_class_id INTEGER,
+        changed_at TEXT,
+        changed_by TEXT,
+        reason TEXT
+    )""")
 
 def _ensure_report_card_fields(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS report_card_settings(
