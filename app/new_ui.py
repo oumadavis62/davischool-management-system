@@ -104,7 +104,49 @@ def _pdf_build(story, pagesize, title):
     doc = SimpleDocTemplate(buffer, pagesize=pagesize, rightMargin=10*mm, leftMargin=10*mm,
                             topMargin=10*mm, bottomMargin=14*mm, title=title,
                             author="DaviSchool Management System")
-    doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+    try:
+        doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+    except Exception as exc:
+        print("DAVISCHOOL PDF STORY FALLBACK:", repr(exc), flush=True)
+        from reportlab.pdfgen import canvas
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=pagesize)
+        c.setTitle(title)
+        c.setAuthor("DaviSchool Management System")
+        y = pagesize[1] - 18 * mm
+        c.setFont("Helvetica-Bold", 13)
+        c.drawString(12 * mm, y, title)
+        y -= 9 * mm
+        c.setFont("Helvetica", 7.5)
+        for item in story:
+            lines = []
+            if hasattr(item, "getPlainText"):
+                lines = [item.getPlainText()]
+            elif hasattr(item, "_cellvalues"):
+                for row in item._cellvalues:
+                    vals = []
+                    for cell in row:
+                        if hasattr(cell, "getPlainText"):
+                            vals.append(cell.getPlainText())
+                        else:
+                            vals.append(str(cell))
+                    lines.append(" | ".join(vals))
+            for line in lines:
+                text_line = re.sub(r"\\s+", " ", str(line)).strip()
+                if not text_line:
+                    continue
+                for start in range(0, len(text_line), 115):
+                    if y < 18 * mm:
+                        c.setFont("Helvetica", 7)
+                        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System · Generated: %s · Page %d" % (generated_at, c.getPageNumber()))
+                        c.showPage()
+                        y = pagesize[1] - 18 * mm
+                        c.setFont("Helvetica", 7.5)
+                    c.drawString(12 * mm, y, text_line[start:start+115])
+                    y -= 4.5 * mm
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System · Generated: %s · Page %d" % (generated_at, c.getPageNumber()))
+        c.save()
     return buffer.getvalue()
 
 
@@ -571,8 +613,13 @@ def overall_grading(request: Request):
         return HTMLResponse("Only the school administrator can manage overall grading.", 403)
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to view overall grading.", 403)
-    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
-    rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_overall_grading_table(cur)
+        rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL OVERALL GRADING PAGE FALLBACK:", repr(exc), flush=True)
+        rules=[]
     con.close()
     rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button></form></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
     body=("<div class='page'><h1>Overall Grade & Position Settings</h1>"
@@ -1095,7 +1142,10 @@ def grading_setup(request: Request, subject_id: str = ""):
         return HTMLResponse("You do not have permission to manage subject grading.", 403)
     con = _db()
     cur = con.cursor()
-    _ensure_grading_table(cur)
+    try:
+        _ensure_grading_table(cur)
+    except Exception as exc:
+        print("DAVISCHOOL GRADING PAGE TABLE FALLBACK:", repr(exc), flush=True)
     subjects = cur.execute(
         "SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)
     ).fetchall()
@@ -1104,12 +1154,16 @@ def grading_setup(request: Request, subject_id: str = ""):
         "SELECT id FROM subjects WHERE id=? AND school_id=?", (subid, sid)
     ).fetchone():
         subid = 0
-    rules = cur.execute(
+    try:
+        rules = cur.execute(
         """SELECT * FROM subject_grading_rules
            WHERE school_id=? AND subject_id=?
            ORDER BY min_mark DESC, max_mark DESC""",
         (sid, subid)
     ).fetchall() if subid else []
+    except Exception as exc:
+        print("DAVISCHOOL GRADING PAGE RULES FALLBACK:", repr(exc), flush=True)
+        rules = []
     con.commit()
     con.close()
 
