@@ -141,6 +141,22 @@ def _audit(cur, school_id, request, action, details):
     cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
                 (school_id,request.session.get("email",""),action,details,ts))
 
+def _permission_enabled(cur, school_id, role, permission):
+    # No custom rule means preserve the existing role behavior.
+    row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
+                    (school_id,role,permission)).fetchone()
+    return True if row is None else bool(int(row["enabled"] or 0))
+
+def _require_permission(request, school_id, permission):
+    role=str(request.session.get("role",""))
+    if role=="school_admin":
+        return True
+    con=_db()
+    try:
+        return _permission_enabled(con.cursor(),school_id,role,permission)
+    finally:
+        con.close()
+
 def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
@@ -1454,9 +1470,15 @@ def fees_page(request: Request):
 def fees_add(request: Request,student_id:int=Form(...),amount:float=Form(...),description:str=Form(...),due_date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if amount <= 0:
+        return HTMLResponse("Fee amount must be greater than zero. <a href='/app/finance/fees'>Back</a>",400)
+    if not description.strip():
+        return HTMLResponse("Fee description is required. <a href='/app/finance/fees'>Back</a>",400)
     con=_db();cur=con.cursor()
-    if cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
-        cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,0,description.strip(),due_date or None,"Pending"));_audit(cur,sid,request,"FEE_CHARGE",f"Charged {amount} to student {student_id}")
+    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
+        con.close();return HTMLResponse("Student not found in this school. <a href='/app/finance/fees'>Back</a>",404)
+    cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,0,description.strip(),due_date or None,"Pending"))
+    _audit(cur,sid,request,"FEE_CHARGE",f"Charged {amount} to student {student_id}")
     con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
 
 @router.post("/app/finance/payments")
@@ -1566,8 +1588,18 @@ def roles_page(request: Request):
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(sid,role,permission.strip(),enabled))
-    _audit(cur,sid,request,"PERMISSION_CHANGE",f"{role}: {permission.strip()}={enabled}");con.commit();con.close();return RedirectResponse("/app/roles",303)
+    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
+    allowed_permissions={"students.view","students.create","students.edit","marks.view","marks.edit","attendance.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","users.manage","settings.manage"}
+    role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
+    if role_v not in allowed_roles or perm_v not in allowed_permissions:
+        return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    existing=cur.execute("SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(sid,role_v,perm_v)).fetchone()
+    if existing:
+        cur.execute("UPDATE roles_permissions SET enabled=? WHERE id=? AND school_id=?",(enabled_v,existing["id"],sid))
+    else:
+        cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(sid,role_v,perm_v,enabled_v))
+    _audit(cur,sid,request,"PERMISSION_CHANGE",f"{role_v}: {perm_v}={enabled_v}");con.commit();con.close();return RedirectResponse("/app/roles",303)
 
 @router.get("/app/audit", response_class=HTMLResponse)
 def audit_page(request: Request):
