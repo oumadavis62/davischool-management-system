@@ -28,7 +28,7 @@ def _ensure_live_postgres_schema():
         "schools": {
             "name": "TEXT", "email": "TEXT", "code": "TEXT",
             "location": "TEXT", "phone": "TEXT", "principal": "TEXT",
-            "school_type": "TEXT",
+            "school_type": "TEXT", "status": "TEXT",
             "postal_address": "TEXT", "postal_code": "TEXT", "logo_data": "TEXT",
         },
         "pending_schools": {
@@ -122,7 +122,7 @@ def ensure_schema_compatibility(con):
             "location": "TEXT",
             "phone": "TEXT",
             "principal": "TEXT",
-            "school_type": "TEXT",
+            "school_type": "TEXT", "status": "TEXT",
             "postal_address": "TEXT", "postal_code": "TEXT", "logo_data": "TEXT",
         },
         "pending_schools": {
