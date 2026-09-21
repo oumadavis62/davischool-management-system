@@ -1194,7 +1194,15 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         except Exception as exc:
             print("DAVISCHOOL GRADING RULES FALLBACK:", repr(exc), flush=True)
             grading_rules=[]
-    js_rules="["+",".join("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"]),float(r["points"] or 0)) for r in grading_rules)+"]"
+    safe_rules=[]
+    for r in grading_rules:
+        try:
+            safe_rules.append("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"] or "E"),float(r["points"] or 0)))
+        except Exception:
+            # Ignore an incomplete legacy grading row rather than breaking
+            # the entire Marks Entry screen.
+            continue
+    js_rules="["+",".join(safe_rules)+"]"
     eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
