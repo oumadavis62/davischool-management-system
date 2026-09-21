@@ -624,6 +624,8 @@ def finance_page(request: Request):
 def school_settings_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "settings.view"):
+        return HTMLResponse("You do not have permission to view school settings.", 403)
     con=_db();cur=con.cursor()
     school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     con.close()
@@ -647,9 +649,11 @@ def school_settings_page(request: Request):
     return _school_page(request,"School Settings",body)
 
 @router.post("/app/school-settings")
-async def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...), postal_address:str=Form(""), postal_code:str=Form(""), school_logo:UploadFile|None=File(None)):
+async async def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...), postal_address:str=Form(""), postal_code:str=Form(""), school_logo:UploadFile|None=File(None)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.edit"):
+        return HTMLResponse("You do not have permission to edit school settings.", 403)
     allowed={"Primary","Secondary","Primary & Junior Secondary"}
     if school_type not in allowed:return HTMLResponse("Invalid school type. <a href='/app/school-settings'>Back</a>",400)
     logo_data=None
@@ -1491,6 +1495,8 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
 def attendance_page(request: Request, class_id:str="", date:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "attendance.view"):
+        return HTMLResponse("You do not have permission to view attendance.", 403)
     today=date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
     cid=int(class_id) if class_id.isdigit() else 0
     con=_db();cur=con.cursor()
@@ -1696,6 +1702,8 @@ def _simple_rows(rows, cols):
 def timetable_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "timetable.view"):
+        return HTMLResponse("You do not have permission to view the timetable.", 403)
     con=_db();cur=con.cursor()
     rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY day,start_time",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -1740,6 +1748,8 @@ def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),en
 def announcements_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "communications.view"):
+        return HTMLResponse("You do not have permission to view announcements.", 403)
     con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
     tr=_simple_rows(rows,["title","message","audience","created_at"])
     body=f"""<div class='page'><h1>Announcements</h1><div class='muted'>Publish school notices and internal communications.</div>
@@ -1751,6 +1761,8 @@ def announcements_page(request: Request):
 def announcements_add(request: Request,title:str=Form(...),message:str=Form(...),audience:str=Form("All")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "communications.edit"):
+        return HTMLResponse("You do not have permission to publish announcements.", 403)
     con=_db();cur=con.cursor();now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO announcements(school_id,title,message,audience,created_at) VALUES(?,?,?,?,?)",(sid,title.strip(),message.strip(),audience,now))
     _audit(cur,sid,request,"ANNOUNCEMENT_CREATE",title.strip());con.commit();con.close();return RedirectResponse("/app/announcements",303)
@@ -1787,6 +1799,8 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
 def audit_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "audit.view"):
+        return HTMLResponse("You do not have permission to view the audit trail.", 403)
     con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall();con.close()
     tr=_simple_rows(rows,["timestamp","user_email","action","details"])
     body=f"""<div class='page'><h1>Audit Trail</h1><div class='muted'>Security and activity history for this school.</div><div class='card section'><h2>Recent activity ({len(rows)})</h2><table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table></div></div>"""
