@@ -364,6 +364,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     exam_name = escape(str(er["name"])) if er else "Select an examination"
     colspan = 3 + len(subjects) * 3 + 5
 
+    print_script = '''<script>function printDocument(){var doc=document.querySelector('.marksheet-card');if(!doc){window.print();return;}var w=window.open('', '_blank', 'width=1200,height=800');if(!w){window.print();return;}var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}@page{size:auto;margin:10mm}';w.document.open();w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+'</body></html>');w.document.close();w.focus();setTimeout(function(){w.print();},300);}</script>'''
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
         "<div class='muted'>A print-ready marksheet with automatic subject grades and points.</div>"
@@ -380,8 +381,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
         "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
         "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
-            print_script = '''        + print_script +
-        
+        + print_script +
         "<style>"
         ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
