@@ -1,4 +1,0 @@
-DaviSchool Python syntax validation
-Commit: 0f5b81c1714126f2cbc1bea1a80ba16b07ffcfa8
-Python: Python 3.14.7
-compileall exit code: 0
