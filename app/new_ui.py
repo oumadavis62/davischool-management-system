@@ -166,6 +166,8 @@ def _school_page(request, title, body):
 def students_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
+    if not _require_permission(request, sid, "students.view"):
+        return HTMLResponse("You do not have permission to view students.", 403)
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
     students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
@@ -192,6 +194,8 @@ def students_page(request: Request):
 def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "students.create"):
+        return HTMLResponse("You do not have permission to create students.", 403)
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
     admission=admission_no.strip()
     if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
@@ -207,6 +211,8 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
 def student_edit_page(request: Request,student_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to edit students.", 403)
     con=_db();cur=con.cursor()
     st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -229,6 +235,8 @@ def student_edit_page(request: Request,student_id:int):
 def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name:str=Form(...),assessment_no:str=Form(""),class_id:str=Form(""),gender:str=Form(""),parent_phone:str=Form(""),status:str=Form("active")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to edit students.", 403)
     con=_db();cur=con.cursor();_ensure_student_history_table(cur)
     st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     if not st:con.close();return HTMLResponse("Student not found.",404)
@@ -1580,6 +1588,8 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
 def classes_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "classes.view"):
+        return HTMLResponse("You do not have permission to view classes.", 403)
     con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall();con.close()
     trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['level'] or ''))}</td><td>{escape(str(x['stream'] or ''))}</td></tr>" for x in rows)
     body=f"""<div class='page'><h1>Classes & Streams</h1><div class='card section'><form method='post' action='/app/classes/add' class='formgrid'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><select name='level' class='field'><option value=''>Select level</option><option>Pre-Primary</option><option>Lower Primary</option><option>Upper Primary</option><option>Junior Secondary</option><option>Senior Secondary</option><option>College</option><option>Other</option></select><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div><div class='card section'><table><thead><tr><th>Name</th><th>Level</th><th>Stream</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No classes.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
@@ -1589,6 +1599,8 @@ def classes_page(request: Request):
 def classes_add(request: Request,name:str=Form(...),level:str=Form(""),stream:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "classes.create"):
+        return HTMLResponse("You do not have permission to create classes.", 403)
     name_v=name.strip(); level_v=level.strip(); stream_v=stream.strip()
     if not name_v:return HTMLResponse("Class name is required. <a href='/app/classes'>Back</a>",400)
     con=_db();cur=con.cursor()
@@ -1601,6 +1613,8 @@ def classes_add(request: Request,name:str=Form(...),level:str=Form(""),stream:st
 def subjects_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "subjects.view"):
+        return HTMLResponse("You do not have permission to view subjects.", 403)
     con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall();con.close()
     trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td></tr>" for x in rows)
     body=f"""<div class='page'><h1>Subjects</h1><div class='card section'><form method='post' action='/app/subjects/add' class='formgrid'><input name='name' required placeholder='Subject name' class='field'><input name='code' placeholder='Code' class='field'><input name='initial' placeholder='Initial' class='field'><button class='btn'>Add Subject</button></form></div><div class='card section'><table><thead><tr><th>Subject</th><th>Code</th><th>Initial</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No subjects.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
@@ -1610,6 +1624,8 @@ def subjects_page(request: Request):
 def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "subjects.create"):
+        return HTMLResponse("You do not have permission to create subjects.", 403)
     name_v=name.strip(); code_v=code.strip(); initial_v=initial.strip()
     if not name_v:return HTMLResponse("Subject name is required. <a href='/app/subjects'>Back</a>",400)
     con=_db();cur=con.cursor()
@@ -1623,6 +1639,8 @@ def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:s
 def exams_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "exams.view"):
+        return HTMLResponse("You do not have permission to view examinations.", 403)
     con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
     trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['exam_type'] or ''))}</td><td>{escape(str(x['term'] or ''))}</td><td>{escape(str(x['year'] or ''))}</td></tr>" for x in rows)
     body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><form method='post' action='/app/exams/add' class='formgrid'><input name='name' required placeholder='Exam name' class='field'><select name='exam_type' class='field'><option value=''>Select exam type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><select name='year' class='field'>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select><button class='btn'>Create Exam</button></form></div><div class='card section'><table><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
@@ -1632,6 +1650,8 @@ def exams_page(request: Request):
 def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:str=Form(""),year:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "exams.create"):
+        return HTMLResponse("You do not have permission to create examinations.", 403)
     name_v=name.strip(); type_v=exam_type.strip(); term_v=term.strip(); year_v=year.strip()
     if not name_v:return HTMLResponse("Examination name is required. <a href='/app/exams'>Back</a>",400)
     con=_db();cur=con.cursor()
