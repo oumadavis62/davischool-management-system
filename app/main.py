@@ -451,8 +451,9 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         if not valid:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         user_id=u["id"]; user_email=u["email"]; role=u["role"]; full_name=u["full_name"]; school_id=u["school_id"] or 0
-        # A suspended school must not be able to start a new session.
-        if role == "school_admin" and school_id:
+        # Every school-linked account is blocked when its school is suspended.
+        # Super Admin accounts are platform-level and may not have a school_id.
+        if school_id and role != "super_admin":
             school = cur.execute("SELECT status FROM schools WHERE id=?", (school_id,)).fetchone()
             school_status = str(school["status"] or "active").strip().lower() if school else "suspended"
             if school_status not in ("active", "enabled"):
