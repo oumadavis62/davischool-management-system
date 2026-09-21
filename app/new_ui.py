@@ -1227,6 +1227,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     students=[]
     out_of=100.0
     subject_comments={}
+    if eid and cid and subid and str(request.session.get("role","")) == "teacher" and not _teacher_class_authorized(cur, request, sid, cid, subid):
+        con.close()
+        return HTMLResponse("You are not allocated to this class and subject.", 403)
     if eid and cid and subid:
         # Load the learner list first. The fallback query deliberately reads
         # only student data, so a legacy marks schema can never prevent the
