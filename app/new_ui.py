@@ -86,7 +86,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
             ("/app/report-cards","📄","Report Cards","reports.view"),
             ("/app/attendance","✓","Attendance","attendance.view"),
-            ("/app/timetable","🗓","Timetable","timetable.view"),
+            ("/app/timetable","🗓","Timetable","timetable.view","timetable.edit",,
             ("/app/finance","💰","Fees & Finance","fees.view"),
             ("/app/accounting","📚","Accounting","finance.view"),
             ("/app/announcements","📢","Announcements","communications.view"),
@@ -1816,7 +1816,7 @@ def timetable_page(request: Request):
 def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(""),stream:str=Form(""),subject:str=Form(""),teacher:str=Form(""),room:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "timetable.view"):
+    if not _require_permission(request, sid, "timetable.edit"):
         return HTMLResponse("You do not have permission to edit the timetable.", 403)
     if day not in ("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"):
         return HTMLResponse("Invalid timetable day. <a href='/app/timetable'>Back</a>",400)
