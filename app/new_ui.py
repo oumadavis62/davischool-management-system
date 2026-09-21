@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from html import escape
 import base64
 import re
+from urllib.parse import quote
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -674,6 +675,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
     colspan = 3 + len(subjects) * 3 + 5
+    pdf_marksheet_url = f"/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}"
 
     print_script = '''<script>function printDocument(){var doc=document.querySelector('.marksheet-card');if(!doc){window.print();return;}var w=window.open('', '_blank', 'width=1200,height=800');if(!w){window.print();return;}var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}@page{size:auto;margin:10mm}';w.document.open();w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+'</body></html>');w.document.close();w.focus();setTimeout(function(){w.print();},300);}</script>'''
     body = (
@@ -685,8 +687,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>" + topts + "</select>"
         "<select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>" + yopts + "</select>"
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
-        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button><a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={escape(term or "")}&year={escape(year or "")}&stream={escape(stream or "")}'>⬇️ Download PDF</a>"
-        "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
+        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + pdf_marksheet_url + "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> <a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
         "<div class='card section marksheet-card'>%s"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
