@@ -16,7 +16,7 @@ YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi
 def davischool_login_page(request: Request):
     if request.session.get("email"):
         return RedirectResponse("/app", status_code=303)
-    error = "<div class='err'>Invalid username or password.</div>" if request.query_params.get("error") else ""
+    error = "<div class='err'>This school account is suspended. Please contact the DaviSchool administrator.</div>" if request.query_params.get("suspended") else ("<div class='err'>Invalid username or password.</div>" if request.query_params.get("error") else "")
     return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>body{{margin:0;background:#f4f7fb;font-family:Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}}.box{{width:min(430px,92vw);background:white;border:1px solid #e2e8f0;border-radius:18px;padding:32px;box-shadow:0 18px 50px #0f172a14}}.logo{{font-size:25px;font-weight:900;color:#111827;margin-bottom:5px}}.sub{{color:#64748b;margin-bottom:25px}}label{{display:block;font-size:13px;font-weight:800;color:#334155;margin:14px 0 7px}}input{{width:100%;box-sizing:border-box;padding:13px;border:1px solid #dbe2ea;border-radius:10px;font-size:15px}}button{{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#111827;color:white;font-weight:900;font-size:15px;cursor:pointer}}.err{{background:#fff1f2;border:1px solid #fda4af;color:#9f1239;padding:11px;border-radius:10px;margin-bottom:14px}}</style></head><body><div class='box'><div class='logo'>🏫 DaviSchool Management System</div><div class='sub'>Secure school management platform</div>{error}<form method='post' action='/login'><label>Email / Username</label><input name='email' type='email' autocomplete='username' required placeholder='Enter your email'><label>Password</label><input name='password' type='password' autocomplete='current-password' required placeholder='Enter password'><button type='submit'>Sign In</button></form></div></body></html>""")
 
 @router.post("/login")
@@ -32,6 +32,15 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     ok, legacy = verify_password(password, user["password"] or "")
     if not ok:
         return RedirectResponse("/?error=1", status_code=303)
+    if user["role"] == "school_admin":
+        con = _db()
+        try:
+            school = con.execute("SELECT status FROM schools WHERE id=?", (user["school_id"],)).fetchone()
+        finally:
+            con.close()
+        status = str(school["status"] or "active").strip().lower() if school else "suspended"
+        if status not in ("active", "enabled"):
+            return RedirectResponse("/?suspended=1", status_code=303)
     request.session["email"] = user["email"]
     request.session["role"] = user["role"]
     request.session["school_id"] = user["school_id"]
@@ -108,7 +117,19 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 def _school_session(request):
     if "email" not in request.session or request.session.get("role") == "super_admin":
         return None
-    return int(request.session.get("school_id") or 0)
+    sid = int(request.session.get("school_id") or 0)
+    if not sid:
+        return None
+    con = _db()
+    try:
+        school = con.execute("SELECT status FROM schools WHERE id=?", (sid,)).fetchone()
+    finally:
+        con.close()
+    status = str(school["status"] or "active").strip().lower() if school else "suspended"
+    if status not in ("active", "enabled"):
+        request.session.clear()
+        return None
+    return sid
 
 def _audit(cur, school_id, request, action, details):
     ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
