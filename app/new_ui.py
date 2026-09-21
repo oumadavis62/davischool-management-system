@@ -1311,6 +1311,11 @@ def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...)
     row=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=? ORDER BY id DESC LIMIT 1",(sid,student_id,subject_id,exam_id,class_id)).fetchone()
     if row:
         cur.execute("DELETE FROM marks WHERE id=? AND school_id=?",(row["id"],sid))
+        try:
+            _ensure_report_card_fields(cur)
+            cur.execute("DELETE FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",(sid,student_id,exam_id,subject_id))
+        except Exception:
+            pass
         _audit(cur,sid,request,"MARKS_DELETE",f"Deleted mark for student {student_id}, exam {exam_id}, class {class_id}, subject {subject_id}")
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
