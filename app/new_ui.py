@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from html import escape
 import base64
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -60,6 +61,71 @@ def davischool_logout(request: Request):
 def _db():
     from app.main import get_db
     return get_db()
+
+def _pdf_response(pdf_bytes, filename):
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("_") or "davischool.pdf"
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
+
+
+def _pdf_build(story, pagesize, title):
+    from io import BytesIO
+    from reportlab.platypus import SimpleDocTemplate
+    from reportlab.lib.units import mm
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=pagesize, rightMargin=10*mm, leftMargin=10*mm,
+                            topMargin=10*mm, bottomMargin=10*mm, title=title,
+                            author="DaviSchool Management System")
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def _pdf_styles():
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    styles = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle("DaviTitle", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER, spaceAfter=5),
+        "subtitle": ParagraphStyle("DaviSubtitle", parent=styles["Normal"], fontSize=8, leading=10, alignment=TA_CENTER, spaceAfter=8),
+        "normal": ParagraphStyle("DaviNormal", parent=styles["Normal"], fontSize=8, leading=10),
+        "small": ParagraphStyle("DaviSmall", parent=styles["Normal"], fontSize=7, leading=9),
+        "table": ParagraphStyle("DaviTable", parent=styles["Normal"], fontSize=6.5, leading=8),
+        "table_head": ParagraphStyle("DaviTableHead", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=TA_CENTER),
+    }
+
+
+def _pdf_school_header(school_row, styles, title, subtitle=""):
+    from reportlab.lib import colors
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.units import mm
+    from io import BytesIO
+    name = str(school_row["name"] or "DaviSchool") if school_row else "DaviSchool"
+    contacts = []
+    if school_row:
+        for key in ("email", "phone", "postal_address", "postal_code"):
+            if key in school_row.keys() and school_row[key]:
+                value = str(school_row[key])
+                if key == "postal_address":
+                    value = "P.O. Box " + value
+                contacts.append(value)
+    contact_text = " · ".join(contacts)
+    logo_flowable = Paragraph("🏫", styles["title"])
+    logo_data = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
+    if logo_data:
+        try:
+            from reportlab.platypus import Image
+            raw = logo_data.split(",", 1)[1] if "," in logo_data and logo_data.split(",", 1)[0].startswith("data:") else logo_data
+            logo_flowable = Image(BytesIO(base64.b64decode(raw)), width=22*mm, height=18*mm)
+        except Exception:
+            pass
+    text = [Paragraph(escape(name).upper(), styles["title"])]
+    if contact_text:
+        text.append(Paragraph(escape(contact_text), styles["small"]))
+    if subtitle:
+        text.append(Paragraph(escape(subtitle), styles["small"]))
+    table = Table([[logo_flowable, text]], colWidths=[28*mm, None])
+    table.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("LINEBELOW",(0,0),(-1,-1),1,colors.HexColor("#111827")), ("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    return [table, Spacer(1, 5), Paragraph(escape(title), styles["subtitle"])]
 
 def _shell(title, name, role, body, school_id=None):
     # Sidebar visibility follows the same permission vocabulary enforced by
