@@ -161,6 +161,18 @@ def _require_permission(request, school_id, permission):
     finally:
         con.close()
 
+def _teacher_class_authorized(cur, request, school_id, class_id):
+    """Restrict teacher data entry to classes assigned to the logged-in teacher."""
+    if str(request.session.get("role","")) != "teacher":
+        return True
+    teacher_id = request.session.get("teacher_id")
+    if not teacher_id:
+        return False
+    return bool(cur.execute(
+        "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
+        (school_id, teacher_id, class_id)
+    ).fetchone())
+
 def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
@@ -1109,6 +1121,9 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         return HTMLResponse("You do not have permission to edit marks.", 403)
     form=await request.form()
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
+    if not _teacher_class_authorized(cur, request, sid, class_id):
+        con.close()
+        return HTMLResponse("You are not allocated to this class.", 403)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid: con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
@@ -1563,6 +1578,9 @@ async def attendance_save(request: Request, class_id:int=Form(...), date:str=For
     if not _require_permission(request, sid, "attendance.edit"):
         return HTMLResponse("You do not have permission to edit attendance.", 403)
     form=await request.form();con=_db();cur=con.cursor()
+    if not _teacher_class_authorized(cur, request, sid, class_id):
+        con.close()
+        return HTMLResponse("You are not allocated to this class.", 403)
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
     for s in students:
         status=str(form.get(f"status_{s['id']}","Present"))
