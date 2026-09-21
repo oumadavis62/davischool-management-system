@@ -1036,12 +1036,30 @@ def school_dean_add_subject(request: Request, subject_name: str = Form(...), cod
 def school_dean_del_subject(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=subjects",303)
 @app.post("/school/dean-settings/allocate")
 def school_dean_allocate(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?)", (school["id"], teacher_id, subject_id, class_id)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=allocation",303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor()
+    sid=school["id"]
+    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    valid_subject=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    if not (valid_teacher and valid_subject and valid_class):
+        con.close(); return HTMLResponse("Invalid teacher, subject or class selection.",400)
+    duplicate=cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND subject_id=? AND class_id=?",(sid,teacher_id,subject_id,class_id)).fetchone()
+    if duplicate:
+        con.close(); return HTMLResponse("This teacher allocation already exists.",400)
+    cur.execute("INSERT INTO teacher_allocations (school_id, teacher_id, subject_id, class_id) VALUES (?,?,?,?,?)", (sid, teacher_id, subject_id, class_id))
+    con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=allocation",303)
 @app.get("/school/dean-settings/delete-alloc/{aid}")
-def school_del_alloc(aid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM teacher_allocations WHERE id=?", (aid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=allocation",303)
+def school_del_alloc(request: Request, aid: int):
+    school=get_school_obj(request); con=get_db(); cur=con.cursor()
+    cur.execute("DELETE FROM teacher_allocations WHERE id=? AND school_id=?",(aid,school["id"]))
+    con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=allocation",303)
 @app.post("/school/dean-settings/promote")
 def school_promote(request: Request, from_class: int = Form(...), to_class: int = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("UPDATE students SET class_id=? WHERE school_id=? AND class_id=?", (to_class, school["id"], from_class)); con.commit(); con.close(); return RedirectResponse(f"/school/dean-settings?tab=promote",303)
+    school = get_school_obj(request); con = get_db(); cur = con.cursor(); sid=school["id"]
+    if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(from_class,sid)).fetchone() or not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(to_class,sid)).fetchone():
+        con.close(); return HTMLResponse("Both classes must belong to this school.",400)
+    cur.execute("UPDATE students SET class_id=? WHERE school_id=? AND class_id=?", (to_class, sid, from_class))
+    con.commit(); con.close(); return RedirectResponse(f"/school/dean-settings?tab=promote",303)
 
 @app.get("/school/classes", response_class=HTMLResponse)
 def school_classes(request: Request):
