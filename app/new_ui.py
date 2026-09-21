@@ -457,7 +457,7 @@ def overall_grading(request: Request):
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
     con.close()
-    rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><a class='btnlink' href='/app/academics/overall-grading/delete/%s'>Delete</a></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
+    rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'><button class='btnlink' type='submit' onclick="return confirm('Delete this overall grading rule?')">Delete</button></form></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
     body=("<div class='page'><h1>Overall Grade & Position Settings</h1>"
       "<div class='muted'>Set the total-mark bands your school uses for the final overall grade. Position is then calculated automatically from total marks within the selected class and stream.</div>"
       "<div class='card section'><h2>Add overall grade band</h2><form method='post' action='/app/academics/overall-grading/add' style='display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px'>"
@@ -950,7 +950,7 @@ def grading_setup(request: Request, subject_id: str = ""):
     )
     rule_rows = "".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td>"
-        "<td><a class='btnlink' href='/app/academics/grading/delete/%s?subject_id=%s'>Delete</a></td></tr>"
+        "<td><form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick="return confirm('Delete this subject grading rule?')">Delete</button></form></td></tr>"
         % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
            float(r["points"] or 0), r["id"], subid)
         for r in rules
