@@ -1036,10 +1036,6 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if not _require_permission(request, sid, "marks.view"):
         return HTMLResponse("You do not have permission to view marks.", 403)
     if not _require_permission(request, sid, "reports.edit"):
-        return HTMLResponse("You do not have permission to edit grading.", 403)
-    if not _require_permission(request, sid, "reports.edit"):
-        return HTMLResponse("You do not have permission to edit grading.", 403)
-    if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to manage grading.", 403)
     con=_db();cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
