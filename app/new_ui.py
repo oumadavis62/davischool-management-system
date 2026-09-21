@@ -1227,7 +1227,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
-        rows+="<tr><td>%s</td><td><b>%s</b></td><td><input name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment' %s></td></tr>"%(escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],escape(str(mark)),out_of,"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))),"disabled" if locked else "")
+        rows+="<tr id='student-%s'><td>%s</td><td><b>%s</b></td><td><input id='mark-%s' name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment' %s></td><td style='white-space:nowrap'>%s</td></tr>"%(x["id"],escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],x["id"],escape(str(mark)),out_of,"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))),"disabled" if locked else "",("" if locked else "<button type='button' class='editbtn' onclick=\"document.getElementById('mark-%s').focus();document.getElementById('mark-%s').select();\">✏️ Edit</button><button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick=\"return confirm('Delete this mark for %s? This cannot be undone.');\">🗑️ Delete</button>"%(x["id"],x["id"],x["id"],escape(str(x["name"] or "")).replace("'","&#39;"))))
     con.close()
     body=(
       "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
@@ -1241,9 +1241,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='/app/academics/marks/save'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
-      "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>%s</tbody></table>%s"
+      "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
       "</form></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked. Further changes are disabled." if locked else "🟢 Marks are open for editing."),("<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form>"%(eid,cid,subid) if locked else ("<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Finalize these marks? Further edits will be blocked until reopened.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Finalize Marks</button></form>"%(eid,cid,subid) if students else "")),eid,cid,subid,out_of,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","" if locked else ("<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""))+
-      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
+      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
@@ -1291,6 +1291,27 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             else:
                 cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,st["id"],exam_id,subject_id,comment,now))
     _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+@router.post("/app/academics/marks/delete")
+def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), student_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to delete marks.", 403)
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
+    if not _teacher_class_authorized(cur, request, sid, class_id):
+        con.close(); return HTMLResponse("You are not allocated to this class.",403)
+    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone() and cur.execute("SELECT id FROM students WHERE id=? AND school_id=? AND class_id=?",(student_id,sid,class_id)).fetchone()
+    if not valid:
+        con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if _academic_lock(cur,sid,exam_id,class_id,subject_id):
+        con.close(); return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
+    row=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=? ORDER BY id DESC LIMIT 1",(sid,student_id,subject_id,exam_id,class_id)).fetchone()
+    if row:
+        cur.execute("DELETE FROM marks WHERE id=? AND school_id=?",(row["id"],sid))
+        _audit(cur,sid,request,"MARKS_DELETE",f"Deleted mark for student {student_id}, exam {exam_id}, class {class_id}, subject {subject_id}")
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
