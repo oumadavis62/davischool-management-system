@@ -2,7 +2,8 @@ name: Database Backup
 
 on:
   schedule:
-    - cron: "30 1 * * 0"
+    # Run every day at 01:30 UTC.
+    - cron: "30 1 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,11 +19,23 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          set -euo pipefail
           test -n "$DATABASE_URL"
           mkdir -p backups
-          pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl > "backups/davischool-$(date -u +%Y-%m-%d).dump"
+          pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl > "backups/davischool-$(date -u +%Y-%m-%dT%H-%M-%SZ).dump"
 
-      - name: Upload backup artifact
+      - name: Verify backup archive
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+          dump_file="$(find backups -type f -name '*.dump' -print -quit)"
+          test -n "$dump_file"
+          pg_restore --list "$dump_file" > /tmp/davischool-backup-contents.txt
+          test -s /tmp/davischool-backup-contents.txt
+
+      - name: Upload verified backup artifact
         uses: actions/upload-artifact@v4
         with:
           name: davischool-database-backup-${{ github.run_number }}
