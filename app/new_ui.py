@@ -631,8 +631,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
 def finance_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "reports.view"):
-        return HTMLResponse("You do not have permission to view marksheets.", 403)
+    if not (_require_permission(request, sid, "fees.view") or _require_permission(request, sid, "finance.view")):
+        return HTMLResponse("You do not have permission to view fees or finance.", 403)
     con=_db();cur=con.cursor()
     fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
     exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
