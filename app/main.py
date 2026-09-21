@@ -897,10 +897,14 @@ def school_set_marks_save(request: Request, subject_id: int = Form(...), class_n
     con.commit(); con.close()
     return RedirectResponse("/school/set-marks",303)
 
-@app.get("/school/set-marks/delete/{cid}")
+@app.post("/school/set-marks/delete/{cid}")
 def school_set_marks_delete(cid: int, request: Request):
-    if "email" not in request.session: return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM set_marks_config WHERE id=?", (cid,)); con.commit(); con.close()
+    if request.session.get("role") not in {"school_admin","super_admin"}: return RedirectResponse("/",303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"marks.edit"): return RedirectResponse("/portal",303)
+    con = get_db(); cur = con.cursor()
+    cur.execute("DELETE FROM set_marks_config WHERE id=? AND school_id=?", (cid,school["id"]))
+    con.commit(); con.close()
     return RedirectResponse("/school/set-marks",303)
 
 @app.get("/super/global-control/set-marks", response_class=HTMLResponse)
@@ -937,15 +941,12 @@ def global_set_marks_save(request: Request, subject_id: int = Form(...), class_n
     con.commit(); con.close()
     return RedirectResponse("/super/global-control/set-marks",303)
 
-@app.get("/super/global-control/set-marks/delete/{cid}")
+@app.post("/super/global-control/set-marks/delete/{cid}")
 def global_set_marks_delete(cid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor()
-    cur.execute("SELECT subject_id, class_name, stream, year, term, exam_id FROM set_marks_config WHERE id=?", (cid,)); row = cur.fetchone()
-    if row:
-        cur.execute("DELETE FROM set_marks_config WHERE class_name=? AND stream=? AND year=? AND term=? AND exam_id=? AND subject_id IN (SELECT id FROM subjects WHERE name=(SELECT name FROM subjects WHERE id=?))", (row["class_name"], row["stream"], row["year"], row["term"], row["exam_id"], row["subject_id"]))
-        cur.execute("DELETE FROM set_marks_config WHERE id=?", (cid,))
-    else:
+    cur.execute("SELECT id FROM set_marks_config WHERE id=?", (cid,))
+    if cur.fetchone():
         cur.execute("DELETE FROM set_marks_config WHERE id=?", (cid,))
     con.commit(); con.close()
     return RedirectResponse("/super/global-control/set-marks",303)
@@ -1094,7 +1095,7 @@ def school_classes(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall(); con.close()
-    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='/school/classes/delete/{c['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
+    rows = "".join([f"<tr><td style='padding:10px 12px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><form method='post' action='/school/classes/delete/{c['id']}' style='display:inline'><button type='submit' onclick="return confirm('Delete this class?')" style='background:#fee2e2;color:#991b1b;padding:4px 8px;border:0;border-radius:6px;cursor:pointer'>🗑️</button></form></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
     header = school_header(school, name, "classes", is_impersonating=is_imp)
     return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes & Streams ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Class</button></form></div></div></div></div></div></body></html>")
 @app.post("/school/classes/add")
@@ -1105,11 +1106,13 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
     if not nm: con.close(); return HTMLResponse("Class name is required.",400)
     if cur.execute("SELECT id FROM classes WHERE school_id=? AND upper(name)=? AND upper(stream)=?",(school["id"],nm,st)).fetchone(): con.close(); return HTMLResponse("That class/stream already exists in this school.",409)
     cur.execute("INSERT INTO classes (school_id,name,stream) VALUES (?,?,?)",(school["id"],nm,st)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
-@app.get("/school/classes/delete/{cid}")
+@app.post("/school/classes/delete/{cid}")
 def del_class(cid: int, request: Request):
     school=get_school_obj(request)
     if not school or not _role_permission(request,"classes.edit"): return RedirectResponse("/portal",303)
-    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
+    con=get_db(); cur=con.cursor()
+    cur.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school["id"]))
+    con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 
 # EXAM SETTINGS RESTORED - EXACT — YOUR PART 2
 @app.get("/school/exams", response_class=HTMLResponse)
@@ -1898,15 +1901,17 @@ def sid(request):
 @app.get("/school/timetable", response_class=HTMLResponse)
 def school_timetable(request: Request):
     con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY id DESC",(sid(request),)); rows=cur.fetchall(); con.close()
-    tr="".join([f"<tr><td>{r['day']}</td><td>{r['start_time']}-{r['end_time']}</td><td>{r['class_name']} {r['stream'] or ''}</td><td>{r['subject']}</td><td>{r['teacher'] or ''}</td><td>{r['room'] or ''}</td><td><a href='/school/modules/timetable/delete/{r['id']}'>Delete</a></td></tr>" for r in rows]) or "<tr><td colspan='7'>No timetable entries yet.</td></tr>"
+    tr="".join([f"<tr><td>{r['day']}</td><td>{r['start_time']}-{r['end_time']}</td><td>{r['class_name']} {r['stream'] or ''}</td><td>{r['subject']}</td><td>{r['teacher'] or ''}</td><td>{r['room'] or ''}</td><td><form method='post' action='/school/modules/timetable/delete/{r['id']}' style='display:inline'><button type='submit' onclick="return confirm('Delete this timetable entry?')" style='border:0;background:none;color:#b91c1c;cursor:pointer'>Delete</button></form></td></tr>" for r in rows]) or "<tr><td colspan='7'>No timetable entries yet.</td></tr>"
     body=f"<div class='card'><form method='post' action='/school/modules/timetable/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'><select name='day' class='input-field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select><input name='start_time' required type='time' class='input-field'><input name='end_time' required type='time' class='input-field'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' placeholder='Stream' class='input-field'><input name='subject' required placeholder='Subject' class='input-field'><input name='teacher' placeholder='Teacher' class='input-field'><input name='room' placeholder='Room' class='input-field'><button class='btn'>Add Period</button></form><table style='margin-top:16px'><tr><th>Day</th><th>Time</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Room</th><th>Action</th></tr>{tr}</table></div>"
     return module_page(request,'🗓️ Smart Timetable','timetable',body)
 @app.post("/school/modules/timetable/add")
 def add_timetable(request:Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(...),stream:str=Form(''),subject:str=Form(...),teacher:str=Form(''),room:str=Form('')):
     con=get_db(); con.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid(request),day,start_time,end_time,class_name,stream,subject,teacher,room)); con.commit(); con.close(); return RedirectResponse('/school/timetable',303)
-@app.get("/school/modules/timetable/delete/{rid}")
+@app.post("/school/modules/timetable/delete/{rid}")
 def del_timetable(request:Request,rid:int):
-    con=get_db(); con.execute("DELETE FROM timetable WHERE id=? AND school_id=?",(rid,sid(request))); con.commit(); con.close(); return RedirectResponse('/school/timetable',303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"timetable.edit"): return RedirectResponse("/portal",303)
+    con=get_db(); con.execute("DELETE FROM timetable WHERE id=? AND school_id=?",(rid,school["id"])); con.commit(); con.close(); return RedirectResponse('/school/timetable',303)
 
 @app.get("/school/fees", response_class=HTMLResponse)
 def school_fees(request: Request):
