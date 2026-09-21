@@ -1746,5 +1746,5 @@ def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=For
         con.close()
         return HTMLResponse("This assessment component already exists for the selected student, subject, term and year. <a href='/app/academics/assessments'>Back</a>",400)
     cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,term_v,year_v,component_v,score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
-        _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component.strip()} for student {student_id}")
+    _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component_v} for student {student_id}")
     con.commit();con.close();return RedirectResponse("/app/academics/assessments",303)
