@@ -19,6 +19,25 @@ def _ensure_live_postgres_schema():
     except Exception:
         return
 
+    try:
+        cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            exam_id INTEGER NOT NULL,
+            class_id INTEGER NOT NULL,
+            subject_id INTEGER NOT NULL,
+            teacher_id INTEGER,
+            requested_by TEXT,
+            requested_at TEXT,
+            reason TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewed_by TEXT,
+            reviewed_at TEXT,
+            review_note TEXT
+        )""")
+    except Exception:
+        pass
+
     migrations = {
         "users": {
             "email": "TEXT", "password": "TEXT", "role": "TEXT",
@@ -86,6 +105,21 @@ def _ensure_live_postgres_schema():
 
     with psycopg.connect(database_url) as pg:
         with pg.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL,
+                exam_id INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                subject_id INTEGER NOT NULL,
+                teacher_id INTEGER,
+                requested_by TEXT,
+                requested_at TEXT,
+                reason TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                reviewed_by TEXT,
+                reviewed_at TEXT,
+                review_note TEXT
+            )""")
             for table, columns in migrations.items():
                 cur.execute(
                     "SELECT column_name FROM information_schema.columns "
