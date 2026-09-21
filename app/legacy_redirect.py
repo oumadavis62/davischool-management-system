@@ -121,8 +121,8 @@ def install_legacy_school_redirect(app):
                     "<td><input id='recovery-mark-%s' name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput'></td>"
                     "<td>%s</td><td>%s</td>"
                     "<td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment'></td>"
-                    "<td style='white-space:nowrap'><button type='button' class='editbtn' onclick="document.getElementById('recovery-mark-%s').focus();document.getElementById('recovery-mark-%s').select();">✏️ Edit</button>"
-                    "<button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick="return confirm('Delete this mark for %s? This cannot be undone.');">🗑️ Delete</button></td></tr>"
+                    "<td style='white-space:nowrap'><button type='button' class='editbtn' onclick=&quot;document.getElementById('recovery-mark-%s').focus();document.getElementById('recovery-mark-%s').select();&quot;>✏️ Edit</button>"
+                    "<button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick=&quot;return confirm('Delete this mark for %s? This cannot be undone.');&quot;>🗑️ Delete</button></td></tr>"
                     % (
                         ui.escape(str(st["admission_no"] or "")),
                         ui.escape(str(st["name"] or "")),
