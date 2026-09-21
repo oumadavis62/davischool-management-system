@@ -918,26 +918,34 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
 def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_ensure_grading_table(cur);_ensure_academic_locks_table(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid=int(class_id) if class_id.isdigit() else 0
-    stats=[]
+    stats=[]; student_results=[]
     if eid:
-        q="""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
+        q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
           COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
           FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?"""
         params=[eid,sid]
-        if cid:
-            q+=" AND m.class_id=?";params.append(cid)
-        q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name"
-        params.append(sid);stats=cur.execute(q,params).fetchall()
+        if cid:q+=" AND m.class_id=?";params.append(cid)
+        q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name";params.append(sid)
+        stats=cur.execute(q,params).fetchall()
+        students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
+        for st in students:
+            result=_student_result(cur,sid,int(st["id"]),eid)
+            locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
+                WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
+            student_results.append((st,result,int(locks or 0)))
     con.close()
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     rows="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in stats)
-    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Subject performance for a selected examination and class.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    ranked=sorted(student_results,key=lambda z:(-float(z[1]["total"]),str(z[0]["name"])))
+    rank_map={int(z[0]["id"]):i+1 for i,z in enumerate(ranked)}
+    student_rows="".join(f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['count']}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td><td>{rank_map.get(int(st['id']),'—')} / {len(ranked)}</td></tr>" for st,res,_ in student_results)
+    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Academic Analysis",body)
 
 @router.post("/app/report-cards/subject-comment")
