@@ -66,6 +66,18 @@ def verify_password(password: str, stored: str) -> tuple[bool, bool]:
         return False, False
 
 def get_db():
+    """
+    Return the application's database connection.
+
+    Production uses the managed Render PostgreSQL database whenever
+    DATABASE_URL is configured. SQLite remains available for local
+    development/backwards compatibility when DATABASE_URL is absent.
+    """
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_url:
+        from app.db import connect as pg_connect
+        return pg_connect(database_url, connect_timeout=10)
+
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
     try:
@@ -148,6 +160,31 @@ def init_extended_db():
     except: pass
     try: cur.execute("ALTER TABLE users ADD COLUMN teacher_id INTEGER")
     except: pass
+
+    # Performance indexes for the multi-school production workload. These are
+    # additive and safe for existing data.
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)",
+        "CREATE INDEX IF NOT EXISTS idx_users_school ON users(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_students_school ON students(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_students_class ON students(school_id,class_id)",
+        "CREATE INDEX IF NOT EXISTS idx_classes_school ON classes(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_subjects_school ON subjects(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_teachers_school ON teachers(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_marks_school ON marks(school_id)",
+        "CREATE INDEX IF NOT EXISTS idx_marks_student ON marks(school_id,student_id)",
+        "CREATE INDEX IF NOT EXISTS idx_marks_exam_class ON marks(school_id,exam_id,class_id)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(school_id,student_id,date)",
+        "CREATE INDEX IF NOT EXISTS idx_fee_payments_student ON fee_payments(school_id,student_id,date)",
+        "CREATE INDEX IF NOT EXISTS idx_fees_student ON fees(school_id,student_id)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_school_time ON system_audit(school_id,timestamp)",
+    ]
+    for statement in indexes:
+        try:
+            cur.execute(statement)
+        except Exception:
+            pass
+
     con.commit(); con.close()
 init_extended_db()
 
