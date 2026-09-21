@@ -2093,6 +2093,13 @@ def global_other(path: str, request: Request):
 # ============================================================
 
 def _school_user(request: Request):
+    # Legacy /school routes are retained for compatibility, but the unified
+    # /app workspace and dedicated role portals are now the supported workflow.
+    # Do not expose legacy school controls to teacher/accountant/registrar/
+    # parent/student sessions.
+    role = str(request.session.get("role", ""))
+    if role not in {"school_admin", "super_admin"}:
+        return None
     school = get_school_obj(request)
     if not school or not request.session.get("email"):
         return None
