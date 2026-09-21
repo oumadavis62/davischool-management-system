@@ -435,9 +435,17 @@ def overall_grading(request: Request):
 def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if min_total<0 or max_total<min_total:
-        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)
+    if min_total<0 or max_total<min_total or not grade.strip():
+        return HTMLResponse("Invalid total-mark range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+    overlap=cur.execute(
+        """SELECT id FROM overall_grading_rules
+           WHERE school_id=? AND min_total<=? AND max_total>=? LIMIT 1""",
+        (sid,max_total,min_total)
+    ).fetchone()
+    if overlap:
+        con.close()
+        return HTMLResponse("That overall grading range overlaps an existing range. <a href='/app/academics/overall-grading'>Back</a>",400)
     cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
     _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f total marks"%(grade.strip(),min_total,max_total))
     con.commit();con.close()
@@ -902,6 +910,8 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
         return RedirectResponse("/", 303)
     if min_mark < 0 or max_mark > 100 or min_mark > max_mark or points < 0:
         return HTMLResponse("Invalid grading range. <a href='/app/academics/grading'>Back</a>", 400)
+    if not grade.strip():
+        return HTMLResponse("Grade is required. <a href='/app/academics/grading'>Back</a>", 400)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
@@ -910,6 +920,15 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     ).fetchone():
         con.close()
         return HTMLResponse("Invalid subject. <a href='/app/academics/grading'>Back</a>", 400)
+    overlap=cur.execute(
+        """SELECT id FROM subject_grading_rules
+           WHERE school_id=? AND subject_id=? AND min_mark<=? AND max_mark>=?
+           LIMIT 1""",
+        (sid,subject_id,max_mark,min_mark)
+    ).fetchone()
+    if overlap:
+        con.close()
+        return HTMLResponse("That grading range overlaps an existing range for this subject. <a href='/app/academics/grading'>Back</a>",400)
     cur.execute(
         """INSERT INTO subject_grading_rules
            (school_id,subject_id,min_mark,max_mark,grade,points)
@@ -1709,10 +1728,23 @@ def assessments_page(request: Request, student_id:str="", subject_id:str="", ter
 def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=Form(...),term:str=Form(...),year:str=Form(...),component:str=Form(...),score:float=Form(...),out_of:float=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if out_of<=0 or score<0 or score>out_of:return HTMLResponse("Invalid assessment score. <a href='/app/academics/assessments'>Back</a>",400)
+    term_v=term.strip()
+    year_v=year.strip()
+    component_v=component.strip()
+    if out_of<=0 or score<0 or score>out_of or not term_v or not year_v or not component_v:
+        return HTMLResponse("Invalid assessment details or score. <a href='/app/academics/assessments'>Back</a>",400)
     con=_db();cur=con.cursor();_ensure_assessment_table(cur)
-    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-    if valid:
-        cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,term.strip(),year.strip(),component.strip(),score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+    valid_student=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    valid_subject=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not valid_student or not valid_subject:
+        con.close()
+        return HTMLResponse("Invalid student or subject. <a href='/app/academics/assessments'>Back</a>",400)
+    duplicate=cur.execute("""SELECT id FROM assessment_scores
+        WHERE school_id=? AND student_id=? AND subject_id=? AND term=? AND year=? AND lower(component)=lower(?) LIMIT 1""",
+        (sid,student_id,subject_id,term_v,year_v,component_v)).fetchone()
+    if duplicate:
+        con.close()
+        return HTMLResponse("This assessment component already exists for the selected student, subject, term and year. <a href='/app/academics/assessments'>Back</a>",400)
+    cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,term_v,year_v,component_v,score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
         _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component.strip()} for student {student_id}")
     con.commit();con.close();return RedirectResponse("/app/academics/assessments",303)
