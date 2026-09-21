@@ -377,6 +377,8 @@ def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form
 def academics_page(request: Request, exam_id: str = "", class_id: str = "", subject_id: str = "", term: str = "", year: str = ""):
     sid = _school_session(request)
     if not sid: return RedirectResponse("/")
+    if not _require_permission(request, sid, "marks.view"):
+        return HTMLResponse("You do not have permission to view academic records.", 403)
     con = _db(); cur = con.cursor()
     terms = cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
