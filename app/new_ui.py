@@ -1638,7 +1638,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
             except Exception as exc:
                 print("DAVISCHOOL ANALYSIS LOCK COUNT FALLBACK:", repr(exc), flush=True)
                 locks=0
-            student_results.append((st,result,int(locks or 0))
+            student_results.append((st,result,int(locks or 0)))
     con.close()
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
