@@ -177,8 +177,7 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
     admission=admission_no.strip()
     if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
         con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
-    cid=int(class_id) if class_id.isdigit() else None
-    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
+    cid=int(class_id) if class_id.isdigit() else None    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
     cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),"","active"))
     student_id=cur.lastrowid
     _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
@@ -246,19 +245,79 @@ def student_history(request: Request,student_id:int):
 def staff_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
-    con=_db(); cur=con.cursor(); staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall(); con.close()
-    rows="".join(f"<tr><td>{escape(str(t['name'] or ''))}</td><td>{escape(str(t['role'] or ''))}</td><td>{escape(str(t['email'] or ''))}</td><td>{escape(str(t['phone'] or ''))}</td><td>{escape(str(t['employment_type'] or ''))}</td></tr>" for t in staff)
-    body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory and teaching workforce.</div>
+    con=_db(); cur=con.cursor()
+    staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    con.close()
+    def val(t,key,default=""):
+        try: return str(t[key] if t[key] is not None else default)
+        except Exception: return default
+    rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'email'))}</td><td>{escape(val(t,'phone'))}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{t["id"]}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={t["id"]}'>Teaching</a></td></tr>""" for t in staff)
+    body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory, employment status, teacher profiles and academic responsibilities.</div>
 <div class='card section'><h2>Add staff member</h2><form method='post' action='/app/staff/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
-<input name='name' required placeholder='Full name' class='field'><input name='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'><select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select><select name='gender' class='field'><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select><button class='btn'>Save Staff</button></form></div>
-<div class='card section'><h2>Staff register ({len(staff)})</h2><table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No staff yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+<input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'>
+<select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select>
+<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select>
+<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select>
+<input name='department' placeholder='Department / responsibility' class='field'><button class='btn'>Save Staff</button></form></div>
+<div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><h2>Staff register ({len(staff)})</h2><a class='action' href='/app/academics/allocations'>Teacher Allocation</a></div>
+<table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
     return _school_page(request,"Staff & Teachers",body)
 
 @router.post("/app/staff/add")
-def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent")):
+def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type) VALUES(?,?,?,?,?,?,?,?,?)",(sid,name.strip(),email.strip(),phone.strip(),tsc_no.strip(),gender.strip(),id_no.strip(),role.strip(),employment_type.strip()));_audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}");con.commit();con.close();return RedirectResponse("/app/staff",303)
+    allowed_status=("active","inactive","on_leave","left")
+    new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
+    con=_db();cur=con.cursor(); email_v=email.strip(); tsc_v=tsc_no.strip(); id_v=id_no.strip()
+    if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?)",(sid,email_v)).fetchone():
+        con.close(); return HTMLResponse("A staff member with that email already exists. <a href='/app/staff'>Back</a>",400)
+    if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?)",(sid,tsc_v)).fetchone():
+        con.close(); return HTMLResponse("That TSC number already exists. <a href='/app/staff'>Back</a>",400)
+    if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?)",(sid,id_v)).fetchone():
+        con.close(); return HTMLResponse("That ID number already exists. <a href='/app/staff'>Back</a>",400)
+    cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,status,department) VALUES(?,?,?,?,?,?,?,?,?,?,?)",(sid,name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip()))
+    _audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}")
+    con.commit();con.close();return RedirectResponse("/app/staff",303)
+
+@router.get("/app/staff/edit/{teacher_id}",response_class=HTMLResponse)
+def staff_edit_page(request: Request,teacher_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    con=_db();cur=con.cursor(); t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone(); con.close()
+    if not t:return HTMLResponse("Staff member not found.",404)
+    def val(key,default=""):
+        try:return str(t[key] if t[key] is not None else default)
+        except Exception:return default
+    status=val("status","active")
+    body=f"""<div class='page'><h1>Edit Staff / Teacher</h1><div class='card section'><form method='post' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+<label>Full name<input name='name' value='{escape(val("name"))}' required class='field'></label><label>Email<input name='email' type='email' value='{escape(val("email"))}' class='field'></label>
+<label>Phone<input name='phone' value='{escape(val("phone"))}' class='field'></label><label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"))}' class='field'></label>
+<label>ID number<input name='id_no' value='{escape(val("id_no"))}' class='field'></label><label>Role<select name='role' class='field'><option>{escape(val("role","Teacher"))}</option><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select></label>
+<label>Gender<select name='gender' class='field'><option>{escape(val("gender"))}</option><option>Male</option><option>Female</option><option>Other</option></select></label><label>Employment type<select name='employment_type' class='field'><option>{escape(val("employment_type","Permanent"))}</option><option>Permanent</option><option>Contract</option><option>Part-time</option></select></label>
+<label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
+<label>Department / responsibility<input name='department' value='{escape(val("department"))}' class='field'></label><div><button class='btn'>Save Changes</button> <a class='action' href='/app/staff'>Cancel</a></div></form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin-top:5px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Edit Staff / Teacher",body)
+
+@router.post("/app/staff/edit/{teacher_id}")
+def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    allowed_status=("active","inactive","on_leave","left"); new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
+    con=_db();cur=con.cursor(); t=cur.execute("SELECT * FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    if not t:con.close();return HTMLResponse("Staff member not found.",404)
+    email_v=email.strip();tsc_v=tsc_no.strip();id_v=id_no.strip()
+    if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?) AND id<>?",(sid,email_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("A staff member with that email already exists.",400)
+    if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?) AND id<>?",(sid,tsc_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("That TSC number already exists.",400)
+    if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?) AND id<>?",(sid,id_v,teacher_id)).fetchone():
+        con.close();return HTMLResponse("That ID number already exists.",400)
+    cur.execute("UPDATE teachers SET name=?,email=?,phone=?,tsc_no=?,gender=?,id_no=?,role=?,employment_type=?,status=?,department=? WHERE id=? AND school_id=?",(name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip(),teacher_id,sid))
+    _audit(cur,sid,request,"STAFF_UPDATE",f"Updated staff member {name.strip()} ({teacher_id})")
+    con.commit();con.close();return RedirectResponse("/app/staff",303)
 
 @router.get("/app/academics", response_class=HTMLResponse)
 def academics_page(request: Request, exam_id: str = "", class_id: str = "", subject_id: str = "", term: str = "", year: str = ""):
@@ -357,8 +416,7 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if min_total<0 or max_total<min_total:
-        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)
-    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+        return HTMLResponse("Invalid total-mark range. <a href='/app/academics/overall-grading'>Back</a>",400)    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
     _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f total marks"%(grade.strip(),min_total,max_total))
     con.commit();con.close()
@@ -537,8 +595,7 @@ def school_settings_page(request: Request):
         return escape(str(school[key] or ""))
     logo=str(school["logo_data"] or "") if "logo_data" in school.keys() else ""
     logo_preview=f"<img src='{escape(logo)}' alt='School logo' style='max-width:140px;max-height:100px;object-fit:contain;border:1px solid #dbe2ea;border-radius:10px;padding:6px;background:white'>" if logo else "<div style='width:140px;height:100px;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px'>No logo uploaded</div>"
-    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile, contact details and document identity for this school.</div>
-<div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' enctype='multipart/form-data' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
+    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile, contact details and document identity for this school.</div><div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' enctype='multipart/form-data' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
 <label>School Name<input name='school_name' required value='{val("name")}' class='field'></label>
 <label>School Email<input name='school_email' type='email' required value='{val("email")}' class='field'></label>
 <label>Location<input name='location' required value='{val("location")}' class='field'></label>
@@ -717,8 +774,7 @@ def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
         (school_id, exam_id, class_id, subject_id)
     ).fetchone()
 
-def _ensure_grading_table(cur):
-    cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
+def _ensure_grading_table(cur):    cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER,
         subject_id INTEGER,
@@ -897,8 +953,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     locked = bool(_academic_lock(cur,sid,eid,cid,subid)) if eid and cid and subid else False
-    rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
-    rows=""
+    rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."    rows=""
     for x in students:
         mark=x["marks"]
         if mark=="":
@@ -1077,7 +1132,6 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
     cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?) ON CONFLICT(school_id,exam_id) DO UPDATE SET opening_date=excluded.opening_date,closing_date=excluded.closing_date",(sid,exam_id,opening_date,closing_date))
     con.commit();con.close()
     return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}",303)
-
 @router.get("/app/report-cards", response_class=HTMLResponse)
 def report_cards(request: Request, exam_id:str="", student_id:str=""):
     sid=_school_session(request)
@@ -1258,7 +1312,6 @@ def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:s
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     con=_db();cur=con.cursor();cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name.strip(),code.strip(),initial.strip()));_audit(cur,sid,request,"SUBJECT_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/subjects",303)
-
 @router.get("/app/exams", response_class=HTMLResponse)
 def exams_page(request: Request):
     sid=_school_session(request)
@@ -1438,100 +1491,3 @@ def allocations_page(request: Request):
     teachers=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    rows=cur.execute("""SELECT ta.*,t.name teacher_name,s.name subject_name,c.name class_name,c.stream
-                        FROM teacher_allocations ta JOIN teachers t ON t.id=ta.teacher_id
-                        JOIN subjects s ON s.id=ta.subject_id JOIN classes c ON c.id=ta.class_id
-                        WHERE ta.school_id=? ORDER BY t.name,s.name,c.name""",(sid,)).fetchall()
-    con.close()
-    opts=lambda xs,label: "".join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' '+escape(str(x['stream'] or ''))) if label=='class' else ''}</option>" for x in xs)
-    tr=_simple_rows(rows,["teacher_name","subject_name","class_name","stream"])
-    body=f"""<div class='page'><h1>Teacher Allocation</h1><div class='muted'>Assign teachers to subjects and classes.</div>
-<div class='card section'><form method='post' action='/app/academics/allocations/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
-<select name='teacher_id' required class='field'>{opts(teachers,'teacher')}</select><select name='subject_id' required class='field'>{opts(subjects,'subject')}</select><select name='class_id' required class='field'>{opts(classes,'class')}</select><button class='btn'>Save Allocation</button></form></div>
-<div class='card section'><h2>Current allocations ({len(rows)})</h2><table><thead><tr><th>Teacher</th><th>Subject</th><th>Class</th><th>Stream</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Teacher Allocation",body)
-
-@router.post("/app/academics/allocations/add")
-def allocations_add(request: Request,teacher_id:int=Form(...),subject_id:int=Form(...),class_id:int=Form(...)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor()
-    valid=all(cur.execute(q,(x,sid)).fetchone() for q,x in [
-        ("SELECT id FROM teachers WHERE id=? AND school_id=?",teacher_id),
-        ("SELECT id FROM subjects WHERE id=? AND school_id=?",subject_id),
-        ("SELECT id FROM classes WHERE id=? AND school_id=?",class_id)])
-    if valid:
-        if not cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND subject_id=? AND class_id=?",(sid,teacher_id,subject_id,class_id)).fetchone():
-            cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,subject_id,class_id) VALUES(?,?,?,?)",(sid,teacher_id,subject_id,class_id))
-            _audit(cur,sid,request,"TEACHER_ALLOCATION","Created teacher allocation")
-    con.commit();con.close();return RedirectResponse("/app/academics/allocations",303)
-
-@router.get("/app/academics/assessments", response_class=HTMLResponse)
-def assessments_page(request: Request, student_id:str="", subject_id:str="", term:str=""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor();_ensure_assessment_table(cur)
-    students=cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    stid=int(student_id) if student_id.isdigit() else 0; subid=int(subject_id) if subject_id.isdigit() else 0
-    rows=cur.execute("""SELECT a.*,s.name subject_name FROM assessment_scores a JOIN subjects s ON s.id=a.subject_id
-                        WHERE a.school_id=? AND (?=0 OR a.student_id=?) AND (?=0 OR a.subject_id=?) AND (?='' OR a.term=?)
-                        ORDER BY a.id DESC LIMIT 300""",(sid,stid,stid,subid,subid,term,term)).fetchall()
-    con.commit();con.close()
-    so="".join(f"<option value='{s['id']}' {'selected' if s['id']==subid else ''}>{escape(str(s['name']))}</option>" for s in subjects)
-    sto="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    tr=_simple_rows(rows,["student_id","subject_name","term","year","component","score","out_of","created_at"])
-    body=f"""<div class='page'><h1>SBA / CBA</h1><div class='muted'>Record continuous assessment components separately from examination marks.</div>
-<div class='card section'><form method='post' action='/app/academics/assessments/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
-<select name='student_id' required class='field'>{sto}</select><select name='subject_id' required class='field'>{so}</select><select name='term' required class='field'><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><input name='year' required value='{datetime.now(ZoneInfo("Africa/Nairobi")).year}' class='field'><select name='component' required class='field'><option>CAT 1</option><option>CAT 2</option><option>Project</option><option>Practical</option><option>SBA</option><option>CBA</option><option>Assignment</option><option>Other</option></select><input name='score' required type='number' min='0' step='0.01' placeholder='Score' class='field'><input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'><button class='btn'>Save Assessment</button></form></div>
-<div class='card section'><h2>Assessment records</h2><table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th></tr></thead><tbody>{tr or '<tr><td colspan=8>No assessment records yet.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"SBA / CBA",body)
-
-@router.post("/app/academics/assessments/add")
-def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=Form(...),term:str=Form(...),year:str=Form(...),component:str=Form(...),score:float=Form(...),out_of:float=Form(...)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if out_of<=0 or score<0 or score>out_of:return HTMLResponse("Invalid assessment score. <a href='/app/academics/assessments'>Back</a>",400)
-    con=_db();cur=con.cursor();_ensure_assessment_table(cur)
-    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-    if valid:
-        cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,term.strip(),year.strip(),component.strip(),score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
-        _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component.strip()} for student {student_id}")
-    con.commit();con.close();return RedirectResponse("/app/academics/assessments",303)
-
-@router.get("/app/academics/student-analysis", response_class=HTMLResponse)
-def student_analysis(request: Request, student_id:str=""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor();students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
-    rows=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
-                        FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.student_id=? AND m.school_id=?
-                        WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(stid,sid,sid)).fetchall() if stid else []
-    st=next((x for x in students if x["id"]==stid),None);con.close()
-    vals=[float(x["avg_mark"] or 0) for x in rows if int(x["entries"] or 0)>0];overall=sum(vals)/len(vals) if vals else 0
-    so="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    tr="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Student Analysis</h1><div class='muted'>{escape(str(st['name'] if st else ''))} · {escape(str(st['class_name'] if st else ''))}</div>
-<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'><select name='student_id' class='field'>{so}</select><button class='btn'>Analyse Student</button></form></div>
-<div class='grid'><div class='card'><div class='label'>Overall subject average</div><div class='kpi'>{overall:.2f}%</div></div><div class='card'><div class='label'>Subjects with marks</div><div class='kpi'>{len(vals)}</div></div></div>
-<div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{tr or '<tr><td colspan=5>No marks recorded.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Student Analysis",body)
-
-@router.get("/app/academics/class-analysis", response_class=HTMLResponse)
-def class_analysis(request: Request, exam_id:str="", class_id:str=""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor();exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0);cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
-    rows=cur.execute("""SELECT s.id,s.name,s.admission_no,COALESCE(AVG(m.marks),0) average,COUNT(m.id) entries
-                        FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.school_id=?
-                        WHERE s.school_id=? AND s.class_id=? GROUP BY s.id,s.name,s.admission_no ORDER BY average DESC""",(eid,sid,sid,cid)).fetchall() if eid and cid else []
-    con.close(); avg=(sum(float(x["average"] or 0) for x in rows)/len(rows)) if rows else 0
-    eo="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams);co="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    tr="".join(f"<tr><td>{n}</td><td>{escape(str(x['admission_no'] or ''))}</td><td>{escape(str(x['name']))}</td><td>{x['entries']}</td><td>{float(x['average'] or 0):.2f}</td><td>{_grade(x['average'])}</td></tr>" for n,x in enumerate(rows,1))
-    body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Student performance distribution for a selected examination and class.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eo}</select><select name='class_id' class='field'>{co}</select><button class='btn'>Analyse Class</button></form></div><div class='grid'><div class='card'><div class='label'>Class average</div><div class='kpi'>{avg:.2f}%</div></div><div class='card'><div class='label'>Students</div><div class='kpi'>{len(rows)}</div></div></div><div class='card section'><table><thead><tr><th>Pos</th><th>Admission</th><th>Student</th><th>Entries</th><th>Average</th><th>Grade</th></tr></thead><tbody>{tr or '<tr><td colspan=6>No marks recorded.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Class Analysis",body)
