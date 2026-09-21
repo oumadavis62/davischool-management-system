@@ -86,7 +86,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
             ("/app/report-cards","📄","Report Cards","reports.view"),
             ("/app/attendance","✓","Attendance","attendance.view"),
-            ("/app/timetable","🗓","Timetable","timetable.view","timetable.edit",,
+            ("/app/timetable","🗓","Timetable","timetable.view"),
             ("/app/finance","💰","Fees & Finance","fees.view"),
             ("/app/accounting","📚","Accounting","finance.view"),
             ("/app/announcements","📢","Announcements","communications.view"),
