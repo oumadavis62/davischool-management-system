@@ -589,6 +589,35 @@ def _grade(mark, out_of=100):
     return "E"
 
 
+def _ensure_report_card_fields(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS report_card_settings(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        opening_date TEXT,
+        closing_date TEXT,
+        UNIQUE(school_id,exam_id)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS subject_performance_comments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        comment TEXT,
+        updated_at TEXT,
+        UNIQUE(school_id,student_id,exam_id,subject_id)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS class_teacher_comments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        comment TEXT,
+        updated_at TEXT,
+        UNIQUE(school_id,student_id,exam_id)
+    )""")
+
 def _ensure_academic_locks_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS academic_locks(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -891,17 +920,67 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Subject performance for a selected examination and class.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Academic Analysis",body)
 
+@router.post("/app/report-cards/subject-comment")
+def save_subject_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), subject_id:int=Form(...), comment:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
+    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone() and cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    if not valid: con.close(); return HTMLResponse("Invalid report selection.",400)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(school_id,student_id,exam_id,subject_id) DO UPDATE SET comment=excluded.comment,updated_at=excluded.updated_at",
+                (sid,student_id,exam_id,subject_id,comment.strip(),now))
+    con.commit();con.close()
+    return RedirectResponse(f"/app/report-cards?student_id={student_id}&exam_id={exam_id}",303)
+
+@router.post("/app/report-cards/class-teacher-comment")
+def save_class_teacher_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), comment:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
+    valid=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone() and cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    if not valid: con.close(); return HTMLResponse("Invalid report selection.",400)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO class_teacher_comments(school_id,student_id,exam_id,comment,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(school_id,student_id,exam_id) DO UPDATE SET comment=excluded.comment,updated_at=excluded.updated_at",
+                (sid,student_id,exam_id,comment.strip(),now))
+    con.commit();con.close()
+    return RedirectResponse(f"/app/report-cards?student_id={student_id}&exam_id={exam_id}",303)
+
+@router.get("/app/report-card-settings",response_class=HTMLResponse)
+def report_card_settings(request: Request, exam_id:int=0):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
+    exams=cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    selected=cur.execute("SELECT * FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,exam_id)).fetchone() if exam_id else None
+    con.close()
+    options="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==exam_id else ''}>{escape(str(e['name']))}</option>" for e in exams)
+    return _page("Report Card Settings",f"""<div class='card section'><h2>Report Card Dates</h2><p class='muted'>Set the opening and closing dates for each examination/reporting period.</p><form method='post'><select name='exam_id' class='field' required>{options}</select><label>Date of Opening</label><input type='date' name='opening_date' class='field' value='{escape(str(selected["opening_date"] if selected else ""))}'><label>Date of Closing</label><input type='date' name='closing_date' class='field' value='{escape(str(selected["closing_date"] if selected else ""))}'><button class='btn'>Save Dates</button></form></div>""")
+
+@router.post("/app/report-card-settings")
+def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_date:str=Form(""), closing_date:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
+    if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone():
+        con.close();return HTMLResponse("Invalid examination.",400)
+    if opening_date and closing_date and closing_date<opening_date:
+        con.close();return HTMLResponse("Closing date cannot be before opening date.",400)
+    cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?) ON CONFLICT(school_id,exam_id) DO UPDATE SET opening_date=excluded.opening_date,closing_date=excluded.closing_date",(sid,exam_id,opening_date,closing_date))
+    con.commit();con.close()
+    return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}",303)
+
 @router.get("/app/report-cards", response_class=HTMLResponse)
 def report_cards(request: Request, exam_id:str="", student_id:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
-    rows=[];comment=""; report_final=False; position="—"; class_total_students=0
+    rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0
     if st and eid:
         rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
           WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
@@ -928,6 +1007,15 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
                 break
         cm=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,stid,eid)).fetchone()
         comment=cm["comment"] if cm else ""
+        tc=cur.execute("SELECT comment FROM class_teacher_comments WHERE school_id=? AND student_id=? AND exam_id=? LIMIT 1",(sid,stid,eid)).fetchone()
+        class_teacher_comment=tc["comment"] if tc else ""
+        for sr in rows:
+            sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,stid,eid,sr["subject_id"])).fetchone()
+            subject_comments[int(sr["subject_id"])]=sc["comment"] if sc else ""
+        rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
+        if rs:
+            opening_date=rs["opening_date"] or ""
+            closing_date=rs["closing_date"] or ""
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     result=_student_result(cur,sid,stid,eid) if st and eid else {"rows":[],"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
@@ -943,7 +1031,7 @@ def report_cards(request: Request, exam_id:str="", student_id:str=""):
     doc_brand="<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     final_banner=("<div style='padding:10px;background:#dcfce7;color:#166534;border-radius:9px;font-weight:800'>✅ FINAL REPORT — all recorded subjects are finalized.</div>" if report_final else "<div style='padding:10px;background:#fef3c7;color:#92400e;border-radius:9px;font-weight:800'>📝 DRAFT REPORT — finalize all recorded subject marks before printing the final report.</div>")
     print_btn="<button class='btn' style='margin-top:8px' onclick='window.print()'>Print Report</button>" if report_final else ""
-    report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th></tr></thead><tbody>{markrows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'>Points</div><div class='kpi'>{result["points"]:.1f}</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form>{print_btn}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
+    report_html=f"""<div class='card section' id='report'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{''.join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td><td>{escape(str(subject_comments.get(int(r['subject_id']),'')))}</td></tr>" for r,mark,grade,points in result["details"])}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'>Points</div><div class='kpi'>{result["points"]:.1f}</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form><div style='margin-top:14px'><b>Class Teacher's Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px'>{escape(str(class_teacher_comment or ''))}</div></div><div class='grid' style='margin-top:12px'><div><b>Date of Opening</b><div>{escape(str(opening_date or ''))}</div></div><div><b>Date of Closing</b><div>{escape(str(closing_date or ''))}</div></div></div><div style='margin-top:14px'><b>Additional Report Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:45px'>{escape(str(comment or ''))}</div></div>{print_btn}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Report Cards",body)
 
