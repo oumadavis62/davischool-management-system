@@ -4,6 +4,168 @@ from urllib.parse import quote
 
 def install_legacy_school_redirect(app):
     """Disable legacy /school routes and decorate school verification responses."""
+    @app.exception_handler(Exception)
+    async def davischool_marks_exception_handler(request: Request, exc: Exception):
+        # Keep the Marks Entry screen usable even when a legacy production
+        # schema contains an unexpected column/table mismatch. This handler
+        # is read-only: it never changes existing academic records.
+        if request.url.path != "/app/academics/marks" or request.method.upper() != "GET":
+            print("DAVISCHOOL UNHANDLED EXCEPTION:", repr(exc), flush=True)
+            return PlainTextResponse("Internal Server Error", status_code=500)
+
+        print("DAVISCHOOL MARKS PAGE EXCEPTION:", repr(exc), flush=True)
+        try:
+            import app.new_ui as ui
+            sid = ui._school_session(request)
+            if not sid:
+                return RedirectResponse("/", status_code=303)
+            if not ui._require_permission(request, sid, "marks.view"):
+                return HTMLResponse("You do not have permission to view marks.", status_code=403)
+
+            con = ui._db()
+            cur = con.cursor()
+
+            def safe_rows(sql, params=()):
+                try:
+                    return cur.execute(sql, params).fetchall()
+                except Exception as inner:
+                    print("DAVISCHOOL MARKS FALLBACK QUERY:", repr(inner), flush=True)
+                    return []
+
+            exams = safe_rows("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC", (sid,))
+            classes = safe_rows("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,))
+            subjects = safe_rows("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (sid,))
+
+            q = request.query_params
+            exam_raw, class_raw, subject_raw = q.get("exam_id",""), q.get("class_id",""), q.get("subject_id","")
+            eid = int(exam_raw) if exam_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+            cid = int(class_raw) if class_raw.isdigit() else 0
+            subid = int(subject_raw) if subject_raw.isdigit() else 0
+
+            students = []
+            out_of = 100.0
+            comments = {}
+
+            if eid and cid and subid:
+                try:
+                    students = cur.execute(
+                        """SELECT id,admission_no,name FROM students
+                           WHERE school_id=? AND class_id=? ORDER BY name""",
+                        (sid, cid)
+                    ).fetchall()
+                except Exception as inner:
+                    print("DAVISCHOOL MARKS STUDENT FALLBACK:", repr(inner), flush=True)
+                    students = []
+
+                try:
+                    cfg = cur.execute(
+                        "SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",
+                        (sid, eid, subid)
+                    ).fetchone()
+                    if cfg and cfg["out_of"]:
+                        out_of = float(cfg["out_of"])
+                except Exception as inner:
+                    print("DAVISCHOOL MARKS OUT-OF FALLBACK:", repr(inner), flush=True)
+
+                for st in students:
+                    try:
+                        row = cur.execute(
+                            "SELECT marks FROM marks WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",
+                            (sid, st["id"], eid, subid)
+                        ).fetchone()
+                        mark = row["marks"] if row else ""
+                    except Exception as inner:
+                        print("DAVISCHOOL MARKS VALUE FALLBACK:", repr(inner), flush=True)
+                        mark = ""
+                    try:
+                        comments[int(st["id"])] = ""
+                        row = cur.execute(
+                            "SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
+                            (sid, st["id"], eid, subid)
+                        ).fetchone()
+                        if row:
+                            comments[int(st["id"])] = str(row["comment"] or "")
+                    except Exception:
+                        pass
+                    try:
+                        st["marks"] = mark
+                    except Exception:
+                        pass
+
+            def opt(row, selected):
+                rid = int(row["id"])
+                label = str(row["name"] or "")
+                stream = str(row["stream"] or "") if "stream" in row.keys() else ""
+                if stream:
+                    label += " " + stream
+                return "<option value='%s' %s>%s</option>" % (
+                    rid, "selected" if rid == selected else "", ui.escape(label)
+                )
+
+            eopts = "".join(opt(e, eid) for e in exams)
+            copts = "".join(opt(c, cid) for c in classes)
+            sopts = "".join(opt(s, subid) for s in subjects)
+
+            rows = ""
+            for st in students:
+                mark = st["marks"] if "marks" in st.keys() else ""
+                if mark == "" or mark is None:
+                    grade, points = "—", "—"
+                else:
+                    try:
+                        grade, points = ui._subject_grade_points(cur, sid, subid, mark)
+                        points = "%.1f" % float(points)
+                    except Exception:
+                        grade, points = ui._default_grade_points(float(mark))
+                        points = "%.1f" % float(points)
+                rows += (
+                    "<tr><td>%s</td><td><b>%s</b></td>"
+                    "<td><input name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput'></td>"
+                    "<td>%s</td><td>%s</td>"
+                    "<td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment'></td></tr>"
+                    % (
+                        ui.escape(str(st["admission_no"] or "")),
+                        ui.escape(str(st["name"] or "")),
+                        st["id"],
+                        ui.escape(str(mark)),
+                        out_of,
+                        ui.escape(str(grade)),
+                        points,
+                        st["id"],
+                        ui.escape(str(comments.get(int(st["id"]), "")))
+                    )
+                )
+
+            body = (
+                "<div class='page'><h1>Marks Entry</h1>"
+                "<div class='muted'>Safe recovery view loaded. Existing records were not changed.</div>"
+                "<div class='card section'><form method='get' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
+                "<select name='exam_id' class='field'><option value=''>Select examination</option>%s</select>"
+                "<select name='class_id' class='field'><option value=''>Select class</option>%s</select>"
+                "<select name='subject_id' class='field'><option value=''>Select subject</option>%s</select>"
+                "<button class='btn'>Load Students</button></form></div>"
+                "<div class='card section'><form method='post' action='/app/academics/marks/save'>"
+                "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
+                "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead>"
+                "<tbody>%s</tbody></table>%s</form></div></div>"
+                "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
+                % (
+                    eopts, copts, sopts, eid, cid, subid, out_of,
+                    rows or "<tr><td colspan='6'>Select an examination, class and subject, then load students.</td></tr>",
+                    "<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""
+                )
+            )
+            con.close()
+            return ui._school_page(request, "Marks Entry", body)
+        except Exception as fallback_exc:
+            print("DAVISCHOOL MARKS RECOVERY FAILED:", repr(fallback_exc), flush=True)
+            return HTMLResponse(
+                "<div style='font-family:Arial;padding:30px'><h2>Marks Entry could not be loaded</h2>"
+                "<p>The system protected your existing records and did not change them.</p>"
+                "<p>Please reload this page after the latest deployment completes.</p></div>",
+                status_code=500
+            )
+
     @app.middleware("http")
     async def redirect_legacy_school(request: Request, call_next):
         path = request.url.path
