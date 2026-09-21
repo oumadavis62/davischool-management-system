@@ -473,7 +473,7 @@ def overall_grading(request: Request):
 def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "reports.edit"):
+    if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
     if min_total<0 or max_total<min_total or not grade.strip():
         return HTMLResponse("Invalid total-mark range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
@@ -491,7 +491,7 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
     con.commit();con.close()
     return RedirectResponse("/app/academics/overall-grading",303)
 
-@router.get("/app/academics/overall-grading/delete/{rule_id}")
+@router.post("/app/academics/overall-grading/delete/{rule_id}")
 def overall_grading_delete(request: Request,rule_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
@@ -1023,7 +1023,7 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     con.close()
     return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
 
-@router.get("/app/academics/grading/delete/{rule_id}")
+@router.post("/app/academics/grading/delete/{rule_id}")
 def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
