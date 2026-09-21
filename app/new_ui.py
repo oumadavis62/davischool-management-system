@@ -491,6 +491,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view marksheets.", 403)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
@@ -901,6 +903,8 @@ def grading_setup(request: Request, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to manage grading.", 403)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
@@ -967,6 +971,8 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
     if min_mark < 0 or max_mark > 100 or min_mark > max_mark or points < 0:
         return HTMLResponse("Invalid grading range. <a href='/app/academics/grading'>Back</a>", 400)
     if not grade.strip():
@@ -1006,6 +1012,8 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
