@@ -918,7 +918,7 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
         (rule_id, sid)
     ).fetchone()
     if row:
-        cur.execute("DELETE FROM subject_grading_rules WHERE id=?", (rule_id,))
+        cur.execute("DELETE FROM subject_grading_rules WHERE id=? AND school_id=?", (rule_id, sid))
         _audit(cur, sid, request, "GRADING_RULE_DELETE",
                "Deleted grading rule %s" % rule_id)
     con.commit()
@@ -1311,7 +1311,7 @@ async def attendance_save(request: Request, class_id:int=Form(...), date:str=For
     for s in students:
         status=str(form.get(f"status_{s['id']}","Present"))
         old=cur.execute("SELECT id FROM attendance WHERE school_id=? AND student_id=? AND date=?",(sid,s["id"],date)).fetchone()
-        if old: cur.execute("UPDATE attendance SET status=? WHERE id=?",(status,old["id"]))
+        if old: cur.execute("UPDATE attendance SET status=? WHERE id=? AND school_id=?",(status,old["id"],sid))
         else: cur.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(sid,s["id"],date,status))
     _audit(cur,sid,request,"ATTENDANCE_SAVE",f"Saved attendance for class {class_id} on {date}")
     con.commit();con.close();return RedirectResponse(f"/app/attendance?class_id={class_id}&date={date}",303)
