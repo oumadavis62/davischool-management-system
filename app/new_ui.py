@@ -70,7 +70,6 @@ def _shell(title, name, role, body, school_id=None):
             ("/schools/manage","🏫","Manage Schools",None),
             ("/super/global-control/dashboard","🌍","Global Control",None),
             ("/account/change-password","🔑","My Account",None),
-            ("/school/system-audit","🛡","Audit & Security",None),
         ]
     else:
         nav = [
