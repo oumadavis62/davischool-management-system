@@ -955,7 +955,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     locked = bool(_academic_lock(cur,sid,eid,cid,subid)) if eid and cid and subid else False
-    rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."    rows=""
+    rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
+    rows=""
     for x in students:
         mark=x["marks"]
         if mark=="":
