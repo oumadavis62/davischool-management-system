@@ -115,7 +115,9 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 <main class='main'><header class='top'><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}</main></div></body></html>"""
 
 def _school_session(request):
-    if "email" not in request.session or request.session.get("role") == "super_admin":
+    # The /app workspace is the school administration workspace. Other
+    # accounts use their dedicated portal so they cannot inherit admin access.
+    if "email" not in request.session or request.session.get("role") != "school_admin":
         return None
     sid = int(request.session.get("school_id") or 0)
     if not sid:
