@@ -45,6 +45,7 @@ def install_legacy_school_redirect(app):
             students = []
             out_of = 100.0
             comments = {}
+            marks_by_student = {}
 
             if eid and cid and subid:
                 try:
@@ -87,10 +88,7 @@ def install_legacy_school_redirect(app):
                             comments[int(st["id"])] = str(row["comment"] or "")
                     except Exception:
                         pass
-                    try:
-                        st["marks"] = mark
-                    except Exception:
-                        pass
+                    marks_by_student[int(st["id"])] = mark
 
             def opt(row, selected):
                 rid = int(row["id"])
@@ -108,7 +106,7 @@ def install_legacy_school_redirect(app):
 
             rows = ""
             for st in students:
-                mark = st["marks"] if "marks" in st.keys() else ""
+                mark = marks_by_student.get(int(st["id"]), "")
                 if mark == "" or mark is None:
                     grade, points = "—", "—"
                 else:
