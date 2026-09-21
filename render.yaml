@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: .
     autoDeploy: true
-    healthCheckPath: /
+    healthCheckPath: /healthz
     buildCommand: ./build.sh
     startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers ${WEB_CONCURRENCY:-2}
     envVars:
@@ -15,6 +15,8 @@ services:
       - key: DAVISCHOOL_SECRET_KEY
         generateValue: true
       - key: DAVISCHOOL_HTTPS_ONLY
+        value: "1"
+      - key: DAVISCHOOL_REQUIRE_DATABASE
         value: "1"
       - key: DAVISCHOOL_SUPER_ADMIN
         value: "admin@davischool.com"
