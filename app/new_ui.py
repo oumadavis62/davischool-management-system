@@ -377,7 +377,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         "<button type='button' class='btn' onclick='printDocument()' >Print Marksheet</button>"
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> <a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
-        "<div class='card section marksheet-card'>{doc_brand}"
+        "<div class='card section marksheet-card'>%s"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
         "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
         "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
