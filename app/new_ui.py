@@ -110,7 +110,7 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
                     value = "P.O. Box " + value
                 contacts.append(value)
     contact_text = " · ".join(contacts)
-    logo_flowable = Paragraph("🏫", styles["title"])
+    logo_flowable = Paragraph("SCHOOL", styles["title"])
     logo_data = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     if logo_data:
         try:
