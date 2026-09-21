@@ -1180,12 +1180,18 @@ def school_record_load(request: Request, class_name: str = Form(...), stream: st
     if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?", (exam_id, school["id"])).fetchone():
         con.close()
         return HTMLResponse("Invalid examination for this school. <a href='/school/record-marks'>Back</a>", status_code=403)
+    if request.session.get("role")=="teacher" and not _role_permission(request,"marks.edit"):
+        con.close()
+        return HTMLResponse("Your account is not permitted to record marks.",403)
     cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (school["id"], class_name.upper(), stream.upper()))
     cl = cur.fetchone()
     if not cl:
         cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? LIMIT 1", (school["id"], class_name.upper()))
         cl = cur.fetchone()
     class_id = cl["id"] if cl else 0
+    if not class_id or not _teacher_allocation_allowed(request,school["id"],class_id,subject_id):
+        con.close()
+        return HTMLResponse("This subject/class is not assigned to your teacher account.",403)
     cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? ORDER BY name", (school["id"], class_id)); students_raw = cur.fetchall()
     cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND class_name=? AND stream=? AND year=? AND term=? AND exam_id=? AND subject_id=?", (school["id"], class_name.upper(), stream.upper(), year, term, exam_id, subject_id))
     cfg = cur.fetchone()
@@ -1211,6 +1217,8 @@ def school_record_auto_save(request: Request, student_id: int = Form(...), exam_
     if "email" not in request.session: return JSONResponse({"ok":False})
     school = get_school_obj(request)
     if not school: return JSONResponse({"ok":False})
+    if request.session.get("role")=="teacher" and not _role_permission(request,"marks.edit"):
+        return JSONResponse({"ok":False,"message":"Your account is not permitted to record marks."},status_code=403)
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (school["id"], class_name.upper(), stream.upper()))
     cl = cur.fetchone()
@@ -1218,6 +1226,9 @@ def school_record_auto_save(request: Request, student_id: int = Form(...), exam_
         cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? LIMIT 1", (school["id"], class_name.upper()))
         cl = cur.fetchone()
     class_id = cl["id"] if cl else 0
+    if not class_id or not _teacher_allocation_allowed(request,school["id"],class_id,subject_id):
+        con.close()
+        return JSONResponse({"ok":False,"message":"This subject/class is not assigned to your teacher account."},status_code=403)
     try:
         # The write endpoint is the authoritative place for mark validation.
         if out_of <= 0:
@@ -1769,15 +1780,44 @@ def finance_fee_payment(request:Request,student_id:int=Form(...),amount:float=Fo
     con.commit(); con.close(); return RedirectResponse('/school/finance',303)
 
 # === ADDITIVE WORKING MODULE WINDOWS ===
+def _role_permission(request, permission):
+    """Check a school role permission; missing rules remain enabled for compatibility."""
+    role=request.session.get("role")
+    if role in ("school_admin","super_admin"):
+        return True
+    school_id=request.session.get("school_id")
+    if not school_id or not role:
+        return False
+    con=get_db(); cur=con.cursor()
+    row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(school_id,role,permission)).fetchone()
+    con.close()
+    return True if row is None else bool(row["enabled"])
+
+def _teacher_allocation_allowed(request, school_id, class_id, subject_id):
+    if request.session.get("role") != "teacher":
+        return True
+    teacher_id=request.session.get("teacher_id")
+    if not teacher_id:
+        return False
+    con=get_db(); cur=con.cursor()
+    row=cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",(school_id,teacher_id,class_id,subject_id)).fetchone()
+    con.close()
+    return bool(row)
+
 def module_page(request, title, active, body, global_mode=False):
     if "email" not in request.session: return RedirectResponse("/")
     if global_mode:
         if request.session.get("role") != "super_admin": return RedirectResponse("/")
         header = global_header(request.session.get("name","Davis Ouma"), active)
     else:
-        if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+        role=request.session.get("role")
         school = get_school_obj(request)
         if not school: return RedirectResponse("/dashboard")
+        role_modules={"teacher":{"record-marks":"marks.edit","attendance":"attendance.edit","analysis":"reports.view","timetable":"timetable.view"},"accountant":{"fees":"fees.view","finance":"finance.view"},"registrar":{"students":"students.view","staff":"staff.view"}}
+        if role not in ["school_admin","super_admin"]:
+            permission=role_modules.get(role,{}).get(active)
+            if not permission or not _role_permission(request,permission):
+                return RedirectResponse("/portal" if role in ("teacher","accountant","registrar","parent","student") else "/")
         header = school_header(school, request.session.get("name",""), active, request.session.get("is_impersonating",False))
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#f4f7fb;color:#0f172a}}.mod{{padding:24px;max-width:1600px;margin:auto}}
@@ -1927,6 +1967,8 @@ def school_attendance(request:Request):
     return module_page(request,'🗓️ Attendance','attendance',body)
 @app.post("/school/attendance/record")
 def school_attendance_record(request:Request,student_id:int=Form(...),date:str=Form(...),status:str=Form(...)):
+    if not _role_permission(request,"attendance.edit"):
+        return RedirectResponse("/portal",303)
     con=get_db(); con.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(sid(request),student_id,date,status)); con.commit(); con.close(); return RedirectResponse('/school/attendance',303)
 
 # Global mirrors of the school operational windows.
