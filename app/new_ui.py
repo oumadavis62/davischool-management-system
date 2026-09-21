@@ -436,6 +436,8 @@ def _overall_grade(cur, school_id, total):
 def overall_grading(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view overall grading.", 403)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
     con.close()
@@ -455,6 +457,8 @@ def overall_grading(request: Request):
 def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit overall grading.", 403)
     if min_total<0 or max_total<min_total or not grade.strip():
         return HTMLResponse("Invalid total-mark range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
@@ -475,6 +479,8 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
 def overall_grading_delete(request: Request,rule_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit overall grading.", 403)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     cur.execute("DELETE FROM overall_grading_rules WHERE id=? AND school_id=?",(rule_id,sid))
     con.commit();con.close()
@@ -623,6 +629,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
 def finance_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view marksheets.", 403)
     con=_db();cur=con.cursor()
     fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
     exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
@@ -1017,6 +1025,14 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "marks.view"):
+        return HTMLResponse("You do not have permission to view marks.", 403)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to manage grading.", 403)
     con=_db();cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -1083,6 +1099,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
 async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to edit marks.", 403)
     form=await request.form()
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
@@ -1124,6 +1142,8 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
 def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to finalize marks.", 403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid:
@@ -1139,6 +1159,8 @@ def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(..
 def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to unfinalize marks.", 403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     row=_academic_lock(cur,sid,exam_id,class_id,subject_id)
     if row:
@@ -1151,6 +1173,8 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
 def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view academic analysis.", 403)
     con=_db();cur=con.cursor();_ensure_grading_table(cur);_ensure_academic_locks_table(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -1329,6 +1353,8 @@ function printReportCard(){
 def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(...), comment:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit report comments.", 403)
     con=_db();cur=con.cursor()
     if cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
         cur.execute("INSERT INTO report_comments(school_id,student_id,exam_id,comment,created_at) VALUES(?,?,?,?,?)",(sid,student_id,exam_id,comment.strip(),datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
@@ -1339,6 +1365,8 @@ def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(
 def student_analysis_page(request: Request, exam_id: str = "", student_id: str = ""):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view student analysis.", 403)
     con=_db(); cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
@@ -1362,6 +1390,8 @@ def student_analysis_page(request: Request, exam_id: str = "", student_id: str =
 def class_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view class analysis.", 403)
     con=_db(); cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
