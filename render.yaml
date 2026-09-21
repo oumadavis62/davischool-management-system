@@ -2,6 +2,7 @@ services:
   - type: web
     name: davischool-management-system
     runtime: python
+    rootDir: .
     autoDeploy: true
     healthCheckPath: /
     buildCommand: ./build.sh
