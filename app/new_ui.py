@@ -993,7 +993,7 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    con=_db();cur=con.cursor();_ensure_grading_table(cur);_ensure_academic_locks_table(cur)
+    con=_db();cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -1013,13 +1013,19 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         for strow in students:
             sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,strow["id"],eid,subid)).fetchone()
             subject_comments[int(strow["id"])]=sc["comment"] if sc else ""
-    grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
-      WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall() if subid else []
+    grading_rules=[]
+    if subid:
+        _ensure_grading_table(cur)
+        grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
+          WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall()
     js_rules="["+",".join("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"]),float(r["points"] or 0)) for r in grading_rules)+"]"
     eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
     copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
-    locked = bool(_academic_lock(cur,sid,eid,cid,subid)) if eid and cid and subid else False
+    locked = False
+    if eid and cid and subid:
+        _ensure_academic_locks_table(cur)
+        locked = bool(_academic_lock(cur,sid,eid,cid,subid))
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     rows=""
     for x in students:
