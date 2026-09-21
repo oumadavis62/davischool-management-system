@@ -1080,6 +1080,20 @@ def school_record_load(request: Request, class_name: str = Form(...), stream: st
     if "email" not in request.session: return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor()
+    # Validate every academic reference against the logged-in school before
+    # accepting a mark. This prevents cross-school writes and invalid scores.
+    if out_of <= 0:
+        con.close()
+        return JSONResponse({"ok":False,"message":"Invalid maximum mark."}, status_code=400)
+    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?", (student_id, school["id"])).fetchone():
+        con.close()
+        return JSONResponse({"ok":False,"message":"Student is not part of this school."}, status_code=403)
+    if not cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, school["id"])).fetchone():
+        con.close()
+        return JSONResponse({"ok":False,"message":"Subject is not part of this school."}, status_code=403)
+    if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?", (exam_id, school["id"])).fetchone():
+        con.close()
+        return JSONResponse({"ok":False,"message":"Examination is not part of this school."}, status_code=403)
     cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=?", (school["id"], class_name.upper(), stream.upper()))
     cl = cur.fetchone()
     if not cl:
@@ -1121,8 +1135,9 @@ def school_record_auto_save(request: Request, student_id: int = Form(...), exam_
     try:
         if marks.strip()=="": cur.close(); con.close(); return JSONResponse({"ok":True})
         m = int(float(marks.strip()))
-        if m>out_of: m=out_of
-        if m<0: m=0
+        if m < 0 or m > out_of:
+            con.close()
+            return JSONResponse({"ok":False,"message":f"Marks must be between 0 and {out_of}."}, status_code=400)
         cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?", (school["id"], student_id, subject_id, exam_id))
         ex = cur.fetchone()
         if ex:
