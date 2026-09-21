@@ -1049,9 +1049,18 @@ def school_edit_term(tid: int, request: Request, term_name: str = Form(...), yea
 def school_del_term(tid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM terms WHERE id=?", (tid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=terms",303)
 @app.post("/school/dean-settings/add-subject")
 def school_dean_add_subject(request: Request, subject_name: str = Form(...), code: str = Form(""), initial: str = Form("")):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO subjects (school_id, name, code, initial) VALUES (?,?,?,?)", (school["id"], subject_name.strip().upper(), code.strip().upper(), initial.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=subjects",303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"subjects.create"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); nm=subject_name.strip().upper(); cd=code.strip().upper()
+    if not nm: con.close(); return HTMLResponse("Subject name is required.",400)
+    if cur.execute("SELECT id FROM subjects WHERE school_id=? AND upper(name)=?",(school["id"],nm)).fetchone() or (cd and cur.execute("SELECT id FROM subjects WHERE school_id=? AND upper(code)=?",(school["id"],cd)).fetchone()):
+        con.close(); return HTMLResponse("Subject name or code already exists in this school.",409)
+    cur.execute("INSERT INTO subjects (school_id,name,code,initial) VALUES (?,?,?,?)",(school["id"],nm,cd,initial.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=subjects",303)
 @app.get("/school/dean-settings/delete-subject/{sid}")
-def school_dean_del_subject(sid: int): con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM subjects WHERE id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=subjects",303)
+def school_dean_del_subject(sid: int, request: Request):
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"subjects.edit"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?",(sid,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/dean-settings?tab=subjects",303)
 @app.post("/school/dean-settings/allocate")
 def school_dean_allocate(request: Request, teacher_id: int = Form(...), subject_id: int = Form(...), class_id: int = Form(...)):
     school = get_school_obj(request); con = get_db(); cur = con.cursor()
@@ -1089,15 +1098,17 @@ def school_classes(request: Request):
     return HTMLResponse(f"<html><body>{header}<div style='padding:18px'><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes & Streams ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table><div style='padding:12px'><a href='/school/dashboard' style='padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0f172a;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='/school/classes/add'><input name='class_name' required placeholder='Class Name *' class='input-field'><input name='stream' required placeholder='Stream *' class='input-field'><button class='add-btn' style='margin-top:8px'>➕ Add Class</button></form></div></div></div></div></div></body></html>")
 @app.post("/school/classes/add")
 def add_class(request: Request, class_name: str = Form(...), stream: str = Form(...)):
-    school = get_school_obj(request); con = get_db(); cur = con.cursor(); cur.execute("INSERT INTO classes (school_id, name, stream) VALUES (?,?,?)", (school["id"], class_name.strip().upper(), stream.strip().upper())); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"classes.create"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); nm=class_name.strip().upper(); st=stream.strip().upper()
+    if not nm: con.close(); return HTMLResponse("Class name is required.",400)
+    if cur.execute("SELECT id FROM classes WHERE school_id=? AND upper(name)=? AND upper(stream)=?",(school["id"],nm,st)).fetchone(): con.close(); return HTMLResponse("That class/stream already exists in this school.",409)
+    cur.execute("INSERT INTO classes (school_id,name,stream) VALUES (?,?,?)",(school["id"],nm,st)); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 @app.get("/school/classes/delete/{cid}")
 def del_class(cid: int, request: Request):
-    school = get_school_obj(request)
-    if not school: return RedirectResponse("/",303)
-    con = get_db(); cur = con.cursor()
-    cur.execute("DELETE FROM classes WHERE id=? AND school_id=?", (cid, school["id"]))
-    con.commit(); con.close()
-    return RedirectResponse("/school/classes",303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"classes.edit"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/classes",303)
 
 # EXAM SETTINGS RESTORED - EXACT — YOUR PART 2
 @app.get("/school/exams", response_class=HTMLResponse)
@@ -1128,9 +1139,10 @@ def edit_exam(eid: int, request: Request, exam_name: str = Form(...), term: str 
     con.commit(); con.close()
     return RedirectResponse("/school/exams",303)
 @app.get("/school/exams/delete/{eid}")
-def del_exam(eid: int):
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM exams WHERE id=?", (eid,)); con.commit(); con.close()
-    return RedirectResponse("/school/exams",303)
+def del_exam(eid: int, request: Request):
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"exams.edit"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM exams WHERE id=? AND school_id=?",(eid,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/exams",303)
 
 @app.get("/school/teachers", response_class=HTMLResponse)
 def teachers_page(request: Request):
@@ -1142,12 +1154,14 @@ def teachers_page(request: Request):
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0f172a;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
 @app.post("/school/teachers/add")
 def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""), id_no: str = Form(...), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form(""), employment_type: str = Form("Teaching")):
-    school = get_school_obj(request)
-    if not school: return RedirectResponse("/school/teachers",303)
-    con = get_db(); cur = con.cursor()
-    cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role, employment_type) VALUES (?,?,?,?,?,?,?,?,?)", (school["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender.strip(), id_no.strip(), role.strip(), employment_type.strip()))
-    con.commit(); con.close()
-    return RedirectResponse("/school/teachers",303)
+    school=get_school_obj(request)
+    if not school or not _role_permission(request,"staff.create"): return RedirectResponse("/portal",303)
+    con=get_db(); cur=con.cursor(); nm=name.strip().upper(); ident=id_no.strip(); em=email.strip()
+    if not nm or not ident: con.close(); return HTMLResponse("Staff name and ID number are required.",400)
+    if cur.execute("SELECT id FROM teachers WHERE school_id=? AND (id_no=? OR (email<>'' AND lower(email)=lower(?)))",(school["id"],ident,em)).fetchone():
+        con.close(); return HTMLResponse("A staff record with that ID or email already exists in this school.",409)
+    cur.execute("INSERT INTO teachers (school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type) VALUES (?,?,?,?,?,?,?,?,?)",(school["id"],nm,em,phone.strip(),tsc_no.strip(),gender.strip(),role.strip(),employment_type.strip()))
+    con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int, request: Request):
     school = get_school_obj(request)
