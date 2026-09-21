@@ -1376,7 +1376,13 @@ def classes_page(request: Request):
 def classes_add(request: Request,name:str=Form(...),level:str=Form(""),stream:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();cur.execute("INSERT INTO classes(school_id,name,level,stream) VALUES(?,?,?,?)",(sid,name.strip(),level.strip(),stream.strip()));_audit(cur,sid,request,"CLASS_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/classes",303)
+    name_v=name.strip(); level_v=level.strip(); stream_v=stream.strip()
+    if not name_v:return HTMLResponse("Class name is required. <a href='/app/classes'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM classes WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(stream,''))=lower(?)",(sid,name_v,stream_v)).fetchone():
+        con.close();return HTMLResponse("That class and stream already exists. <a href='/app/classes'>Back</a>",400)
+    cur.execute("INSERT INTO classes(school_id,name,level,stream) VALUES(?,?,?,?)",(sid,name_v,level_v,stream_v))
+    _audit(cur,sid,request,"CLASS_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/classes",303)
 
 @router.get("/app/subjects", response_class=HTMLResponse)
 def subjects_page(request: Request):
@@ -1391,7 +1397,15 @@ def subjects_page(request: Request):
 def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name.strip(),code.strip(),initial.strip()));_audit(cur,sid,request,"SUBJECT_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/subjects",303)
+    name_v=name.strip(); code_v=code.strip(); initial_v=initial.strip()
+    if not name_v:return HTMLResponse("Subject name is required. <a href='/app/subjects'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM subjects WHERE school_id=? AND lower(name)=lower(?)",(sid,name_v)).fetchone():
+        con.close();return HTMLResponse("That subject already exists in this school. <a href='/app/subjects'>Back</a>",400)
+    if code_v and cur.execute("SELECT id FROM subjects WHERE school_id=? AND lower(code)=lower(?)",(sid,code_v)).fetchone():
+        con.close();return HTMLResponse("That subject code already exists in this school. <a href='/app/subjects'>Back</a>",400)
+    cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name_v,code_v,initial_v))
+    _audit(cur,sid,request,"SUBJECT_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/subjects",303)
 @router.get("/app/exams", response_class=HTMLResponse)
 def exams_page(request: Request):
     sid=_school_session(request)
@@ -1405,7 +1419,13 @@ def exams_page(request: Request):
 def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:str=Form(""),year:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();cur.execute("INSERT INTO exams(school_id,name,term,year,exam_type) VALUES(?,?,?,?,?)",(sid,name.strip(),term.strip(),year.strip(),exam_type.strip()));_audit(cur,sid,request,"EXAM_CREATE",name.strip());con.commit();con.close();return RedirectResponse("/app/exams",303)
+    name_v=name.strip(); type_v=exam_type.strip(); term_v=term.strip(); year_v=year.strip()
+    if not name_v:return HTMLResponse("Examination name is required. <a href='/app/exams'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    if cur.execute("SELECT id FROM exams WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(term,''))=lower(?) AND lower(COALESCE(year,''))=lower(?)",(sid,name_v,term_v,year_v)).fetchone():
+        con.close();return HTMLResponse("That examination already exists for this term and year. <a href='/app/exams'>Back</a>",400)
+    cur.execute("INSERT INTO exams(school_id,name,term,year,exam_type) VALUES(?,?,?,?,?)",(sid,name_v,term_v,year_v,type_v))
+    _audit(cur,sid,request,"EXAM_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/exams",303)
 
 @router.get("/app/finance/fees", response_class=HTMLResponse)
 def fees_page(request: Request):
