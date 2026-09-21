@@ -73,11 +73,24 @@ def _pdf_build(story, pagesize, title):
     from io import BytesIO
     from reportlab.platypus import SimpleDocTemplate
     from reportlab.lib.units import mm
+    from reportlab.pdfbase.pdfmetrics import stringWidth
     buffer = BytesIO()
+    generated_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S EAT")
+
+    def draw_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        footer = "DaviSchool Management System  ·  Generated: %s  ·  Page %d" % (
+            generated_at, canvas.getPageNumber()
+        )
+        canvas.setFillColorRGB(0.35, 0.39, 0.45)
+        canvas.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
+        canvas.restoreState()
+
     doc = SimpleDocTemplate(buffer, pagesize=pagesize, rightMargin=10*mm, leftMargin=10*mm,
-                            topMargin=10*mm, bottomMargin=10*mm, title=title,
+                            topMargin=10*mm, bottomMargin=14*mm, title=title,
                             author="DaviSchool Management System")
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return buffer.getvalue()
 
 
@@ -677,7 +690,23 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     colspan = 3 + len(subjects) * 3 + 5
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
-    print_script = '''<script>function printDocument(){var doc=document.querySelector('.marksheet-card');if(!doc){window.print();return;}var w=window.open('', '_blank', 'width=1200,height=800');if(!w){window.print();return;}var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}@page{size:auto;margin:10mm}';w.document.open();w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+'</body></html>');w.document.close();w.focus();setTimeout(function(){w.print();},300);}</script>'''
+    print_script = '''<script>
+function printDocument(){
+  var doc=document.querySelector('.marksheet-card');
+  if(!doc){window.print();return;}
+  var w=window.open('', '_blank', 'width=1200,height=800');
+  if(!w){window.print();return;}
+  var generatedAt=new Intl.DateTimeFormat('en-KE',{
+    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+  }).format(new Date())+' EAT';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:auto;margin:10mm 10mm 15mm}';
+  var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+footer+'</body></html>';
+  w.document.open();w.document.write(html);w.document.close();w.focus();
+  setTimeout(function(){w.print();},300);
+}
+</script>'''
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
         "<div class='muted'>A print-ready marksheet with automatic subject grades and points.</div>"
@@ -1423,17 +1452,22 @@ function printReportCard(){
   if(!doc){window.print();return;}
   var w=window.open('', '_blank', 'width=1100,height=800');
   if(!w){window.print();return;}
-  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.report-document{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #111;padding:6px;font-size:10px;text-align:left}.kpi{font-size:18px;font-weight:900}.card{border:0;box-shadow:none}.report-comment-form{display:none}@page{size:A4;margin:10mm}';
-  w.document.open();
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Student Report Card</title><style>'+css+'</style></head><body>'+doc.outerHTML.replace('id="report"','class="report-document"')+'</body></html>');
-  w.document.close();w.focus();setTimeout(function(){w.print();},300);
+  var generatedAt=new Intl.DateTimeFormat('en-KE',{
+    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+  }).format(new Date())+' EAT';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.report-document{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #111;padding:6px;font-size:10px;text-align:left}.kpi{font-size:18px;font-weight:900}.card{border:0;box-shadow:none}.report-comment-form{display:none}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:A4;margin:10mm 10mm 15mm}';
+  var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Student Report Card</title><style>'+css+'</style></head><body>'+doc.outerHTML.replace('id="report"','class="report-document"')+footer+'</body></html>';
+  w.document.open();w.document.write(html);w.document.close();w.focus();
+  setTimeout(function(){w.print();},300);
 }
 </script>""";
     print_btn=(("<button class='btn' style='margin-top:8px' onclick='printReportCard()'>Print Report</button> " if report_final else "") + "<a class='btn' style='display:inline-block;margin-top:8px;text-decoration:none' href='/app/report-cards/pdf?exam_id={eid}&student_id={stid}'>⬇️ Download PDF</a>") if st and eid else ""
     report_html=f"""<div class='card section' id='report' style='background:white'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{''.join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td><td>{escape(str(subject_comments.get(int(r['subject_id']),'')))}</td></tr>" for r,mark,grade,points in result["details"])}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'>Points</div><div class='kpi'>{result["points"]:.1f}</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><div class='report-comment-form'><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form></div><div style='margin-top:14px'><b>Class Teacher's Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px'>{escape(str(class_teacher_comment or ''))}</div></div><div class='grid' style='margin-top:12px'><div><b>Date of Opening</b><div>{escape(str(opening_date or ''))}</div></div><div><b>Date of Closing</b><div>{escape(str(closing_date or ''))}</div></div></div><div style='margin-top:14px'><b>Additional Report Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:45px'>{escape(str(comment or ''))}</div></div>{print_btn}{print_script}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     subject_editor="".join(f"""<div class='card' style='margin-top:10px'><div style='font-weight:800;margin-bottom:7px'>{escape(str(r['name']))}</div><form method='post' action='/app/report-cards/subject-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='subject_id' value='{r['subject_id']}'><textarea name='comment' class='field' rows='2' placeholder='Performance comment for this subject'>{escape(str(subject_comments.get(int(r['subject_id']),'')))}</textarea><button class='btn' style='margin-top:7px'>Save Subject Comment</button></form></div>""" for r in rows) if st and eid else ""
     teacher_editor=f"""<div class='card section no-print'><h2>Class Teacher's Comment</h2><form method='post' action='/app/report-cards/class-teacher-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><textarea name='comment' class='field' rows='4' placeholder='Enter the class teacher's comment'>{escape(str(class_teacher_comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Class Teacher Comment</button></form></div>""" if st and eid else ""
-    body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='card section no-print'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}{teacher_editor}<div class='card section no-print'><h2>Subject Performance Comments</h2><div class='muted'>Enter an individual performance comment for each subject. These comments appear on the printed report card.</div>{subject_editor or '<div class="muted" style="margin-top:10px">Select a student and examination first.</div>'}</div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff}}@media print{{.no-print{{display:none!important}}}}</style>"""
+    body=f"""<div class='page'><h1>Report Cards</h1><div class='muted'>Generate a print-ready student academic report.</div><div class='muted' style='margin-top:4px'>Printable and downloadable documents include the DaviSchool Management System footer and exact generation time.</div><div class='card section no-print'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Generate</button></form></div>{report_html}{teacher_editor}<div class='card section no-print'><h2>Subject Performance Comments</h2><div class='muted'>Enter an individual performance comment for each subject. These comments appear on the printed report card.</div>{subject_editor or '<div class="muted" style="margin-top:10px">Select a student and examination first.</div>'}</div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff}}@media print{{.no-print{{display:none!important}}}}</style>"""
     return _school_page(request,"Report Cards",body)
 
 @router.post("/app/report-cards/comment")
