@@ -262,6 +262,8 @@ def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name
 def student_history(request: Request,student_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "students.view"):
+        return HTMLResponse("You do not have permission to view student history.", 403)
     con=_db();cur=con.cursor();_ensure_student_history_table(cur)
     st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     hist=cur.execute("""SELECT h.*,f.name from_class,t.name to_class
