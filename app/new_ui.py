@@ -511,7 +511,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
-    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
+    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
     action_html="".join("<a class='action' href='%s'><span>%s</span>%s<small>%s</small></a>"%x for x in actions)
     body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Marks Average</div><div class='kpi'>%.1f%%</div></div></div>"%(len(subjects),len(exams),len(classes),float(stat["avg_mark"] or 0))
     body+="<div class='card section'><h2>Academic Selection</h2><form method='get' action='/app/academics' class='academic-select'><select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>"+yopts+"</select><select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>"+topts+"</select><select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>All Exams</option>"+eopts+"</select><select name='class_id' class='field' onchange='this.form.submit()'><option value=''>All Classes</option>"+copts+"</select><select name='subject_id' class='field' onchange='this.form.submit()'><option value=''>All Subjects</option>"+sopts+"</select></form></div><div class='section'><div class='actions'>"+action_html+"</div></div>"
@@ -1553,7 +1553,15 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to view academic analysis.", 403)
-    con=_db();cur=con.cursor();_ensure_grading_table(cur);_ensure_academic_locks_table(cur)
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_grading_table(cur)
+    except Exception as exc:
+        print("DAVISCHOOL ANALYSIS GRADING TABLE FALLBACK:", repr(exc), flush=True)
+    try:
+        _ensure_academic_locks_table(cur)
+    except Exception as exc:
+        print("DAVISCHOOL ANALYSIS LOCK TABLE FALLBACK:", repr(exc), flush=True)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
@@ -1570,9 +1578,13 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         for st in students:
             result=_student_result(cur,sid,int(st["id"]),eid)
-            locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
-                WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
-            student_results.append((st,result,int(locks or 0)))
+            try:
+                locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
+                    WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
+            except Exception as exc:
+                print("DAVISCHOOL ANALYSIS LOCK COUNT FALLBACK:", repr(exc), flush=True)
+                locks=0
+            student_results.append((st,result,int(locks or 0))
     con.close()
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
@@ -1743,6 +1755,10 @@ def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(
         cur.execute("INSERT INTO report_comments(school_id,student_id,exam_id,comment,created_at) VALUES(?,?,?,?,?)",(sid,student_id,exam_id,comment.strip(),datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
         _audit(cur,sid,request,"REPORT_COMMENT","Updated report comment")
     con.commit();con.close();return RedirectResponse(f"/app/report-cards?exam_id={exam_id}&student_id={student_id}",303)
+
+@router.get("/app/academics/subject-analysis", response_class=HTMLResponse)
+def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
+    return new_analysis(request, exam_id=exam_id, class_id=class_id)
 
 @router.get("/app/academics/student-analysis", response_class=HTMLResponse)
 def student_analysis_page(request: Request, exam_id: str = "", student_id: str = ""):
