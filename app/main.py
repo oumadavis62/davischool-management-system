@@ -21,6 +21,21 @@ SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
 @app.middleware("http")
+async def same_origin_guard(request: Request, call_next):
+    # Defense-in-depth CSRF protection for browser state-changing requests.
+    # Requests without Origin/Referer are allowed for compatibility with
+    # server-to-server clients and older integrations.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source = origin or referer
+        if source:
+            expected = f"{request.url.scheme}://{request.url.netloc}"
+            if not (source == expected or source.startswith(expected + "/")):
+                return PlainTextResponse("Cross-site request blocked.", status_code=403)
+    return await call_next(request)
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
