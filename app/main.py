@@ -494,6 +494,8 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         popup=f"""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ Verification failed</div><div style='margin-top:8px;color:#475569'>The school was not partially created. Try the verification again.</div><div style='margin-top:10px;font-family:monospace;font-size:12px;word-break:break-word'>{safe}</div></div>"""
     elif success=="already_added":
         popup=f"""<div style='margin-bottom:16px;background:#fef3c7;border:2px solid #f59e0b;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#92400e'>⚠️ School account already exists</div><div style='margin-top:8px;color:#475569'>{school_email}</div></div>"""
+    elif success=="status_updated":
+        popup="""<div style='margin-bottom:16px;background:#eff6ff;border:2px solid #60a5fa;border-radius:14px;padding:16px'><div style='font-size:17px;font-weight:900;color:#1d4ed8'>🔄 School status updated</div><div style='margin-top:6px;color:#475569'>The school can now sign in only when its status is Active.</div></div>"""
     if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800'>🔓 Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin:12px 0'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>{" ".join(list(pending["auth_code"]))}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700'><button style='background:#0f172a;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Verify</button></form></div>"""
     elif success=="added" and new_pass:
         popup=f"""<div id='daviSuccessOverlay' style='position:fixed;inset:0;background:rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999'><div style='width:min(760px,96vw);background:#dcfce7;border:3px solid #16a34a;border-radius:18px;padding:28px;font-family:Arial,sans-serif'><div style='font-size:25px;font-weight:900;color:#166534;margin-bottom:18px'>✅ Success! 🏫 {school_name}</div><div style='background:white;border:1.5px dashed #22c55e;border-radius:14px;padding:18px;margin-bottom:18px'><div style='font-size:15px;color:#64748b'>👤 Username:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{school_email}</div><div style='font-size:15px;color:#64748b;margin-top:12px'>🔑 Password:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{new_pass}</div></div><button type='button' onclick="document.getElementById('daviSuccessOverlay').remove()" style='display:block;margin-left:auto;background:#0f172a;color:white;border:0;border-radius:12px;padding:13px 30px;font-size:17px;font-weight:900;cursor:pointer'>OK ✅</button></div></div>"""
@@ -507,7 +509,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         status_bg = "#dcfce7" if school_status in ("active", "enabled") else "#fee2e2"
         status_fg = "#166534" if school_status in ("active", "enabled") else "#991b1b"
         school_name_js=str(s["name"] or "this school").replace("\\","\\\\").replace("'","\\'")
-        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px'><form method='post' action='/schools/status/{sid}' style='display:inline'><button type='submit' style='border:0;background:{status_bg};color:{status_fg};border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:800'>{status_text}</button></form></td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><a href='/schools/delete/{sid}' onclick="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')" style='background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️</a></td></tr>""")
+        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px'><form method='post' action='/schools/status/{sid}' style='display:inline'><button type='submit' style='border:0;background:{status_bg};color:{status_fg};border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:800'>{status_text}</button></form></td><td style='padding:12px 10px;display:flex;gap:6px'><a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/schools/delete/{sid}' style='display:inline' onsubmit="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')"><button type='submit' style='border:0;background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700;cursor:pointer'>🗑️</button></form></td></tr>""")
     rows="".join(rows) or "<tr><td colspan='8' style='padding:40px;text-align:center'>No schools</td></tr>"
     return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<script>
 async function viewSchoolPassword(id){{
@@ -653,6 +655,9 @@ def update_school_status(sid: int, request: Request):
     current = str(school["status"] or "active").strip().lower()
     new_status = "suspended" if current in ("active", "enabled") else "active"
     cur.execute("UPDATE schools SET status=? WHERE id=?", (new_status, sid))
+    ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                (sid, request.session.get("email",""), "SCHOOL_STATUS_CHANGE", f"{current} -> {new_status}", ts))
     con.commit(); con.close()
     return RedirectResponse("/schools/manage?success=status_updated", status_code=303)
 
@@ -745,10 +750,29 @@ def update_school(sid: int, request: Request, school_name: str = Form(...), scho
     con.commit(); con.close()
     return RedirectResponse("/schools/manage?success=updated",303)
 
-@app.get("/schools/delete/{sid}")
+@app.post("/schools/delete/{sid}")
 def delete_school(sid: int, request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM schools WHERE id=?", (sid,)); cur.execute("DELETE FROM users WHERE school_id=?", (sid,)); con.commit(); con.close(); return RedirectResponse("/schools/manage",303)
+    if request.session.get("role")!="super_admin":
+        return RedirectResponse("/",303)
+    con = get_db(); cur = con.cursor()
+    school = cur.execute("SELECT id, name FROM schools WHERE id=?", (sid,)).fetchone()
+    if not school:
+        con.close()
+        return RedirectResponse("/schools/manage",303)
+    ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                (sid, request.session.get("email",""), "SCHOOL_DELETE", f"Deleted school {school['name']}", ts))
+    cur.execute("DELETE FROM users WHERE school_id=?", (sid,))
+    cur.execute("DELETE FROM schools WHERE id=?", (sid,))
+    con.commit(); con.close()
+    return RedirectResponse("/schools/manage",303)
+
+@app.get("/schools/delete/{sid}")
+def delete_school_get(sid: int, request: Request):
+    if request.session.get("role")!="super_admin":
+        return RedirectResponse("/",303)
+    return RedirectResponse("/schools/manage",303)
+
 @app.get("/super/switch-to-school/{sid}")
 def switch_to_school(sid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
