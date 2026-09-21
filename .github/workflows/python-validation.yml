@@ -16,7 +16,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Compile application
         run: python -m compileall -q app
+
+      - name: Import-check application entrypoint
+        run: python -c "import ast, pathlib; ast.parse(pathlib.Path('app/main.py').read_text(encoding='utf-8')); print('app/main.py syntax OK')"
