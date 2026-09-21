@@ -798,10 +798,18 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     cid=int(class_id) if class_id.isdigit() else 0
     subid=int(subject_id) if subject_id.isdigit() else 0
     students=[]
+    out_of=100.0
+    subject_comments={}
     if eid and cid and subid:
         students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
           FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
           WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+        cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
+        out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+        _ensure_report_card_fields(cur)
+        for strow in students:
+            sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,strow["id"],eid,subid)).fetchone()
+            subject_comments[int(strow["id"])]=sc["comment"] if sc else ""
     grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
       WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall() if subid else []
     js_rules="["+",".join("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"]),float(r["points"] or 0)) for r in grading_rules)+"]"
@@ -831,7 +839,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='/app/academics/marks/save'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
-      "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of:g}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>%s</tbody></table>%s"
+      "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>%s</tbody></table>%s"
       "</form></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked. Further changes are disabled." if locked else "🟢 Marks are open for editing."),("<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form>"%(eid,cid,subid) if locked else ("<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Finalize these marks? Further edits will be blocked until reopened.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Finalize Marks</button></form>"%(eid,cid,subid) if students else "")),eid,cid,subid,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","" if locked else ("<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""))+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
