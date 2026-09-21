@@ -83,6 +83,8 @@ def _shell(title, name, role, body):
             ("/app/subjects","📚","Subjects"),
             ("/app/exams","🧪","Examinations"),
             ("/app/academics","📝","Academics"),
+            ("/app/academics/allocations","👩‍🏫","Teacher Allocations"),
+            ("/app/academics/assessments","📋","SBA / CBA"),
             ("/app/academics/analysis","📊","Academic Analysis"),
             ("/app/report-cards","📄","Report Cards"),
             ("/app/attendance","✓","Attendance"),
@@ -1476,8 +1478,21 @@ def timetable_page(request: Request):
 def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(""),stream:str=Form(""),subject:str=Form(""),teacher:str=Form(""),room:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if day not in ("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"):
+        return HTMLResponse("Invalid timetable day. <a href='/app/timetable'>Back</a>",400)
+    if not start_time or not end_time or end_time <= start_time:
+        return HTMLResponse("End time must be after start time. <a href='/app/timetable'>Back</a>",400)
     con=_db();cur=con.cursor()
-    cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,day,start_time,end_time,class_name,stream,subject,teacher,room))
+    class_row=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? AND name=? AND stream=? LIMIT 1",(sid,class_name.strip(),stream.strip())).fetchone()
+    subject_row=cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? LIMIT 1",(sid,subject.strip())).fetchone() if subject.strip() else None
+    teacher_row=cur.execute("SELECT id FROM teachers WHERE school_id=? AND name=? LIMIT 1",(sid,teacher.strip())).fetchone() if teacher.strip() else None
+    if not class_row:
+        con.close(); return HTMLResponse("Invalid class or stream for this school. <a href='/app/timetable'>Back</a>",400)
+    if subject.strip() and not subject_row:
+        con.close(); return HTMLResponse("Invalid subject for this school. <a href='/app/timetable'>Back</a>",400)
+    if teacher.strip() and not teacher_row:
+        con.close(); return HTMLResponse("Invalid teacher for this school. <a href='/app/timetable'>Back</a>",400)
+    cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,day,start_time,end_time,class_name.strip(),stream.strip(),subject.strip(),teacher.strip(),room.strip()))
     _audit(cur,sid,request,"TIMETABLE_CREATE",f"{day} {start_time}-{end_time} {class_name} {subject}")
     con.commit();con.close();return RedirectResponse("/app/timetable",303)
 
@@ -1551,6 +1566,8 @@ def accounting_page(request: Request):
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if amount <= 0:
+        return HTMLResponse("Expense amount must be greater than zero. <a href='/app/accounting'>Back</a>",400)
     con=_db();cur=con.cursor();cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date) VALUES(?,?,?,?,?,?,?)",(sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher_no.strip(),date or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")))
     _audit(cur,sid,request,"EXPENSE_CREATE",f"{category}: {amount}");con.commit();con.close();return RedirectResponse("/app/accounting",303)
 
