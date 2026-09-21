@@ -721,7 +721,7 @@ def app_home(request: Request):
         body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><a class='action' href='/app/students'><span>🎓</span>Students</a><a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a><a class='action' href='/app/attendance'><span>✓</span>Attendance</a><a class='action' href='/app/finance'><span>💰</span>Finance</a><a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a><a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a><a class='action' href='/app/accounting'><span>📚</span>Accounting</a><a class='action' href='/app/users'><span>👤</span>Users</a></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a><a class='action' href='/app/roles'><span>🔐</span>Roles</a><a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a><a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div>"""
+<div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a><a class='action' href='/app/students/promotion'><span>🎓</span>Promotion / Transfer</a><a class='action' href='/app/roles'><span>🔐</span>Roles</a><a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a><a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div>"""
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
 
@@ -1355,6 +1355,114 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
 <div class='card section'><h2>Learner Ranking</h2><table><thead><tr><th>Position</th><th>Admission</th><th>Student</th><th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{sr or '<tr><td colspan=6>No learner results found.</td></tr>'}</tbody></table></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Class Analysis",body)
+
+
+@router.get("/app/students/promotion", response_class=HTMLResponse)
+def student_promotion_page(request: Request, class_id: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    con = _db()
+    cur = con.cursor()
+    _ensure_student_history_table(cur)
+    classes = cur.execute(
+        "SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
+    ).fetchall()
+    cid = int(class_id) if class_id.isdigit() else 0
+    students = cur.execute(
+        """SELECT s.id,s.name,s.admission_no,s.class_id,c.name class_name,c.stream
+           FROM students s LEFT JOIN classes c ON c.id=s.class_id
+           WHERE s.school_id=? AND s.class_id=?
+           ORDER BY s.name""",
+        (sid, cid)
+    ).fetchall() if cid else []
+    con.commit()
+    con.close()
+    copts = "".join(
+        f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
+        for c in classes
+    )
+    topts = "".join(
+        f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
+        for c in classes
+        if int(c["id"]) != cid
+    )
+    rows = "".join(
+        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td>{escape(str(s['name']))}</td>"
+        f"<td>{escape(str(s['class_name'] or ''))} {escape(str(s['stream'] or ''))}</td>"
+        f"<td><select name='to_class_{s['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
+        for s in students
+    )
+    body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
+<div class='muted'>Move learners between classes while preserving their existing marks, attendance and financial records. Every change is recorded in the student class history.</div>
+<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
+<select name='class_id' class='field'><option value=''>Select current class</option>{copts}</select>
+<button class='btn'>Load Students</button></form></div>
+<div class='card section'><form method='post' action='/app/students/promotion'>
+<input type='hidden' name='from_class_id' value='{cid}'>
+<table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promote / Transfer To</th></tr></thead>
+<tbody>{rows or "<tr><td colspan='4'>Select a class to load its students.</td></tr>"}</tbody></table>
+{"<button class='btn' style='margin-top:12px'>Save Class Changes</button>" if students else ""}
+</form></div>
+<div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school.</div>
+</div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request, "Student Promotion / Transfer", body)
+
+
+@router.post("/app/students/promotion")
+async def student_promotion_save(request: Request, from_class_id: int = Form(...)):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    form = await request.form()
+    con = _db()
+    cur = con.cursor()
+    _ensure_student_history_table(cur)
+    if not cur.execute(
+        "SELECT id FROM classes WHERE id=? AND school_id=?", (from_class_id, sid)
+    ).fetchone():
+        con.close()
+        return HTMLResponse("Invalid current class. <a href='/app/students/promotion'>Back</a>", 400)
+    changed = 0
+    now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    for key, value in form.multi_items():
+        if not key.startswith("to_class_"):
+            continue
+        try:
+            student_id = int(key.split("_", 2)[2])
+            to_class_id = int(str(value)) if str(value).isdigit() else 0
+        except Exception:
+            continue
+        if not to_class_id or to_class_id == from_class_id:
+            continue
+        if not cur.execute(
+            "SELECT id FROM classes WHERE id=? AND school_id=?", (to_class_id, sid)
+        ).fetchone():
+            continue
+        student = cur.execute(
+            "SELECT id,class_id FROM students WHERE id=? AND school_id=? AND class_id=?",
+            (student_id, sid, from_class_id)
+        ).fetchone()
+        if not student:
+            continue
+        cur.execute(
+            "UPDATE students SET class_id=? WHERE id=? AND school_id=?",
+            (to_class_id, student_id, sid)
+        )
+        cur.execute(
+            """INSERT INTO student_class_history
+               (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+               VALUES(?,?,?,?,?,?,?)""",
+            (sid, student_id, from_class_id, to_class_id, now,
+             request.session.get("email", ""), "Promotion / transfer")
+        )
+        _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
+               f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
+        changed += 1
+    con.commit()
+    con.close()
+    return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&changed={changed}", 303)
 
 
 @router.get("/app/attendance", response_class=HTMLResponse)
