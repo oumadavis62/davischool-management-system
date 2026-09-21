@@ -20,6 +20,17 @@ SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-se
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
+@app.get("/healthz")
+def healthz():
+    """Lightweight readiness check that verifies the configured database is reachable."""
+    con = get_db()
+    try:
+        con.execute("SELECT 1").fetchone()
+        return JSONResponse({"status": "ok", "database": "reachable"})
+    finally:
+        con.close()
+
+
 @app.middleware("http")
 async def same_origin_guard(request: Request, call_next):
     # Defense-in-depth CSRF protection for browser state-changing requests.
@@ -51,6 +62,7 @@ async def security_headers(request: Request, call_next):
     return response
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
+REQUIRE_DATABASE = os.environ.get("DAVISCHOOL_REQUIRE_DATABASE", "0").lower() in {"1", "true", "yes"}
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 310000
@@ -93,6 +105,8 @@ def get_db():
     development/backwards compatibility when DATABASE_URL is absent.
     """
     database_url = os.environ.get("DATABASE_URL", "").strip()
+    if REQUIRE_DATABASE and not database_url:
+        raise RuntimeError("DAVISCHOOL_REQUIRE_DATABASE is enabled but DATABASE_URL is not configured; refusing to use local SQLite for production data.")
     if database_url:
         from app.db import connect as pg_connect
         return pg_connect(database_url, connect_timeout=10)
