@@ -46,6 +46,20 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     request.session["email"] = user["email"]
     request.session["role"] = user["role"]
     request.session["school_id"] = user["school_id"]
+    request.session["teacher_id"] = user["teacher_id"] if "teacher_id" in user.keys() and user["teacher_id"] else None
+    if user["role"] == "teacher" and not request.session.get("teacher_id") and user["school_id"]:
+        con = _db()
+        try:
+            teacher_row = con.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?) LIMIT 1", (user["school_id"], user["email"])).fetchone()
+            if teacher_row:
+                request.session["teacher_id"] = teacher_row["id"]
+                try:
+                    con.execute("UPDATE users SET teacher_id=? WHERE id=? AND school_id=?", (teacher_row["id"], user["id"], user["school_id"]))
+                    con.commit()
+                except Exception:
+                    pass
+        finally:
+            con.close()
     request.session["name"] = user["full_name"] or user["email"]
     if legacy:
         from app.main import hash_password
@@ -152,7 +166,17 @@ def _shell(title, name, role, body, school_id=None):
             ("/account/change-password","🔑","My Account",None),
         ]
     else:
-        nav = [
+        if role == "teacher":
+            nav = [
+                ("/app","⌂","Overview",None),
+                ("/app/academics","📝","Academics","marks.view"),
+                ("/app/academics/marks","✏️","Marks Entry","marks.edit"),
+                ("/app/academics/marksheets","📋","Class Marksheets","reports.view"),
+                ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
+                ("/app/report-cards","📄","Report Cards","reports.view"),
+            ]
+        else:
+            nav = [
             ("/app","⌂","Overview",None),
             ("/app/students","🎓","Students","students.view"),
             ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
@@ -201,9 +225,8 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 </style></head><body><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a></aside>
 <main class='main'><header class='top'><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}</main></div></body></html>"""
 def _school_session(request):
-    # The /app workspace is the school administration workspace. Other
-    # accounts use their dedicated portal so they cannot inherit admin access.
-    if "email" not in request.session or request.session.get("role") != "school_admin":
+    role = str(request.session.get("role", ""))
+    if "email" not in request.session or role not in ("school_admin", "teacher"):
         return None
     sid = int(request.session.get("school_id") or 0)
     if not sid:
@@ -234,19 +257,26 @@ def _require_permission(request, school_id, permission):
     role=str(request.session.get("role",""))
     if role=="school_admin":
         return True
+    if role=="teacher":
+        return permission in {"marks.view","marks.edit","reports.view","reports.edit"}
     con=_db()
     try:
         return _permission_enabled(con.cursor(),school_id,role,permission)
     finally:
         con.close()
 
-def _teacher_class_authorized(cur, request, school_id, class_id):
-    """Restrict teacher data entry to classes assigned to the logged-in teacher."""
+def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None):
+    """Restrict teacher academic actions to their allocated class/subject."""
     if str(request.session.get("role","")) != "teacher":
         return True
     teacher_id = request.session.get("teacher_id")
     if not teacher_id:
         return False
+    if subject_id:
+        return bool(cur.execute(
+            "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+            (school_id, teacher_id, class_id, subject_id)
+        ).fetchone())
     return bool(cur.execute(
         "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
         (school_id, teacher_id, class_id)
@@ -531,6 +561,8 @@ def _overall_grade(cur, school_id, total):
 def overall_grading(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can manage overall grading.", 403)
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to view overall grading.", 403)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
@@ -552,6 +584,8 @@ def overall_grading(request: Request):
 def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
     if min_total<0 or max_total<min_total or not grade.strip():
@@ -574,6 +608,8 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
 def overall_grading_delete(request: Request,rule_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
@@ -961,6 +997,33 @@ def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
         (school_id, exam_id, class_id, subject_id)
     ).fetchone()
 
+def _ensure_marks_correction_requests_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        teacher_id INTEGER,
+        requested_by TEXT,
+        requested_at TEXT,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        review_note TEXT
+    )""")
+
+def _pending_marks_correction(cur, school_id, exam_id, class_id, subject_id, teacher_id=None):
+    _ensure_marks_correction_requests_table(cur)
+    params=[school_id,exam_id,class_id,subject_id]
+    q="SELECT * FROM marks_correction_requests WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='pending'"
+    if teacher_id:
+        q += " AND teacher_id=?"
+        params.append(teacher_id)
+    q += " ORDER BY id DESC LIMIT 1"
+    return cur.execute(q,params).fetchone()
+
 def _ensure_grading_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1014,6 +1077,8 @@ def grading_setup(request: Request, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can manage subject grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to manage subject grading.", 403)
     con = _db()
@@ -1082,6 +1147,8 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
     if min_mark < 0 or max_mark > 100 or min_mark > max_mark or points < 0:
@@ -1123,6 +1190,8 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
     con = _db()
@@ -1215,7 +1284,26 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # A legacy lock table must never make existing marks inaccessible.
             print("DAVISCHOOL MARKS LOCK FALLBACK:", repr(exc), flush=True)
             locked = False
+    role = str(request.session.get("role",""))
+    teacher_id = request.session.get("teacher_id") if role == "teacher" else None
+    pending_correction = None
+    if eid and cid and subid:
+        try:
+            pending_correction = _pending_marks_correction(cur, sid, eid, cid, subid, teacher_id if role == "teacher" else None)
+        except Exception as exc:
+            print("DAVISCHOOL MARKS CORRECTION READ FALLBACK:", repr(exc), flush=True)
+            pending_correction = None
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
+    grading_link="" if role=="teacher" else "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a>"%subid
+    if locked:
+        if role == "school_admin":
+            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
+        elif pending_correction:
+            mark_actions = "<span class='muted'>Correction request is awaiting school admin review.</span>"
+        else:
+            mark_actions = "<form method='post' action='/app/academics/marks/request-correction' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='display:inline-block;width:min(360px,100%%);margin-right:8px'><button class='btn' type='submit'>🔓 Request Correction</button></form>"%(eid,cid,subid)
+    else:
+        mark_actions = "<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Submit & Lock Marks</button></form>"%(eid,cid,subid) if students else ""
     rows=""
     for x in students:
         mark=x["marks"]
@@ -1236,13 +1324,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<button class='btn'>Load Students</button></form>"
-      "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "
-      "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a></div></div>"%subid+
+      "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "+grading_link+"</div></div>" +
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='/app/academics/marks/save'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
-      "</form></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked. Further changes are disabled." if locked else "🟢 Marks are open for editing."),("<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form>"%(eid,cid,subid) if locked else ("<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Finalize these marks? Further edits will be blocked until reopened.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Finalize Marks</button></form>"%(eid,cid,subid) if students else "")),eid,cid,subid,out_of,rows or "<tr><td colspan='5'>Select an examination, class and subject, then load students.</td></tr>","" if locked else ("<button class='btn' style='margin-top:12px'>Save Marks</button>" if students else ""))+
+      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",mark_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
     )
@@ -1256,9 +1343,9 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         return HTMLResponse("You do not have permission to edit marks.", 403)
     form=await request.form()
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
-    if not _teacher_class_authorized(cur, request, sid, class_id):
+    if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close()
-        return HTMLResponse("You are not allocated to this class.", 403)
+        return HTMLResponse("You are not allocated to this class and subject.", 403)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid: con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
@@ -1301,8 +1388,8 @@ def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to delete marks.", 403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
-    if not _teacher_class_authorized(cur, request, sid, class_id):
-        con.close(); return HTMLResponse("You are not allocated to this class.",403)
+    if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
+        con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone() and cur.execute("SELECT id FROM students WHERE id=? AND school_id=? AND class_id=?",(student_id,sid,class_id)).fetchone()
     if not valid:
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
@@ -1330,6 +1417,8 @@ def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(..
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid:
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
+        con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
     if not _academic_lock(cur,sid,exam_id,class_id,subject_id):
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
@@ -1337,10 +1426,102 @@ def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(..
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
+@router.post("/app/academics/marks/request-correction")
+def request_marks_correction(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), reason:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "teacher":
+        return HTMLResponse("Only teachers can submit a correction request.",403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to request mark corrections.",403)
+    teacher_id=request.session.get("teacher_id")
+    if not teacher_id:
+        return HTMLResponse("Your teacher account is not linked to a teacher record. Please contact the school administrator.",403)
+    reason=reason.strip()
+    if len(reason)<5:
+        return HTMLResponse("Please provide a clear reason for the correction.",400)
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur);_ensure_marks_correction_requests_table(cur)
+    if not _teacher_class_authorized(cur,request,sid,class_id,subject_id):
+        con.close();return HTMLResponse("You are not allocated to this class and subject.",403)
+    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not valid:
+        con.close();return HTMLResponse("Invalid academic selection.",400)
+    if not _academic_lock(cur,sid,exam_id,class_id,subject_id):
+        con.close();return HTMLResponse("These marks are not locked, so you can correct them directly.",400)
+    existing=_pending_marks_correction(cur,sid,exam_id,class_id,subject_id,int(teacher_id))
+    if existing:
+        con.close();return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO marks_correction_requests(school_id,exam_id,class_id,subject_id,teacher_id,requested_by,requested_at,reason,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,int(teacher_id),request.session.get("email",""),now,reason,"pending"))
+    _audit(cur,sid,request,"MARKS_CORRECTION_REQUEST",f"Requested mark correction for exam {exam_id}, class {class_id}, subject {subject_id}: {reason}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+@router.get("/app/academics/marks-corrections", response_class=HTMLResponse)
+def marks_correction_requests(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can review mark correction requests.",403)
+    con=_db();cur=con.cursor();_ensure_marks_correction_requests_table(cur)
+    rows=cur.execute("""SELECT r.*,e.name exam_name,c.name class_name,c.stream,sub.name subject_name,t.name teacher_name
+        FROM marks_correction_requests r
+        LEFT JOIN exams e ON e.id=r.exam_id LEFT JOIN classes c ON c.id=r.class_id
+        LEFT JOIN subjects sub ON sub.id=r.subject_id LEFT JOIN teachers t ON t.id=r.teacher_id
+        WHERE r.school_id=? ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.id DESC""",(sid,)).fetchall()
+    con.close()
+    body_rows=""
+    for r in rows:
+        status=str(r["status"] or "").lower()
+        action=""
+        if status=="pending":
+            action=(f"<form method='post' action='/app/academics/marks-corrections/approve' style='display:inline'><input type='hidden' name='request_id' value='{r['id']}'><button class='btn' type='submit' onclick=\"return confirm('Approve this correction request and reopen the marks?');\">🔓 Approve / Reopen</button></form> "
+                    f"<form method='post' action='/app/academics/marks-corrections/reject' style='display:inline'><input type='hidden' name='request_id' value='{r['id']}'><button class='btnlink' type='submit' onclick=\"return confirm('Reject this correction request?');\">Reject</button></form>")
+        body_rows += f"<tr><td>{escape(str(r['requested_at'] or ''))}</td><td>{escape(str(r['teacher_name'] or r['requested_by'] or ''))}</td><td>{escape(str(r['exam_name'] or ''))}</td><td>{escape(str(r['class_name'] or ''))} {escape(str(r['stream'] or ''))}</td><td>{escape(str(r['subject_name'] or ''))}</td><td>{escape(str(r['reason'] or ''))}</td><td>{escape(status.title())}</td><td>{action}</td></tr>"
+    body=f"""<div class='page'><h1>Marks Correction Requests</h1><div class='muted'>Review teacher requests to reopen finalized marks. Approving a request unlocks only the selected examination, class and subject.</div><div class='card section'><table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>{body_rows or '<tr><td colspan=8>No correction requests yet.</td></tr>'}</tbody></table></div></div><style>.btn,.btnlink{{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;text-decoration:none}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}</style>"""
+    return _school_page(request,"Marks Correction Requests",body)
+
+@router.post("/app/academics/marks-corrections/approve")
+def approve_marks_correction(request: Request, request_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can approve corrections.",403)
+    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur);_ensure_marks_correction_requests_table(cur)
+    row=cur.execute("SELECT * FROM marks_correction_requests WHERE id=? AND school_id=? AND status='pending'",(request_id,sid)).fetchone()
+    if not row:
+        con.close();return HTMLResponse("Correction request not found or already reviewed.",404)
+    lock=_academic_lock(cur,sid,row["exam_id"],row["class_id"],row["subject_id"])
+    if lock:
+        cur.execute("DELETE FROM academic_locks WHERE id=? AND school_id=?",(lock["id"],sid))
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE marks_correction_requests SET status='approved',reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND school_id=?",(request.session.get("email",""),now,"Marks reopened for teacher correction.",request_id,sid))
+    _audit(cur,sid,request,"MARKS_CORRECTION_APPROVE",f"Approved correction request {request_id}; reopened exam {row['exam_id']}, class {row['class_id']}, subject {row['subject_id']}")
+    con.commit();con.close()
+    return RedirectResponse("/app/academics/marks-corrections",303)
+
+@router.post("/app/academics/marks-corrections/reject")
+def reject_marks_correction(request: Request, request_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can reject corrections.",403)
+    con=_db();cur=con.cursor();_ensure_marks_correction_requests_table(cur)
+    row=cur.execute("SELECT id FROM marks_correction_requests WHERE id=? AND school_id=? AND status='pending'",(request_id,sid)).fetchone()
+    if not row:
+        con.close();return HTMLResponse("Correction request not found or already reviewed.",404)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE marks_correction_requests SET status='rejected',reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND school_id=?",(request.session.get("email",""),now,"Correction request rejected.",request_id,sid))
+    _audit(cur,sid,request,"MARKS_CORRECTION_REJECT",f"Rejected correction request {request_id}")
+    con.commit();con.close()
+    return RedirectResponse("/app/academics/marks-corrections",303)
+
 @router.post("/app/academics/marks/unfinalize")
 def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can directly reopen finalized marks.",403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to unfinalize marks.", 403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
