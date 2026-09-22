@@ -14,8 +14,11 @@ def _pdf_route_error(request, route_name, exc):
     print("DAVISCHOOL PDF ROUTE ERROR: %s %s %s" % (route_name, request.method, request.url.path), flush=True)
     print("DAVISCHOOL PDF ROUTE EXCEPTION: %r" % (exc,), flush=True)
     print(traceback.format_exc(), flush=True)
+    detail = f"{type(exc).__name__}: {str(exc) or 'no exception message'}"
+    safe_detail = escape(detail)[:800]
     return HTMLResponse(
-        "DaviSchool could not generate this PDF. Please retry after the latest deployment.",
+        "DaviSchool PDF generation failed.<br><br><b>Technical detail:</b> " + safe_detail +
+        "<br><br>Please send this exact technical detail to the developer so the failing database/query can be fixed.",
         status_code=500,
     )
 
