@@ -1447,12 +1447,26 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'><div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
         "<button class='btn'>Save Grade & Points</button></form></div>"
+        "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
+        "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
+        "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
+        "<input type='hidden' name='source_subject_id' value='%s'>"
+        "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:9px'>"
+        "%s"
+        "</div>"
+        "<label style='display:block;margin:12px 0;font-weight:700'><input type='checkbox' id='select-all-grading' onclick='document.querySelectorAll(\".grading-target\").forEach(function(x){x.checked=this.checked},this)'> Select all other subjects</label>"
+        "<label style='display:block;margin:12px 0'><input type='checkbox' name='overwrite' value='1'> Replace existing grading scales on selected subjects</label>"
+        "<button class='btn' type='submit'>📋 Copy Grading Scale</button></form></div>"
         "<div class='card section'><h2>Configured rules</h2>"
         "<table><thead><tr><th>Minimum</th><th>Maximum</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Action</th></tr></thead>"
         "<tbody>%s</tbody></table></div>"
         "<div class='card section'><b>Default fallback:</b> if a subject has no custom rule for a mark, DaviSchool uses the standard A–E scale and default points until you configure that subject.</div>"
         "</div><style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
-    ) % (subid, rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>")
+    ) % (subid, "".join(
+            "<label style='display:flex;align-items:center;gap:8px;padding:7px'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'> %s</label>"
+            % (s["id"], escape(str(s["name"])))
+            for s in subjects if int(s["id"]) != subid
+        ), rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>")
     return _school_page(request, "Subject Grading & Points", body)
 
 @router.post("/app/academics/grading/add")
@@ -1500,6 +1514,89 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     con.commit()
     con.close()
     return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
+
+@router.post("/app/academics/grading/copy")
+async def grading_copy(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit grading.", 403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage subject grading.", 403)
+    form = await request.form()
+    try:
+        source_subject_id = int(str(form.get("source_subject_id") or "0"))
+    except Exception:
+        source_subject_id = 0
+    target_ids = []
+    for raw in form.getlist("target_subject_ids"):
+        try:
+            value = int(str(raw))
+            if value > 0 and value not in target_ids:
+                target_ids.append(value)
+        except Exception:
+            continue
+    overwrite = str(form.get("overwrite") or "") == "1"
+    if not source_subject_id or not target_ids:
+        return HTMLResponse("Select a source subject and at least one target subject. <a href='/app/academics/grading'>Back</a>", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_grading_table(cur)
+        source = cur.execute(
+            "SELECT id,name FROM subjects WHERE id=? AND school_id=?",
+            (source_subject_id, sid)
+        ).fetchone()
+        if not source:
+            return HTMLResponse("Invalid source subject. <a href='/app/academics/grading'>Back</a>", 400)
+        rules = cur.execute(
+            """SELECT min_mark,max_mark,grade,points,performance_comment
+               FROM subject_grading_rules
+               WHERE school_id=? AND subject_id=?
+               ORDER BY min_mark DESC,max_mark DESC,id DESC""",
+            (sid, source_subject_id)
+        ).fetchall()
+        if not rules:
+            return HTMLResponse("The selected subject has no grading rules to copy. Configure its grading scale first. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % source_subject_id, 400)
+        valid_targets = cur.execute(
+            "SELECT id,name FROM subjects WHERE school_id=? AND id<>? ORDER BY name",
+            (sid, source_subject_id)
+        ).fetchall()
+        valid_ids = {int(x["id"]) for x in valid_targets}
+        target_ids = [x for x in target_ids if x in valid_ids]
+        if not target_ids:
+            return HTMLResponse("No valid target subjects were selected. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % source_subject_id, 400)
+        copied = 0
+        skipped = 0
+        for target_id in target_ids:
+            existing = cur.execute(
+                "SELECT id FROM subject_grading_rules WHERE school_id=? AND subject_id=? LIMIT 1",
+                (sid, target_id)
+            ).fetchone()
+            if existing and not overwrite:
+                skipped += 1
+                continue
+            cur.execute(
+                "DELETE FROM subject_grading_rules WHERE school_id=? AND subject_id=?",
+                (sid, target_id)
+            )
+            for rule in rules:
+                cur.execute(
+                    """INSERT INTO subject_grading_rules
+                       (school_id,subject_id,min_mark,max_mark,grade,points,performance_comment)
+                       VALUES(?,?,?,?,?,?,?)""",
+                    (sid, target_id, rule["min_mark"], rule["max_mark"], rule["grade"],
+                     rule["points"], rule["performance_comment"] or "")
+                )
+            copied += 1
+        _audit(cur, sid, request, "GRADING_RULE_COPY",
+               "Copied grading scale from subject %s to %s subject(s); skipped %s existing subject(s)" %
+               (source_subject_id, copied, skipped))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/academics/grading?subject_id=%s&copied=%s" % (source_subject_id, copied), 303)
 
 @router.get("/app/academics/grading/edit/{rule_id}", response_class=HTMLResponse)
 def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
