@@ -778,50 +778,72 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _marksheet_subject_order(subjects):
-    # MarkSheet curriculum order is independent of database/alphabetical order.
-    # Match the real subject name even when schools have saved common CBC
-    # variants such as "Integrated Science & Technology" or extra descriptors.
+    # MarkSheet-only curriculum order. Do NOT change the database query here:
+    # the MarkSheet must first load all subjects exactly as before, then this
+    # function orders the already-loaded rows without affecting classes,
+    # streams, marks, summaries, or combined-grade selection.
     def normalize(value):
         value = str(value or "").strip().casefold()
         value = re.sub(r"[^a-z0-9]+", " ", value)
         return " ".join(value.split())
 
-    preferred = {normalize(name): index for index, name in enumerate(MARKSHEET_SUBJECT_ORDER)}
+    preferred = {
+        normalize("English"): 1,
+        normalize("Kiswahili"): 2,
+        normalize("Mathematics"): 3,
+        normalize("Integrated Science"): 4,
+        normalize("Agriculture"): 5,
+        normalize("Creative Arts and Sports"): 6,
+        normalize("Social Studies"): 7,
+        normalize("CRE"): 8,
+        normalize("Pre-technical Studies"): 9,
+    }
 
     def curriculum_position(value):
         name = normalize(value)
         if name in preferred:
             return preferred[name]
 
-        # Common stored-name variations. Use the curriculum subject itself
-        # rather than alphabetical order, so Integrated Science can never
-        # fall to the end merely because its database label has extra words.
-        if name.startswith("english"):
-            return preferred[normalize("English")]
-        if name.startswith("kiswahili"):
-            return preferred[normalize("Kiswahili")]
-        if name.startswith("mathematics") or name.startswith("math"):
-            return preferred[normalize("Mathematics")]
-        if "integrated science" in name:
-            return preferred[normalize("Integrated Science")]
-        if name.startswith("agriculture"):
-            return preferred[normalize("Agriculture")]
-        if "creative arts and sports" in name or ("creative arts" in name and "sport" in name):
-            return preferred[normalize("Creative Arts and Sports")]
-        if name.startswith("social studies"):
-            return preferred[normalize("Social Studies")]
-        if name == "cre" or name.startswith("cre "):
-            return preferred[normalize("CRE")]
-        if name.startswith("pre technical studies") or name.startswith("pre technical"):
-            return preferred[normalize("Pre-technical Studies")]
+        # Match common stored-name variations without depending on exact
+        # punctuation, ampersands, hyphens, or extra descriptors.
+        tokens = set(name.split())
+        if "english" in tokens:
+            return 1
+        if "kiswahili" in tokens:
+            return 2
+        if "mathematics" in tokens or "math" in tokens:
+            return 3
 
-        return len(MARKSHEET_SUBJECT_ORDER)
+        # Integrated Science must be position 4 whenever the stored subject
+        # contains both "integrated" and "science", regardless of any other
+        # words such as technology, CBC, & etc.
+        if "integrated" in tokens and "science" in tokens:
+            return 4
 
-    def order_key(subject):
-        name = normalize(subject["name"])
-        return (curriculum_position(name), name)
+        if "agriculture" in tokens:
+            return 5
+        if "creative" in tokens and "arts" in tokens and "sport" in tokens:
+            return 6
+        if "social" in tokens and "studies" in tokens:
+            return 7
+        if name == "cre" or "cre" in tokens:
+            return 8
+        if "pre" in tokens and "technical" in tokens:
+            return 9
 
-    return sorted(subjects, key=order_key)
+        return 100
+
+    # Python's sort is stable, so subjects with the same curriculum position
+    # retain their original database order. Other subjects remain after the
+    # nine required curriculum subjects, ordered by their normalized name.
+    return sorted(
+        subjects,
+        key=lambda subject: (
+            curriculum_position(subject["name"]),
+            normalize(subject["name"]) if curriculum_position(subject["name"]) == 100 else "",
+        ),
+    )
+
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
     sid = _school_session(request)
