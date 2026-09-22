@@ -1505,7 +1505,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<tbody>%s</tbody></table></div>"
         "<div class='card section'><b>Default fallback:</b> if a subject has no custom rule for a mark, DaviSchool uses the standard A–E scale and default points until you configure that subject.</div>"
         "</div><style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
-    ) % (subid, "".join(
+    ) % (subid, subid, "".join(
             "<label style='display:flex;align-items:center;gap:8px;padding:7px'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'> %s</label>"
             % (s["id"], escape(str(s["name"])))
             for s in subjects if int(s["id"]) != subid
