@@ -778,11 +778,24 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _marksheet_subject_order(subjects):
-    preferred = {name.casefold(): index for index, name in enumerate(MARKSHEET_SUBJECT_ORDER)}
-    return sorted(subjects, key=lambda subject: (
-        preferred.get(str(subject["name"] or "").strip().casefold(), len(MARKSHEET_SUBJECT_ORDER)),
-        str(subject["name"] or "").strip().casefold(),
-    ))
+    # Match the configured curriculum order even when the stored subject name
+    # contains extra spacing or a common punctuation/wording variation.
+    def normalize(value):
+        value = str(value or "").strip().casefold()
+        value = re.sub(r"[^a-z0-9]+", " ", value)
+        return " ".join(value.split())
+
+    preferred = {normalize(name): index for index, name in enumerate(MARKSHEET_SUBJECT_ORDER)}
+    aliases = {
+        "integrated science technology": preferred[normalize("Integrated Science")],
+        "integrated science and technology": preferred[normalize("Integrated Science")],
+        "pre technical studies": preferred[normalize("Pre-technical Studies")],
+    }
+    def order_key(subject):
+        name = normalize(subject["name"])
+        position = preferred.get(name, aliases.get(name, len(MARKSHEET_SUBJECT_ORDER)))
+        return (position, name)
+    return sorted(subjects, key=order_key)
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
     sid = _school_session(request)
