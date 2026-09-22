@@ -801,19 +801,23 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
         sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th>"
 
-    # Calculate the class mean for every subject from the marks currently shown.
+    # Subject means are calculated from the already-loaded marks only.
+    # Keep this lightweight and isolated so one malformed mark cannot break the MarkSheet.
     subject_means=[]
     for subject in subjects:
-        values=[]
+        total_mean=0.0
+        count_mean=0
         sid_subject=int(subject["id"])
         for student in students:
             value=marks.get((int(student["id"]),sid_subject))
-            if value is not None:
-                try:
-                    values.append(float(value))
-                except (TypeError,ValueError):
-                    pass
-        subject_means.append((subject, sum(values)/len(values) if values else None, len(values)))
+            if value in (None,""):
+                continue
+            try:
+                total_mean += float(value)
+                count_mean += 1
+            except (TypeError,ValueError):
+                continue
+        subject_means.append((subject, (total_mean/count_mean) if count_mean else None, count_mean))
 
     computed=[]
     for student in students:
