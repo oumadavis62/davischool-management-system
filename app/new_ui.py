@@ -778,23 +778,49 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _marksheet_subject_order(subjects):
-    # Match the configured curriculum order even when the stored subject name
-    # contains extra spacing or a common punctuation/wording variation.
+    # MarkSheet curriculum order is independent of database/alphabetical order.
+    # Match the real subject name even when schools have saved common CBC
+    # variants such as "Integrated Science & Technology" or extra descriptors.
     def normalize(value):
         value = str(value or "").strip().casefold()
         value = re.sub(r"[^a-z0-9]+", " ", value)
         return " ".join(value.split())
 
     preferred = {normalize(name): index for index, name in enumerate(MARKSHEET_SUBJECT_ORDER)}
-    aliases = {
-        "integrated science technology": preferred[normalize("Integrated Science")],
-        "integrated science and technology": preferred[normalize("Integrated Science")],
-        "pre technical studies": preferred[normalize("Pre-technical Studies")],
-    }
+
+    def curriculum_position(value):
+        name = normalize(value)
+        if name in preferred:
+            return preferred[name]
+
+        # Common stored-name variations. Use the curriculum subject itself
+        # rather than alphabetical order, so Integrated Science can never
+        # fall to the end merely because its database label has extra words.
+        if name.startswith("english"):
+            return preferred[normalize("English")]
+        if name.startswith("kiswahili"):
+            return preferred[normalize("Kiswahili")]
+        if name.startswith("mathematics") or name.startswith("math"):
+            return preferred[normalize("Mathematics")]
+        if "integrated science" in name:
+            return preferred[normalize("Integrated Science")]
+        if name.startswith("agriculture"):
+            return preferred[normalize("Agriculture")]
+        if "creative arts and sports" in name or ("creative arts" in name and "sport" in name):
+            return preferred[normalize("Creative Arts and Sports")]
+        if name.startswith("social studies"):
+            return preferred[normalize("Social Studies")]
+        if name == "cre" or name.startswith("cre "):
+            return preferred[normalize("CRE")]
+        if name.startswith("pre technical studies") or name.startswith("pre technical"):
+            return preferred[normalize("Pre-technical Studies")]
+
+        return len(MARKSHEET_SUBJECT_ORDER)
+
     def order_key(subject):
         name = normalize(subject["name"])
-        position = preferred.get(name, aliases.get(name, len(MARKSHEET_SUBJECT_ORDER)))
-        return (position, name)
+        return (curriculum_position(name), name)
+
     return sorted(subjects, key=order_key)
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
