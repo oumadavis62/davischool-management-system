@@ -149,7 +149,7 @@ def _pdf_build(story, pagesize, title):
                                 vals.append(str(cell))
                         lines.append(" | ".join(vals))
                 for line in lines:
-                    text_line = re.sub(r"\\s+", " ", str(line)).strip()
+                    text_line = re.sub(r"\s+", " ", str(line)).strip()
                     if not text_line:
                         continue
                     text_line = ascii_text(text_line)
