@@ -934,7 +934,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         for subject in subjects:
             value=marks.get((int(student["id"]),int(subject["id"])))
             if value is None:
-                cells+="<td>—</td><td>—</td><td>—</td>"
+                cells+="<td>—</td><td>—</td><td>—</td><td>—</td>"
             else:
                 try:
                     grade,points,performance_comment=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
