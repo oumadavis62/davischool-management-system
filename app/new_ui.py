@@ -980,9 +980,9 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
             overall_grade=_default_grade_points(total)[0] if count else "—"
         average=(total/count) if count else 0
-        rows+=("<tr><td>%d</td><td>%s</td><td><b>%s</b></td>%s"
+        rows+=("<tr><td>%s</td><td><b>%s</b></td>%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
-          %(index,escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
+          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
     try:
         school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
@@ -1004,7 +1004,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
-    colspan = 3 + len(subjects) * 3 + 5
+    colspan = 2 + len(subjects) * 3 + 5
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
     print_script = '''<script>
@@ -1017,7 +1017,7 @@ function printDocument(){
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
   }).format(new Date())+' EAT';
-  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .no-col{width:42px}.marksheet .name-col{width:190px}.marksheet .mks-col,.marksheet .grade-col,.marksheet .points-col{width:58px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:auto;margin:10mm 10mm 15mm}';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .adm-no-col{width:78px}.marksheet .name-col{width:190px}.marksheet .mks-col,.marksheet .grade-col,.marksheet .points-col{width:58px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:auto;margin:10mm 10mm 15mm}';
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
   var html='<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+footer+'</body></html>';
   w.document.open();w.document.write(html);w.document.close();w.focus();
@@ -1053,9 +1053,9 @@ function printDocument(){
         "<div class='marksheet-meta'>CLASS: " + class_title + " &nbsp;&nbsp; EXAM: " + exam_name +
         " &nbsp;&nbsp; TERM: " + escape(term or "All") + " &nbsp;&nbsp; YEAR: " + escape(year or "All") + "</div>"
         "<div style='overflow:auto'><table class='marksheet'><colgroup>"
-        "<col class='no-col'><col class='name-col'>" + subject_colgroup +
+        "<col class='adm-no-col'><col class='name-col'>" + subject_colgroup +
         "<col class='overall-marks-col'><col class='overall-points-col'><col class='overall-avg-col'><col class='overall-grade-col'><col class='overall-pos-col'>"
-        "</colgroup><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>" +
+        "</colgroup><thead><tr><th rowspan='2'>ADM NO.</th><th rowspan='2'>NAME</th>" +
         header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
         "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
         rows_html + "</tbody></table></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
@@ -3320,7 +3320,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         con.close()
         styles=_pdf_styles()
         story=_pdf_school_header(school,styles,"Class Marksheet",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'} · {term or 'Term'} {year or ''}")
-        header1=["No.","Admission","Student"]; header2=["","",""]
+        header1=["Adm No.","Student"]; header2=["",""]
         for sub in subjects:
             header1.extend([str(sub["name"]),"",""]); header2.extend(["MKS","GRD","PTS"])
         header1.extend(["OVERALL","","","","",""]); header2.extend(["MKS","PTS","AVG %","GRD","POS"])
@@ -3329,16 +3329,16 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         for idx,(st,total,points,count,vals,overall_grade) in enumerate(computed,1):
             if last_total is None or total!=last_total: pos=idx; last_total=total
             avg=(total/count) if count else 0
-            data.append([str(idx),str(st["admission_no"] or ""),str(st["name"] or "")]+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
+            data.append([str(st["admission_no"] or ""),str(st["name"] or "")]+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
         if len(data)==2:
-            data.append(["","","No students or marks found."]+[""]*(len(header1)-3))
-        col_widths=[10*mm,22*mm,42*mm]+[15*mm]*(len(header1)-8)+[16*mm]*5
+            data.append(["","No students or marks found."]+[""]*(len(header1)-2))
+        col_widths=[22*mm,42*mm]+[15*mm]*(len(header1)-7)+[16*mm]*5
         table=Table(data,colWidths=col_widths,repeatRows=2)
         table.setStyle(TableStyle([
             ("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,1),colors.HexColor("#eef2f7")),
             ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),6),
             ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("ALIGN",(2,2),(2,-1),"LEFT"),("FONTSIZE",(2,2),(2,-1),7)
+            ("ALIGN",(1,2),(1,-1),"LEFT"),("FONTSIZE",(1,2),(1,-1),7)
         ]))
         story += [table, Spacer(1,6), Paragraph("Subject Means",styles["normal"])]
         mean_data=[["Subject","Mean","Entries"]]+[[str(sub["name"]),f"{mean:.2f}" if mean is not None else "—",str(count)] for sub,mean,count in subject_means]
