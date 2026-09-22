@@ -1295,7 +1295,8 @@ def _ensure_grading_table(cur):
         min_mark REAL,
         max_mark REAL,
         grade TEXT,
-        points REAL
+        points REAL,
+        performance_comment TEXT
     )""")
     # Additive compatibility for older production databases.
     for col, definition in [
@@ -1305,6 +1306,7 @@ def _ensure_grading_table(cur):
         ("max_mark","REAL"),
         ("grade","TEXT"),
         ("points","REAL"),
+        ("performance_comment","TEXT"),
     ]:
         try:
             cur.execute("ALTER TABLE subject_grading_rules ADD COLUMN %s %s" % (col, definition))
@@ -1324,7 +1326,7 @@ def _load_grading_rules(cur, school_id):
     try:
         _ensure_grading_table(cur)
         rows = cur.execute(
-            "SELECT subject_id,min_mark,max_mark,grade,points FROM subject_grading_rules WHERE school_id=? ORDER BY subject_id,min_mark DESC,id DESC",
+            "SELECT subject_id,min_mark,max_mark,grade,points,performance_comment FROM subject_grading_rules WHERE school_id=? ORDER BY subject_id,min_mark DESC,id DESC",
             (school_id,)
         ).fetchall()
     except Exception as exc:
@@ -1345,32 +1347,35 @@ def _load_grading_rules(cur, school_id):
             continue
     return rules
 
-def _subject_grade_points(cur, school_id, subject_id, mark, grading_rules=None):
+def _subject_grade_details(cur, school_id, subject_id, mark, grading_rules=None):
     try:
         value = float(mark)
     except Exception:
-        return "—", 0
+        return "—", 0, ""
     if grading_rules is not None:
         for rule in grading_rules.get(int(subject_id), []):
             try:
                 if float(rule["min_mark"]) <= value <= float(rule["max_mark"]):
-                    return str(rule["grade"]), float(rule["points"] or 0)
+                    return str(rule["grade"]), float(rule["points"] or 0), str(rule["performance_comment"] or "")
             except Exception:
                 continue
-        return _default_grade_points(value)
+        grade, points = _default_grade_points(value)
+        return grade, points, ""
     try:
         _ensure_grading_table(cur)
-        rule = cur.execute(
-            """SELECT grade,points FROM subject_grading_rules
-               WHERE school_id=? AND subject_id=? AND ? BETWEEN min_mark AND max_mark
-               ORDER BY min_mark DESC, id DESC LIMIT 1""",
-            (school_id, subject_id, value)
-        ).fetchone()
+        rule = cur.execute("""SELECT grade,points,performance_comment FROM subject_grading_rules
+            WHERE school_id=? AND subject_id=? AND ? BETWEEN min_mark AND max_mark
+            ORDER BY min_mark DESC, id DESC LIMIT 1""",(school_id, subject_id, value)).fetchone()
         if rule:
-            return str(rule["grade"]), float(rule["points"] or 0)
+            return str(rule["grade"]), float(rule["points"] or 0), str(rule["performance_comment"] or "")
     except Exception as exc:
         print("DAVISCHOOL SUBJECT GRADING FALLBACK:", repr(exc), flush=True)
-    return _default_grade_points(value)
+    grade, points = _default_grade_points(value)
+    return grade, points, ""
+
+def _subject_grade_points(cur, school_id, subject_id, mark, grading_rules=None):
+    grade, points, _ = _subject_grade_details(cur, school_id, subject_id, mark, grading_rules)
+    return grade, points
 
 @router.get("/app/academics/grading", response_class=HTMLResponse)
 def grading_setup(request: Request, subject_id: str = ""):
@@ -1419,7 +1424,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td>"
         "<td><form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
         % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
-           float(r["points"] or 0), r["id"], subid)
+           float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid)
         for r in rules
     )
     body = (
@@ -1438,19 +1443,19 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
         "<input name='max_mark' required type='number' min='0' max='100' step='0.01' placeholder='Maximum mark' class='field'>"
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
-        "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
+        "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'><div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
         "<button class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Configured rules</h2>"
-        "<table><thead><tr><th>Minimum</th><th>Maximum</th><th>Grade</th><th>Points</th><th>Action</th></tr></thead>"
+        "<table><thead><tr><th>Minimum</th><th>Maximum</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Action</th></tr></thead>"
         "<tbody>%s</tbody></table></div>"
         "<div class='card section'><b>Default fallback:</b> if a subject has no custom rule for a mark, DaviSchool uses the standard A–E scale and default points until you configure that subject.</div>"
         "</div><style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
-    ) % (subid, rule_rows or "<tr><td colspan='5'>No custom grading rules configured for this subject.</td></tr>")
+    ) % (subid, rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>")
     return _school_page(request, "Subject Grading & Points", body)
 
 @router.post("/app/academics/grading/add")
 def grading_add(request: Request, subject_id: int = Form(...), min_mark: float = Form(...),
-                max_mark: float = Form(...), grade: str = Form(...), points: float = Form(...)):
+                max_mark: float = Form(...), grade: str = Form(...), points: float = Form(...), performance_comment: str = Form(...)):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
@@ -1462,6 +1467,8 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
         return HTMLResponse("Invalid grading range. <a href='/app/academics/grading'>Back</a>", 400)
     if not grade.strip():
         return HTMLResponse("Grade is required. <a href='/app/academics/grading'>Back</a>", 400)
+    if not performance_comment.strip():
+        return HTMLResponse("Performance comment is required. <a href='/app/academics/grading'>Back</a>", 400)
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
@@ -1481,9 +1488,9 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
         return HTMLResponse("That grading range overlaps an existing range for this subject. <a href='/app/academics/grading'>Back</a>",400)
     cur.execute(
         """INSERT INTO subject_grading_rules
-           (school_id,subject_id,min_mark,max_mark,grade,points)
-           VALUES(?,?,?,?,?,?)""",
-        (sid, subject_id, min_mark, max_mark, grade.strip(), points)
+           (school_id,subject_id,min_mark,max_mark,grade,points,performance_comment)
+           VALUES(?,?,?,?,?,?,?)""",
+        (sid, subject_id, min_mark, max_mark, grade.strip(), points, performance_comment.strip())
     )
     _audit(cur, sid, request, "GRADING_RULE_CREATE",
            "Configured %s: %.1f-%.1f = %s / %.1f points" %
