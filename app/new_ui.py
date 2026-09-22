@@ -1300,6 +1300,8 @@ def _ensure_grading_table(cur):
         performance_comment TEXT
     )""")
     # Additive compatibility for older production databases.
+    # Use a savepoint for each ALTER so PostgreSQL does not leave the whole
+    # request transaction aborted when the column already exists.
     for col, definition in [
         ("school_id","INTEGER"),
         ("subject_id","INTEGER"),
@@ -1310,9 +1312,21 @@ def _ensure_grading_table(cur):
         ("performance_comment","TEXT"),
     ]:
         try:
+            cur.execute("SAVEPOINT davischool_grading_column")
             cur.execute("ALTER TABLE subject_grading_rules ADD COLUMN %s %s" % (col, definition))
+            cur.execute("RELEASE SAVEPOINT davischool_grading_column")
         except Exception:
-            pass
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_grading_column")
+                cur.execute("RELEASE SAVEPOINT davischool_grading_column")
+            except Exception:
+                try:
+                    cur.connection.rollback()
+                except Exception:
+                    try:
+                        cur._connection.rollback()
+                    except Exception:
+                        pass
 
 def _default_grade_points(mark):
     grade = _grade(mark)
