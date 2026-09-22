@@ -276,10 +276,7 @@ def _shell(title, name, role, body, school_id=None):
             nav = [
                 ("/app","⌂","Overview",None),
                 ("/app/academics","📝","Academics","marks.view"),
-                ("/app/academics/marks","✏️","Marks Entry","marks.edit"),
-                ("/app/academics/marksheets","📋","Class Marksheets","reports.view"),
-                ("/app/academics/subject-analysis","📊","Subject Analysis","reports.view"),
-                ("/app/report-cards","📄","Report Cards","reports.view"),
+                            ("/app/report-cards","📄","Report Cards","reports.view"),
             ]
         else:
             nav = [
@@ -293,7 +290,6 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/academics/marks","✏️","Marks Entry","marks.view"),
             ("/app/academics/marksheets","📋","Class Marksheets","reports.view"),
             ("/app/academics/subject-analysis","📊","Subject Analysis","reports.view"),
-            ("/app/academics/class-analysis","🏫","Class Analysis","reports.view"),
             ("/app/academics/allocations","👩‍🏫","Teacher Allocations","staff.edit"),
             ("/app/academics/assessments","📋","SBA / CBA","marks.edit"),
             ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
