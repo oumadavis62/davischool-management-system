@@ -2137,7 +2137,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         except Exception: pass
         con.close()
         return HTMLResponse("Academic data is still initializing. Please refresh this page in a few seconds.",503)
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+    if not selected_exam_ids and exams:
+        selected_exam_ids=[int(exams[0]["id"])]
+    eid=selected_exam_ids[0] if selected_exam_ids else 0
     cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     students=[]
@@ -2522,11 +2525,13 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         print("DAVISCHOOL ANALYSIS OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
     stats=[]; student_results=[]
     if eid:
+        placeholders=",".join("?" for _ in selected_exam_ids)
         q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
           COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
-          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
           LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id"""
-        params=[eid,sid]
+        q=q.replace("PLACEHOLDERS",placeholders)
+        params=list(selected_exam_ids)+[sid]
         if cid:q+=" AND sm.class_id=?";params.append(cid)
         q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name";params.append(sid)
         try: stats=cur.execute(q,params).fetchall()
@@ -2538,7 +2543,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         for st in students:
             try:
-                result=_student_result(cur,sid,int(st["id"]),eid,grading_rules,overall_rules)
+                result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
             except Exception as exc:
                 print("DAVISCHOOL ANALYSIS STUDENT RESULT FALLBACK:", repr(exc), flush=True)
                 result={"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
@@ -2550,7 +2555,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
                 locks=0
             student_results.append((st,result,int(locks or 0)))
     con.close()
-    eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))}</option>" for e in exams)
+    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     rows="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in stats)
     ranked=sorted(student_results,key=lambda z:(-float(z[1]["total"]),str(z[0]["name"])))
