@@ -132,6 +132,17 @@ def _ensure_live_postgres_schema():
                                 (table,),
                             )
                             existing = {row[0] for row in cur.fetchall()}
+        # Academic indexes keep MarkSheet and Marks Entry fast on large schools.
+        for index_sql in (
+            "CREATE INDEX IF NOT EXISTS idx_students_school_class_name ON students(school_id, class_id, name)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_school_exam_class ON marks(school_id, exam_id, class_id)",
+            "CREATE INDEX IF NOT EXISTS idx_marks_student_exam_subject ON marks(student_id, exam_id, subject_id)",
+            "CREATE INDEX IF NOT EXISTS idx_grading_school_subject_range ON subject_grading_rules(school_id, subject_id, min_mark, max_mark)",
+        ):
+            try:
+                cur.execute(index_sql)
+            except Exception as exc:
+                print("DAVISCHOOL ACADEMIC INDEX SKIPPED:", repr(exc), flush=True)
         pg.commit()
 
 
