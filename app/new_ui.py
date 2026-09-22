@@ -801,6 +801,20 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
         sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th>"
 
+    # Calculate the class mean for every subject from the marks currently shown.
+    subject_means=[]
+    for subject in subjects:
+        values=[]
+        sid_subject=int(subject["id"])
+        for student in students:
+            value=marks.get((int(student["id"]),sid_subject))
+            if value is not None:
+                try:
+                    values.append(float(value))
+                except (TypeError,ValueError):
+                    pass
+        subject_means.append((subject, sum(values)/len(values) if values else None, len(values)))
+
     computed=[]
     for student in students:
         total=0.0
@@ -877,18 +891,19 @@ function printDocument(){
         "<div class='card section marksheet-card'>%s"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
         "<div style='overflow:auto'><table class='marksheet'><thead><tr><th rowspan='2'>NO.</th><th rowspan='2'>NAME</th>%s<th colspan='5'>OVERALL</th></tr>"
-        "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div></div></div>"
+        "<tr>%s<th>MKS</th><th>PTS</th><th>AVG %%</th><th>GRD</th><th>POS</th></tr></thead><tbody>%s</tbody></table></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div><div class='subject-mean-grid'>%s</div></div></div></div>"
         + print_script +
         "<style>"
         ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
-        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}"
+        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
     ) % (
         doc_brand, school_name, class_title, exam_name, escape(term or "All"), escape(year or "All"),
-        header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan
+        header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan,
+        "".join("<div class='subject-mean-item'><span>%s</span><b>%s</b><small>%d mark%s</small></div>" % (escape(str(subject["name"])), ("%.2f" % mean) if mean is not None else "—", count, "" if count == 1 else "s") for subject,mean,count in subject_means) or "<div class='subject-mean-empty'>No subject marks available.</div>"
     )
     con.close()
     return _school_page(request, "Class Marksheets", body)
@@ -2658,6 +2673,17 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         if year: mq+=" AND year=?"; mp.append(year)
         mark_rows=cur.execute(mq,mp).fetchall() if eid and cid else []
         marks={(int(x["student_id"]),int(x["subject_id"])):x["marks"] for x in mark_rows}
+        subject_means=[]
+        for sub in subjects:
+            vals=[]
+            for st in students:
+                value=marks.get((int(st["id"]),int(sub["id"])))
+                if value is not None:
+                    try:
+                        vals.append(float(value))
+                    except (TypeError,ValueError):
+                        pass
+            subject_means.append((sub, sum(vals)/len(vals) if vals else None, len(vals)))
         computed=[]
         for st in students:
             total=0.0; points=0.0; count=0; vals=[]
@@ -2699,7 +2725,12 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
             ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
             ("ALIGN",(2,2),(2,-1),"LEFT"),("FONTSIZE",(2,2),(2,-1),7)
         ]))
-        story += [table, Spacer(1,4), Paragraph("Generated by DaviSchool Management System.",styles["small"])]
+        story += [table, Spacer(1,6), Paragraph("Subject Means",styles["normal"])]
+        mean_data=[["Subject","Mean","Entries"]]+[[str(sub["name"]),f"{mean:.2f}" if mean is not None else "—",str(count)] for sub,mean,count in subject_means]
+        if len(mean_data)==1: mean_data.append(["No subject marks available.","",""])
+        mean_table=Table(mean_data,colWidths=[95*mm,35*mm,35*mm],repeatRows=1)
+        mean_table.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("ALIGN",(1,1),(-1,-1),"CENTER")]))
+        story += [mean_table, Spacer(1,4), Paragraph("Generated by DaviSchool Management System.",styles["small"])]
         pdf=_pdf_build(story,landscape(A3),"Class Marksheet")
         filename=f"marksheet_{(cr['name'] if cr else 'class')}_{(er['name'] if er else 'exam')}.pdf"
         return _pdf_response(pdf,filename)
