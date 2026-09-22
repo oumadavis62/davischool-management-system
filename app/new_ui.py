@@ -290,6 +290,10 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/subjects","📚","Subjects","subjects.view"),
             ("/app/exams","🧪","Examinations","exams.view"),
             ("/app/academics","📝","Academics","marks.view"),
+            ("/app/academics/marks","✏️","Marks Entry","marks.view"),
+            ("/app/academics/marksheets","📋","Class Marksheets","reports.view"),
+            ("/app/academics/subject-analysis","📊","Subject Analysis","reports.view"),
+            ("/app/academics/class-analysis","🏫","Class Analysis","reports.view"),
             ("/app/academics/allocations","👩‍🏫","Teacher Allocations","staff.edit"),
             ("/app/academics/assessments","📋","SBA / CBA","marks.edit"),
             ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
@@ -901,7 +905,11 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             if value is None:
                 cells+="<td>—</td><td>—</td><td>—</td>"
             else:
-                grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value,grading_rules)
+                try:
+                    grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value,grading_rules)
+                except Exception as exc:
+                    print("DAVISCHOOL MARKSHEET GRADE FALLBACK:", repr(exc), flush=True)
+                    grade,points=_default_grade_points(float(value))
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
@@ -1834,8 +1842,14 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         _ensure_academic_locks_table(cur)
     except Exception as exc:
         print("DAVISCHOOL ANALYSIS LOCK TABLE FALLBACK:", repr(exc), flush=True)
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    try:
+        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL ANALYSIS CONTEXT FAILED:", repr(exc), flush=True)
+        try: con.rollback()
+        except Exception: pass
+        exams=[]; classes=[]
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     try: grading_rules = _load_grading_rules(cur, sid)
@@ -1861,7 +1875,11 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
             stats=[]
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         for st in students:
-            result=_student_result(cur,sid,int(st["id"]),eid,grading_rules,overall_rules)
+            try:
+                result=_student_result(cur,sid,int(st["id"]),eid,grading_rules,overall_rules)
+            except Exception as exc:
+                print("DAVISCHOOL ANALYSIS STUDENT RESULT FALLBACK:", repr(exc), flush=True)
+                result={"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
             try:
                 locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
                     WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
