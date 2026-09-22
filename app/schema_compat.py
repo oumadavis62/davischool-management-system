@@ -55,7 +55,9 @@ def _ensure_live_postgres_schema():
             "employment_type": "TEXT", "status": "TEXT", "department": "TEXT",
         },
         "teacher_allocations": {"school_id": "INTEGER", "teacher_id": "INTEGER", "subject_id": "INTEGER", "class_id": "INTEGER", "responsibility": "TEXT"},
+        "subject_grading_rules": {"school_id": "INTEGER", "subject_id": "INTEGER", "min_mark": "REAL", "max_mark": "REAL", "grade": "TEXT", "points": "REAL", "performance_comment": "TEXT"},
         "billing": {"school_id": "INTEGER", "amount": "TEXT", "status": "TEXT", "due_date": "TEXT", "created_at": "TEXT"},
+        "subject_performance_comments": {"school_id": "INTEGER", "student_id": "INTEGER", "exam_id": "INTEGER", "subject_id": "INTEGER", "comment": "TEXT", "updated_at": "TEXT"},
         "marks": {
             "school_id": "INTEGER", "student_id": "INTEGER", "subject_id": "INTEGER",
             "exam_id": "INTEGER", "class_id": "INTEGER", "marks": "INTEGER",
