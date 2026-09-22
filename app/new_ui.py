@@ -278,7 +278,7 @@ def _shell(title, name, role, body, school_id=None):
                 ("/app/academics","📝","Academics","marks.view"),
                 ("/app/academics/marks","✏️","Marks Entry","marks.edit"),
                 ("/app/academics/marksheets","📋","Class Marksheets","reports.view"),
-                ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
+                ("/app/academics/subject-analysis","📊","Subject Analysis","reports.view"),
                 ("/app/report-cards","📄","Report Cards","reports.view"),
             ]
         else:
