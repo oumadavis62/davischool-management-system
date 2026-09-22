@@ -1401,32 +1401,61 @@ def grading_setup(request: Request, subject_id: str = ""):
         return HTMLResponse("Only the school administrator can manage subject grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to manage subject grading.", 403)
+    # Keep schema compatibility/migration work isolated from the reads below.
+    # Older PostgreSQL databases may need additive columns, and a failed DDL
+    # attempt must never leave the grading page using an aborted transaction.
     con = _db()
     cur = con.cursor()
     try:
         _ensure_grading_table(cur)
+        con.commit()
     except Exception as exc:
         print("DAVISCHOOL GRADING PAGE TABLE FALLBACK:", repr(exc), flush=True)
-    subjects = cur.execute(
-        "SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)
-    ).fetchall()
-    subid = int(subject_id) if subject_id.isdigit() else 0
-    if subid and not cur.execute(
-        "SELECT id FROM subjects WHERE id=? AND school_id=?", (subid, sid)
-    ).fetchone():
-        subid = 0
+        try:
+            con.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+    con = _db()
+    cur = con.cursor()
     try:
-        rules = cur.execute(
-        """SELECT * FROM subject_grading_rules
-           WHERE school_id=? AND subject_id=?
-           ORDER BY min_mark DESC, max_mark DESC""",
-        (sid, subid)
-    ).fetchall() if subid else []
+        subjects = cur.execute(
+            "SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)
+        ).fetchall()
+        subid = int(subject_id) if subject_id.isdigit() else 0
+        if subid and not cur.execute(
+            "SELECT id FROM subjects WHERE id=? AND school_id=?", (subid, sid)
+        ).fetchone():
+            subid = 0
+        try:
+            rules = cur.execute(
+            """SELECT * FROM subject_grading_rules
+               WHERE school_id=? AND subject_id=?
+               ORDER BY min_mark DESC, max_mark DESC""",
+            (sid, subid)
+            ).fetchall() if subid else []
+        except Exception as exc:
+            print("DAVISCHOOL GRADING PAGE RULES FALLBACK:", repr(exc), flush=True)
+            rules = []
     except Exception as exc:
-        print("DAVISCHOOL GRADING PAGE RULES FALLBACK:", repr(exc), flush=True)
+        print("DAVISCHOOL GRADING PAGE READ FAILED:", repr(exc), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        subjects = []
+        subid = int(subject_id) if subject_id.isdigit() else 0
         rules = []
-    con.commit()
-    con.close()
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
 
     sopts = "".join(
         "<option value='%s' %s>%s</option>" % (
