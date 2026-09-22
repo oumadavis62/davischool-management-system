@@ -901,8 +901,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     header_cells = ""
     sub_header_cells = ""
     for subject in subjects:
-        header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
-        sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th>"
+        header_cells += "<th colspan='4' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
+        sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th><th>COMMENT</th>"
 
     # Calculate subject means from the marks query itself (one pass only).
     # This avoids an extra student x subject loop and keeps the MarkSheet fast.
@@ -937,14 +937,15 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
                 cells+="<td>—</td><td>—</td><td>—</td>"
             else:
                 try:
-                    grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value,grading_rules)
+                    grade,points,performance_comment=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
                 except Exception as exc:
                     print("DAVISCHOOL MARKSHEET GRADE FALLBACK:", repr(exc), flush=True)
                     grade,points=_default_grade_points(float(value))
+                    performance_comment=""
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
-                cells+="<td>%.1f</td><td><b>%s</b></td><td>%.1f</td>"%(float(value),escape(str(grade)),float(points))
+                cells+="<td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"%(float(value),escape(str(grade)),float(points),escape(str(performance_comment or "")))
         computed.append((student,total,total_points,count,cells))
     computed.sort(key=lambda x:x[1],reverse=True)
     rows=""
@@ -985,7 +986,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
-    colspan = 3 + len(subjects) * 3 + 5
+    colspan = 3 + len(subjects) * 4 + 5
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
     print_script = '''<script>
