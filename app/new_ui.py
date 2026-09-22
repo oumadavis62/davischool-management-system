@@ -1658,7 +1658,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             grade,points="—","—"
         else:
             try:
-                grade,points=_subject_grade_points(cur,sid,subid,mark)
+                grade,points,default_comment=_subject_grade_details(cur,sid,subid,mark,{subid:grading_rules})
+                if not subject_comments.get(int(x["id"])) and default_comment:
+                    subject_comments[int(x["id"])]=default_comment
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
