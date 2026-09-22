@@ -772,15 +772,15 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     try: overall_rules = _load_overall_grading_rules(cur, sid)
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
-    # The grading helpers may rollback a PostgreSQL transaction when a legacy
-    # grading table is unavailable. Always continue with a fresh cursor so a
-    # cursor invalidated by that rollback can never break the MarkSheet page.
+    # Grading-table compatibility helpers can rollback PostgreSQL transactions.
+    # Start the actual MarkSheet read/render work on a completely fresh
+    # connection so no aborted transaction or invalid cursor can leak into it.
     try:
-        cur = con.cursor()
-    except Exception:
         con.close()
-        con = _db()
-        cur = con.cursor()
+    except Exception:
+        pass
+    con = _db()
+    cur = con.cursor()
     try:
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
@@ -802,8 +802,19 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         subjects = []
     eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
-    class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
-    er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone() if eid else None
+    try:
+        class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
+        er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone() if eid else None
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET CONTEXT LOOKUP FAILED:", repr(exc), flush=True)
+        try:
+            con.close()
+        except Exception:
+            pass
+        con = _db()
+        cur = con.cursor()
+        class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
+        er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone() if eid else None
     if er:
         if not term:
             term = str(er["term"] or "")
@@ -944,13 +955,27 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         if last_total is None or total != last_total:
             last_position=index
             last_total=total
-        overall_grade=_overall_grade(cur,sid,total,overall_rules) if count else "—"
+        try:
+            overall_grade=_overall_grade(cur,sid,total,overall_rules) if count else "—"
+        except Exception as exc:
+            print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
+            overall_grade=_default_grade_points(total)[0] if count else "—"
         average=(total/count) if count else 0
         rows+=("<tr><td>%d</td><td>%s</td><td><b>%s</b></td>%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
           %(index,escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
-    school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    try:
+        school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET SCHOOL LOOKUP FAILED:", repr(exc), flush=True)
+        try:
+            con.close()
+        except Exception:
+            pass
+        con = _db()
+        cur = con.cursor()
+        school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
     school_name = escape(str(school_row["name"])) if school_row else "DaviSchool"
     school_email = escape(str(school_row["email"] or "")) if school_row else ""
     school_phone = escape(str(school_row["phone"] or "")) if school_row else ""
