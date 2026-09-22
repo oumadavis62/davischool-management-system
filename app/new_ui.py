@@ -1472,6 +1472,11 @@ def grading_setup(request: Request, subject_id: str = ""):
            float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid, r["id"], subid)
         for r in rules
     )
+    target_subject_options = "".join(
+        "<label style='display:flex;align-items:center;gap:8px;padding:7px'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'> %s</label>"
+        % (s["id"], escape(str(s["name"])))
+        for s in subjects if int(s["id"]) != subid
+    )
     body = (
         "<div class='page'><h1>Subject Grading & Points</h1>"
         "<div class='muted'>Set the grade band and points for each subject. "
@@ -1484,32 +1489,29 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<div class='card section'><h2>Add grading rule</h2>"
         "<form method='post' action='/app/academics/grading/add' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
-        "<input type='hidden' name='subject_id' value='%s'>"
+        "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
         "<input name='max_mark' required type='number' min='0' max='100' step='0.01' placeholder='Maximum mark' class='field'>"
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
-        "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'><div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
+        "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
+        "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
         "<button class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
         "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
-        "<input type='hidden' name='source_subject_id' value='%s'>"
+        "<input type='hidden' name='source_subject_id' value='" + str(subid) + "'>"
         "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:9px'>"
-        "%s"
+        + target_subject_options +
         "</div>"
         "<label style='display:block;margin:12px 0;font-weight:700'><input type='checkbox' id='select-all-grading' onclick='document.querySelectorAll(\".grading-target\").forEach(function(x){x.checked=this.checked},this)'> Select all other subjects</label>"
         "<label style='display:block;margin:12px 0'><input type='checkbox' name='overwrite' value='1'> Replace existing grading scales on selected subjects</label>"
         "<button class='btn' type='submit'>📋 Copy Grading Scale</button></form></div>"
         "<div class='card section'><h2>Configured rules</h2>"
         "<table><thead><tr><th>Minimum</th><th>Maximum</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Action</th></tr></thead>"
-        "<tbody>%s</tbody></table></div>"
+        "<tbody>" + (rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>") + "</tbody></table></div>"
         "<div class='card section'><b>Default fallback:</b> if a subject has no custom rule for a mark, DaviSchool uses the standard A–E scale and default points until you configure that subject.</div>"
-        "</div><style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
-    ) % (subid, subid, "".join(
-            "<label style='display:flex;align-items:center;gap:8px;padding:7px'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'> %s</label>"
-            % (s["id"], escape(str(s["name"])))
-            for s in subjects if int(s["id"]) != subid
-        ), rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>")
+        "</div><style>.field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
+    )
     return _school_page(request, "Subject Grading & Points", body)
 
 @router.post("/app/academics/grading/add")
