@@ -1429,11 +1429,15 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # only student data, so a legacy marks schema can never prevent the
         # Marks Entry screen from opening.
         try:
-            students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(m.marks,'') marks
+            students=cur.execute("""SELECT s.id,s.admission_no,s.name,CASE WHEN m.marks IS NULL THEN '' ELSE CAST(m.marks AS TEXT) END marks
               FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
               WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
             students=cur.execute("""SELECT id,admission_no,name,'' AS marks
               FROM students WHERE school_id=? AND class_id=? ORDER BY name""",(sid,cid)).fetchall()
         try:
