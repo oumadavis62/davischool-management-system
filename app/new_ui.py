@@ -3755,10 +3755,13 @@ def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = 
         con=_db();cur=con.cursor()
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids=[int(exams[0]["id"])]
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
         st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
-        result=_student_result(cur,sid,stid,eid) if st and eid else {"details":[],"total":0.0,"points":0.0,"average":0.0,"overall_grade":"—"}
+        result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),None) if st and eid else {"details":[],"total":0.0,"points":0.0,"average":0.0,"overall_grade":"—"}
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
         styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Analysis",f"{st['name'] if st else 'Student'} · {er['name'] if er else 'Examination'}")
@@ -3774,7 +3777,7 @@ def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = 
         return _pdf_route_error(request, "student_analysis_pdf", exc)
 
 @router.get("/app/report-cards/class-pdf")
-def report_cards_class_pdf(request: Request, exam_id: str = "", class_id: str = "", inline: str = ""):
+def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", inline: str = ""):
     try:
         sid=_school_session(request)
         if not sid:return RedirectResponse("/")
@@ -3785,7 +3788,8 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", class_id: str = 
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.units import mm
         con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
-        eid=int(exam_id) if exam_id.isdigit() else 0
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         if not eid or not cid:
             con.close();return HTMLResponse("Please select an examination and class.",400)
@@ -3800,7 +3804,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", class_id: str = 
         styles=_pdf_styles();story=[];_ensure_academic_locks_table(cur)
         grading_rules=_load_grading_rules(cur,sid)
         for student_index,st in enumerate(students):
-            result=_student_result(cur,sid,int(st["id"]),eid)
+            result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,None)
             rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
                 WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,st["id"],eid)).fetchall()
             marked=[r["subject_id"] for r in rows if r["marks"] is not None and str(r["marks"])!=""]
@@ -3844,7 +3848,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", class_id: str = 
         return _pdf_route_error(request,"report_cards_class_pdf",exc)
 
 @router.get("/app/report-cards/pdf")
-def report_card_pdf(request: Request, exam_id: str = "", student_id: str = ""):
+def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", student_id: str = ""):
 
     try:
         sid=_school_session(request)
