@@ -17,6 +17,19 @@ from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
 app = FastAPI()
+
+# Keep database initialization out of module import time. Render/Uvicorn must be
+# able to bind the HTTP port before PostgreSQL schema checks run.
+@app.on_event("startup")
+def _startup_database_initialization():
+    try:
+        init_db()
+        init_extended_db()
+        print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
+    except Exception as exc:
+        print("DAVISCHOOL DATABASE INITIALIZATION FAILED:", repr(exc), flush=True)
+        raise
+
 SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
@@ -175,8 +188,6 @@ def init_db():
     # administrator is represented by the configured super_admin account.
     cur.execute("DELETE FROM users WHERE lower(role)=lower(?)", ("admin",))
     con.commit(); con.close()
-init_db()
-
 def init_extended_db():
     con = get_db(); cur = con.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, day TEXT, start_time TEXT, end_time TEXT, class_name TEXT, stream TEXT, subject TEXT, teacher TEXT, room TEXT)")
@@ -225,8 +236,6 @@ def init_extended_db():
             pass
 
     con.commit(); con.close()
-init_extended_db()
-
 def get_school_obj(req):
     sid = req.session.get("school_id",0)
     if sid==0: return None
