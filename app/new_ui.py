@@ -771,9 +771,19 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     cur = con.cursor()
     grading_rules = _load_grading_rules(cur, sid)
     overall_rules = _load_overall_grading_rules(cur, sid)
-    exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
-    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    try:
+        exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        exams = []
+        classes = []
+        subjects = []
     eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
@@ -789,7 +799,15 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         student_query += " AND stream=?"
         student_params.append(stream)
     student_query += " ORDER BY name"
-    students = cur.execute(student_query, student_params).fetchall() if cid else []
+    try:
+        students = cur.execute(student_query, student_params).fetchall() if cid else []
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET STUDENT QUERY FAILED:", repr(exc), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        students = []
     mark_rows = []
     if eid and cid:
         mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"
@@ -1452,8 +1470,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid=int(class_id) if class_id.isdigit() else 0
-    subid=int(subject_id) if subject_id.isdigit() else 0
+    cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+    subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     students=[]
     out_of=100.0
     subject_comments={}
