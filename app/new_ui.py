@@ -132,13 +132,17 @@ def _pdf_build(story, pagesize, title):
                             vals.append(str(cell))
                     lines.append(" | ".join(vals))
             for line in lines:
-                text_line = re.sub(r"\\s+", " ", str(line)).strip()
+                text_line = re.sub(r"\s+", " ", str(line)).strip()
                 if not text_line:
                     continue
+                # Helvetica in ReportLab is not Unicode-complete. Keep the emergency
+                # fallback PDF ASCII-safe so an otherwise recoverable build error cannot
+                # turn into a second Internal Server Error.
+                text_line = text_line.encode("ascii", "replace").decode("ascii")
                 for start in range(0, len(text_line), 115):
                     if y < 18 * mm:
                         c.setFont("Helvetica", 7)
-                        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System · Generated: %s · Page %d" % (generated_at, c.getPageNumber()))
+                        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System - Generated: %s - Page %d" % (generated_at, c.getPageNumber()))
                         c.showPage()
                         y = pagesize[1] - 18 * mm
                         c.setFont("Helvetica", 7.5)
