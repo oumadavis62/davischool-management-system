@@ -806,11 +806,18 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     # Combined mode uses class_id=grade:<class name>, e.g. grade:Grade 9.
     combined_mode = class_id.startswith("grade:")
     combined_grade = class_id[6:] if combined_mode else ""
+    def _grade_group_key(row):
+        name = str(row["name"] or "").strip()
+        stream_value = str(row["stream"] or "").strip()
+        if stream_value:
+            return name
+        match = re.match(r"^(.*?\d)\s*[A-Za-z]$", name)
+        return match.group(1).strip() if match else name
     selected_class_ids = []
     if combined_mode:
         selected_class_ids = [
             int(c["id"]) for c in classes
-            if str(c["name"] or "").strip().lower() == combined_grade.strip().lower()
+            if _grade_group_key(c).strip().lower() == combined_grade.strip().lower()
         ]
         stream = ""
         cid = selected_class_ids[0] if selected_class_ids else 0
@@ -910,7 +917,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     # multiple stream records, while retaining each individual stream.
     grade_groups = {}
     for c in classes:
-        grade_key = str(c["name"] or "").strip()
+        grade_key = _grade_group_key(c)
         if grade_key:
             grade_groups.setdefault(grade_key.lower(), {"name": grade_key, "ids": []})
             grade_groups[grade_key.lower()]["ids"].append(int(c["id"]))
@@ -3321,10 +3328,17 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
         combined_mode = class_id.startswith("grade:")
         combined_grade = class_id[6:] if combined_mode else ""
+        def _grade_group_key(row):
+            name = str(row["name"] or "").strip()
+            stream_value = str(row["stream"] or "").strip()
+            if stream_value:
+                return name
+            match = re.match(r"^(.*?\d)\s*[A-Za-z]$", name)
+            return match.group(1).strip() if match else name
         if combined_mode:
             selected_class_ids = [
                 int(c["id"]) for c in classes
-                if str(c["name"] or "").strip().lower() == combined_grade.strip().lower()
+                if _grade_group_key(c).strip().lower() == combined_grade.strip().lower()
             ]
             cid = selected_class_ids[0] if selected_class_ids else 0
             stream = ""
