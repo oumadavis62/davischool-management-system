@@ -769,8 +769,12 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         return HTMLResponse("You do not have permission to view marksheets.", 403)
     con = _db()
     cur = con.cursor()
-    grading_rules = _load_grading_rules(cur, sid)
-    overall_rules = _load_overall_grading_rules(cur, sid)
+    try: grading_rules = _load_grading_rules(cur, sid)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET GRADING RULES FALLBACK:", repr(exc), flush=True); grading_rules=[]
+    try: overall_rules = _load_overall_grading_rules(cur, sid)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
     try:
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
@@ -1466,9 +1470,16 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if not _require_permission(request, sid, "marks.view"):
         return HTMLResponse("You do not have permission to view marks.", 403)
     con=_db();cur=con.cursor()
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    try:
+        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKS ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
+        try: con.rollback()
+        except Exception: pass
+        con.close()
+        return HTMLResponse("Academic data is still initializing. Please refresh this page in a few seconds.",503)
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
@@ -1826,18 +1837,28 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid=int(class_id) if class_id.isdigit() else 0
-    grading_rules = _load_grading_rules(cur, sid)
-    overall_rules = _load_overall_grading_rules(cur, sid)
+    cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+    try: grading_rules = _load_grading_rules(cur, sid)
+    except Exception as exc:
+        print("DAVISCHOOL ANALYSIS GRADING RULES FALLBACK:", repr(exc), flush=True); grading_rules=[]
+    try: overall_rules = _load_overall_grading_rules(cur, sid)
+    except Exception as exc:
+        print("DAVISCHOOL ANALYSIS OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
     stats=[]; student_results=[]
     if eid:
         q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
           COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
-          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?"""
+          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+          LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id"""
         params=[eid,sid]
-        if cid:q+=" AND m.class_id=?";params.append(cid)
+        if cid:q+=" AND sm.class_id=?";params.append(cid)
         q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name";params.append(sid)
-        stats=cur.execute(q,params).fetchall()
+        try: stats=cur.execute(q,params).fetchall()
+        except Exception as exc:
+            print("DAVISCHOOL SUBJECT ANALYSIS QUERY FALLBACK:", repr(exc), flush=True)
+            try: con.rollback()
+            except Exception: pass
+            stats=[]
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         for st in students:
             result=_student_result(cur,sid,int(st["id"]),eid,grading_rules,overall_rules)
