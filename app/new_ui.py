@@ -1015,7 +1015,7 @@ function printDocument(){
         "<select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>" + topts + "</select>"
         "<select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>" + yopts + "</select>"
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
-        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + pdf_marksheet_url + "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
+        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>%s</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> <a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
         "<div class='card section marksheet-card'>%s"
         "<div class='marksheet-school'>%s</div><div class='marksheet-meta'>CLASS: %s &nbsp;&nbsp; EXAM: %s &nbsp;&nbsp; TERM: %s &nbsp;&nbsp; YEAR: %s</div>"
@@ -1031,7 +1031,7 @@ function printDocument(){
         "</style></div>"
     ) % (
         doc_brand, school_name, class_title, exam_name, escape(term or "All"), escape(year or "All"),
-        header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan,
+        pdf_marksheet_url, header_cells, sub_header_cells, rows or "<tr><td colspan='%s'>No students or marks found.</td></tr>" % colspan,
         "".join("<div class='subject-mean-item'><span>%s</span><b>%s</b><small>%d mark%s</small></div>" % (escape(str(subject["name"])), ("%.2f" % mean) if mean is not None else "—", count, "" if count == 1 else "s") for subject,mean,count in subject_means) or "<div class='subject-mean-empty'>No subject marks available.</div>"
     )
     con.close()
