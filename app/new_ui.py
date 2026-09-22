@@ -1421,7 +1421,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         ) for s in subjects
     )
     rule_rows = "".join(
-        "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td>"
+        "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"
         "<td><form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
         % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
            float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid)
