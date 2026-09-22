@@ -723,18 +723,21 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
         if row["marks"] is None or str(row["marks"]).strip() == "":
             continue
         try:
-            buckets.setdefault(int(row["subject_id"]), []).append(float(row["marks"]))
+            subject_id = int(row["subject_id"])
+            exam_value = int(row["exam_id"])
+            buckets.setdefault(subject_id, {})[exam_value] = float(row["marks"])
         except (TypeError, ValueError):
             continue
     details = []
     exam_marks = {}
     total = points = 0.0
-    for subject_id, values in buckets.items():
+    for subject_id, by_exam in buckets.items():
+        values = list(by_exam.values())
         average = sum(values) / len(values)
         source = next(r for r in rows if int(r["subject_id"]) == subject_id)
         grade, pt = _subject_grade_points(cur, school_id, subject_id, average, grading_rules)
         details.append((source, average, grade, float(pt or 0)))
-        exam_marks[subject_id] = {ids[i]: values[i] for i in range(min(len(ids), len(values)))}
+        exam_marks[subject_id] = {exam_id: by_exam[exam_id] for exam_id in ids if exam_id in by_exam}
         total += average
         points += float(pt or 0)
     count = len(details)
