@@ -9,6 +9,7 @@ import base64
 import secrets
 import re
 import traceback
+import threading
 from starlette.middleware.sessions import SessionMiddleware
 import random
 from datetime import datetime
@@ -18,17 +19,34 @@ from cryptography.fernet import Fernet, InvalidToken
 
 app = FastAPI()
 
-# Keep database initialization out of module import time. Render/Uvicorn must be
-# able to bind the HTTP port before PostgreSQL schema checks run.
-@app.on_event("startup")
-def _startup_database_initialization():
+# Render/Uvicorn must be able to bind the HTTP port even when PostgreSQL
+# migrations take time. Database initialization therefore runs in a background
+# thread instead of blocking the ASGI startup/lifespan phase.
+DB_INIT_READY = False
+DB_INIT_ERROR = None
+DB_INIT_THREAD = None
+
+def _initialize_database_background():
+    global DB_INIT_READY, DB_INIT_ERROR
     try:
         init_db()
         init_extended_db()
+        DB_INIT_READY = True
         print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
     except Exception as exc:
-        print("DAVISCHOOL DATABASE INITIALIZATION FAILED:", repr(exc), flush=True)
-        raise
+        DB_INIT_ERROR = repr(exc)
+        print("DAVISCHOOL DATABASE INITIALIZATION FAILED:", DB_INIT_ERROR, flush=True)
+
+@app.on_event("startup")
+def _startup_database_initialization():
+    global DB_INIT_THREAD
+    DB_INIT_THREAD = threading.Thread(
+        target=_initialize_database_background,
+        name="davischool-db-init",
+        daemon=True,
+    )
+    DB_INIT_THREAD.start()
+    print("DAVISCHOOL DATABASE INITIALIZATION STARTED IN BACKGROUND", flush=True)
 
 SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
@@ -36,7 +54,17 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_
 
 @app.get("/healthz")
 def healthz():
-    """Lightweight readiness check that verifies the configured database is reachable."""
+    """Render readiness check: HTTP is up, and the database initialization is complete."""
+    if DB_INIT_ERROR:
+        return JSONResponse(
+            {"status": "error", "database": "initialization_failed", "detail": DB_INIT_ERROR},
+            status_code=503,
+        )
+    if not DB_INIT_READY:
+        return JSONResponse(
+            {"status": "starting", "database": "initialization_in_progress"},
+            status_code=503,
+        )
     con = get_db()
     try:
         con.execute("SELECT 1").fetchone()
