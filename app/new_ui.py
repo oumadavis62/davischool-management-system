@@ -902,16 +902,15 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     sub_header_cells = ""
     subject_colgroup = ""
     for subject in subjects:
-        header_cells += "<th colspan='4' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
+        header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
         sub_header_cells += (
             "<th class='mks-head'>MKS</th>"
             "<th class='grade-head'>GRD</th>"
             "<th class='points-head'>PTS</th>"
-            "<th class='comment-head'>COMMENT</th>"
         )
         subject_colgroup += (
             "<col class='mks-col'><col class='grade-col'>"
-            "<col class='points-col'><col class='comment-col'>"
+            "<col class='points-col'>"
         )
 
     # Calculate subject means from the marks query itself (one pass only).
@@ -944,14 +943,14 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         for subject in subjects:
             value=marks.get((int(student["id"]),int(subject["id"])))
             if value is None:
-                cells+="<td>—</td><td>—</td><td>—</td><td>—</td>"
+                cells+="<td>—</td><td>—</td><td>—</td>"
             else:
                 try:
-                    grade,points,performance_comment=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
+                    grade,points,_=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
                 except Exception as exc:
                     print("DAVISCHOOL MARKSHEET GRADE FALLBACK:", repr(exc), flush=True)
                     grade,points=_default_grade_points(float(value))
-                    performance_comment=""
+                    _ = ""
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
@@ -959,12 +958,10 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
                     "<td class='mks-cell'>%.1f</td>"
                     "<td class='grade-cell'><b>%s</b></td>"
                     "<td class='points-cell'>%.1f</td>"
-                    "<td class='comment-cell'>%s</td>"
                     % (
                         float(value),
                         escape(str(grade)),
                         float(points),
-                        escape(str(performance_comment or "")),
                     )
                 )
         computed.append((student,total,total_points,count,cells))
@@ -1007,7 +1004,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(class_row["name"])) if class_row else "Select a class"
     exam_name = escape(str(er["name"])) if er else "Select an examination"
-    colspan = 3 + len(subjects) * 4 + 5
+    colspan = 3 + len(subjects) * 3 + 5
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
     print_script = '''<script>
@@ -1067,7 +1064,7 @@ function printDocument(){
         "<style>"
         ".field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
-        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .mks-col,.marksheet .grade-col,.marksheet .points-col,.marksheet .comment-col{width:auto}.marksheet .mks-cell,.marksheet .grade-cell,.marksheet .points-cell,.marksheet .comment-cell{vertical-align:middle}.marksheet .mks-cell{min-width:58px}.marksheet .grade-cell{min-width:58px}.marksheet .points-cell{min-width:58px}.marksheet .comment-cell{min-width:150px;white-space:normal}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
+        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .no-col{width:42px}.marksheet .name-col{width:190px}.marksheet .mks-col,.marksheet .grade-col,.marksheet .points-col{width:58px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .mks-cell,.marksheet .grade-cell,.marksheet .points-cell{vertical-align:middle;min-width:58px}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase}.marksheet th:nth-child(2),.marksheet td:nth-child(2){text-align:left;min-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
