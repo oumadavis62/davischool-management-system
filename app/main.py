@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "00995e33936f357d836a3a001c482d2c801c1642"
+BUILD_COMMIT = "MULTI_ASSESSMENT_ANALYSIS"
 
 app = FastAPI()
 
