@@ -27,6 +27,53 @@ def _pdf_route_error(request, route_name, exc):
 TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
 YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi")).year, datetime.now(ZoneInfo("Africa/Nairobi")).year + 5))
 
+def _parse_assessment_ids(exam_ids="", exam_id=""):
+    """Safely normalize one or more assessment IDs without changing existing routes."""
+    raw = exam_ids or exam_id or ""
+    out = []
+    for value in str(raw).split(","):
+        try:
+            value = int(value.strip())
+            if value > 0 and value not in out:
+                out.append(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _average_selected_assessments(cur, school_id, student_id, exam_ids, term="", year=""):
+    """Return subject-level averages for selected assessments.
+    
+    This calculation layer is deliberately isolated from the existing screens.
+    Missing marks are ignored, while available assessment marks are averaged.
+    """
+    ids = _parse_assessment_ids(",".join(str(x) for x in (exam_ids or [])))
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    sql = (
+        "SELECT subject_id, marks FROM marks "
+        "WHERE school_id=? AND student_id=? AND exam_id IN (" + placeholders + ")"
+    )
+    params = [school_id, student_id] + ids
+    if term:
+        sql += " AND term=?"
+        params.append(term)
+    if year:
+        sql += " AND year=?"
+        params.append(year)
+    rows = cur.execute(sql, params).fetchall()
+    buckets = {}
+    for row in rows:
+        if row["marks"] is None or str(row["marks"]).strip() == "":
+            continue
+        try:
+            buckets.setdefault(int(row["subject_id"]), []).append(float(row["marks"]))
+        except (TypeError, ValueError):
+            continue
+    return {subject_id: sum(values) / len(values) for subject_id, values in buckets.items() if values}
+
+
 @router.get("/", response_class=HTMLResponse)
 def davischool_login_page(request: Request):
     if request.session.get("email"):
