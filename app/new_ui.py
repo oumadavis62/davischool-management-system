@@ -849,7 +849,26 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     try:
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+        subjects = cur.execute(
+            """SELECT * FROM subjects
+               WHERE school_id=?
+               ORDER BY CASE
+                   WHEN lower(trim(name)) LIKE 'english%' THEN 1
+                   WHEN lower(trim(name)) LIKE 'kiswahili%' THEN 2
+                   WHEN lower(trim(name)) LIKE 'mathematics%' OR lower(trim(name)) LIKE 'math%' THEN 3
+                   WHEN lower(trim(name)) LIKE '%integrated science%' THEN 4
+                   WHEN lower(trim(name)) LIKE 'agriculture%' THEN 5
+                   WHEN lower(trim(name)) LIKE '%creative arts%' AND lower(trim(name)) LIKE '%sport%' THEN 6
+                   WHEN lower(trim(name)) LIKE 'social studies%' THEN 7
+                   WHEN lower(trim(name)) = 'cre' OR lower(trim(name)) LIKE 'cre %' THEN 8
+                   WHEN lower(trim(name)) LIKE 'pre technical%' OR lower(trim(name)) LIKE 'pre-technical%' THEN 9
+                   ELSE 10
+               END, lower(trim(name))""",
+            (sid,)
+        ).fetchall()
+        # Keep a second deterministic application-level ordering pass so
+        # database collation/case differences can never move Integrated
+        # Science or another curriculum subject to the end.
         subjects = _marksheet_subject_order(subjects)
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
@@ -3411,7 +3430,26 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
             print("DAVISCHOOL MARKSHEET PDF GRADING TABLE FALLBACK:", repr(exc), flush=True)
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+        subjects = cur.execute(
+            """SELECT * FROM subjects
+               WHERE school_id=?
+               ORDER BY CASE
+                   WHEN lower(trim(name)) LIKE 'english%' THEN 1
+                   WHEN lower(trim(name)) LIKE 'kiswahili%' THEN 2
+                   WHEN lower(trim(name)) LIKE 'mathematics%' OR lower(trim(name)) LIKE 'math%' THEN 3
+                   WHEN lower(trim(name)) LIKE '%integrated science%' THEN 4
+                   WHEN lower(trim(name)) LIKE 'agriculture%' THEN 5
+                   WHEN lower(trim(name)) LIKE '%creative arts%' AND lower(trim(name)) LIKE '%sport%' THEN 6
+                   WHEN lower(trim(name)) LIKE 'social studies%' THEN 7
+                   WHEN lower(trim(name)) = 'cre' OR lower(trim(name)) LIKE 'cre %' THEN 8
+                   WHEN lower(trim(name)) LIKE 'pre technical%' OR lower(trim(name)) LIKE 'pre-technical%' THEN 9
+                   ELSE 10
+               END, lower(trim(name))""",
+            (sid,)
+        ).fetchall()
+        # Keep a second deterministic application-level ordering pass so
+        # database collation/case differences can never move Integrated
+        # Science or another curriculum subject to the end.
         subjects = _marksheet_subject_order(subjects)
         eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
         combined_mode = class_id.startswith("grade:")
