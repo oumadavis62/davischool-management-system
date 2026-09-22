@@ -1032,9 +1032,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     marks = _aggregate_marks_for_students(cur, sid, [int(st["id"]) for st in students], selected_exam_ids, term, year)
     streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
 
-    eopts = "".join("<option value='%s' %s>%s</option>" % (
-        e["id"], "selected" if int(e["id"]) == eid else "", escape(str(e["name"]))
-    ) for e in exams)
+    eopts = "".join("<option value='%s' %s>%s</option>" % (e["id"], "selected" if int(e["id"]) in selected_exam_ids else "", escape(str(e["name"]))) for e in exams)
     # Offer a combined option for every grade/class name represented by
     # multiple stream records, while retaining each individual stream.
     grade_groups = {}
@@ -1192,7 +1190,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     school_logo = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
     class_title = escape(str(combined_grade)) + " — ALL STREAMS" if combined_mode and combined_grade else (escape(str(class_row["name"])) if class_row else "Select a class")
-    exam_name = escape(str(er["name"])) if er else "Select an examination"
+    exam_name = escape(" + ".join(str(e["name"]) for e in exams if int(e["id"]) in selected_exam_ids)) if selected_exam_ids else "Select examinations"
     stream_col_html = "<th rowspan='2'>STREAM</th>" if combined_mode else ""
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
     colspan = 3 + len(subjects) * 3 + 5 if combined_mode else 2 + len(subjects) * 3 + 5
@@ -1233,7 +1231,7 @@ function printDocument(){
     rows_html = rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
-        "<div class='muted'>A print-ready marksheet with automatic subject grades and points.</div>"
+        "<div class='muted'>A print-ready marksheet. Select one or more assessments; when multiple assessments are selected, each subject shows their average.</div>"
         "<div class='card section no-print'><form method='get' action='/app/academics/marksheets' class='marksheet-select'>"
         "<select name='class_id' class='field' onchange='this.form.submit()'><option value=''>Select Class</option>" + copts + "</select>"
         "<select name='stream' class='field' onchange='this.form.submit()'><option value=''>All Streams</option>" + stropts + "</select>"
@@ -2467,7 +2465,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     ranked=sorted(student_results,key=lambda z:(-float(z[1]["total"]),str(z[0]["name"])))
     rank_map={int(z[0]["id"]):i+1 for i,z in enumerate(ranked)}
     student_rows="".join(f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['count']}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td><td>{rank_map.get(int(st['id']),'—')} / {len(ranked)}</td></tr>" for st,res,_ in student_results)
-    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='3'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Academic Analysis",body)
 
 @router.post("/app/report-cards/subject-comment")
