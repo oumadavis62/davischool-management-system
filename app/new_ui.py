@@ -3319,17 +3319,34 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
         subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
         eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-        cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+        combined_mode = class_id.startswith("grade:")
+        combined_grade = class_id[6:] if combined_mode else ""
+        if combined_mode:
+            selected_class_ids = [
+                int(c["id"]) for c in classes
+                if str(c["name"] or "").strip().lower() == combined_grade.strip().lower()
+            ]
+            cid = selected_class_ids[0] if selected_class_ids else 0
+            stream = ""
+        else:
+            cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+            selected_class_ids = [cid] if cid else []
         er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         cr = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
         if er:
             term = term or str(er["term"] or "")
             year = year or str(er["year"] or "")
-        q = "SELECT * FROM students WHERE school_id=? AND class_id=?"; params=[sid,cid]
-        if stream:
+        if selected_class_ids:
+            placeholders = ",".join("?" for _ in selected_class_ids)
+            q = "SELECT * FROM students WHERE school_id=? AND class_id IN (" + placeholders + ")"
+            params=[sid] + selected_class_ids
+        else:
+            q = "SELECT * FROM students WHERE school_id=? AND class_id=?"; params=[sid,cid]
+        if stream and not combined_mode:
             q += " AND stream=?"; params.append(stream)
-        students = cur.execute(q+" ORDER BY name",params).fetchall() if cid else []
-        mq="SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"; mp=[sid,eid,cid]
+        students = cur.execute(q+" ORDER BY name",params).fetchall() if selected_class_ids else []
+        placeholders = ",".join("?" for _ in selected_class_ids)
+        mq="SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id IN (" + placeholders + ")"; mp=[sid,eid] + selected_class_ids
         if term: mq+=" AND term=?"; mp.append(term)
         if year: mq+=" AND year=?"; mp.append(year)
         mark_rows=cur.execute(mq,mp).fetchall() if eid and cid else []
@@ -3365,8 +3382,11 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
         con.close()
         styles=_pdf_styles()
-        story=_pdf_school_header(school,styles,"Class Marksheet",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'} · {term or 'Term'} {year or ''}")
+        pdf_class_title = (f"{combined_grade} — ALL STREAMS" if combined_mode else f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''}")
+        story=_pdf_school_header(school,styles,"Class Marksheet",f"{pdf_class_title} · {er['name'] if er else 'Examination'} · {term or 'Term'} {year or ''}")
         header1=["Adm No.","Student"]; header2=["",""]
+        if combined_mode:
+            header1.append("Stream"); header2.append("")
         for sub in subjects:
             header1.extend([str(sub["name"]),"",""]); header2.extend(["MKS","GRD","PTS"])
         header1.extend(["OVERALL","","","","",""]); header2.extend(["MKS","PTS","AVG %","GRD","POS"])
@@ -3375,10 +3395,14 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         for idx,(st,total,points,count,vals,overall_grade) in enumerate(computed,1):
             if last_total is None or total!=last_total: pos=idx; last_total=total
             avg=(total/count) if count else 0
-            data.append([str(st["admission_no"] or ""),str(st["name"] or "")]+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
+            prefix=[str(st["admission_no"] or ""),str(st["name"] or "")]
+            if combined_mode:
+                prefix.append(str(st["stream"] or ""))
+            data.append(prefix+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
         if len(data)==2:
             data.append(["","No students or marks found."]+[""]*(len(header1)-2))
-        col_widths=[22*mm,42*mm]+[15*mm]*(len(header1)-7)+[16*mm]*5
+        subject_width_count = len(header1) - (8 if combined_mode else 7)
+        col_widths=[22*mm,42*mm] + ([18*mm] if combined_mode else []) + [15*mm]*subject_width_count + [16*mm]*5
         table=Table(data,colWidths=col_widths,repeatRows=2)
         table.setStyle(TableStyle([
             ("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,1),colors.HexColor("#eef2f7")),
@@ -3393,7 +3417,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         mean_table.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("ALIGN",(1,1),(-1,-1),"CENTER")]))
         story += [mean_table, Spacer(1,4), Paragraph("Generated by DaviSchool Management System.",styles["small"])]
         pdf=_pdf_build(story,landscape(A3),"Class Marksheet")
-        filename=f"marksheet_{(cr['name'] if cr else 'class')}_{(er['name'] if er else 'exam')}.pdf"
+        filename=f"marksheet_{(combined_grade if combined_mode else (cr['name'] if cr else 'class'))}_{(er['name'] if er else 'exam')}.pdf"
         return _pdf_response(pdf,filename)
 
 
