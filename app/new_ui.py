@@ -801,22 +801,26 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
         sub_header_cells += "<th>MKS</th><th>GRD</th><th>PTS</th>"
 
-    # Calculate means from the marks already loaded for this MarkSheet.
-    # Any malformed value is ignored so the MarkSheet itself remains available.
+    # Calculate subject means from the marks query itself (one pass only).
+    # This avoids an extra student x subject loop and keeps the MarkSheet fast.
+    mean_totals={}
+    mean_counts={}
+    for row in mark_rows:
+        try:
+            value=row["marks"]
+            if value is None or str(value).strip()=="":
+                continue
+            subject_id=int(row["subject_id"])
+            mean_totals[subject_id]=mean_totals.get(subject_id,0.0)+float(value)
+            mean_counts[subject_id]=mean_counts.get(subject_id,0)+1
+        except (TypeError,ValueError,KeyError):
+            continue
     subject_means=[]
     for subject in subjects:
-        total_mean=0.0
-        count_mean=0
-        sid_subject=int(subject["id"])
-        for student in students:
-            value=marks.get((int(student["id"]),sid_subject))
-            try:
-                if value is not None and str(value).strip() != "":
-                    total_mean += float(value)
-                    count_mean += 1
-            except (TypeError, ValueError):
-                continue
-        subject_means.append((subject, total_mean / count_mean if count_mean else None, count_mean))
+        subject_id=int(subject["id"])
+        count_mean=mean_counts.get(subject_id,0)
+        mean=(mean_totals.get(subject_id,0.0)/count_mean) if count_mean else None
+        subject_means.append((subject,mean,count_mean))
 
     computed=[]
     for student in students:
