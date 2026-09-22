@@ -2220,7 +2220,7 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]; ranking=[]
         if eid and cid:
-            stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
+            stats=cur.execute("""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
                 FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
@@ -2245,7 +2245,7 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     class_comment_rules=_load_grading_rules(cur,sid) if stats else {}
-    ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{int(x['entries'] or 0)}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(x.get('id',0) or 0),float(x['average'] or 0),class_comment_rules)[2] or ''))}</td></tr>" for x in stats)
+    ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{int(x['entries'] or 0)}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(x['subject_id']),float(x['average'] or 0),class_comment_rules)[2] or ''))}</td></tr>" for x in stats)
     sr="".join(f"<tr><td>{i}</td><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td></tr>" for i,(st,res) in enumerate(ranking,1))
     body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Class-level subject performance and learner results.</div>
 <div class='card section'><form method='get' action='/app/academics/class-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><button class='btn'>Analyse</button></form></div>
@@ -3149,10 +3149,20 @@ def report_card_pdf(request: Request, exam_id: str = "", student_id: str = ""):
             tv=float(t["total"] or 0)
             if last_total is None or tv!=last_total:pos=idx;last_total=tv
             if int(t["id"])==stid:position=pos;break
-        comments={}; 
+        comments={}
+        try:
+            pdf_grading_rules=_load_grading_rules(cur,sid)
+        except Exception:
+            pdf_grading_rules={}
         for r in rows:
             x=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,stid,eid,r["subject_id"])).fetchone()
-            comments[int(r["subject_id"])]=x["comment"] if x else ""
+            value=(x["comment"] if x else "") or ""
+            if not value and r["marks"] is not None:
+                try:
+                    _,_,value=_subject_grade_details(cur,sid,int(r["subject_id"]),r["marks"],pdf_grading_rules)
+                except Exception:
+                    pass
+            comments[int(r["subject_id"])]=value
         tc=cur.execute("SELECT comment FROM class_teacher_comments WHERE school_id=? AND student_id=? AND exam_id=? LIMIT 1",(sid,stid,eid)).fetchone()
         rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,stid,eid)).fetchone()
         rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
