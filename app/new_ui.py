@@ -653,7 +653,6 @@ def _student_result(cur, school_id, student_id, exam_id, grading_rules=None, ove
         graded += 1
         details.append((r,mark,grade,float(pt or 0)))
     average=(total/graded) if graded else 0.0
-    average=(total/graded) if graded else 0.0
     overall=_overall_grade(cur,school_id,average,overall_rules) if graded else "—"
     return {"rows":rows,"details":details,"total":total,"points":points,
             "count":graded,"average":average,"overall_grade":overall}
@@ -699,7 +698,7 @@ def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
         rule=cur.execute("""SELECT grade FROM overall_grading_rules
             WHERE school_id=? AND ? BETWEEN min_total AND max_total
             ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,average_percentage)).fetchone()
-        return str(rule["grade"]) if rule else _default_grade_points(total)[0]
+        return str(rule["grade"]) if rule else _default_grade_points(average_percentage)[0]
     except Exception as exc:
         print("DAVISCHOOL OVERALL GRADING FALLBACK:", repr(exc), flush=True)
         return _default_grade_points(average_percentage)[0]
