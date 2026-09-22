@@ -3862,12 +3862,15 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids=[int(exams[0]["id"])]
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
         st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
         if not st:
             con.close();return HTMLResponse("Student not found.",404)
-        result=_student_result(cur,sid,stid,eid)
+        result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),None)
         rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
             WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
         _ensure_academic_locks_table(cur)
