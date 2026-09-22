@@ -1423,9 +1423,10 @@ def grading_setup(request: Request, subject_id: str = ""):
     )
     rule_rows = "".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"
-        "<td><form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
+        "<td style='white-space:nowrap'><a class='btnlink' href='/app/academics/grading/edit/%s?subject_id=%s'>✏️ Edit</a> "
+        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
         % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
-           float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid)
+           float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid, r["id"], subid)
         for r in rules
     )
     body = (
@@ -1498,6 +1499,139 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
            (grade.strip(), min_mark, max_mark, grade.strip(), points))
     con.commit()
     con.close()
+    return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
+
+@router.get("/app/academics/grading/edit/{rule_id}", response_class=HTMLResponse)
+def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit grading.", 403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_grading_table(cur)
+        row = cur.execute(
+            "SELECT * FROM subject_grading_rules WHERE id=? AND school_id=?",
+            (rule_id, sid)
+        ).fetchone()
+        if not row:
+            return HTMLResponse("Grading rule not found. <a href='/app/academics/grading'>Back</a>", 404)
+        sid_for_form = int(row["subject_id"])
+        subject = cur.execute(
+            "SELECT id,name FROM subjects WHERE id=? AND school_id=?",
+            (sid_for_form, sid)
+        ).fetchone()
+    finally:
+        con.close()
+    if not subject:
+        return HTMLResponse("Subject not found. <a href='/app/academics/grading'>Back</a>", 404)
+    body = (
+        "<div class='page'><h1>Edit Grading Rule</h1>"
+        "<div class='muted'>Update the minimum mark, maximum mark, grade, points, or performance comment for this subject.</div>"
+        "<div class='card section'><div style='margin-bottom:12px;font-weight:800'>Subject: %s</div>"
+        "<form method='post' action='/app/academics/grading/edit/%s' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>"
+        "<input type='hidden' name='subject_id' value='%s'>"
+        "<input name='min_mark' required type='number' min='0' max='100' step='0.01' value='%s' placeholder='Minimum mark' class='field'>"
+        "<input name='max_mark' required type='number' min='0' max='100' step='0.01' value='%s' placeholder='Maximum mark' class='field'>"
+        "<input name='grade' required value='%s' placeholder='Grade e.g. A' class='field'>"
+        "<input name='points' required type='number' min='0' step='0.01' value='%s' placeholder='Points' class='field'>"
+        "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='3' placeholder='Performance comment for this grade band' class='field'>%s</textarea></div>"
+        "<div style='grid-column:1/-1'><button class='btn' type='submit'>💾 Save Changes</button> "
+        "<a class='btnlink' href='/app/academics/grading?subject_id=%s'>Cancel</a></div>"
+        "</form></div></div>"
+        "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style></div>"
+    ) % (
+        escape(str(subject["name"])),
+        rule_id,
+        sid_for_form,
+        escape(str(row["min_mark"])),
+        escape(str(row["max_mark"])),
+        escape(str(row["grade"] or "")),
+        escape(str(row["points"] or 0)),
+        escape(str(row["performance_comment"] or "")),
+        sid_for_form
+    )
+    return _school_page(request, "Edit Grading Rule", body)
+
+@router.post("/app/academics/grading/edit/{rule_id}")
+def grading_edit(
+    request: Request,
+    rule_id: int,
+    subject_id: int = Form(...),
+    min_mark: float = Form(...),
+    max_mark: float = Form(...),
+    grade: str = Form(...),
+    points: float = Form(...),
+    performance_comment: str = Form(...)
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can edit grading.", 403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to edit grading.", 403)
+    grade_v = grade.strip()
+    comment_v = performance_comment.strip()
+    if min_mark < 0 or max_mark > 100 or min_mark > max_mark or points < 0:
+        return HTMLResponse("Invalid grading range. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % subject_id, 400)
+    if not grade_v:
+        return HTMLResponse("Grade is required. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % subject_id, 400)
+    if not comment_v:
+        return HTMLResponse("Performance comment is required. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % subject_id, 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_grading_table(cur)
+        row = cur.execute(
+            "SELECT * FROM subject_grading_rules WHERE id=? AND school_id=?",
+            (rule_id, sid)
+        ).fetchone()
+        if not row:
+            con.close()
+            return HTMLResponse("Grading rule not found. <a href='/app/academics/grading?subject_id=%s'>Back</a>" % subject_id, 404)
+        if int(row["subject_id"]) != int(subject_id):
+            con.close()
+            return HTMLResponse("Invalid subject for this grading rule.", 400)
+        subject = cur.execute(
+            "SELECT id FROM subjects WHERE id=? AND school_id=?",
+            (subject_id, sid)
+        ).fetchone()
+        if not subject:
+            con.close()
+            return HTMLResponse("Invalid subject. <a href='/app/academics/grading'>Back</a>", 400)
+        overlap = cur.execute(
+            """SELECT id FROM subject_grading_rules
+               WHERE school_id=? AND subject_id=? AND id<>?
+                 AND min_mark<=? AND max_mark>=?
+               LIMIT 1""",
+            (sid, subject_id, rule_id, max_mark, min_mark)
+        ).fetchone()
+        if overlap:
+            con.close()
+            return HTMLResponse(
+                "That grading range overlaps another existing range for this subject. "
+                "<a href='/app/academics/grading/edit/%s?subject_id=%s'>Back</a>" % (rule_id, subject_id),
+                400
+            )
+        cur.execute(
+            """UPDATE subject_grading_rules
+               SET min_mark=?, max_mark=?, grade=?, points=?, performance_comment=?
+               WHERE id=? AND school_id=? AND subject_id=?""",
+            (min_mark, max_mark, grade_v, points, comment_v, rule_id, sid, subject_id)
+        )
+        _audit(
+            cur, sid, request, "GRADING_RULE_EDIT",
+            "Updated %s: %.1f-%.1f = %s / %.1f points" %
+            (grade_v, min_mark, max_mark, grade_v, points)
+        )
+        con.commit()
+    finally:
+        con.close()
     return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
 
 @router.post("/app/academics/grading/delete/{rule_id}")
