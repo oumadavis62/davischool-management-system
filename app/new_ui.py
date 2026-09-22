@@ -667,6 +667,13 @@ def _load_overall_grading_rules(cur, school_id):
         ).fetchall()
     except Exception as exc:
         print("DAVISCHOOL OVERALL RULES LOAD FALLBACK:", repr(exc), flush=True)
+        try:
+            cur.connection.rollback()
+        except Exception:
+            try:
+                cur._connection.rollback()
+            except Exception:
+                pass
         return []
 
 def _overall_grade(cur, school_id, total, overall_rules=None):
@@ -1225,6 +1232,13 @@ def _load_grading_rules(cur, school_id):
         ).fetchall()
     except Exception as exc:
         print("DAVISCHOOL GRADING RULES LOAD FALLBACK:", repr(exc), flush=True)
+        try:
+            cur.connection.rollback()
+        except Exception:
+            try:
+                cur._connection.rollback()
+            except Exception:
+                pass
         return {}
     rules = {}
     for row in rows:
@@ -1445,6 +1459,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         except Exception as exc:
             print("DAVISCHOOL MARKS CONFIG FALLBACK:", repr(exc), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
             out_of=100.0
         try:
             _ensure_report_card_fields(cur)
@@ -1457,6 +1475,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     subject_comments[int(strow["id"])]=""
         except Exception as exc:
             print("DAVISCHOOL MARKS COMMENT TABLE FALLBACK:", repr(exc), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
     grading_rules=[]
     if subid:
         try:
@@ -1465,6 +1487,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
               WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL GRADING RULES FALLBACK:", repr(exc), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
             grading_rules=[]
     safe_rules=[]
     for r in grading_rules:
