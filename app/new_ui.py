@@ -1613,7 +1613,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     safe_rules=[]
     for r in grading_rules:
         try:
-            safe_rules.append("[%s,%s,%r,%s]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"] or "E"),float(r["points"] or 0)))
+            safe_rules.append("[%s,%s,%r,%s,%r]"%(float(r["min_mark"]),float(r["max_mark"]),str(r["grade"] or "E"),float(r["points"] or 0),str(r["performance_comment"] or "")))
         except Exception:
             # Ignore an incomplete legacy grading row rather than breaking
             # the entire Marks Entry screen.
@@ -1662,7 +1662,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
-        rows+="<tr id='student-%s'><td>%s</td><td><b>%s</b></td><td><input id='mark-%s' name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td><input name='comment_%s' value='%s' class='field' placeholder='Performance comment' %s></td><td style='white-space:nowrap'>%s</td></tr>"%(x["id"],escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],x["id"],escape(str(mark)),out_of,"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))),"disabled" if locked else "",("" if locked else "<button type='button' class='editbtn' onclick=\"document.getElementById('mark-%s').focus();document.getElementById('mark-%s').select();\">✏️ Edit</button><button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick=\"return confirm('Delete this mark for %s? This cannot be undone.');\">🗑️ Delete</button>"%(x["id"],x["id"],x["id"],escape(str(x["name"] or "")).replace("'","&#39;"))))
+        rows+="<tr id='student-%s'><td>%s</td><td><b>%s</b></td><td><input id='mark-%s' name='mark_%s' value='%s' type='number' min='0' max='%s' step='0.01' class='markinput' %s></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td><input name='comment_%s' value='%s' class='field commentinput' placeholder='Performance comment' %s></td><td style='white-space:nowrap'>%s</td></tr>"%(x["id"],escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],x["id"],escape(str(mark)),out_of,"disabled" if locked else "",escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))),"disabled" if locked else "",("" if locked else "<button type='button' class='editbtn' onclick=\"document.getElementById('mark-%s').focus();document.getElementById('mark-%s').select();\">✏️ Edit</button><button type='submit' formaction='/app/academics/marks/delete' formmethod='post' name='student_id' value='%s' class='deletebtn' onclick=\"return confirm('Delete this mark for %s? This cannot be undone.');\">🗑️ Delete</button>"%(x["id"],x["id"],x["id"],escape(str(x["name"] or "")).replace("'","&#39;"))))
     con.close()
     body=(
       "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
@@ -1678,7 +1678,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
       "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",mark_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
-      "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value);if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';return;}var grade='E',points=1;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;});});</script>"%js_rules
+      "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='E',points=1,comment='';for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
 
@@ -1702,6 +1702,11 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    try:
+        grading_rules=_load_grading_rules(cur,sid)
+    except Exception as exc:
+        print("DAVISCHOOL MARKS SAVE GRADING FALLBACK:",repr(exc),flush=True)
+        grading_rules={}
     for st in students:
         raw=form.get(f"mark_{st['id']}")
         if raw is None or str(raw).strip()=="":
@@ -1719,6 +1724,12 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             _ensure_report_card_fields(cur)
             now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             comment=str(form.get(f"comment_{st['id']}") or "").strip()
+            if not comment:
+                try:
+                    _, _, comment = _subject_grade_details(cur,sid,subject_id,mark,grading_rules)
+                except Exception as exc:
+                    print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
+                    comment=""
             existing_comment=cur.execute("SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,st["id"],exam_id,subject_id)).fetchone()
             if existing_comment:
                 cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
