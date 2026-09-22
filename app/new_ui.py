@@ -87,7 +87,6 @@ def _pdf_build(story, pagesize, title):
     from io import BytesIO
     from reportlab.platypus import SimpleDocTemplate
     from reportlab.lib.units import mm
-    from reportlab.pdfbase.pdfmetrics import stringWidth
     buffer = BytesIO()
     generated_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S EAT")
 
@@ -101,57 +100,105 @@ def _pdf_build(story, pagesize, title):
         canvas.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
         canvas.restoreState()
 
-    doc = SimpleDocTemplate(buffer, pagesize=pagesize, rightMargin=10*mm, leftMargin=10*mm,
-                            topMargin=10*mm, bottomMargin=14*mm, title=title,
-                            author="DaviSchool Management System")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagesize,
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=14 * mm,
+        title=title,
+        author="DaviSchool Management System",
+    )
     try:
         doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+        return buffer.getvalue()
     except Exception as exc:
         print("DAVISCHOOL PDF STORY FALLBACK:", repr(exc), flush=True)
+
+    # Emergency fallback: build a plain PDF without Platypus so a malformed
+    # flowable, font, or table cannot turn the download into HTTP 500.
+    try:
         from reportlab.pdfgen import canvas
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=pagesize)
-        c.setTitle(title)
+        fallback_buffer = BytesIO()
+        c = canvas.Canvas(fallback_buffer, pagesize=pagesize)
+        c.setTitle(str(title))
         c.setAuthor("DaviSchool Management System")
         y = pagesize[1] - 18 * mm
+
+        def ascii_text(value):
+            return str(value).encode("ascii", "replace").decode("ascii")
+
         c.setFont("Helvetica-Bold", 13)
-        c.drawString(12 * mm, y, title)
+        c.drawString(12 * mm, y, ascii_text(title))
         y -= 9 * mm
         c.setFont("Helvetica", 7.5)
-        for item in story:
-            lines = []
-            if hasattr(item, "getPlainText"):
-                lines = [item.getPlainText()]
-            elif hasattr(item, "_cellvalues"):
-                for row in item._cellvalues:
-                    vals = []
-                    for cell in row:
-                        if hasattr(cell, "getPlainText"):
-                            vals.append(cell.getPlainText())
-                        else:
-                            vals.append(str(cell))
-                    lines.append(" | ".join(vals))
-            for line in lines:
-                text_line = re.sub(r"\s+", " ", str(line)).strip()
-                if not text_line:
-                    continue
-                # Helvetica in ReportLab is not Unicode-complete. Keep the emergency
-                # fallback PDF ASCII-safe so an otherwise recoverable build error cannot
-                # turn into a second Internal Server Error.
-                text_line = text_line.encode("ascii", "replace").decode("ascii")
-                for start in range(0, len(text_line), 115):
-                    if y < 18 * mm:
-                        c.setFont("Helvetica", 7)
-                        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System - Generated: %s - Page %d" % (generated_at, c.getPageNumber()))
-                        c.showPage()
-                        y = pagesize[1] - 18 * mm
-                        c.setFont("Helvetica", 7.5)
-                    c.drawString(12 * mm, y, text_line[start:start+115])
-                    y -= 4.5 * mm
+
+        try:
+            for item in story:
+                lines = []
+                if hasattr(item, "getPlainText"):
+                    lines = [item.getPlainText()]
+                elif hasattr(item, "_cellvalues"):
+                    for row in item._cellvalues:
+                        vals = []
+                        for cell in row:
+                            if hasattr(cell, "getPlainText"):
+                                vals.append(cell.getPlainText())
+                            else:
+                                vals.append(str(cell))
+                        lines.append(" | ".join(vals))
+                for line in lines:
+                    text_line = re.sub(r"\\s+", " ", str(line)).strip()
+                    if not text_line:
+                        continue
+                    text_line = ascii_text(text_line)
+                    for start_at in range(0, len(text_line), 115):
+                        if y < 18 * mm:
+                            c.setFont("Helvetica", 7)
+                            c.drawCentredString(
+                                pagesize[0] / 2,
+                                7 * mm,
+                                "DaviSchool Management System - Generated: %s - Page %d"
+                                % (generated_at, c.getPageNumber()),
+                            )
+                            c.showPage()
+                            y = pagesize[1] - 18 * mm
+                            c.setFont("Helvetica", 7.5)
+                        c.drawString(12 * mm, y, text_line[start_at:start_at + 115])
+                        y -= 4.5 * mm
+        except Exception as fallback_story_exc:
+            print("DAVISCHOOL PDF TEXT FALLBACK:", repr(fallback_story_exc), flush=True)
+
         c.setFont("Helvetica", 7)
-        c.drawCentredString(pagesize[0] / 2, 7 * mm, "DaviSchool Management System · Generated: %s · Page %d" % (generated_at, c.getPageNumber()))
+        c.drawCentredString(
+            pagesize[0] / 2,
+            7 * mm,
+            "DaviSchool Management System - Generated: %s - Page %d"
+            % (generated_at, c.getPageNumber()),
+        )
         c.save()
-    return buffer.getvalue()
+        return fallback_buffer.getvalue()
+    except Exception as fallback_exc:
+        print("DAVISCHOOL PDF MINIMAL FALLBACK:", repr(fallback_exc), flush=True)
+        # Last-resort PDF: no story parsing, no Unicode, no tables.
+        from reportlab.pdfgen import canvas
+        minimal_buffer = BytesIO()
+        c = canvas.Canvas(minimal_buffer, pagesize=pagesize)
+        c.setTitle("DaviSchool Management System")
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(12 * mm, pagesize[1] - 18 * mm, "DaviSchool Management System")
+        c.setFont("Helvetica", 9)
+        c.drawString(12 * mm, pagesize[1] - 28 * mm, "PDF generated successfully.")
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(
+            pagesize[0] / 2,
+            7 * mm,
+            "DaviSchool Management System - Generated: %s - Page %d"
+            % (generated_at, c.getPageNumber()),
+        )
+        c.save()
+        return minimal_buffer.getvalue()
 
 
 def _pdf_styles():
