@@ -790,15 +790,37 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         student_params.append(stream)
     student_query += " ORDER BY name"
     students = cur.execute(student_query, student_params).fetchall() if cid else []
-    mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"
-    mark_params = [sid, eid, cid]
-    if term:
-        mark_query += " AND term=?"
-        mark_params.append(term)
-    if year:
-        mark_query += " AND year=?"
-        mark_params.append(year)
-    mark_rows = cur.execute(mark_query, mark_params).fetchall() if eid and cid else []
+    mark_rows = []
+    if eid and cid:
+        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"
+        mark_params = [sid, eid, cid]
+        if term:
+            mark_query += " AND term=?"
+            mark_params.append(term)
+        if year:
+            mark_query += " AND year=?"
+            mark_params.append(year)
+        try:
+            mark_rows = cur.execute(mark_query, mark_params).fetchall()
+        except Exception as exc:
+            # Older production databases may temporarily lack one of the
+            # optional filtering columns. Never let that prevent the
+            # marksheet from loading the students and their marks.
+            print("DAVISCHOOL MARKSHEET MARK QUERY FALLBACK:", repr(exc), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            try:
+                fallback_rows = cur.execute(
+                    "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=?",
+                    (sid, eid)
+                ).fetchall()
+                allowed_students = {int(st["id"]) for st in students}
+                mark_rows = [r for r in fallback_rows if int(r["student_id"]) in allowed_students]
+            except Exception as fallback_exc:
+                print("DAVISCHOOL MARKSHEET MARK FALLBACK FAILED:", repr(fallback_exc), flush=True)
+                mark_rows = []
     marks = {(int(r["student_id"]), int(r["subject_id"])): r["marks"] for r in mark_rows}
     streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
 
@@ -1466,19 +1488,26 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             out_of=100.0
         try:
             _ensure_report_card_fields(cur)
-            for strow in students:
-                try:
-                    sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,strow["id"],eid,subid)).fetchone()
-                    subject_comments[int(strow["id"])]=sc["comment"] if sc else ""
-                except Exception as exc:
-                    print("DAVISCHOOL MARKS COMMENT READ FALLBACK:", repr(exc), flush=True)
-                    subject_comments[int(strow["id"])]=""
+            student_ids = [int(strow["id"]) for strow in students]
+            if student_ids:
+                placeholders = ",".join(["?"] * len(student_ids))
+                comment_rows = cur.execute(
+                    "SELECT student_id,comment FROM subject_performance_comments "
+                    "WHERE school_id=? AND exam_id=? AND subject_id=? "
+                    "AND student_id IN (" + placeholders + ")",
+                    [sid, eid, subid] + student_ids
+                ).fetchall()
+                subject_comments = {
+                    int(row["student_id"]): (row["comment"] or "")
+                    for row in comment_rows
+                }
         except Exception as exc:
-            print("DAVISCHOOL MARKS COMMENT TABLE FALLBACK:", repr(exc), flush=True)
+            print("DAVISCHOOL MARKS COMMENT READ FALLBACK:", repr(exc), flush=True)
             try:
                 con.rollback()
             except Exception:
                 pass
+            subject_comments = {int(strow["id"]): "" for strow in students}
     grading_rules=[]
     if subid:
         try:
