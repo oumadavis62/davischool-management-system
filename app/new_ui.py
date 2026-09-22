@@ -772,6 +772,15 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     try: overall_rules = _load_overall_grading_rules(cur, sid)
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
+    # The grading helpers may rollback a PostgreSQL transaction when a legacy
+    # grading table is unavailable. Always continue with a fresh cursor so a
+    # cursor invalidated by that rollback can never break the MarkSheet page.
+    try:
+        cur = con.cursor()
+    except Exception:
+        con.close()
+        con = _db()
+        cur = con.cursor()
     try:
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
@@ -782,6 +791,12 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             con.rollback()
         except Exception:
             pass
+        try:
+            cur = con.cursor()
+        except Exception:
+            con.close()
+            con = _db()
+            cur = con.cursor()
         exams = []
         classes = []
         subjects = []
@@ -808,6 +823,12 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             con.rollback()
         except Exception:
             pass
+        try:
+            cur = con.cursor()
+        except Exception:
+            con.close()
+            con = _db()
+            cur = con.cursor()
         students = []
     mark_rows = []
     if eid and cid:
@@ -830,6 +851,12 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
                 con.rollback()
             except Exception:
                 pass
+            try:
+                cur = con.cursor()
+            except Exception:
+                con.close()
+                con = _db()
+                cur = con.cursor()
             try:
                 fallback_rows = cur.execute(
                     "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=?",
