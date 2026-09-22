@@ -2056,10 +2056,49 @@ def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(
 
 @router.get("/app/academics/subject-analysis", response_class=HTMLResponse)
 def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
-    response = new_analysis(request, exam_id=exam_id, class_id=class_id)
-    if isinstance(response, HTMLResponse):
-        response.body = response.body.replace(b"<h1>Academic Analysis</h1>", b"<h1>Subject Analysis</h1>", 1)
-    return response
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view subject analysis.", 403)
+    con=_db(); cur=con.cursor()
+    try:
+        exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        cid=int(class_id) if class_id.isdigit() else 0
+        stats=[]
+        if eid:
+            sql="""SELECT sub.id,sub.name subject,COUNT(m.id) entries,
+                    COALESCE(AVG(m.marks),0) average,
+                    COALESCE(MAX(m.marks),0) highest,
+                    COALESCE(MIN(m.marks),0) lowest
+                   FROM subjects sub
+                   LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+                   LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+                   WHERE sub.school_id=?"""
+            params=[eid,sid,sid]
+            if cid:
+                sql+=" AND st.class_id=?"
+                params.append(cid)
+            sql+=" GROUP BY sub.id,sub.name ORDER BY sub.name"
+            stats=cur.execute(sql,params).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL SUBJECT ANALYSIS PAGE FAILED:",repr(exc),flush=True)
+        try: con.rollback()
+        except Exception: pass
+        exams=[]; classes=[]; subjects=[]; eid=0; cid=0; stats=[]
+    finally:
+        con.close()
+    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
+    copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    rows="".join(f"<tr><td>{escape(str(r['subject']))}</td><td>{int(r['entries'] or 0)}</td><td>{float(r['average'] or 0):.2f}</td><td>{float(r['highest'] or 0):.1f}</td><td>{float(r['lowest'] or 0):.1f}</td></tr>" for r in stats)
+    body=f"""<div class='page'><h1>Subject Analysis</h1><div class='muted'>Compare subject performance for the selected examination and class.</div>
+<div class='card section'><form method='get' action='/app/academics/subject-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div>
+<div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or "<tr><td colspan='5'>No marks found for the selected examination/class.</td></tr>"}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request,"Subject Analysis",body)
 
 @router.get("/app/academics/student-analysis", response_class=HTMLResponse)
 def student_analysis_page(request: Request, exam_id: str = "", student_id: str = ""):
@@ -2089,37 +2128,50 @@ def student_analysis_page(request: Request, exam_id: str = "", student_id: str =
 @router.get("/app/academics/class-analysis", response_class=HTMLResponse)
 def class_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
     sid=_school_session(request)
-    if not sid: return RedirectResponse("/")
+    if not sid:
+        return RedirectResponse("/")
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to view class analysis.", 403)
     con=_db(); cur=con.cursor()
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid=int(class_id) if class_id.isdigit() else 0
-    stats=[]
-    ranking=[]
-    if eid and cid:
-        stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
-          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=? AND m.class_id=?
-          WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(eid,sid,cid,sid)).fetchall()
-        students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
-        for st in students:
-            res=_student_result(cur,sid,int(st["id"]),eid)
-            ranking.append((st,res))
-        ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
-    con.close()
+    try:
+        exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        cid=int(class_id) if class_id.isdigit() else 0
+        stats=[]; ranking=[]
+        if eid and cid:
+            stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
+                COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
+                FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+                LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+                WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",
+                (eid,sid,sid,cid)).fetchall()
+            students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
+            for st in students:
+                try:
+                    res=_student_result(cur,sid,int(st["id"]),eid)
+                except Exception as exc:
+                    print("DAVISCHOOL CLASS ANALYSIS RESULT FALLBACK:",repr(exc),flush=True)
+                    res={"total":0.0,"average":0.0,"overall_grade":"—","count":0}
+                ranking.append((st,res))
+            ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
+    except Exception as exc:
+        print("DAVISCHOOL CLASS ANALYSIS PAGE FAILED:",repr(exc),flush=True)
+        try: con.rollback()
+        except Exception: pass
+        exams=[]; classes=[]; eid=0; cid=0; stats=[]; ranking=[]
+    finally:
+        con.close()
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{int(x['entries'] or 0)}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td></tr>" for x in stats)
     sr="".join(f"<tr><td>{i}</td><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td></tr>" for i,(st,res) in enumerate(ranking,1))
-    ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td></tr>" for x in stats)
     body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Class-level subject performance and learner results.</div>
-<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><button class='btn'>Analyse</button><a class='btn' style='text-decoration:none;text-align:center' href='/app/academics/class-analysis/pdf?exam_id={eid}&class_id={cid}'>⬇️ Download PDF</a></form></div>
-<div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{ar or '<tr><td colspan=5>Select an examination and class.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>Learner Ranking</h2><table><thead><tr><th>Position</th><th>Admission</th><th>Student</th><th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{sr or '<tr><td colspan=6>No learner results found.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+<div class='card section'><form method='get' action='/app/academics/class-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><button class='btn'>Analyse</button></form></div>
+<div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{ar or "<tr><td colspan='5'>Select an examination and class.</td></tr>"}</tbody></table></div>
+<div class='card section'><h2>Learner Ranking</h2><table><thead><tr><th>Position</th><th>Admission</th><th>Student</th><th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{sr or "<tr><td colspan='6'>No learner results found.</td></tr>"}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request,"Class Analysis",body)
-
 
 @router.get("/app/students/promotion", response_class=HTMLResponse)
 def student_promotion_page(request: Request, class_id: str = ""):
