@@ -1105,16 +1105,20 @@ function printDocument(){
   setTimeout(function(){w.print();},300);
 }
 </script>'''
-    subject_mean_html = "".join(
-        "<div class='subject-mean-item'><span>%s</span><b>%s</b><small>%d mark%s</small></div>"
-        % (
-            escape(str(subject["name"])),
-            ("%.2f" % mean) if mean is not None else "—",
-            count,
-            "" if count == 1 else "s",
-        )
-        for subject, mean, count in subject_means
-    ) or "<div class='subject-mean-empty'>No subject marks available.</div>"
+    subject_mean_html = (
+        "<table class='subject-summary'><thead><tr><th>Subject</th><th>Mean</th><th>Entries</th><th>Position</th></tr></thead><tbody>" +
+        "".join(
+            "<tr><td>%s</td><td>%s</td><td>%d</td><td>%s</td></tr>"
+            % (
+                escape(str(subject["name"])),
+                ("%.2f" % mean) if mean is not None else "—",
+                count,
+                str(subject_positions.get(int(subject["id"]), "—")),
+            )
+            for subject, mean, count in subject_means
+        ) +
+        "</tbody></table>"
+    ) if subject_means else "<div class='subject-mean-empty'>No subject marks available.</div>"
     rows_html = rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
