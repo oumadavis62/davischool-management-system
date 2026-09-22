@@ -801,7 +801,23 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         classes = []
         subjects = []
     eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+
+    # A class can be printed either as one stream or as a combined grade.
+    # Combined mode uses class_id=grade:<class name>, e.g. grade:Grade 9.
+    combined_mode = class_id.startswith("grade:")
+    combined_grade = class_id[6:] if combined_mode else ""
+    selected_class_ids = []
+    if combined_mode:
+        selected_class_ids = [
+            int(c["id"]) for c in classes
+            if str(c["name"] or "").strip().lower() == combined_grade.strip().lower()
+        ]
+        stream = ""
+        cid = selected_class_ids[0] if selected_class_ids else 0
+    else:
+        cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+        selected_class_ids = [cid] if cid else []
+
     try:
         class_row = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
         er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone() if eid else None
@@ -820,9 +836,14 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             term = str(er["term"] or "")
         if not year:
             year = str(er["year"] or "")
-    student_query = "SELECT * FROM students WHERE school_id=? AND class_id=?"
-    student_params = [sid, cid]
-    if stream:
+    if selected_class_ids:
+        class_marks_placeholders = ",".join("?" for _ in selected_class_ids)
+        student_query = "SELECT * FROM students WHERE school_id=? AND class_id IN (" + class_marks_placeholders + ")"
+        student_params = [sid] + selected_class_ids
+    else:
+        student_query = "SELECT * FROM students WHERE school_id=? AND class_id=?"
+        student_params = [sid, cid]
+    if stream and not combined_mode:
         student_query += " AND stream=?"
         student_params.append(stream)
     student_query += " ORDER BY name"
@@ -842,9 +863,10 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             cur = con.cursor()
         students = []
     mark_rows = []
-    if eid and cid:
-        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"
-        mark_params = [sid, eid, cid]
+    if eid and selected_class_ids:
+        class_marks_placeholders = ",".join("?" for _ in selected_class_ids)
+        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id IN (" + class_marks_placeholders + ")"
+        mark_params = [sid, eid] + selected_class_ids
         if term:
             mark_query += " AND term=?"
             mark_params.append(term)
@@ -884,8 +906,27 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     eopts = "".join("<option value='%s' %s>%s</option>" % (
         e["id"], "selected" if int(e["id"]) == eid else "", escape(str(e["name"]))
     ) for e in exams)
-    copts = "".join("<option value='%s' %s>%s %s</option>" % (
-        c["id"], "selected" if int(c["id"]) == cid else "",
+    # Offer a combined option for every grade/class name represented by
+    # multiple stream records, while retaining each individual stream.
+    grade_groups = {}
+    for c in classes:
+        grade_key = str(c["name"] or "").strip()
+        if grade_key:
+            grade_groups.setdefault(grade_key.lower(), {"name": grade_key, "ids": []})
+            grade_groups[grade_key.lower()]["ids"].append(int(c["id"]))
+    combined_options = []
+    for group in sorted(grade_groups.values(), key=lambda x: x["name"].lower()):
+        if len(group["ids"]) >= 2:
+            selected = combined_mode and group["name"].strip().lower() == combined_grade.strip().lower()
+            combined_options.append(
+                "<option value='grade:%s' %s>%s — All Streams</option>" % (
+                    escape(group["name"]),
+                    "selected" if selected else "",
+                    escape(group["name"])
+                )
+            )
+    copts = "".join(combined_options) + "".join("<option value='%s' %s>%s %s</option>" % (
+        c["id"], "selected" if (not combined_mode and int(c["id"]) == cid) else "",
         escape(str(c["name"])), escape(str(c["stream"] or ""))
     ) for c in classes)
     stropts = "".join("<option value='%s' %s>%s</option>" % (
@@ -981,9 +1022,10 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
             overall_grade=_default_grade_points(total)[0] if count else "—"
         average=(total/count) if count else 0
-        rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s"
+        stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(str(student["stream"] or "")) if combined_mode else ""
+        rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
-          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),cells,total,total_points,average,escape(str(overall_grade)),last_position))
+          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells,total,total_points,average,escape(str(overall_grade)),last_position))
 
     try:
         school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
@@ -1003,10 +1045,13 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
     school_postal_code = escape(str(school_row["postal_code"] or "")) if school_row and "postal_code" in school_row.keys() else ""
     school_logo = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div><div class='doc-school'>%s</div><div class='doc-contact'>%s%s%s%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,school_email,(" · "+school_phone) if school_phone else "",(" · "+school_postal) if school_postal else "",(" · "+school_postal_code) if school_postal_code else "")
-    class_title = escape(str(class_row["name"])) if class_row else "Select a class"
+    class_title = escape(str(combined_grade)) + " — ALL STREAMS" if combined_mode and combined_grade else (escape(str(class_row["name"])) if class_row else "Select a class")
     exam_name = escape(str(er["name"])) if er else "Select an examination"
-    colspan = 2 + len(subjects) * 3 + 5
-    pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={cid}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
+    stream_col_html = "<th rowspan='2'>STREAM</th>" if combined_mode else ""
+    stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
+    colspan = 3 + len(subjects) * 3 + 5 if combined_mode else 2 + len(subjects) * 3 + 5
+    selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
+    pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
     print_script = '''<script>
 function printDocument(){
@@ -1018,7 +1063,7 @@ function printDocument(){
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
   }).format(new Date())+' EAT';
-  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .adm-no-col{width:78px}.marksheet .name-col{width:190px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:auto;margin:10mm 10mm 15mm}';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-school{text-align:center;font-size:20px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:4px 5px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff;color:#111}.marksheet .adm-no-col{width:78px}.marksheet .name-col{width:190px;min-width:190px;max-width:190px}.marksheet .stream-col,.marksheet .stream-cell{width:70px;min-width:70px;max-width:70px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .subjecthead{font-size:11px;color:#d00;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:1px solid #cbd5e1;padding-top:4px;font-size:8px;color:#475569;background:#fff}@page{size:auto;margin:10mm 10mm 15mm}';
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
   var html='<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+footer+'</body></html>';
   w.document.open();w.document.write(html);w.document.close();w.focus();
@@ -1054,10 +1099,10 @@ function printDocument(){
         "<div class='marksheet-meta'>CLASS: " + class_title + " &nbsp;&nbsp; EXAM: " + exam_name +
         " &nbsp;&nbsp; TERM: " + escape(term or "All") + " &nbsp;&nbsp; YEAR: " + escape(year or "All") + "</div>"
         "<div style='overflow:auto'><table class='marksheet'><colgroup>"
-        "<col class='adm-no-col'><col class='name-col'>" + subject_colgroup +
+        "<col class='adm-no-col'><col class='name-col'>" + stream_colgroup_html + subject_colgroup +
         "<col class='overall-marks-col'><col class='overall-points-col'><col class='overall-avg-col'><col class='overall-grade-col'><col class='overall-pos-col'>"
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
-        header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
+        stream_col_html + header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
         "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
         rows_html + "</tbody></table></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
         "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
@@ -1065,7 +1110,7 @@ function printDocument(){
         "<style>"
         ".field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
         ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
-        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:0;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap;box-sizing:border-box}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .adm-no-col{width:78px;min-width:78px;max-width:78px}.marksheet .name-col{width:190px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .mks-cell,.marksheet .points-cell{vertical-align:middle;width:58px;min-width:58px;max-width:58px}.marksheet .grade-cell{vertical-align:middle;width:50px;min-width:50px;max-width:50px}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase;white-space:nowrap;overflow:hidden;max-width:166px}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
+        ".marksheet-card{background:#fff}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:0;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap;box-sizing:border-box}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .adm-no-col{width:78px;min-width:78px;max-width:78px}.marksheet .name-col{width:190px;min-width:190px;max-width:190px}.marksheet .stream-col,.marksheet .stream-cell{width:70px;min-width:70px;max-width:70px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .mks-cell,.marksheet .points-cell{vertical-align:middle;width:58px;min-width:58px;max-width:58px}.marksheet .grade-cell{vertical-align:middle;width:50px;min-width:50px;max-width:50px}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase;white-space:nowrap;overflow:hidden;max-width:166px}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
         "</style></div>"
