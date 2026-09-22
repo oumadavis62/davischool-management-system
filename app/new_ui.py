@@ -772,6 +772,37 @@ def overall_grading_delete(request: Request,rule_id:int):
 
 # MarkSheet-only subject order. Subjects not listed here remain after the
 # requested curriculum subjects, preserving their existing alphabetical order.
+def _parse_exam_ids(exam_ids="", exam_id=""):
+    raw = exam_ids or exam_id or ""
+    out = []
+    for part in str(raw).split(","):
+        try:
+            value = int(part.strip())
+            if value > 0 and value not in out:
+                out.append(value)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year=""):
+    if not student_ids or not exam_ids:
+        return {}
+    sp = ",".join("?" for _ in student_ids)
+    ep = ",".join("?" for _ in exam_ids)
+    q = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND student_id IN ("+sp+") AND exam_id IN ("+ep+")"
+    params = [sid] + list(student_ids) + list(exam_ids)
+    if term:
+        q += " AND term=?"; params.append(term)
+    if year:
+        q += " AND year=?"; params.append(year)
+    rows = cur.execute(q, params).fetchall()
+    buckets = {}
+    for r in rows:
+        if r["marks"] is None or str(r["marks"]).strip()=="":
+            continue
+        buckets.setdefault((int(r["student_id"]),int(r["subject_id"])), []).append(float(r["marks"]))
+    return {k: sum(v)/len(v) for k,v in buckets.items() if v}
+
 MARKSHEET_SUBJECT_ORDER = (
     "English", "Kiswahili", "Mathematics", "Integrated Science", "Agriculture",
     "Creative Arts and Sports", "Social Studies", "CRE", "Pre-technical Studies",
@@ -845,7 +876,7 @@ def _marksheet_subject_order(subjects):
     )
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
-def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
+def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -888,7 +919,9 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         exams = []
         classes = []
         subjects = []
-    eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    selected_exam_ids = _parse_exam_ids(exam_ids, exam_id)
+    if not selected_exam_ids and exams: selected_exam_ids=[int(exams[0]["id"])]
+    eid = selected_exam_ids[0] if selected_exam_ids else 0
     class_stream_by_id = {int(c["id"]): str(c["stream"] or "") for c in classes}
 
     # A class can be printed either as one stream or as a combined grade.
@@ -996,7 +1029,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             except Exception as fallback_exc:
                 print("DAVISCHOOL MARKSHEET MARK FALLBACK FAILED:", repr(fallback_exc), flush=True)
                 mark_rows = []
-    marks = {(int(r["student_id"]), int(r["subject_id"])): r["marks"] for r in mark_rows}
+    marks = _aggregate_marks_for_students(cur, sid, [int(st["id"]) for st in students], selected_exam_ids, term, year)
     streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
 
     eopts = "".join("<option value='%s' %s>%s</option>" % (
