@@ -704,6 +704,47 @@ def _student_result(cur, school_id, student_id, exam_id, grading_rules=None, ove
     return {"rows":rows,"details":details,"total":total,"points":points,
             "count":graded,"average":average,"overall_grade":overall}
 
+def _student_result_for_assessments(cur, school_id, student_id, exam_ids, grading_rules=None, overall_rules=None):
+    """Safe multi-assessment result engine; existing single-assessment engine remains unchanged."""
+    ids = _parse_assessment_ids(",".join(str(x) for x in (exam_ids or [])))
+    if not ids:
+        return {"rows": [], "details": [], "exam_marks": {}, "total": 0.0, "points": 0.0,
+                "count": 0, "average": 0.0, "overall_grade": "—"}
+    placeholders = ",".join("?" for _ in ids)
+    rows = cur.execute(
+        "SELECT sub.id subject_id,sub.name,m.exam_id,m.marks FROM marks m "
+        "JOIN subjects sub ON sub.id=m.subject_id "
+        "WHERE m.school_id=? AND m.student_id=? AND m.exam_id IN (" + placeholders + ") "
+        "ORDER BY sub.name,m.exam_id",
+        [school_id, student_id] + ids
+    ).fetchall()
+    buckets = {}
+    for row in rows:
+        if row["marks"] is None or str(row["marks"]).strip() == "":
+            continue
+        try:
+            buckets.setdefault(int(row["subject_id"]), []).append(float(row["marks"]))
+        except (TypeError, ValueError):
+            continue
+    details = []
+    exam_marks = {}
+    total = points = 0.0
+    for subject_id, values in buckets.items():
+        average = sum(values) / len(values)
+        source = next(r for r in rows if int(r["subject_id"]) == subject_id)
+        grade, pt = _subject_grade_points(cur, school_id, subject_id, average, grading_rules)
+        details.append((source, average, grade, float(pt or 0)))
+        exam_marks[subject_id] = {ids[i]: values[i] for i in range(min(len(ids), len(values)))}
+        total += average
+        points += float(pt or 0)
+    count = len(details)
+    average = total / count if count else 0.0
+    overall = _overall_grade(cur, school_id, average, overall_rules) if count else "—"
+    return {"rows": rows, "details": details, "exam_marks": exam_marks,
+            "total": total, "points": points, "count": count,
+            "average": average, "overall_grade": overall}
+
+
 def _ensure_overall_grading_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS overall_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
