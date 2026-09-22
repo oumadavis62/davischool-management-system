@@ -625,7 +625,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     return _school_page(request,"Academic Management",body)
 
 
-def _student_result(cur, school_id, student_id, exam_id):
+def _student_result(cur, school_id, student_id, exam_id, grading_rules=None, overall_rules=None):
     """Single source of truth for a student's academic totals."""
     rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks
         FROM marks m JOIN subjects sub ON sub.id=m.subject_id
@@ -639,13 +639,13 @@ def _student_result(cur, school_id, student_id, exam_id):
         if r["marks"] is None or str(r["marks"])=="":
             continue
         mark=float(r["marks"])
-        grade,pt=_subject_grade_points(cur,school_id,int(r["subject_id"]),mark)
+        grade,pt=_subject_grade_points(cur,school_id,int(r["subject_id"]),mark,grading_rules)
         total += mark
         points += float(pt or 0)
         graded += 1
         details.append((r,mark,grade,float(pt or 0)))
     average=(total/graded) if graded else 0.0
-    overall=_overall_grade(cur,school_id,total) if graded else "—"
+    overall=_overall_grade(cur,school_id,total,overall_rules) if graded else "—"
     return {"rows":rows,"details":details,"total":total,"points":points,
             "count":graded,"average":average,"overall_grade":overall}
 
@@ -658,7 +658,26 @@ def _ensure_overall_grading_table(cur):
         grade TEXT
     )""")
 
-def _overall_grade(cur, school_id, total):
+def _load_overall_grading_rules(cur, school_id):
+    try:
+        _ensure_overall_grading_table(cur)
+        return cur.execute(
+            "SELECT min_total,max_total,grade FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,id DESC",
+            (school_id,)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL OVERALL RULES LOAD FALLBACK:", repr(exc), flush=True)
+        return []
+
+def _overall_grade(cur, school_id, total, overall_rules=None):
+    if overall_rules is not None:
+        for rule in overall_rules:
+            try:
+                if float(rule["min_total"]) <= float(total) <= float(rule["max_total"]):
+                    return str(rule["grade"])
+            except Exception:
+                continue
+        return _default_grade_points(total)[0]
     try:
         _ensure_overall_grading_table(cur)
         rule=cur.execute("""SELECT grade FROM overall_grading_rules
@@ -743,10 +762,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         return HTMLResponse("You do not have permission to view marksheets.", 403)
     con = _db()
     cur = con.cursor()
-    try:
-        _ensure_grading_table(cur)
-    except Exception as exc:
-        print("DAVISCHOOL MARKSHEET GRADING TABLE FALLBACK:", repr(exc), flush=True)
+    grading_rules = _load_grading_rules(cur, sid)
+    overall_rules = _load_overall_grading_rules(cur, sid)
     exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
     classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
     subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
@@ -833,7 +850,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             if value is None:
                 cells+="<td>—</td><td>—</td><td>—</td>"
             else:
-                grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value)
+                grade,points=_subject_grade_points(cur,sid,int(subject["id"]),value,grading_rules)
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
@@ -848,7 +865,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         if last_total is None or total != last_total:
             last_position=index
             last_total=total
-        overall_grade=_overall_grade(cur,sid,total) if count else "—"
+        overall_grade=_overall_grade(cur,sid,total,overall_rules) if count else "—"
         average=(total/count) if count else 0
         rows+=("<tr><td>%d</td><td>%s</td><td><b>%s</b></td>%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
@@ -1198,11 +1215,38 @@ def _default_grade_points(mark):
     }.get(grade, 0)
     return grade, points
 
-def _subject_grade_points(cur, school_id, subject_id, mark):
+def _load_grading_rules(cur, school_id):
+    """Load subject grading rules once per page instead of recreating/querying the table for every mark."""
+    try:
+        _ensure_grading_table(cur)
+        rows = cur.execute(
+            "SELECT subject_id,min_mark,max_mark,grade,points FROM subject_grading_rules WHERE school_id=? ORDER BY subject_id,min_mark DESC,id DESC",
+            (school_id,)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL GRADING RULES LOAD FALLBACK:", repr(exc), flush=True)
+        return {}
+    rules = {}
+    for row in rows:
+        try:
+            rules.setdefault(int(row["subject_id"]), []).append(row)
+        except Exception:
+            continue
+    return rules
+
+def _subject_grade_points(cur, school_id, subject_id, mark, grading_rules=None):
     try:
         value = float(mark)
     except Exception:
         return "—", 0
+    if grading_rules is not None:
+        for rule in grading_rules.get(int(subject_id), []):
+            try:
+                if float(rule["min_mark"]) <= value <= float(rule["max_mark"]):
+                    return str(rule["grade"]), float(rule["points"] or 0)
+            except Exception:
+                continue
+        return _default_grade_points(value)
     try:
         _ensure_grading_table(cur)
         rule = cur.execute(
@@ -1706,6 +1750,8 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
     cid=int(class_id) if class_id.isdigit() else 0
+    grading_rules = _load_grading_rules(cur, sid)
+    overall_rules = _load_overall_grading_rules(cur, sid)
     stats=[]; student_results=[]
     if eid:
         q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
@@ -1717,7 +1763,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         stats=cur.execute(q,params).fetchall()
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         for st in students:
-            result=_student_result(cur,sid,int(st["id"]),eid)
+            result=_student_result(cur,sid,int(st["id"]),eid,grading_rules,overall_rules)
             try:
                 locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
                     WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
@@ -1898,7 +1944,10 @@ def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(
 
 @router.get("/app/academics/subject-analysis", response_class=HTMLResponse)
 def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
-    return new_analysis(request, exam_id=exam_id, class_id=class_id)
+    response = new_analysis(request, exam_id=exam_id, class_id=class_id)
+    if isinstance(response, HTMLResponse):
+        response.body = response.body.replace(b"<h1>Academic Analysis</h1>", b"<h1>Subject Analysis</h1>", 1)
+    return response
 
 @router.get("/app/academics/student-analysis", response_class=HTMLResponse)
 def student_analysis_page(request: Request, exam_id: str = "", student_id: str = ""):
