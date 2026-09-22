@@ -431,8 +431,14 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
     if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
         con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
     cid=int(class_id) if class_id.isdigit() else None
-    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone(): cid=None
-    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),"","active"))
+    class_stream = ""
+    if cid:
+        class_row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
+        if not class_row:
+            cid=None
+        else:
+            class_stream = str(class_row["stream"] or "").strip()
+    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),class_stream,"active"))
     student_id=cur.lastrowid
     _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
     con.commit(); con.close(); return RedirectResponse("/app/students",303)
@@ -474,9 +480,14 @@ def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name
     dup=cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) AND id<>?",(sid,admission,student_id)).fetchone()
     if dup:con.close();return HTMLResponse("Admission number already exists.",400)
     cid=int(class_id) if class_id.isdigit() else None
-    if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone():con.close();return HTMLResponse("Invalid class.",400)
+    class_stream = ""
+    if cid:
+        class_row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
+        if not class_row:
+            con.close();return HTMLResponse("Invalid class.",400)
+        class_stream = str(class_row["stream"] or "").strip()
     old_class=st["class_id"];new_status=status.strip().lower() if status.strip().lower() in ("active","inactive","graduated","transferred") else "active"
-    cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),new_status,student_id,sid))
+    cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),class_stream,new_status,student_id,sid))
     if (old_class or None)!=(cid or None):
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("INSERT INTO student_class_history(school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason) VALUES(?,?,?,?,?,?,?)",(sid,student_id,old_class,cid,now,request.session.get("email",""),"Student class/stream transfer"))
@@ -801,6 +812,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         classes = []
         subjects = []
     eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    class_stream_by_id = {int(c["id"]): str(c["stream"] or "") for c in classes}
 
     # A class can be printed either as one stream or as a combined grade.
     # Combined mode uses class_id=grade:<class name>, e.g. grade:Grade 9.
@@ -1029,7 +1041,8 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
             overall_grade=_default_grade_points(total)[0] if count else "—"
         average=(total/count) if count else 0
-        stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(str(student["stream"] or "")) if combined_mode else ""
+        student_stream = str(student["stream"] or "").strip() or class_stream_by_id.get(int(student["class_id"] or 0), "")
+        stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
         rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
           %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells,total,total_points,average,escape(str(overall_grade)),last_position))
@@ -3345,6 +3358,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         else:
             cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
             selected_class_ids = [cid] if cid else []
+        class_stream_by_id = {int(c["id"]): str(c["stream"] or "") for c in classes}
         er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         cr = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
         if er:
@@ -3411,7 +3425,8 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
             avg=(total/count) if count else 0
             prefix=[str(st["admission_no"] or ""),str(st["name"] or "")]
             if combined_mode:
-                prefix.append(str(st["stream"] or ""))
+                student_stream = str(st["stream"] or "").strip() or class_stream_by_id.get(int(st["class_id"] or 0), "")
+                prefix.append(student_stream)
             data.append(prefix+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
         if len(data)==2:
             data.append(["","No students or marks found."]+[""]*(len(header1)-2))
