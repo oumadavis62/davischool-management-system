@@ -9,6 +9,16 @@ from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
+def _pdf_route_error(request, route_name, exc):
+    import traceback
+    print("DAVISCHOOL PDF ROUTE ERROR: %s %s %s" % (route_name, request.method, request.url.path), flush=True)
+    print("DAVISCHOOL PDF ROUTE EXCEPTION: %r" % (exc,), flush=True)
+    print(traceback.format_exc(), flush=True)
+    return HTMLResponse(
+        "DaviSchool could not generate this PDF. Please retry after the latest deployment.",
+        status_code=500,
+    )
+
 # Standard selection lists used across school data-entry screens. These keep
 # entry consistent while still allowing the database to store plain text.
 TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
@@ -2610,201 +2620,221 @@ def assessments_add(request: Request,student_id:int=Form(...),subject_id:int=For
 # they query existing records and never modify marks, students, classes or reports.
 @router.get("/app/academics/marksheets/pdf")
 def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
-    sid = _school_session(request)
-    if not sid:
-        return RedirectResponse("/")
-    if not _require_permission(request, sid, "reports.view"):
-        return HTMLResponse("You do not have permission to download marksheets.", 403)
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A3, landscape
-    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.units import mm
-    con = _db(); cur = con.cursor()
-    try:
-        _ensure_grading_table(cur)
-    except Exception as exc:
-        print("DAVISCHOOL MARKSHEET PDF GRADING TABLE FALLBACK:", repr(exc), flush=True)
-    exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
-    er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
-    cr = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
-    if er:
-        term = term or str(er["term"] or "")
-        year = year or str(er["year"] or "")
-    q = "SELECT * FROM students WHERE school_id=? AND class_id=?"; params=[sid,cid]
-    if stream:
-        q += " AND stream=?"; params.append(stream)
-    students = cur.execute(q+" ORDER BY name",params).fetchall() if cid else []
-    mq="SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"; mp=[sid,eid,cid]
-    if term: mq+=" AND term=?"; mp.append(term)
-    if year: mq+=" AND year=?"; mp.append(year)
-    mark_rows=cur.execute(mq,mp).fetchall() if eid and cid else []
-    marks={(int(x["student_id"]),int(x["subject_id"])):x["marks"] for x in mark_rows}
-    computed=[]
-    for st in students:
-        total=0.0; points=0.0; count=0; vals=[]
-        for sub in subjects:
-            value=marks.get((int(st["id"]),int(sub["id"])))
-            if value is None:
-                vals.extend(["—","—","—"])
-            else:
-                try:
-                    grade,pts=_subject_grade_points(cur,sid,int(sub["id"]),value)
-                except Exception as exc:
-                    print("DAVISCHOOL MARKSHEET PDF GRADE FALLBACK:", repr(exc), flush=True)
-                    grade,pts=_default_grade_points(float(value or 0))
-                total+=float(value or 0); points+=float(pts or 0); count+=1
-                vals.extend([f"{float(value):.1f}",str(grade),f"{float(pts):.1f}"])
-        computed.append((st,total,points,count,vals,_overall_grade(cur,sid,total) if count else "—"))
-    computed.sort(key=lambda x:x[1],reverse=True)
-    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
-    con.close()
-    styles=_pdf_styles()
-    story=_pdf_school_header(school,styles,"Class Marksheet",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'} · {term or 'Term'} {year or ''}")
-    header1=["No.","Admission","Student"]; header2=["","",""]
-    for sub in subjects:
-        header1.extend([str(sub["name"]),"",""]); header2.extend(["MKS","GRD","PTS"])
-    header1.extend(["OVERALL","","","","",""]); header2.extend(["MKS","PTS","AVG %","GRD","POS"])
-    data=[header1,header2]
-    last_total=None; pos=0
-    for idx,(st,total,points,count,vals,overall_grade) in enumerate(computed,1):
-        if last_total is None or total!=last_total: pos=idx; last_total=total
-        avg=(total/count) if count else 0
-        data.append([str(idx),str(st["admission_no"] or ""),str(st["name"] or "")]+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
-    if len(data)==2:
-        data.append(["","","No students or marks found."]+[""]*(len(header1)-3))
-    col_widths=[10*mm,22*mm,42*mm]+[15*mm]*(len(header1)-8)+[16*mm]*5
-    table=Table(data,colWidths=col_widths,repeatRows=2)
-    table.setStyle(TableStyle([
-        ("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,1),colors.HexColor("#eef2f7")),
-        ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),6),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ALIGN",(2,2),(2,-1),"LEFT"),("FONTSIZE",(2,2),(2,-1),7)
-    ]))
-    story += [table, Spacer(1,4), Paragraph("Generated by DaviSchool Management System.",styles["small"])]
-    pdf=_pdf_build(story,landscape(A3),"Class Marksheet")
-    filename=f"marksheet_{(cr['name'] if cr else 'class')}_{(er['name'] if er else 'exam')}.pdf"
-    return _pdf_response(pdf,filename)
 
+    try:
+        sid = _school_session(request)
+        if not sid:
+            return RedirectResponse("/")
+        if not _require_permission(request, sid, "reports.view"):
+            return HTMLResponse("You do not have permission to download marksheets.", 403)
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A3, landscape
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import mm
+        con = _db(); cur = con.cursor()
+        try:
+            _ensure_grading_table(cur)
+        except Exception as exc:
+            print("DAVISCHOOL MARKSHEET PDF GRADING TABLE FALLBACK:", repr(exc), flush=True)
+        exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        cid = int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+        er = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
+        cr = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
+        if er:
+            term = term or str(er["term"] or "")
+            year = year or str(er["year"] or "")
+        q = "SELECT * FROM students WHERE school_id=? AND class_id=?"; params=[sid,cid]
+        if stream:
+            q += " AND stream=?"; params.append(stream)
+        students = cur.execute(q+" ORDER BY name",params).fetchall() if cid else []
+        mq="SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id=?"; mp=[sid,eid,cid]
+        if term: mq+=" AND term=?"; mp.append(term)
+        if year: mq+=" AND year=?"; mp.append(year)
+        mark_rows=cur.execute(mq,mp).fetchall() if eid and cid else []
+        marks={(int(x["student_id"]),int(x["subject_id"])):x["marks"] for x in mark_rows}
+        computed=[]
+        for st in students:
+            total=0.0; points=0.0; count=0; vals=[]
+            for sub in subjects:
+                value=marks.get((int(st["id"]),int(sub["id"])))
+                if value is None:
+                    vals.extend(["—","—","—"])
+                else:
+                    try:
+                        grade,pts=_subject_grade_points(cur,sid,int(sub["id"]),value)
+                    except Exception as exc:
+                        print("DAVISCHOOL MARKSHEET PDF GRADE FALLBACK:", repr(exc), flush=True)
+                        grade,pts=_default_grade_points(float(value or 0))
+                    total+=float(value or 0); points+=float(pts or 0); count+=1
+                    vals.extend([f"{float(value):.1f}",str(grade),f"{float(pts):.1f}"])
+            computed.append((st,total,points,count,vals,_overall_grade(cur,sid,total) if count else "—"))
+        computed.sort(key=lambda x:x[1],reverse=True)
+        school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+        con.close()
+        styles=_pdf_styles()
+        story=_pdf_school_header(school,styles,"Class Marksheet",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'} · {term or 'Term'} {year or ''}")
+        header1=["No.","Admission","Student"]; header2=["","",""]
+        for sub in subjects:
+            header1.extend([str(sub["name"]),"",""]); header2.extend(["MKS","GRD","PTS"])
+        header1.extend(["OVERALL","","","","",""]); header2.extend(["MKS","PTS","AVG %","GRD","POS"])
+        data=[header1,header2]
+        last_total=None; pos=0
+        for idx,(st,total,points,count,vals,overall_grade) in enumerate(computed,1):
+            if last_total is None or total!=last_total: pos=idx; last_total=total
+            avg=(total/count) if count else 0
+            data.append([str(idx),str(st["admission_no"] or ""),str(st["name"] or "")]+vals+[f"{total:.1f}",f"{points:.1f}",f"{avg:.1f}",str(overall_grade),str(pos)])
+        if len(data)==2:
+            data.append(["","","No students or marks found."]+[""]*(len(header1)-3))
+        col_widths=[10*mm,22*mm,42*mm]+[15*mm]*(len(header1)-8)+[16*mm]*5
+        table=Table(data,colWidths=col_widths,repeatRows=2)
+        table.setStyle(TableStyle([
+            ("GRID",(0,0),(-1,-1),0.35,colors.black),("BACKGROUND",(0,0),(-1,1),colors.HexColor("#eef2f7")),
+            ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),6),
+            ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("ALIGN",(2,2),(2,-1),"LEFT"),("FONTSIZE",(2,2),(2,-1),7)
+        ]))
+        story += [table, Spacer(1,4), Paragraph("Generated by DaviSchool Management System.",styles["small"])]
+        pdf=_pdf_build(story,landscape(A3),"Class Marksheet")
+        filename=f"marksheet_{(cr['name'] if cr else 'class')}_{(er['name'] if er else 'exam')}.pdf"
+        return _pdf_response(pdf,filename)
+
+
+    except Exception as exc:
+        return _pdf_route_error(request, "class_marksheets_pdf", exc)
 
 @router.get("/app/academics/class-analysis/pdf")
 def class_analysis_pdf(request: Request, exam_id: str = "", class_id: str = ""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request,sid,"reports.view"):
-        return HTMLResponse("You do not have permission to download class analysis.",403)
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
-    con=_db();cur=con.cursor()
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    cid=int(class_id) if class_id.isdigit() else 0
-    er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
-    cr=cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
-    stats=[]; ranking=[]
-    if eid and cid:
-        stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
-          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=? AND m.class_id=?
-          WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(eid,sid,cid,sid)).fetchall()
-        students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
-        for st in students: ranking.append((st,_student_result(cur,sid,int(st["id"]),eid)))
-        ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
-    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
-    styles=_pdf_styles()
-    story=_pdf_school_header(school,styles,"Class Analysis",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'}")
-    story.append(Paragraph("Subject Performance",styles["normal"]))
-    data=[["Subject","Entries","Average","Highest","Lowest"]]+[[str(x["subject"]),str(x["entries"]),f"{float(x['average'] or 0):.2f}",f"{float(x['highest'] or 0):.1f}",f"{float(x['lowest'] or 0):.1f}"] for x in stats]
-    if len(data)==1:data.append(["No subject results found.","","","",""])
-    t=Table(data,colWidths=[70*mm,25*mm,30*mm,30*mm,30*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]));story += [t,Spacer(1,8),Paragraph("Learner Ranking",styles["normal"])]
-    data=[["Position","Admission","Student","Total","Average","Grade"]]+[[str(i),str(st["admission_no"] or ""),str(st["name"]),f"{res['total']:.1f}",f"{res['average']:.1f}%",str(res["overall_grade"])] for i,(st,res) in enumerate(ranking,1)]
-    if len(data)==1:data.append(["","","No learner results found.","","",""])
-    t=Table(data,colWidths=[20*mm,30*mm,65*mm,25*mm,30*mm,25*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]));story.append(t)
-    return _pdf_response(_pdf_build(story,landscape(A4),"Class Analysis"),f"class_analysis_{cr['name'] if cr else 'class'}.pdf")
 
+    try:
+        sid=_school_session(request)
+        if not sid:return RedirectResponse("/")
+        if not _require_permission(request,sid,"reports.view"):
+            return HTMLResponse("You do not have permission to download class analysis.",403)
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        con=_db();cur=con.cursor()
+        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        cid=int(class_id) if class_id.isdigit() else 0
+        er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
+        cr=cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
+        stats=[]; ranking=[]
+        if eid and cid:
+            stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
+              FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=? AND m.class_id=?
+              WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(eid,sid,cid,sid)).fetchall()
+            students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
+            for st in students: ranking.append((st,_student_result(cur,sid,int(st["id"]),eid)))
+            ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
+        school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
+        styles=_pdf_styles()
+        story=_pdf_school_header(school,styles,"Class Analysis",f"{cr['name'] if cr else 'Class'} {cr['stream'] if cr and cr['stream'] else ''} · {er['name'] if er else 'Examination'}")
+        story.append(Paragraph("Subject Performance",styles["normal"]))
+        data=[["Subject","Entries","Average","Highest","Lowest"]]+[[str(x["subject"]),str(x["entries"]),f"{float(x['average'] or 0):.2f}",f"{float(x['highest'] or 0):.1f}",f"{float(x['lowest'] or 0):.1f}"] for x in stats]
+        if len(data)==1:data.append(["No subject results found.","","","",""])
+        t=Table(data,colWidths=[70*mm,25*mm,30*mm,30*mm,30*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]));story += [t,Spacer(1,8),Paragraph("Learner Ranking",styles["normal"])]
+        data=[["Position","Admission","Student","Total","Average","Grade"]]+[[str(i),str(st["admission_no"] or ""),str(st["name"]),f"{res['total']:.1f}",f"{res['average']:.1f}%",str(res["overall_grade"])] for i,(st,res) in enumerate(ranking,1)]
+        if len(data)==1:data.append(["","","No learner results found.","","",""])
+        t=Table(data,colWidths=[20*mm,30*mm,65*mm,25*mm,30*mm,25*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8)]));story.append(t)
+        return _pdf_response(_pdf_build(story,landscape(A4),"Class Analysis"),f"class_analysis_{cr['name'] if cr else 'class'}.pdf")
+
+
+    except Exception as exc:
+        return _pdf_route_error(request, "class_analysis_pdf", exc)
 
 @router.get("/app/academics/student-analysis/pdf")
 def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = ""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request,sid,"reports.view"):
-        return HTMLResponse("You do not have permission to download student analysis.",403)
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
-    con=_db();cur=con.cursor()
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
-    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
-    result=_student_result(cur,sid,stid,eid) if st and eid else {"details":[],"total":0.0,"points":0.0,"average":0.0,"overall_grade":"—"}
-    er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
-    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
-    styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Analysis",f"{st['name'] if st else 'Student'} · {er['name'] if er else 'Examination'}")
-    if st: story += [Paragraph(f"Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}",styles["normal"]),Spacer(1,5)]
-    story += [Paragraph(f"Total: {result['total']:.1f}    Average: {result['average']:.1f}%    Overall Grade: {escape(str(result['overall_grade']))}",styles["normal"]),Spacer(1,6)]
-    data=[["Subject","Mark","Grade","Points"]]+[[str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}"] for r,mark,grade,points in result["details"]]
-    if len(data)==1:data.append(["No marks recorded.","","",""])
-    t=Table(data,colWidths=[85*mm,30*mm,30*mm,30*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),9)]));story.append(t)
-    return _pdf_response(_pdf_build(story,A4,"Student Analysis"),f"student_analysis_{st['name'] if st else 'student'}.pdf")
 
+    try:
+        sid=_school_session(request)
+        if not sid:return RedirectResponse("/")
+        if not _require_permission(request,sid,"reports.view"):
+            return HTMLResponse("You do not have permission to download student analysis.",403)
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        con=_db();cur=con.cursor()
+        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
+        st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+        result=_student_result(cur,sid,stid,eid) if st and eid else {"details":[],"total":0.0,"points":0.0,"average":0.0,"overall_grade":"—"}
+        er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
+        school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
+        styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Analysis",f"{st['name'] if st else 'Student'} · {er['name'] if er else 'Examination'}")
+        if st: story += [Paragraph(f"Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}",styles["normal"]),Spacer(1,5)]
+        story += [Paragraph(f"Total: {result['total']:.1f}    Average: {result['average']:.1f}%    Overall Grade: {escape(str(result['overall_grade']))}",styles["normal"]),Spacer(1,6)]
+        data=[["Subject","Mark","Grade","Points"]]+[[str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}"] for r,mark,grade,points in result["details"]]
+        if len(data)==1:data.append(["No marks recorded.","","",""])
+        t=Table(data,colWidths=[85*mm,30*mm,30*mm,30*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),9)]));story.append(t)
+        return _pdf_response(_pdf_build(story,A4,"Student Analysis"),f"student_analysis_{st['name'] if st else 'student'}.pdf")
+
+
+    except Exception as exc:
+        return _pdf_route_error(request, "student_analysis_pdf", exc)
 
 @router.get("/app/report-cards/pdf")
 def report_card_pdf(request: Request, exam_id: str = "", student_id: str = ""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request,sid,"reports.view"):
-        return HTMLResponse("You do not have permission to download report cards.",403)
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
-    con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
-    exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
-    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
-    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
-    if not st:
-        con.close();return HTMLResponse("Student not found.",404)
-    result=_student_result(cur,sid,stid,eid)
-    rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
-        WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
-    _ensure_academic_locks_table(cur)
-    marked=[r["subject_id"] for r in rows if r["marks"] is not None and str(r["marks"])!=""]
-    locked=cur.execute("SELECT COUNT(*) c FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id IN (%s)"%(",".join("?" for _ in marked)),[sid,eid,st["class_id"]]+marked).fetchone()["c"] if marked else 0
-    report_final=(int(locked)==len(marked)) if marked else False
-    totals=cur.execute("""SELECT s.id,COALESCE(SUM(m.marks),0) total FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.school_id=? AND m.exam_id=? WHERE s.school_id=? AND s.class_id=? GROUP BY s.id ORDER BY total DESC,s.id""",(sid,eid,sid,st["class_id"])).fetchall()
-    position="—"; last_total=None; pos=0
-    for idx,t in enumerate(totals,1):
-        tv=float(t["total"] or 0)
-        if last_total is None or tv!=last_total:pos=idx;last_total=tv
-        if int(t["id"])==stid:position=pos;break
-    comments={}; 
-    for r in rows:
-        x=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,stid,eid,r["subject_id"])).fetchone()
-        comments[int(r["subject_id"])]=x["comment"] if x else ""
-    tc=cur.execute("SELECT comment FROM class_teacher_comments WHERE school_id=? AND student_id=? AND exam_id=? LIMIT 1",(sid,stid,eid)).fetchone()
-    rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,stid,eid)).fetchone()
-    rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
-    er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
-    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
-    styles=_pdf_styles(); subtitle=f"{st['name']} · Admission {st['admission_no'] or ''} · {er['name'] if er else 'Examination'}"
-    story=_pdf_school_header(school,styles,"Student Report Card",subtitle)
-    status="FINAL" if report_final else "DRAFT"
-    story += [Paragraph(f"Class: {st['class_name'] or ''} {st['stream'] or ''} · Status: {status}",styles["normal"]),Spacer(1,5)]
-    data=[["Subject","Mark","Grade","Points","Performance Comment"]]
-    for r,mark,grade,points in result["details"]:
-        data.append([str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}",str(comments.get(int(r["subject_id"]),""))])
-    if len(data)==1:data.append(["No marks recorded.","","","",""])
-    t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
-    story += [t,Spacer(1,7),Paragraph(f"Subjects: {result['count']} · Total: {result['total']:.1f} · Average: {result['average']:.1f}% · Points: {result['points']:.1f} · Overall Grade: {result['overall_grade']} · Position: {position} / {len(totals)}",styles["normal"])]
-    if tc: story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
-    if rc: story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
-    if rs: story += [Spacer(1,4),Paragraph(f"Date of Opening: {rs['opening_date'] or ''}    Date of Closing: {rs['closing_date'] or ''}",styles["normal"])]
-    pdf=_pdf_build(story,A4,"Student Report Card")
-    return _pdf_response(pdf,f"report_card_{st['name']}.pdf")
+
+    try:
+        sid=_school_session(request)
+        if not sid:return RedirectResponse("/")
+        if not _require_permission(request,sid,"reports.view"):
+            return HTMLResponse("You do not have permission to download report cards.",403)
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
+        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
+        st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+        if not st:
+            con.close();return HTMLResponse("Student not found.",404)
+        result=_student_result(cur,sid,stid,eid)
+        rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
+            WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
+        _ensure_academic_locks_table(cur)
+        marked=[r["subject_id"] for r in rows if r["marks"] is not None and str(r["marks"])!=""]
+        locked=cur.execute("SELECT COUNT(*) c FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id IN (%s)"%(",".join("?" for _ in marked)),[sid,eid,st["class_id"]]+marked).fetchone()["c"] if marked else 0
+        report_final=(int(locked)==len(marked)) if marked else False
+        totals=cur.execute("""SELECT s.id,COALESCE(SUM(m.marks),0) total FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.school_id=? AND m.exam_id=? WHERE s.school_id=? AND s.class_id=? GROUP BY s.id ORDER BY total DESC,s.id""",(sid,eid,sid,st["class_id"])).fetchall()
+        position="—"; last_total=None; pos=0
+        for idx,t in enumerate(totals,1):
+            tv=float(t["total"] or 0)
+            if last_total is None or tv!=last_total:pos=idx;last_total=tv
+            if int(t["id"])==stid:position=pos;break
+        comments={}; 
+        for r in rows:
+            x=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,stid,eid,r["subject_id"])).fetchone()
+            comments[int(r["subject_id"])]=x["comment"] if x else ""
+        tc=cur.execute("SELECT comment FROM class_teacher_comments WHERE school_id=? AND student_id=? AND exam_id=? LIMIT 1",(sid,stid,eid)).fetchone()
+        rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,stid,eid)).fetchone()
+        rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
+        er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
+        school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
+        styles=_pdf_styles(); subtitle=f"{st['name']} · Admission {st['admission_no'] or ''} · {er['name'] if er else 'Examination'}"
+        story=_pdf_school_header(school,styles,"Student Report Card",subtitle)
+        status="FINAL" if report_final else "DRAFT"
+        story += [Paragraph(f"Class: {st['class_name'] or ''} {st['stream'] or ''} · Status: {status}",styles["normal"]),Spacer(1,5)]
+        data=[["Subject","Mark","Grade","Points","Performance Comment"]]
+        for r,mark,grade,points in result["details"]:
+            data.append([str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}",str(comments.get(int(r["subject_id"]),""))])
+        if len(data)==1:data.append(["No marks recorded.","","","",""])
+        t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eef2f7")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
+        story += [t,Spacer(1,7),Paragraph(f"Subjects: {result['count']} · Total: {result['total']:.1f} · Average: {result['average']:.1f}% · Points: {result['points']:.1f} · Overall Grade: {result['overall_grade']} · Position: {position} / {len(totals)}",styles["normal"])]
+        if tc: story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
+        if rc: story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
+        if rs: story += [Spacer(1,4),Paragraph(f"Date of Opening: {rs['opening_date'] or ''}    Date of Closing: {rs['closing_date'] or ''}",styles["normal"])]
+        pdf=_pdf_build(story,A4,"Student Report Card")
+        return _pdf_response(pdf,f"report_card_{st['name']}.pdf")
+
+    except Exception as exc:
+        return _pdf_route_error(request, "report_card_pdf", exc)
