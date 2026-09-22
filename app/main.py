@@ -17,6 +17,8 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
+BUILD_COMMIT = "948cd5390e92e6c728bf19cd824c88a0810f262d"
+
 app = FastAPI()
 
 # Render/Uvicorn must be able to bind the HTTP port even when PostgreSQL
@@ -68,7 +70,7 @@ def healthz():
     con = get_db()
     try:
         con.execute("SELECT 1").fetchone()
-        return JSONResponse({"status": "ok", "database": "reachable"})
+        return JSONResponse({"status": "ok", "database": "reachable", "build_commit": BUILD_COMMIT})
     finally:
         con.close()
 
