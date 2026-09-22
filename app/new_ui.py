@@ -768,6 +768,21 @@ def overall_grading_delete(request: Request,rule_id:int):
     con.commit();con.close()
     return RedirectResponse("/app/academics/overall-grading",303)
 
+
+
+# MarkSheet-only subject order. Subjects not listed here remain after the
+# requested curriculum subjects, preserving their existing alphabetical order.
+MARKSHEET_SUBJECT_ORDER = (
+    "English", "Kiswahili", "Mathematics", "Integrated Science", "Agriculture",
+    "Creative Arts and Sports", "Social Studies", "CRE", "Pre-technical Studies",
+)
+
+def _marksheet_subject_order(subjects):
+    preferred = {name.casefold(): index for index, name in enumerate(MARKSHEET_SUBJECT_ORDER)}
+    return sorted(subjects, key=lambda subject: (
+        preferred.get(str(subject["name"] or "").strip().casefold(), len(MARKSHEET_SUBJECT_ORDER)),
+        str(subject["name"] or "").strip().casefold(),
+    ))
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
     sid = _school_session(request)
@@ -796,6 +811,7 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
         subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+        subjects = _marksheet_subject_order(subjects)
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
         try:
@@ -3356,7 +3372,8 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
             print("DAVISCHOOL MARKSHEET PDF GRADING TABLE FALLBACK:", repr(exc), flush=True)
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+        subjects = _marksheet_subject_order(subjects)
         eid = int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
         combined_mode = class_id.startswith("grade:")
         combined_grade = class_id[6:] if combined_mode else ""
