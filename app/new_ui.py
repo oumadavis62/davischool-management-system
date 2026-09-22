@@ -2719,6 +2719,7 @@ def class_analysis_pdf(request: Request, exam_id: str = "", class_id: str = ""):
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import mm
         con=_db();cur=con.cursor()
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -2761,6 +2762,7 @@ def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = 
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import mm
         con=_db();cur=con.cursor()
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
@@ -2793,6 +2795,7 @@ def report_card_pdf(request: Request, exam_id: str = "", student_id: str = ""):
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import mm
         con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
