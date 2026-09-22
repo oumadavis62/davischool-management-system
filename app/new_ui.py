@@ -653,7 +653,8 @@ def _student_result(cur, school_id, student_id, exam_id, grading_rules=None, ove
         graded += 1
         details.append((r,mark,grade,float(pt or 0)))
     average=(total/graded) if graded else 0.0
-    overall=_overall_grade(cur,school_id,total,overall_rules) if graded else "—"
+    average=(total/graded) if graded else 0.0
+    overall=_overall_grade(cur,school_id,average,overall_rules) if graded else "—"
     return {"rows":rows,"details":details,"total":total,"points":points,
             "count":graded,"average":average,"overall_grade":overall}
 
@@ -684,24 +685,24 @@ def _load_overall_grading_rules(cur, school_id):
                 pass
         return []
 
-def _overall_grade(cur, school_id, total, overall_rules=None):
+def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
     if overall_rules is not None:
         for rule in overall_rules:
             try:
-                if float(rule["min_total"]) <= float(total) <= float(rule["max_total"]):
+                if float(rule["min_total"]) <= float(average_percentage) <= float(rule["max_total"]):
                     return str(rule["grade"])
             except Exception:
                 continue
-        return _default_grade_points(total)[0]
+        return _default_grade_points(average_percentage)[0]
     try:
         _ensure_overall_grading_table(cur)
         rule=cur.execute("""SELECT grade FROM overall_grading_rules
             WHERE school_id=? AND ? BETWEEN min_total AND max_total
-            ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,total)).fetchone()
+            ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,average_percentage)).fetchone()
         return str(rule["grade"]) if rule else _default_grade_points(total)[0]
     except Exception as exc:
         print("DAVISCHOOL OVERALL GRADING FALLBACK:", repr(exc), flush=True)
-        return _default_grade_points(total)[0]
+        return _default_grade_points(average_percentage)[0]
 
 @router.get("/app/academics/overall-grading", response_class=HTMLResponse)
 def overall_grading(request: Request):
@@ -721,13 +722,13 @@ def overall_grading(request: Request):
     con.close()
     rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button></form></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
     body=("<div class='page'><h1>Overall Grade & Position Settings</h1>"
-      "<div class='muted'>Set the total-mark bands your school uses for the final overall grade. Position is then calculated automatically from total marks within the selected class and stream.</div>"
+      "<div class='muted'>Set the average-percentage bands your school uses for the final overall grade. The overall grade is based on the learner's average percentage across entered subjects. Position is calculated automatically from total marks within the selected class and stream.</div>"
       "<div class='card section'><h2>Add overall grade band</h2><form method='post' action='/app/academics/overall-grading/add' style='display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px'>"
-      "<input name='min_total' type='number' min='0' step='0.01' required placeholder='Minimum total marks' class='field'>"
-      "<input name='max_total' type='number' min='0' step='0.01' required placeholder='Maximum total marks' class='field'>"
+      "<input name='min_total' type='number' min='0' step='0.01' required placeholder='Minimum average %' class='field'>"
+      "<input name='max_total' type='number' min='0' step='0.01' required placeholder='Maximum average %' class='field'>"
       "<input name='grade' required placeholder='Overall grade e.g. A' class='field'><button class='btn'>Save</button></form></div>"
-      "<div class='card section'><table><thead><tr><th>Minimum Total</th><th>Maximum Total</th><th>Overall Grade</th><th>Action</th></tr></thead><tbody>"+(rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")+"</tbody></table></div>"
-      "<div class='card section'><b>Position:</b> DaviSchool ranks learners automatically by total marks, highest total first. Equal totals receive the same position.</div>"
+      "<div class='card section'><table><thead><tr><th>Minimum Average %</th><th>Maximum Average %</th><th>Overall Grade</th><th>Action</th></tr></thead><tbody>"+(rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")+"</tbody></table></div>"
+      "<div class='card section'><b>Overall grade:</b> Based on average percentage. <b>Position:</b> ranked automatically by total marks, highest total first; equal totals receive the same position.</div>"
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style></div>")
     return _school_page(request,"Overall Grade & Position Settings",body)
 
@@ -739,8 +740,8 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
-    if min_total<0 or max_total<min_total or not grade.strip():
-        return HTMLResponse("Invalid total-mark range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
+    if min_total<0 or max_total>100 or max_total<min_total or not grade.strip():
+        return HTMLResponse("Invalid average-percentage range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
     con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
     overlap=cur.execute(
         """SELECT id FROM overall_grading_rules
@@ -751,7 +752,7 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
         con.close()
         return HTMLResponse("That overall grading range overlaps an existing range. <a href='/app/academics/overall-grading'>Back</a>",400)
     cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
-    _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f total marks"%(grade.strip(),min_total,max_total))
+    _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f%% average"%(grade.strip(),min_total,max_total))
     con.commit();con.close()
     return RedirectResponse("/app/academics/overall-grading",303)
 
@@ -1128,10 +1129,11 @@ def class_marksheets(request: Request, exam_id: str = "", class_id: str = "", te
             last_position=index
             last_total=total
         try:
-            overall_grade=_overall_grade(cur,sid,total,overall_rules) if count else "—"
+            average=(total/count) if count else 0
+            overall_grade=_overall_grade(cur,sid,average,overall_rules) if count else "—"
         except Exception as exc:
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
-            overall_grade=_default_grade_points(total)[0] if count else "—"
+            overall_grade=_default_grade_points(average)[0] if count else "—"
         average=(total/count) if count else 0
         student_stream = str(student["stream"] or "").strip() or class_stream_by_id.get(int(student["class_id"] or 0), "")
         stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
@@ -3502,7 +3504,8 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
                         grade,pts=_default_grade_points(float(value or 0))
                     total+=float(value or 0); points+=float(pts or 0); count+=1
                     vals.extend([f"{float(value):.1f}",str(grade),f"{float(pts):.1f}"])
-            computed.append((st,total,points,count,vals,_overall_grade(cur,sid,total) if count else "—"))
+            average=(total/count) if count else 0.0
+            computed.append((st,total,points,count,vals,_overall_grade(cur,sid,average) if count else "—"))
         computed.sort(key=lambda x:x[1],reverse=True)
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
         con.close()
