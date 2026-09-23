@@ -3240,7 +3240,8 @@ def timetable_page(request: Request):
         cells=[]
         for day in ("Monday","Tuesday","Wednesday","Thursday","Friday"):
             found=[r for r in selected_rows if r["day"]==day and r["start_time"]==st and r["end_time"]==et]
-            cells.append("<td>"+"<br>".join(f"<b>{escape(str(r['subject']))}</b>{('<br>'+escape(str(r['teacher']))) if r['teacher'] else ''}" for r in found) or "—"+"</td>")
+            cell_text="<br>".join(f"<b>{escape(str(r['subject']))}</b>{('<br>'+escape(str(r['teacher']))) if r['teacher'] else ''}" for r in found) or "—"
+            cells.append("<td>"+cell_text+"</td>")
         weekly_rows+=f"<tr><th>{escape(str(st))}–{escape(str(et))}</th>{''.join(cells)}</tr>"
 
     table_rows="".join(
