@@ -1995,7 +1995,7 @@ def school_timetable(request: Request):
             f"<td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td><b>{escape(str(r['subject']))}</b></td>"
             f"<td>{escape(str(r['teacher'] or ''))}</td><td>{escape(str(r['room'] or ''))}</td>"
             f"<td><form method='post' action='/school/modules/timetable/delete/{r['id']}' style='display:inline'>"
-            f"<button type='submit' onclick='return confirm("Delete this timetable entry?")' class='btn danger'>🗑️</button></form></td></tr>"
+            f"<button type='submit' onclick='return confirm(\"Delete this timetable entry?\")' class='btn danger'>🗑️</button></form></td></tr>"
             for r in data
         )
 
