@@ -61,11 +61,11 @@ SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1
 # Active users remain signed in because every authenticated request refreshes the
 # last-activity timestamp.
 try:
-    IDLE_TIMEOUT_SECONDS = max(60, int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(5 * 60))))
+    IDLE_TIMEOUT_SECONDS = max(60, int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(15 * 60))))
 except (TypeError, ValueError):
     # Never let a malformed Render environment variable prevent the web
-    # service from starting. Fall back to the requested 5-minute timeout.
-    IDLE_TIMEOUT_SECONDS = 5 * 60
+    # service from starting. Fall back to the requested 15-minute timeout.
+    IDLE_TIMEOUT_SECONDS = 15 * 60
 
 @app.middleware("http")
 async def idle_session_timeout(request: Request, call_next):
