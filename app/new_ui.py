@@ -900,71 +900,46 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _marksheet_subject_order(subjects):
-    # MarkSheet-only curriculum order. Do NOT change the database query here:
-    # the MarkSheet must first load all subjects exactly as before, then this
-    # function orders the already-loaded rows without affecting classes,
-    # streams, marks, summaries, or combined-grade selection.
+    # MarkSheet-only adjustment: move Science/Integrated Science immediately
+    # after Mathematics, while preserving the existing relative order of every
+    # other subject. This does not change the database subject order.
     def normalize(value):
         value = str(value or "").strip().casefold()
         value = re.sub(r"[^a-z0-9]+", " ", value)
         return " ".join(value.split())
 
-    preferred = {
-        normalize("English"): 1,
-        normalize("Kiswahili"): 2,
-        normalize("Mathematics"): 3,
-        normalize("Integrated Science"): 4,
-        normalize("Agriculture"): 5,
-        normalize("Creative Arts and Sports"): 6,
-        normalize("Social Studies"): 7,
-        normalize("CRE"): 8,
-        normalize("Pre-technical Studies"): 9,
-    }
-
-    def curriculum_position(value):
+    def is_science(value):
         name = normalize(value)
-        if name in preferred:
-            return preferred[name]
-
-        # Match common stored-name variations without depending on exact
-        # punctuation, ampersands, hyphens, or extra descriptors.
         tokens = set(name.split())
-        if "english" in tokens:
-            return 1
-        if "kiswahili" in tokens:
-            return 2
-        if "mathematics" in tokens or "math" in tokens:
-            return 3
+        return (
+            name == "science"
+            or name == "integrated science"
+            or ("integrated" in tokens and "science" in tokens)
+        )
 
-        # Integrated Science must be position 4 whenever the stored subject
-        # contains both "integrated" and "science", regardless of any other
-        # words such as technology, CBC, & etc.
-        if "integrated" in tokens and "science" in tokens:
-            return 4
+    def is_mathematics(value):
+        name = normalize(value)
+        tokens = set(name.split())
+        return name == "mathematics" or "mathematics" in tokens or "math" in tokens
 
-        if "agriculture" in tokens:
-            return 5
-        if "creative" in tokens and "arts" in tokens and "sport" in tokens:
-            return 6
-        if "social" in tokens and "studies" in tokens:
-            return 7
-        if name == "cre" or "cre" in tokens:
-            return 8
-        if "pre" in tokens and "technical" in tokens:
-            return 9
+    ordered = list(subjects)
+    science_indexes = [i for i, subject in enumerate(ordered) if is_science(subject["name"])]
+    math_index = next((i for i, subject in enumerate(ordered) if is_mathematics(subject["name"])), None)
 
-        return 100
+    if not science_indexes or math_index is None:
+        return ordered
 
-    # Python's sort is stable, so subjects with the same curriculum position
-    # retain their original database order. Other subjects remain after the
-    # nine required curriculum subjects, ordered by their normalized name.
-    return sorted(
-        subjects,
-        key=lambda subject: (
-            curriculum_position(subject["name"]),
-            normalize(subject["name"]) if curriculum_position(subject["name"]) == 100 else "",
-        ),
-    )
+    # Remove Science from its original position, then insert it directly after
+    # Mathematics. All non-Science subjects retain their original relative order.
+    science_rows = [ordered[i] for i in science_indexes]
+    remaining = [subject for i, subject in enumerate(ordered) if i not in science_indexes]
+    new_math_index = next((i for i, subject in enumerate(remaining) if is_mathematics(subject["name"])), None)
+
+    if new_math_index is None:
+        return ordered
+
+    insert_at = new_math_index + 1
+    return remaining[:insert_at] + science_rows + remaining[insert_at:]
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
