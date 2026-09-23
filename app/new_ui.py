@@ -3248,7 +3248,7 @@ def timetable_page(request: Request):
         f"<tr><td>{escape(str(r['day']))}</td><td>{escape(str(r['start_time']))}–{escape(str(r['end_time']))}</td>"
         f"<td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td><b>{escape(str(r['subject']))}</b></td>"
         f"<td>{escape(str(r['teacher'] or ''))}</td><td>{escape(str(r['room'] or ''))}</td>"
-        f"<td><form method='post' action='/app/timetable/delete/{r['id']}' onsubmit="return confirm('Delete this lesson?')"><button class='mini danger'>🗑️</button></form></td></tr>"
+        f"<td><form method='post' action='/app/timetable/delete/{r['id']}' onsubmit='return confirm(\"Delete this lesson?\")'><button class='mini danger'>🗑️</button></form></td></tr>"
         for r in rows
     ) or "<tr><td colspan='7' style='padding:30px;text-align:center'>No timetable entries yet.</td></tr>"
 
