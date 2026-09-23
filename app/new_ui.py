@@ -2785,11 +2785,12 @@ def subject_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
         except Exception: pass
         exams=[]; classes=[]; subjects=[]; eid=0; cid=0; stats=[]
     finally:
-        con.close()
+        pass
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     subject_comment_rules=_load_grading_rules(cur,sid) if stats else {}
     rows="".join(f"<tr><td>{escape(str(r['subject']))}</td><td>{int(r['entries'] or 0)}</td><td>{float(r['average'] or 0):.2f}</td><td>{float(r['highest'] or 0):.1f}</td><td>{float(r['lowest'] or 0):.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(r['id']),float(r['average'] or 0),subject_comment_rules)[2] or ''))}</td></tr>" for r in stats)
+    con.close()
     body=f"""<div class='page'><h1>Subject Analysis</h1><div class='muted'>Compare subject performance for the selected examination and class.</div>
 <div class='card section'><form method='get' action='/app/academics/subject-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div>
 <div class='card section'><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th><th>Performance Comment</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No marks found for the selected examination/class.</td></tr>"}</tbody></table></div></div>
