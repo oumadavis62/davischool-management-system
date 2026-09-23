@@ -7,11 +7,15 @@ A secure browser-based school management platform designed for online deployment
 - Managed PostgreSQL database
 - HTTPS/TLS
 - Secure signed sessions
-- Environment-based secrets
 - Audit log
 - Role field for users
 - Printable report cards
 - Modules for students, staff, classes, subjects, assessments, marks, analytics, report cards, attendance, finance, timetable, library, inventory, discipline, parent messaging, exports and settings.
+
+## Deployment validation
+- The MarkSheet overall-metric selector uses syntax-safe Python string construction.
+- The application source is validated by the repository Python compilation workflow before deployment.
+- The current main branch contains the corrected `app/new_ui.py` MarkSheet selector.
 
 ## Local test
 1. Install Python 3.12+.
