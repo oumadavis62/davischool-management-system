@@ -2747,7 +2747,7 @@ def report_comment(request: Request, exam_id:int=Form(...), student_id:int=Form(
     con.commit();con.close();return RedirectResponse(f"/app/report-cards?exam_id={exam_id}&student_id={student_id}",303)
 
 @router.get("/app/academics/subject-analysis", response_class=HTMLResponse)
-def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
+def subject_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = ""):
     sid=_school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -2758,7 +2758,10 @@ def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = "
         exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
         subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids=[int(exams[0]["id"])]
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]
         if eid:
@@ -2767,15 +2770,15 @@ def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = "
                     COALESCE(MAX(m.marks),0) highest,
                     COALESCE(MIN(m.marks),0) lowest
                    FROM subjects sub
-                   LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+                   LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
                    LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
                    WHERE sub.school_id=?"""
-            params=[eid,sid,sid]
+            params=list(selected_exam_ids)+[sid,sid]
             if cid:
                 sql+=" AND st.class_id=?"
                 params.append(cid)
             sql+=" GROUP BY sub.id,sub.name ORDER BY sub.name"
-            stats=cur.execute(sql,params).fetchall()
+            stats=cur.execute(sql.replace("PLACEHOLDERS",",".join("?" for _ in selected_exam_ids)),params).fetchall()
     except Exception as exc:
         print("DAVISCHOOL SUBJECT ANALYSIS PAGE FAILED:",repr(exc),flush=True)
         try: con.rollback()
@@ -2794,7 +2797,7 @@ def subject_analysis_page(request: Request, exam_id: str = "", class_id: str = "
     return _school_page(request,"Subject Analysis",body)
 
 @router.get("/app/academics/student-analysis", response_class=HTMLResponse)
-def student_analysis_page(request: Request, exam_id: str = "", student_id: str = ""):
+def student_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "", student_id: str = ""):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     if not _require_permission(request, sid, "reports.view"):
@@ -2802,17 +2805,20 @@ def student_analysis_page(request: Request, exam_id: str = "", student_id: str =
     con=_db(); cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+    if not selected_exam_ids and exams:
+        selected_exam_ids=[int(exams[0]["id"])]
+    eid=selected_exam_ids[0] if selected_exam_ids else 0
     stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
     analysis_grading_rules=_load_grading_rules(cur,sid) if st and eid else []
-    result=_student_result(cur,sid,stid,eid,analysis_grading_rules,None) if st and eid else {"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
-    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
+    result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,analysis_grading_rules,None) if st and eid else {"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
+    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     sopts="".join(f"<option value='{s['id']}' {'selected' if int(s['id'])==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     con.close()
     rows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(r['subject_id']),mark,analysis_grading_rules)[2] or ''))}</td></tr>" for r,mark,grade,points in result["details"])
     body=f"""<div class='page'><h1>Student Analysis</h1><div class='muted'>Detailed performance for one learner using the same grading engine as the report card.</div>
-<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Analyse</button><a class='btn' style='text-decoration:none;text-align:center' href='/app/academics/student-analysis/pdf?exam_id={eid}&student_id={stid}'>⬇️ Download PDF</a></form></div>
+<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='4'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Analyse</button><a class='btn' style='text-decoration:none;text-align:center' href='/app/academics/student-analysis/pdf?exam_ids={",".join(str(x) for x in selected_exam_ids)}&student_id={stid}'>⬇️ Download PDF</a></form></div>
 <div class='grid'><div class='card'><div class='label'>Student</div><div class='kpi' style='font-size:18px'>{escape(str(st["name"] if st else "—"))}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{result["total"]:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{result["average"]:.1f}%</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div></div>
 <div class='card section'><h2>Subject Results</h2><table><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks recorded for this student and examination.</td></tr>'}</tbody></table></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
@@ -2820,7 +2826,7 @@ def student_analysis_page(request: Request, exam_id: str = "", student_id: str =
 
 
 @router.get("/app/academics/class-analysis", response_class=HTMLResponse)
-def class_analysis_page(request: Request, exam_id: str = "", class_id: str = ""):
+def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = ""):
     sid=_school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -2830,7 +2836,10 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
     try:
         exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids=[int(exams[0]["id"])]
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]; ranking=[]
         if eid and cid:
@@ -2843,7 +2852,7 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
             students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
             for st in students:
                 try:
-                    res=_student_result(cur,sid,int(st["id"]),eid)
+                    res=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,_load_grading_rules(cur,sid),None)
                 except Exception as exc:
                     print("DAVISCHOOL CLASS ANALYSIS RESULT FALLBACK:",repr(exc),flush=True)
                     res={"total":0.0,"average":0.0,"overall_grade":"—","count":0}
@@ -2856,13 +2865,13 @@ def class_analysis_page(request: Request, exam_id: str = "", class_id: str = "")
         exams=[]; classes=[]; eid=0; cid=0; stats=[]; ranking=[]
     finally:
         con.close()
-    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
+    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     class_comment_rules=_load_grading_rules(cur,sid) if stats else {}
     ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{int(x['entries'] or 0)}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(x['subject_id']),float(x['average'] or 0),class_comment_rules)[2] or ''))}</td></tr>" for x in stats)
     sr="".join(f"<tr><td>{i}</td><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td></tr>" for i,(st,res) in enumerate(ranking,1))
     body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Class-level subject performance and learner results.</div>
-<div class='card section'><form method='get' action='/app/academics/class-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_id' class='field'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><button class='btn'>Analyse</button></form></div>
+<div class='card section'><form method='get' action='/app/academics/class-analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='4'><option value=''>Select examination</option>{eopts}</select><select name='class_id' class='field'><option value=''>Select class</option>{copts}</select><button class='btn'>Analyse</button></form></div>
 <div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th><th>Performance Comment</th></tr></thead><tbody>{ar or "<tr><td colspan='6'>Select an examination and class.</td></tr>"}</tbody></table></div>
 <div class='card section'><h2>Learner Ranking</h2><table><thead><tr><th>Position</th><th>Admission</th><th>Student</th><th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{sr or "<tr><td colspan='6'>No learner results found.</td></tr>"}</tbody></table></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
@@ -3805,7 +3814,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         return _pdf_route_error(request, "class_marksheets_pdf", exc)
 
 @router.get("/app/academics/class-analysis/pdf")
-def class_analysis_pdf(request: Request, exam_id: str = "", class_id: str = ""):
+def class_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = ""):
 
     try:
         sid=_school_session(request)
@@ -3819,17 +3828,22 @@ def class_analysis_pdf(request: Request, exam_id: str = "", class_id: str = ""):
         con=_db();cur=con.cursor()
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids=[int(exams[0]["id"])]
+        eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         cr=cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone() if cid else None
         stats=[]; ranking=[]
-        if eid and cid:
+        if selected_exam_ids and cid:
+            placeholders=",".join("?" for _ in selected_exam_ids)
             stats=cur.execute("""SELECT sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
-              FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=? AND m.class_id=?
-              WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",(eid,sid,cid,sid)).fetchall()
+              FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=? AND m.class_id=?
+              WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
+              list(selected_exam_ids)+[sid,cid,sid]).fetchall()
             students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
-            for st in students: ranking.append((st,_student_result(cur,sid,int(st["id"]),eid)))
+            for st in students: ranking.append((st,_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,_load_grading_rules(cur,sid),None)))
             ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
         styles=_pdf_styles()
@@ -3848,7 +3862,7 @@ def class_analysis_pdf(request: Request, exam_id: str = "", class_id: str = ""):
         return _pdf_route_error(request, "class_analysis_pdf", exc)
 
 @router.get("/app/academics/student-analysis/pdf")
-def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = ""):
+def student_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = "", student_id: str = ""):
 
     try:
         sid=_school_session(request)
@@ -3870,8 +3884,9 @@ def student_analysis_pdf(request: Request, exam_id: str = "", student_id: str = 
         st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
         result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),None) if st and eid else {"details":[],"total":0.0,"points":0.0,"average":0.0,"overall_grade":"—"}
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
+        assessment_label=", ".join(str(x["name"]) for x in exams if int(x["id"]) in selected_exam_ids) or "Examination"
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
-        styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Analysis",f"{st['name'] if st else 'Student'} · {er['name'] if er else 'Examination'}")
+        styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Analysis",f"{st['name'] if st else 'Student'} · {assessment_label}")
         if st: story += [Paragraph(f"Admission: {escape(str(st['admission_no'] or ''))} · Class: {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}",styles["normal"]),Spacer(1,5)]
         story += [Paragraph(f"Total: {result['total']:.1f}    Average: {result['average']:.1f}%    Overall Grade: {escape(str(result['overall_grade']))}",styles["normal"]),Spacer(1,6)]
         data=[["Subject","Mark","Grade","Points"]]+[[str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}"] for r,mark,grade,points in result["details"]]
