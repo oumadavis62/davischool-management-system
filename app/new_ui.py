@@ -1275,9 +1275,23 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
         if id(item) not in page_students:
             continue
-        rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s"
-          "".join({"mks":"<td><b>%.1f</b></td>"%total,"pts":"<td><b>%.1f</b></td>"%total_points,"avg":"<td><b>%.1f%%</b></td>"%average,"grade":"<td><b>%s</b></td>"%escape(str(overall_grade)),"pos":"<td><b>%d</b></td>"%last_position}[m] for m in overall_metric_list) + "</tr>"
-          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells))
+        overall_cells = "".join({
+            "mks": "<td><b>%.1f</b></td>" % total,
+            "pts": "<td><b>%.1f</b></td>" % total_points,
+            "avg": "<td><b>%.1f%%</b></td>" % average,
+            "grade": "<td><b>%s</b></td>" % escape(str(overall_grade)),
+            "pos": "<td><b>%d</b></td>" % last_position,
+        }[m] for m in overall_metric_list)
+        rows += (
+            "<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s%s</tr>"
+            % (
+                escape(str(student["admission_no"] or "")),
+                escape(str(student["name"] or "")),
+                stream_cell,
+                cells,
+                overall_cells,
+            )
+        )
 
     try:
         school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
