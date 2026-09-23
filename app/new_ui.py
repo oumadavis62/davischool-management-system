@@ -906,6 +906,14 @@ MARKSHEET_SUBJECT_ORDER = (
     "Pre-technical Studies",
 )
 
+def _subject_marksheet_label(subject):
+    """Return the subject initial/code for MarkSheet headings, with a safe name fallback."""
+    try:
+        initial = str(subject["initial"] or "").strip()
+    except Exception:
+        initial = ""
+    return initial or str(subject["name"] or "").strip()
+
 def _marksheet_subject_order(subjects):
     # Fixed MarkSheet curriculum order. Only the MarkSheet display order is
     # changed; database subject records and marks remain untouched.
@@ -1180,7 +1188,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     metric_classes = {"mks": "mks-col", "grade": "grade-col", "pts": "points-col"}
     for subject in subjects:
         metrics = subject_metric_map.get(int(subject["id"]), ["mks", "grade", "pts"])
-        header_cells += "<th colspan='%d' class='subjecthead'>%s</th>" % (len(metrics), escape(str(subject["name"])))
+        header_cells += "<th colspan='%d' class='subjecthead'>%s</th>" % (len(metrics), escape(_subject_marksheet_label(subject)))
         for metric in metrics:
             sub_header_cells += "<th class='%s-head'>%s</th>" % (metric, metric_labels[metric])
             subject_colgroup += "<col class='%s'>" % metric_classes[metric]
@@ -1453,7 +1461,7 @@ def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", str
         copts = "".join("<option value='%s' %s>%s %s</option>" % (c["id"], "selected" if int(c["id"]) == cid else "", escape(str(c["name"])), escape(str(c["stream"] or ""))) for c in classes)
         streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
         stropts = "".join("<option value='%s' %s>%s</option>" % (escape(x), "selected" if x == stream else "", escape(x)) for x in streams)
-        subject_headers = "".join("<th>%s<br><span class='blank-sub'>MKS</span></th>" % escape(str(sub["name"])) for sub in subjects)
+        subject_headers = "".join("<th>%s<br><span class='blank-sub'>MKS</span></th>" % escape(_subject_marksheet_label(sub)) for sub in subjects)
         student_rows = "".join("<tr><td>%s</td><td class='student-name'>%s</td>%s<td></td></tr>" % (escape(str(st["admission_no"] or "")), escape(str(st["name"] or "")), "".join("<td class='blank-cell'></td>" for _ in subjects)) for st in students)
         if not students:
             student_rows = "<tr><td colspan='%d'>No students found for the selected class/stream.</td></tr>" % (len(subjects) + 3)
@@ -3895,7 +3903,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         if combined_mode:
             header1.append("Stream"); header2.append("")
         for sub in subjects:
-            header1.extend([str(sub["name"]),"",""]); header2.extend(["MKS","GRD","PTS"])
+            header1.extend([_subject_marksheet_label(sub),"",""]); header2.extend(["MKS","GRD","PTS"])
         header1.extend(["OVERALL","","","","",""]); header2.extend(["MKS","PTS","AVG %","GRD","POS"])
         data=[header1,header2]
         last_total=None; pos=0
@@ -3933,7 +3941,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
                 pdf_last_mean = mean_value
             pdf_subject_positions[int(item[0]["id"])] = pdf_last_position
         mean_data=[["Subject","Mean","Entries","Position"]]+[
-            [str(sub["name"]),f"{mean:.2f}" if mean is not None else "—",str(count),str(pdf_subject_positions.get(int(sub["id"]),"—"))]
+            [_subject_marksheet_label(sub),f"{mean:.2f}" if mean is not None else "—",str(count),str(pdf_subject_positions.get(int(sub["id"]),"—"))]
             for sub,mean,count in subject_means
         ]
         if len(mean_data)==1: mean_data.append(["No subject marks available.","","",""])
