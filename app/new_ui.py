@@ -959,7 +959,7 @@ def _marksheet_subject_order(subjects):
     )
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
-def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1, subject_ids: str = ""):
+def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1, subject_ids: str = "", subject_metrics: str = "", overall_metrics: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -997,6 +997,20 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         if selected_subject_ids:
             selected_set = set(selected_subject_ids)
             subjects = [s for s in subjects if int(s["id"]) in selected_set]
+        subject_metric_map = {}
+        for part in str(subject_metrics or "").split(","):
+            if ":" not in part:
+                continue
+            raw_id, raw_metrics = part.split(":", 1)
+            try:
+                subject_metric_map[int(raw_id)] = [m for m in raw_metrics.split(".") if m in ("mks", "grade", "pts")]
+            except (TypeError, ValueError):
+                pass
+        for subject in subjects:
+            subject_metric_map.setdefault(int(subject["id"]), ["mks", "grade", "pts"])
+        overall_metric_list = [m for m in str(overall_metrics or "").split(",") if m in ("mks", "pts", "avg", "grade", "pos")]
+        if not overall_metric_list:
+            overall_metric_list = ["mks", "pts", "avg", "grade", "pos"]
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
         try:
@@ -1162,18 +1176,14 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     header_cells = ""
     sub_header_cells = ""
     subject_colgroup = ""
+    metric_labels = {"mks": "MKS", "grade": "GRD", "pts": "PTS"}
+    metric_classes = {"mks": "mks-col", "grade": "grade-col", "pts": "points-col"}
     for subject in subjects:
-        header_cells += "<th colspan='3' class='subjecthead'>%s</th>" % escape(str(subject["name"]))
-        sub_header_cells += (
-            "<th class='mks-head'>MKS</th>"
-            "<th class='grade-head'>GRD</th>"
-            "<th class='points-head'>PTS</th>"
-        )
-        subject_colgroup += (
-            "<col class='mks-col' style='width:58px;min-width:58px;max-width:58px'>"
-            "<col class='grade-col' style='width:50px;min-width:50px;max-width:50px'>"
-            "<col class='points-col' style='width:58px;min-width:58px;max-width:58px'>"
-        )
+        metrics = subject_metric_map.get(int(subject["id"]), ["mks", "grade", "pts"])
+        header_cells += "<th colspan='%d' class='subjecthead'>%s</th>" % (len(metrics), escape(str(subject["name"])))
+        for metric in metrics:
+            sub_header_cells += "<th class='%s-head'>%s</th>" % (metric, metric_labels[metric])
+            subject_colgroup += "<col class='%s'>" % metric_classes[metric]
 
     # Calculate subject means from the marks query itself (one pass only).
     # This avoids an extra student x subject loop and keeps the MarkSheet fast.
@@ -1219,8 +1229,9 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         cells=""
         for subject in subjects:
             value=marks.get((int(student["id"]),int(subject["id"])))
+            metrics = subject_metric_map.get(int(subject["id"]), ["mks", "grade", "pts"])
             if value is None:
-                cells+="<td>—</td><td>—</td><td>—</td>"
+                cells += "".join("<td>—</td>" for _ in metrics)
             else:
                 try:
                     grade,points,_=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
@@ -1231,16 +1242,12 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
-                cells+=(
-                    "<td class='mks-cell'>%.1f</td>"
-                    "<td class='grade-cell'><b>%s</b></td>"
-                    "<td class='points-cell'>%.1f</td>"
-                    % (
-                        float(value),
-                        escape(str(grade)),
-                        float(points),
-                    )
-                )
+                metric_html = {
+                    "mks": "<td class='mks-cell'>%.1f</td>" % float(value),
+                    "grade": "<td class='grade-cell'><b>%s</b></td>" % escape(str(grade)),
+                    "pts": "<td class='points-cell'>%.1f</td>" % float(points),
+                }
+                cells += "".join(metric_html[m] for m in metrics)
         computed.append((student,total,total_points,count,cells))
     computed.sort(key=lambda x:x[1],reverse=True)
     page_size=30
@@ -1269,8 +1276,8 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         if id(item) not in page_students:
             continue
         rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s"
-          "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
-          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells,total,total_points,average,escape(str(overall_grade)),last_position))
+          "".join({"mks":"<td><b>%.1f</b></td>"%total,"pts":"<td><b>%.1f</b></td>"%total_points,"avg":"<td><b>%.1f%%</b></td>"%average,"grade":"<td><b>%s</b></td>"%escape(str(overall_grade)),"pos":"<td><b>%d</b></td>"%last_position}[m] for m in overall_metric_list) + "</tr>"
+          %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells))
 
     try:
         school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
@@ -1294,7 +1301,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     exam_name = escape(" + ".join(str(e["name"]) for e in exams if int(e["id"]) in selected_exam_ids)) if selected_exam_ids else "Select examinations"
     stream_col_html = "<th rowspan='2'>STREAM</th>" if combined_mode else ""
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
-    colspan = 3 + len(subjects) * 3 + 5 if combined_mode else 2 + len(subjects) * 3 + 5
+    colspan = (3 if combined_mode else 2) + sum(len(subject_metric_map.get(int(s["id"]), ["mks", "grade", "pts"])) for s in subjects) + len(overall_metric_list)
     selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
     marksheet_page_query = (
@@ -1304,6 +1311,8 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         f"&year={quote(str(year or ''), safe='')}"
         f"&stream={quote(str(stream or ''), safe='')}"
         f"&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}"
+        f"&subject_metrics={quote(subject_metrics or '', safe='')}"
+        f"&overall_metrics={quote(','.join(overall_metric_list), safe='')}"
     )
     prev_page = max(1, page - 1)
     next_page = min(total_pages, page + 1)
@@ -1359,11 +1368,18 @@ function printDocument(){
         "<select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>" + yopts + "</select>"
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
         "<input type='hidden' name='subject_ids' id='selectedSubjectIds' value='" + escape(','.join(str(x) for x in selected_subject_ids)) + "'>"
-        "<button type='submit' class='btn' onclick='var a=[];document.querySelectorAll(\".subject-choice:checked\").forEach(function(x){a.push(x.value)});document.getElementById(\"selectedSubjectIds\").value=a.join(\",\")'>Apply Subjects</button>"
+        "<input type='hidden' name='subject_metrics' id='selectedSubjectMetrics' value='" + escape(subject_metrics or '') + "'>"
+        "<input type='hidden' name='overall_metrics' id='selectedOverallMetrics' value='" + escape(','.join(overall_metric_list)) + "'>"
+        "<button type='submit' class='btn' onclick='var a=[];document.querySelectorAll(\".subject-choice:checked\").forEach(function(x){a.push(x.value)});var sm=[];document.querySelectorAll(\".metric-choice:checked\").forEach(function(x){var id=x.dataset.subject;var f=sm.find(function(y){return y.id===id});if(!f){f={id:id,m:[]};sm.push(f)}f.m.push(x.value)});var om=[];document.querySelectorAll(\".overall-choice:checked\").forEach(function(x){om.push(x.value)});document.getElementById(\"selectedSubjectIds\").value=a.join(\",\");document.getElementById(\"selectedSubjectMetrics\").value=sm.map(function(x){return x.id+\":\"+x.m.join(\".\")}).join(\",\");document.getElementById(\"selectedOverallMetrics\").value=om.join(\",\")'>Apply Display</button>"
         "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + pdf_marksheet_url +
         "<div class='subject-picker'><div class='subject-picker-title'>Subjects to display on MarkSheet</div><div class='subject-picker-grid'>" +
         "".join("<label><input type='checkbox' class='subject-choice' value='%s' %s> %s</label>" % (s["id"], "checked" if (not selected_subject_ids or int(s["id"]) in set(selected_subject_ids)) else "", escape(str(s["name"]))) for s in _marksheet_subject_order(cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall())) +
         "</div><div class='subject-picker-actions'><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=true})'>Select all</button><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=false})'>Clear</button></div></div>" +
+        "<div class='subject-metric-picker'><div class='subject-picker-title'>Display for each selected subject</div><div class='subject-metric-grid'>" +
+        "".join("<div><b>%s:</b> %s</div>" % (escape(str(s["name"])), "".join("<label class='metric-label'><input type='checkbox' class='metric-choice' data-subject='%s' value='%s' %s> %s</label>" % (s["id"],m,"checked" if m in subject_metric_map.get(int(s["id"]),["mks","grade","pts"]) else "",{"mks":"MKS","grade":"GRD","pts":"PTS"}[m]) for m in ("mks","grade","pts"))) for s in subjects) +
+        "</div></div><div class='subject-metric-picker'><div class='subject-picker-title'>Display under OVERALL</div><div class='subject-metric-grid'>" +
+        "".join("<label class='metric-label'><input type='checkbox' class='overall-choice' value='%s' %s> %s</label>" % (m,"checked" if m in overall_metric_list else "",{"mks":"MKS","pts":"PTS","avg":"AVG %","grade":"GRD","pos":"POS"}[m]) for m in ("mks","pts","avg","grade","pos")) +
+        "</div></div>" +
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> "
         "<a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
@@ -1373,16 +1389,16 @@ function printDocument(){
         " &nbsp;&nbsp; TERM: " + escape(term or "All") + " &nbsp;&nbsp; YEAR: " + escape(year or "All") + "</div>"
         "<div class='marksheet-scroll' tabindex='0'><table class='marksheet'><colgroup>"
         "<col class='adm-no-col'><col class='name-col'>" + stream_colgroup_html + subject_colgroup +
-        "<col class='overall-marks-col'><col class='overall-points-col'><col class='overall-avg-col'><col class='overall-grade-col'><col class='overall-pos-col'>"
+        "" + "".join("<col class='overall-%s-col'>" % m for m in overall_metric_list) + ""
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
-        stream_col_html + header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
-        "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
+        stream_col_html + header_cells + "<th colspan='" + str(len(overall_metric_list)) + "'>OVERALL</th></tr><tr>" + sub_header_cells +
+        "".join("<th>%s</th>" % {"mks":"MKS","pts":"PTS","avg":"AVG %","grade":"GRD","pos":"POS"}[m] for m in overall_metric_list) + "</tr></thead><tbody>" +
         rows_html + "</tbody></table>" + marksheet_pagination + "</div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
         "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
         print_script +
         "<style>"
         ".field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
-        ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.subject-picker{grid-column:1/-1;border:1px solid #dbe2ea;border-radius:10px;padding:10px;background:#f8fafc}.subject-picker-title{font-weight:900;margin-bottom:8px}.subject-picker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 12px}.subject-picker-grid label{font-weight:600}.subject-picker-actions{margin-top:8px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
+        ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.subject-picker{grid-column:1/-1;border:1px solid #dbe2ea;border-radius:10px;padding:10px;background:#f8fafc}.subject-picker-title{font-weight:900;margin-bottom:8px}.subject-picker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 12px}.subject-picker-grid label{font-weight:600}.subject-picker-actions{margin-top:8px}.subject-metric-picker{grid-column:1/-1;border:1px solid #dbe2ea;border-radius:10px;padding:10px;background:#fff}.subject-metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px 14px}.metric-label{margin-left:6px;font-weight:600}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
         ".marksheet-card{background:#fff;min-width:0;overflow:hidden}.marksheet-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding-bottom:8px;scrollbar-gutter:stable}.marksheet-scroll:focus{outline:2px solid #94a3b8;outline-offset:2px}.marksheet{width:max-content;min-width:100%}.marksheet-pagination{display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 0}.marksheet-pagination .btnlink:disabled{opacity:.45;cursor:not-allowed}.marksheet thead tr:first-child th{background:#fff}.marksheet thead tr:nth-child(2) th{background:#fff}.marksheet th:nth-child(1),.marksheet td:nth-child(1){position:sticky;left:0;background:#fff;z-index:10}.marksheet th:nth-child(2),.marksheet td:nth-child(2){position:sticky;left:78px;background:#fff;z-index:10}.marksheet thead tr:first-child th:nth-child(1),.marksheet thead tr:first-child th:nth-child(2),.marksheet thead tr:nth-child(2) th:nth-child(1),.marksheet thead tr:nth-child(2) th:nth-child(2){z-index:13}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:0;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap;box-sizing:border-box}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .adm-no-col{width:78px;min-width:78px;max-width:78px}.marksheet .name-col{width:190px;min-width:190px;max-width:190px}.marksheet .stream-col,.marksheet .stream-cell{width:70px;min-width:70px;max-width:70px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .mks-cell,.marksheet .points-cell{vertical-align:middle;width:58px;min-width:58px;max-width:58px}.marksheet .grade-cell{vertical-align:middle;width:50px;min-width:50px;max-width:50px}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase;white-space:nowrap;overflow:hidden;max-width:166px}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.marksheet-pagination{display:none!important}.marksheet tbody tr{display:table-row!important}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
