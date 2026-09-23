@@ -1279,6 +1279,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     page_students=set(id(x) for x in computed[(page-1)*page_size:page*page_size])
 
     rows=""
+    all_rows=""
     last_total=None
     last_position=0
     for index,item in enumerate(computed,1):
@@ -1295,8 +1296,6 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         average=(total/count) if count else 0
         student_stream = str(student["stream"] or "").strip() or class_stream_by_id.get(int(student["class_id"] or 0), "")
         stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
-        if id(item) not in page_students:
-            continue
         overall_cells = "".join({
             "mks": "<td><b>%.1f</b></td>" % total,
             "pts": "<td><b>%.1f</b></td>" % total_points,
@@ -1304,7 +1303,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             "grade": "<td><b>%s</b></td>" % escape(str(overall_grade)),
             "pos": "<td><b>%d</b></td>" % last_position,
         }[m] for m in overall_metric_list)
-        rows += (
+        row_html = (
             "<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s%s</tr>"
             % (
                 escape(str(student["admission_no"] or "")),
@@ -1314,6 +1313,9 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 overall_cells,
             )
         )
+        all_rows += row_html
+        if id(item) in page_students:
+            rows += row_html
 
     try:
         school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
@@ -1368,6 +1370,13 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
 function printDocument(){
   var doc=document.querySelector('.marksheet-card');
   if(!doc){window.print();return;}
+  var allRows=document.getElementById('marksheet-all-rows');
+  var printDoc=doc.cloneNode(true);
+  if(allRows){
+    var printBody=printDoc.querySelector('.marksheet tbody');
+    if(printBody){printBody.innerHTML=allRows.innerHTML;}
+  }
+  printDoc.querySelectorAll('.marksheet-pagination').forEach(function(el){el.remove();});
   var w=window.open('', '_blank', 'width=1200,height=800');
   if(!w){window.print();return;}
   var generatedAt=new Intl.DateTimeFormat('en-KE',{
@@ -1376,7 +1385,7 @@ function printDocument(){
   }).format(new Date())+' EAT';
   var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.marksheet-school{display:none!important}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet{border-collapse:collapse;width:100%;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1.25px solid #176B3A;padding:5px 6px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff!important;color:#000!important;font-weight:900}.marksheet thead tr:nth-child(2) th{background:#fff!important;color:#000!important;font-weight:900}.marksheet tbody td{border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet .adm-no-col{width:78px}.marksheet .name-col{width:190px;min-width:190px;max-width:190px}.marksheet .stream-col,.marksheet .stream-cell{width:70px;min-width:70px;max-width:70px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .subjecthead{font-size:11px;color:#fff;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
-  var html='<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+doc.outerHTML+footer+'</body></html>';
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Class Marksheet</title><style>'+css+'</style></head><body>'+printDoc.outerHTML+footer+'</body></html>';
   w.document.open();w.document.write(html);w.document.close();w.focus();
   setTimeout(function(){w.print();},300);
 }
@@ -1396,6 +1405,7 @@ function printDocument(){
         "</tbody></table>"
     ) if subject_means else "<div class='subject-mean-empty'>No subject marks available.</div>"
     rows_html = rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
+    all_rows_html = all_rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
         "<div class='muted'>A print-ready marksheet. Select one or more assessments; when multiple assessments are selected, each subject shows their average.</div>"
@@ -1420,6 +1430,7 @@ function printDocument(){
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> <a class='btnlink' href='/app/academics/blank-marksheet'>🖨 Blank MarkSheet</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> "
         "<a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
+        "<div id='marksheet-all-rows' style='display:none'><table><tbody>" + all_rows_html + "</tbody></table></div>" +
         "<div class='card section marksheet-card'>" + doc_brand +
         "<div class='marksheet-title'>STUDENT MARKSHEET</div>"
         "<div class='marksheet-meta'>CLASS: " + class_title + " &nbsp;&nbsp; EXAM: " + exam_name +
