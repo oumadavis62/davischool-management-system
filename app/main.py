@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "ce8c0d9f32dd275dda2aa27c605a344402f7c0a2"
+BUILD_COMMIT = "IDLE_TIMEOUT_5MIN_PENDING"
 
 app = FastAPI()
 
@@ -58,7 +58,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_
 # configured idle period, even though the normal session cookie can live longer.
 # Active users remain signed in because every authenticated request refreshes the
 # last-activity timestamp.
-IDLE_TIMEOUT_SECONDS = int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(15 * 60)))
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(5 * 60)))
 
 @app.middleware("http")
 async def idle_session_timeout(request: Request, call_next):
