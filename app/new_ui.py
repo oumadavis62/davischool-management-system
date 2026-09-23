@@ -4,7 +4,7 @@ from html import escape
 import base64
 import re
 from urllib.parse import quote
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 router = APIRouter()
@@ -3221,45 +3221,143 @@ def timetable_page(request: Request):
     if not _require_permission(request, sid, "timetable.view"):
         return HTMLResponse("You do not have permission to view the timetable.", 403)
     con=_db();cur=con.cursor()
-    rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY day,start_time",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    teachers=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY CASE day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,start_time,id",(sid,)).fetchall()
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     con.close()
-    co="".join(f"<option>{escape(str(x['name']))} {escape(str(x['stream'] or ''))}</option>" for x in classes)
-    streams=sorted({str(x['stream'] or '').strip() for x in classes if str(x['stream'] or '').strip()})
-    to="".join(f"<option>{escape(str(x['name']))}</option>" for x in teachers)
-    so="".join(f"<option>{escape(str(x['name']))}</option>" for x in subjects)
-    stro="".join(f"<option>{escape(x)}</option>" for x in streams)
-    tr=_simple_rows(rows,["day","start_time","end_time","class_name","stream","subject","teacher","room"])
-    body=f"""<div class='page'><h1>Timetable</h1><div class='muted'>Build and maintain the school timetable.</div>
-<div class='card section'><h2>Add lesson</h2><form method='post' action='/app/timetable/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
-<select name='day' class='field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select><input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><select name='class_name' class='field'>{co}</select><select name='stream' class='field'><option value=''>Select stream</option>{stro}</select><select name='subject' class='field'>{so}</select><select name='teacher' class='field'>{to}</select><input name='room' placeholder='Room' class='field'><button class='btn'>Save Lesson</button></form></div>
-<div class='card section'><h2>Weekly timetable ({len(rows)})</h2><table><thead><tr><th>Day</th><th>Start</th><th>End</th><th>Class</th><th>Stream</th><th>Subject</th><th>Teacher</th><th>Room</th></tr></thead><tbody>{tr or '<tr><td colspan=8>No timetable entries yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    class_id=request.query_params.get("class_id","")
+    selected=next((c for c in classes if str(c["id"])==str(class_id)),None)
+    msg=request.query_params.get("msg","")
+    co="".join(f"<option value='{c['id']}' {'selected' if selected and int(selected['id'])==int(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    so="".join(f"<option value='{s['id']}'>{escape(str(s['name']))}</option>" for s in subjects)
+    to="<option value=''>-- Optional teacher --</option>"+"".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
+
+    selected_rows=[r for r in rows if selected and str(r["class_name"]).strip()==str(selected["name"]).strip() and str(r["stream"] or "").strip()==str(selected["stream"] or "").strip()]
+    slot_keys=sorted({(r["start_time"],r["end_time"]) for r in selected_rows})
+    weekly_rows=""
+    for st,et in slot_keys:
+        cells=[]
+        for day in ("Monday","Tuesday","Wednesday","Thursday","Friday"):
+            found=[r for r in selected_rows if r["day"]==day and r["start_time"]==st and r["end_time"]==et]
+            cells.append("<td>"+"<br>".join(f"<b>{escape(str(r['subject']))}</b>{('<br>'+escape(str(r['teacher']))) if r['teacher'] else ''}" for r in found) or "—"+"</td>")
+        weekly_rows+=f"<tr><th>{escape(str(st))}–{escape(str(et))}</th>{''.join(cells)}</tr>"
+
+    table_rows="".join(
+        f"<tr><td>{escape(str(r['day']))}</td><td>{escape(str(r['start_time']))}–{escape(str(r['end_time']))}</td>"
+        f"<td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td><b>{escape(str(r['subject']))}</b></td>"
+        f"<td>{escape(str(r['teacher'] or ''))}</td><td>{escape(str(r['room'] or ''))}</td>"
+        f"<td><form method='post' action='/app/timetable/delete/{r['id']}' onsubmit='return confirm("Delete this lesson?")'><button class='mini danger'>🗑️</button></form></td></tr>"
+        for r in rows
+    ) or "<tr><td colspan='7' style='padding:30px;text-align:center'>No timetable entries yet.</td></tr>"
+
+    body=f"""<div class='page'><h1>🗓️ Smart Timetable</h1><div class='muted'>Create, automatically generate, edit and print the school's weekly timetable.</div>
+{("<div class='card' style='background:#ecfdf5;border-color:#a7f3d0;color:#065f46'>✅ "+escape(msg)+"</div>") if msg else ""}
+<div class='card section'><h2>✨ Generate Weekly Timetable</h2><div class='muted'>DaviSchool uses your classes, subjects and teacher allocations where available, while checking teacher/class conflicts.</div>
+<form method='post' action='/app/timetable/generate' style='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px'>
+<select name='class_id' required class='field'><option value=''>-- Select Class / Stream --</option>{co}</select>
+<input name='start_time' type='time' value='08:00' required class='field'><input name='period_minutes' type='number' min='20' max='180' value='40' required class='field' placeholder='Period minutes'><input name='periods_per_day' type='number' min='1' max='12' value='7' required class='field' placeholder='Periods per day'>
+<input name='break_after' type='number' min='0' max='12' value='4' required class='field' placeholder='Break after period'><input name='break_minutes' type='number' min='0' max='120' value='30' required class='field' placeholder='Break minutes'><input name='lessons_per_subject' type='number' min='1' max='10' value='3' required class='field' placeholder='Lessons per subject/week'>
+<label class='field' style='display:flex;align-items:center;gap:8px'><input type='checkbox' name='replace_existing' value='1' checked style='width:auto'> Replace existing timetable for this class</label>
+<button class='btn' style='grid-column:1/-1'>🚀 Generate Timetable</button></form></div>
+
+<div class='card section'><h2>➕ Add Lesson</h2><form method='post' action='/app/timetable/add' style='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px'>
+<select name='day' required class='field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select>
+<input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><select name='class_id' required class='field'><option value=''>-- Class / Stream --</option>{co}</select>
+<select name='subject_id' required class='field'><option value=''>-- Subject --</option>{so}</select><select name='teacher_id' class='field'>{to}</select><input name='room' placeholder='Room / Venue' class='field'><button class='btn'>Save Lesson</button></form></div>
+
+{("<div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><div><h2>📅 Weekly View — "+escape(str(selected['name']))+" "+escape(str(selected['stream'] or ''))+"</h2><div class='muted'>Class timetable</div></div><button class='btn' onclick='window.print()'>🖨️ Print</button></div><div style='overflow:auto'><table class='week'><tr><th>TIME</th><th>MONDAY</th><th>TUESDAY</th><th>WEDNESDAY</th><th>THURSDAY</th><th>FRIDAY</th></tr>"+(weekly_rows or "<tr><td colspan='6' style='padding:30px;text-align:center'>No lessons for this class.</td></tr>")+"</table></div></div>") if selected else ""}
+
+<div class='card section'><div style='display:flex;justify-content:space-between;align-items:center;gap:10px'><div><h2>📋 Saved Lessons ({len(rows)})</h2><div class='muted'>All timetable records are isolated to this school.</div></div><form method='get'><select name='class_id' onchange='this.form.submit()' class='field' style='min-width:230px'><option value=''>View class timetable</option>{co}</select></form></div>
+<div style='overflow:auto'><table><thead><tr><th>Day</th><th>Time</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Room</th><th>Action</th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
+<style>.week td,.week th{{border:1px solid #e5e7eb;padding:12px;vertical-align:top}}.week th{{background:#f8fafc;font-size:11px}}.week td{{min-width:150px;font-size:12px;line-height:1.45}}.mini{{border:0;padding:6px 8px;border-radius:7px;cursor:pointer}}.danger{{background:#fee2e2;color:#991b1b}}@media print{{.side,.top,.page>h1,.page>.muted,.section:not(:has(.week)),button,form{{display:none!important}}.page{{padding:0!important}}.card{{border:0!important;box-shadow:none!important}}}}</style></div>"""
     return _school_page(request,"Timetable",body)
 
 @router.post("/app/timetable/add")
-def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_name:str=Form(""),stream:str=Form(""),subject:str=Form(""),teacher:str=Form(""),room:str=Form("")):
+def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_id:int=Form(...),subject_id:int=Form(...),teacher_id:str=Form(""),room:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "timetable.edit"):
-        return HTMLResponse("You do not have permission to edit the timetable.", 403)
-    if day not in ("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"):
-        return HTMLResponse("Invalid timetable day. <a href='/app/timetable'>Back</a>",400)
-    if not start_time or not end_time or end_time <= start_time:
-        return HTMLResponse("End time must be after start time. <a href='/app/timetable'>Back</a>",400)
+        return HTMLResponse("You do not have permission to edit the timetable.",403)
+    if day not in ("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday") or not start_time or not end_time or end_time<=start_time:
+        return HTMLResponse("Invalid day or time. <a href='/app/timetable'>Back</a>",400)
     con=_db();cur=con.cursor()
-    class_row=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? AND name=? AND stream=? LIMIT 1",(sid,class_name.strip(),stream.strip())).fetchone()
-    subject_row=cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? LIMIT 1",(sid,subject.strip())).fetchone() if subject.strip() else None
-    teacher_row=cur.execute("SELECT id FROM teachers WHERE school_id=? AND name=? LIMIT 1",(sid,teacher.strip())).fetchone() if teacher.strip() else None
-    if not class_row:
-        con.close(); return HTMLResponse("Invalid class or stream for this school. <a href='/app/timetable'>Back</a>",400)
-    if subject.strip() and not subject_row:
-        con.close(); return HTMLResponse("Invalid subject for this school. <a href='/app/timetable'>Back</a>",400)
-    if teacher.strip() and not teacher_row:
-        con.close(); return HTMLResponse("Invalid teacher for this school. <a href='/app/timetable'>Back</a>",400)
-    cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,day,start_time,end_time,class_name.strip(),stream.strip(),subject.strip(),teacher.strip(),room.strip()))
-    _audit(cur,sid,request,"TIMETABLE_CREATE",f"{day} {start_time}-{end_time} {class_name} {subject}")
+    cls=cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    sub=cur.execute("SELECT id,name FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    teacher=cur.execute("SELECT id,name FROM teachers WHERE id=? AND school_id=?",(int(teacher_id),sid)).fetchone() if str(teacher_id).isdigit() else None
+    if not cls or not sub:
+        con.close();return RedirectResponse("/app/timetable?msg=Invalid+class+or+subject",303)
+    class_name,stream=cls["name"],cls["stream"] or ""
+    class_conflict=cur.execute("SELECT id FROM timetable WHERE school_id=? AND day=? AND start_time<? AND end_time>? AND class_name=? AND COALESCE(stream,'')=? LIMIT 1",(sid,day,end_time,start_time,class_name,stream)).fetchone()
+    teacher_conflict=cur.execute("SELECT id FROM timetable WHERE school_id=? AND day=? AND start_time<? AND end_time>? AND teacher=? LIMIT 1",(sid,day,end_time,start_time,teacher["name"] if teacher else "")).fetchone() if teacher else None
+    if class_conflict:
+        con.close();return RedirectResponse("/app/timetable?msg=Class+conflict:+this+class+already+has+a+lesson+at+that+time",303)
+    if teacher_conflict:
+        con.close();return RedirectResponse("/app/timetable?msg=Teacher+conflict:+teacher+is+already+busy+at+that+time",303)
+    cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,day,start_time,end_time,class_name,stream,sub["name"],teacher["name"] if teacher else "",room.strip()))
+    _audit(cur,sid,request,"TIMETABLE_CREATE",f"{day} {start_time}-{end_time} {class_name} {sub['name']}")
+    con.commit();con.close();return RedirectResponse(f"/app/timetable?class_id={class_id}&msg=Lesson+saved",303)
+
+@router.post("/app/timetable/generate")
+def timetable_generate(request: Request,class_id:int=Form(...),start_time:str=Form("08:00"),period_minutes:int=Form(40),periods_per_day:int=Form(7),break_after:int=Form(4),break_minutes:int=Form(30),lessons_per_subject:int=Form(3),replace_existing:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"timetable.edit"):
+        return HTMLResponse("You do not have permission to edit the timetable.",403)
+    if period_minutes<20 or periods_per_day<1 or periods_per_day>12 or break_after<0 or lessons_per_subject<1:
+        return RedirectResponse("/app/timetable?msg=Invalid+timetable+settings",303)
+    con=_db();cur=con.cursor()
+    cls=cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    if not cls:
+        con.close();return RedirectResponse("/app/timetable?msg=Class+not+found",303)
+    allocations=cur.execute("SELECT ta.subject_id,s.name subject_name,t.name teacher_name FROM teacher_allocations ta JOIN subjects s ON s.id=ta.subject_id LEFT JOIN teachers t ON t.id=ta.teacher_id WHERE ta.school_id=? AND ta.class_id=? ORDER BY ta.subject_id",(sid,class_id)).fetchall()
+    subjects=allocations or cur.execute("SELECT id,name subject_name,'' teacher_name FROM subjects WHERE school_id=? ORDER BY id",(sid,)).fetchall()
+    subjects=[dict(x) for x in subjects]
+    if not subjects:
+        con.close();return RedirectResponse(f"/app/timetable?class_id={class_id}&msg=Add+subjects+or+teacher+allocations+before+generating",303)
+    class_name,stream=cls["name"],cls["stream"] or ""
+    if replace_existing:
+        cur.execute("DELETE FROM timetable WHERE school_id=? AND class_name=? AND COALESCE(stream,'')=?",(sid,class_name,stream))
+    days=["Monday","Tuesday","Wednesday","Thursday","Friday"]
+    base=datetime.strptime(start_time,"%H:%M")
+    slots=[]
+    for day in days:
+        for p in range(1,periods_per_day+1):
+            offset=(p-1)*period_minutes+(break_minutes if break_after and p>break_after else 0)
+            st=(base+timedelta(minutes=offset)).strftime("%H:%M")
+            et=(base+timedelta(minutes=offset+period_minutes)).strftime("%H:%M")
+            slots.append((day,st,et))
+    occupied=cur.execute("SELECT day,start_time,end_time,teacher FROM timetable WHERE school_id=?",(sid,)).fetchall()
+    teacher_busy={(r["day"],r["start_time"],r["end_time"],str(r["teacher"] or "").strip().lower()) for r in occupied if str(r["teacher"] or "").strip()}
+    schedule=[];class_busy=set();remaining=[]
+    for subj in subjects:
+        for _ in range(lessons_per_subject):remaining.append(subj)
+    for idx,subj in enumerate(remaining):
+        ordered=slots[idx%len(slots):]+slots[:idx%len(slots)]
+        for day,st,et in ordered:
+            if (day,st,et) in class_busy:continue
+            teacher_name=str(subj.get("teacher_name") or "").strip()
+            if teacher_name and (day,st,et,teacher_name.lower()) in teacher_busy:continue
+            if schedule and schedule[-1]["day"]==day and schedule[-1]["subject"]==subj["subject_name"]:continue
+            schedule.append({"day":day,"start_time":st,"end_time":et,"subject":subj["subject_name"],"teacher":teacher_name});class_busy.add((day,st,et))
+            if teacher_name:teacher_busy.add((day,st,et,teacher_name.lower()))
+            break
+    for item in schedule:
+        cur.execute("INSERT INTO timetable(school_id,day,start_time,end_time,class_name,stream,subject,teacher,room) VALUES(?,?,?,?,?,?,?,?,?)",(sid,item["day"],item["start_time"],item["end_time"],class_name,stream,item["subject"],item["teacher"],""))
+    _audit(cur,sid,request,"TIMETABLE_GENERATE",f"Generated {len(schedule)} timetable lessons for {class_name} {stream}".strip())
+    con.commit();con.close()
+    msg=f"Generated {len(schedule)} lessons for {class_name} {stream}".strip()
+    return RedirectResponse(f"/app/timetable?class_id={class_id}&msg={quote(msg)}",303)
+
+@router.post("/app/timetable/delete/{rid}")
+def timetable_delete(request: Request,rid:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"timetable.edit"):
+        return HTMLResponse("You do not have permission to edit the timetable.",403)
+    con=_db();cur=con.cursor()
+    cur.execute("DELETE FROM timetable WHERE id=? AND school_id=?",(rid,sid))
+    _audit(cur,sid,request,"TIMETABLE_DELETE",f"Deleted timetable lesson {rid}")
     con.commit();con.close();return RedirectResponse("/app/timetable",303)
 
 @router.get("/app/announcements", response_class=HTMLResponse)
