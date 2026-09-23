@@ -895,51 +895,67 @@ def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year
     return {k: sum(v)/len(v) for k,v in buckets.items() if v}
 
 MARKSHEET_SUBJECT_ORDER = (
-    "English", "Kiswahili", "Mathematics", "Integrated Science", "Agriculture",
-    "Creative Arts and Sports", "Social Studies", "CRE", "Pre-technical Studies",
+    "English",
+    "Kiswahili",
+    "Mathematics",
+    "Integrated Science",
+    "Agriculture",
+    "Creative Arts and Sports",
+    "Social Studies",
+    "Christian Religious Education",
+    "Pre-technical Studies",
 )
 
 def _marksheet_subject_order(subjects):
-    # MarkSheet-only adjustment: move Science/Integrated Science immediately
-    # after Mathematics, while preserving the existing relative order of every
-    # other subject. This does not change the database subject order.
+    # Fixed MarkSheet curriculum order. Only the MarkSheet display order is
+    # changed; database subject records and marks remain untouched.
     def normalize(value):
         value = str(value or "").strip().casefold()
         value = re.sub(r"[^a-z0-9]+", " ", value)
         return " ".join(value.split())
 
-    def is_science(value):
+    def subject_position(value):
         name = normalize(value)
         tokens = set(name.split())
-        return (
-            name == "science"
-            or name == "integrated science"
-            or ("integrated" in tokens and "science" in tokens)
-        )
 
-    def is_mathematics(value):
-        name = normalize(value)
-        tokens = set(name.split())
-        return name == "mathematics" or "mathematics" in tokens or "math" in tokens
+        if "english" in tokens:
+            return 1
+        if "kiswahili" in tokens:
+            return 2
+        if "mathematics" in tokens or "math" in tokens:
+            return 3
+        if "integrated" in tokens and "science" in tokens:
+            return 4
+        if name == "science":
+            return 4
+        if "agriculture" in tokens:
+            return 5
+        if "creative" in tokens and "arts" in tokens and "sport" in tokens:
+            return 6
+        if "social" in tokens and "studies" in tokens:
+            return 7
+        # Accept both the full stored name and the common CRE abbreviation.
+        if (
+            name == "cre"
+            or "christian religious education" in name
+            or ("christian" in tokens and "religious" in tokens and "education" in tokens)
+        ):
+            return 8
+        if "pre" in tokens and "technical" in tokens:
+            return 9
 
-    ordered = list(subjects)
-    science_indexes = [i for i, subject in enumerate(ordered) if is_science(subject["name"])]
-    math_index = next((i for i, subject in enumerate(ordered) if is_mathematics(subject["name"])), None)
+        # Subjects outside the requested curriculum remain after the nine
+        # specified subjects, preserving their original relative order.
+        return 100
 
-    if not science_indexes or math_index is None:
-        return ordered
-
-    # Remove Science from its original position, then insert it directly after
-    # Mathematics. All non-Science subjects retain their original relative order.
-    science_rows = [ordered[i] for i in science_indexes]
-    remaining = [subject for i, subject in enumerate(ordered) if i not in science_indexes]
-    new_math_index = next((i for i, subject in enumerate(remaining) if is_mathematics(subject["name"])), None)
-
-    if new_math_index is None:
-        return ordered
-
-    insert_at = new_math_index + 1
-    return remaining[:insert_at] + science_rows + remaining[insert_at:]
+    return sorted(
+        list(subjects),
+        key=lambda subject: (
+            subject_position(subject["name"]),
+            0 if subject_position(subject["name"]) < 100 else 1,
+            normalize(subject["name"]) if subject_position(subject["name"]) == 100 else "",
+        ),
+    )
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
