@@ -959,7 +959,7 @@ def _marksheet_subject_order(subjects):
     )
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
-def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1):
+def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1, subject_ids: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -987,6 +987,16 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
         subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
         subjects = _marksheet_subject_order(subjects)
+        selected_subject_ids = []
+        for raw_id in str(subject_ids or "").split(","):
+            try:
+                if raw_id.strip():
+                    selected_subject_ids.append(int(raw_id.strip()))
+            except ValueError:
+                pass
+        if selected_subject_ids:
+            selected_set = set(selected_subject_ids)
+            subjects = [s for s in subjects if int(s["id"]) in selected_set]
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
         try:
@@ -1293,6 +1303,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         f"&term={quote(str(term or ''), safe='')}"
         f"&year={quote(str(year or ''), safe='')}"
         f"&stream={quote(str(stream or ''), safe='')}"
+        f"&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}"
     )
     prev_page = max(1, page - 1)
     next_page = min(total_pages, page + 1)
@@ -1347,7 +1358,12 @@ function printDocument(){
         "<select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>" + topts + "</select>"
         "<select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>" + yopts + "</select>"
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
+        "<input type='hidden' name='subject_ids' id='selectedSubjectIds' value='" + escape(','.join(str(x) for x in selected_subject_ids)) + "'>"
+        "<button type='submit' class='btn' onclick='var a=[];document.querySelectorAll(\".subject-choice:checked\").forEach(function(x){a.push(x.value)});document.getElementById(\"selectedSubjectIds\").value=a.join(\",\")'>Apply Subjects</button>"
         "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + pdf_marksheet_url +
+        "<div class='subject-picker'><div class='subject-picker-title'>Subjects to display on MarkSheet</div><div class='subject-picker-grid'>" +
+        "".join("<label><input type='checkbox' class='subject-choice' value='%s' %s> %s</label>" % (s["id"], "checked" if (not selected_subject_ids or int(s["id"]) in set(selected_subject_ids)) else "", escape(str(s["name"]))) for s in _marksheet_subject_order(cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall())) +
+        "</div><div class='subject-picker-actions'><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=true})'>Select all</button><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=false})'>Clear</button></div></div>" +
         "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> "
         "<a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
@@ -1366,7 +1382,7 @@ function printDocument(){
         print_script +
         "<style>"
         ".field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
-        ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
+        ".marksheet-select{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.subject-picker{grid-column:1/-1;border:1px solid #dbe2ea;border-radius:10px;padding:10px;background:#f8fafc}.subject-picker-title{font-weight:900;margin-bottom:8px}.subject-picker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px 12px}.subject-picker-grid label{font-weight:600}.subject-picker-actions{margin-top:8px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033;margin-right:6px}"
         ".marksheet-card{background:#fff;min-width:0;overflow:hidden}.marksheet-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding-bottom:8px;scrollbar-gutter:stable}.marksheet-scroll:focus{outline:2px solid #94a3b8;outline-offset:2px}.marksheet{width:max-content;min-width:100%}.marksheet-pagination{display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 0}.marksheet-pagination .btnlink:disabled{opacity:.45;cursor:not-allowed}.marksheet thead tr:first-child th{background:#fff}.marksheet thead tr:nth-child(2) th{background:#fff}.marksheet th:nth-child(1),.marksheet td:nth-child(1){position:sticky;left:0;background:#fff;z-index:10}.marksheet th:nth-child(2),.marksheet td:nth-child(2){position:sticky;left:78px;background:#fff;z-index:10}.marksheet thead tr:first-child th:nth-child(1),.marksheet thead tr:first-child th:nth-child(2),.marksheet thead tr:nth-child(2) th:nth-child(1),.marksheet thead tr:nth-child(2) th:nth-child(2){z-index:13}.doc-header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #111827;padding-bottom:10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school{font-size:18px;font-weight:900;text-transform:uppercase}.doc-contact{font-size:10px;color:#475569;margin-top:3px}.marksheet-title{text-align:center;font-size:24px;font-weight:900;color:#111827;padding:4px}.marksheet-school{text-align:center;font-size:22px;font-weight:900;text-transform:uppercase;padding:6px}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #111;border-bottom:1px solid #111}.marksheet{border-collapse:collapse;width:max-content;min-width:0;font-family:Arial,sans-serif;table-layout:fixed}.marksheet th,.marksheet td{border:1px solid #111;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap;box-sizing:border-box}.marksheet th{background:#fff;color:#111;text-transform:none}.marksheet .adm-no-col{width:78px;min-width:78px;max-width:78px}.marksheet .name-col{width:190px;min-width:190px;max-width:190px}.marksheet .stream-col,.marksheet .stream-cell{width:70px;min-width:70px;max-width:70px}.marksheet .mks-col,.marksheet .points-col{width:58px;min-width:58px;max-width:58px}.marksheet .grade-col{width:50px;min-width:50px;max-width:50px}.marksheet .overall-marks-col,.marksheet .overall-points-col{width:62px}.marksheet .overall-avg-col{width:68px}.marksheet .overall-grade-col{width:58px}.marksheet .overall-pos-col{width:50px}.marksheet .mks-cell,.marksheet .points-cell{vertical-align:middle;width:58px;min-width:58px;max-width:58px}.marksheet .grade-cell{vertical-align:middle;width:50px;min-width:50px;max-width:50px}.marksheet .subjecthead{font-size:13px;color:#d00;text-transform:uppercase;white-space:nowrap;overflow:hidden;max-width:166px}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:190px;width:190px;max-width:190px}.marksheet td b{font-weight:800}.subject-mean-summary{margin-top:12px;border:1px solid #111827;padding:9px;background:#fff}.subject-mean-title{font-size:12px;font-weight:900;text-align:center;border-bottom:1px solid #111827;padding-bottom:5px;margin-bottom:7px}.subject-mean-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.subject-mean-item{border:1px solid #cbd5e1;padding:6px;text-align:center}.subject-mean-item span{display:block;font-size:10px;font-weight:800;text-transform:uppercase}.subject-mean-item b{display:block;font-size:14px;margin:2px 0}.subject-mean-item small{font-size:8px;color:#64748b}.subject-mean-empty{font-size:10px;color:#64748b;text-align:center;padding:5px}"
         "@media(max-width:900px){.marksheet-select{grid-template-columns:1fr 1fr}}"
         "@media print{body{background:#fff}.marksheet-pagination{display:none!important}.marksheet tbody tr{display:table-row!important}.side,.top,.no-print,.page>h1,.page>.muted{display:none!important}.main{margin-left:0!important;padding:0!important}.page{padding:0!important;margin:0!important;max-width:none!important}.marksheet-card{display:block!important;border:0!important;box-shadow:none!important;margin:0!important;padding:0!important;width:100%!important}.marksheet-card .doc-header{margin-top:0}.marksheet-title{font-size:20px}.marksheet-school{font-size:20px}.marksheet th,.marksheet td{padding:4px 5px;font-size:10px}}"
