@@ -58,7 +58,12 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_
 # configured idle period, even though the normal session cookie can live longer.
 # Active users remain signed in because every authenticated request refreshes the
 # last-activity timestamp.
-IDLE_TIMEOUT_SECONDS = int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(5 * 60)))
+try:
+    IDLE_TIMEOUT_SECONDS = max(60, int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(5 * 60))))
+except (TypeError, ValueError):
+    # Never let a malformed Render environment variable prevent the web
+    # service from starting. Fall back to the requested 5-minute timeout.
+    IDLE_TIMEOUT_SECONDS = 5 * 60
 
 @app.middleware("http")
 async def idle_session_timeout(request: Request, call_next):
