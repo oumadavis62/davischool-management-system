@@ -289,9 +289,9 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
         if "postal_code" in school_row.keys() and school_row["postal_code"]:
             address_lines.append("Postal Code " + str(school_row["postal_code"]))
         if "phone" in school_row.keys() and school_row["phone"]:
-            right_contact_lines.append("☎ " + str(school_row["phone"]))
+            right_contact_lines.append("Phone: " + str(school_row["phone"]))
         if "email" in school_row.keys() and school_row["email"]:
-            right_contact_lines.append("✉ " + str(school_row["email"]))
+            right_contact_lines.append("Email: " + str(school_row["email"]))
     logo_flowable = Paragraph("SCHOOL", styles["title"])
     logo_data = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     if logo_data:
