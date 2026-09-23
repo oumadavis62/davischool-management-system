@@ -1393,7 +1393,7 @@ function printDocument(){
         "</div></div><div class='subject-metric-picker'><div class='subject-picker-title'>Display under OVERALL</div><div class='subject-metric-grid'>" +
         "".join("<label class='metric-label'><input type='checkbox' class='overall-choice' value='%s' %s> %s</label>" % (m,"checked" if m in overall_metric_list else "",{"mks":"MKS","pts":"PTS","avg":"AVG %","grade":"GRD","pos":"POS"}[m]) for m in ("mks","pts","avg","grade","pos")) +
         "</div><div style='margin-top:12px'><button type='submit' class='btn' onclick='var a=[];document.querySelectorAll(\".subject-choice:checked\").forEach(function(x){a.push(x.value)});var sm=[];document.querySelectorAll(\".metric-choice:checked\").forEach(function(x){var id=x.dataset.subject;var f=sm.find(function(y){return y.id===id});if(!f){f={id:id,m:[]};sm.push(f)}f.m.push(x.value)});var om=[];document.querySelectorAll(\".overall-choice:checked\").forEach(function(x){om.push(x.value)});document.getElementById(\"selectedSubjectIds\").value=a.join(\",\");document.getElementById(\"selectedSubjectMetrics\").value=sm.map(function(x){return x.id+\":\"+x.m.join(\".\")}).join(\",\");document.getElementById(\"selectedOverallMetrics\").value=om.join(\",\")'>Apply Display</button></div></div>" +
-        "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> "
+        "</form><div style='margin-top:10px'><a class='btnlink' href='/app/academics/marks'>Enter / Edit Marks</a> <a class='btnlink' href='/app/academics/blank-marksheet'>🖨 Blank MarkSheet</a> "
         "<a class='btnlink' href='/app/academics/grading'>Set Subject Grade & Points</a> "
         "<a class='btnlink' href='/app/academics/overall-grading'>Set Overall Grade</a></div></div>"
         "<div class='card section marksheet-card'>" + doc_brand +
@@ -1420,6 +1420,76 @@ function printDocument(){
     con.close()
     return _school_page(request, "Class Marksheets", body)
 
+
+@router.get("/app/academics/blank-marksheet", response_class=HTMLResponse)
+def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", stream: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to generate blank marksheets.", 403)
+    con = _db()
+    try:
+        cur = con.cursor()
+        exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+        subjects = _marksheet_subject_order(cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall())
+        eid = int(exam_id) if str(exam_id).isdigit() else (int(exams[0]["id"]) if exams else 0)
+        selected_exam = cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?", (eid, sid)).fetchone() if eid else None
+        cid = int(class_id) if str(class_id).isdigit() else (int(classes[0]["id"]) if classes else 0)
+        selected_class = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
+        students = []
+        if cid:
+            sql = "SELECT * FROM students WHERE school_id=? AND class_id=?"
+            params = [sid, cid]
+            if stream:
+                sql += " AND stream=?"
+                params.append(stream)
+            sql += " ORDER BY name"
+            students = cur.execute(sql, params).fetchall()
+        school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+        con.close()
+        eopts = "".join("<option value='%s' %s>%s</option>" % (e["id"], "selected" if int(e["id"]) == eid else "", escape(str(e["name"]))) for e in exams)
+        copts = "".join("<option value='%s' %s>%s %s</option>" % (c["id"], "selected" if int(c["id"]) == cid else "", escape(str(c["name"])), escape(str(c["stream"] or ""))) for c in classes)
+        streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
+        stropts = "".join("<option value='%s' %s>%s</option>" % (escape(x), "selected" if x == stream else "", escape(x)) for x in streams)
+        subject_headers = "".join("<th>%s<br><span class='blank-sub'>MKS</span></th>" % escape(str(sub["name"])) for sub in subjects)
+        student_rows = "".join("<tr><td>%s</td><td class='student-name'>%s</td>%s<td></td></tr>" % (escape(str(st["admission_no"] or "")), escape(str(st["name"] or "")), "".join("<td class='blank-cell'></td>" for _ in subjects)) for st in students)
+        if not students:
+            student_rows = "<tr><td colspan='%d'>No students found for the selected class/stream.</td></tr>" % (len(subjects) + 3)
+        school_name = escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+        contacts = []
+        if school:
+            for key in ("email", "phone", "postal_address", "postal_code"):
+                if key in school.keys() and school[key]:
+                    value = str(school[key])
+                    if key == "postal_address": value = "P.O. Box " + value
+                    contacts.append(value)
+        class_title = escape(str(selected_class["name"] or "")) if selected_class else "Class"
+        stream_title = escape(stream or (str(selected_class["stream"] or "") if selected_class else ""))
+        exam_title = escape(str(selected_exam["name"] or "")) if selected_exam else "Examination"
+        body = f"""<div class='page'><h1>Blank MarkSheet</h1><div class='muted'>Print a clean sheet for handwritten marks entry. Only registered student details and column headers are populated.</div>
+<div class='card no-print' style='margin-top:14px'><form method='get' action='/app/academics/blank-marksheet' class='blank-controls'>
+<div><label>Examination</label><select name='exam_id' class='field'>{eopts}</select></div>
+<div><label>Class</label><select name='class_id' class='field'>{copts}</select></div>
+<div><label>Stream</label><select name='stream' class='field'><option value=''>All / selected class</option>{stropts}</select></div>
+<div style='align-self:end'><button class='btn' type='submit'>Prepare Blank Sheet</button> <button class='btn' type='button' onclick='window.print()'>Print</button></div>
+</form></div>
+<div class='card blank-marksheet-card'><div class='blank-doc-head'><div><div class='blank-school'>{school_name}</div><div class='blank-contact'>{escape(" · ".join(contacts))}</div></div><div class='blank-title'>BLANK MARKS ENTRY SHEET</div></div>
+<div class='blank-meta'><b>CLASS:</b> {class_title} &nbsp;&nbsp; <b>STREAM:</b> {stream_title or "All"} &nbsp;&nbsp; <b>EXAM:</b> {exam_title}</div>
+<div class='blank-scroll'><table class='blank-marksheet'><thead><tr><th>ADM NO.</th><th>STUDENT NAME</th>{subject_headers}<th>OVERALL</th></tr></thead><tbody>{student_rows}</tbody></table></div>
+<div class='blank-note'>Handwritten entry sheet — enter marks clearly, then submit the completed sheet for electronic entry into DaviSchool.</div></div></div>
+<style>
+.blank-controls{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}.blank-controls label{{display:block;font-size:12px;font-weight:800;margin-bottom:5px}}.blank-controls .field{{width:100%;padding:10px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}
+.blank-marksheet-card{{background:#fff;overflow:hidden}}.blank-doc-head{{display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:2px solid #111827;padding:8px 4px 10px}}.blank-school{{font-size:20px;font-weight:900;text-transform:uppercase}}.blank-contact{{font-size:9px;color:#475569;margin-top:3px}}.blank-title{{font-size:16px;font-weight:900;text-align:right}}.blank-meta{{font-size:11px;font-weight:800;padding:8px 4px;border-bottom:1px solid #111827}}.blank-scroll{{overflow-x:auto;padding-bottom:8px}}.blank-marksheet{{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif}}.blank-marksheet th,.blank-marksheet td{{border:1px solid #111;padding:7px 8px;text-align:center;font-size:10px;white-space:nowrap;height:28px}}.blank-marksheet th{{background:#eef2f7;font-weight:900}}.blank-marksheet th:first-child,.blank-marksheet td:first-child{{width:72px;min-width:72px}}.blank-marksheet th:nth-child(2),.blank-marksheet td:nth-child(2){{width:190px;min-width:190px;text-align:left}}.blank-marksheet th:not(:first-child):not(:nth-child(2)){{min-width:72px}}.blank-marksheet .blank-sub{{font-size:8px}}.blank-marksheet .blank-cell{{height:30px;min-width:72px}}.blank-note{{font-size:9px;color:#64748b;margin-top:8px}}
+@media(max-width:900px){{.blank-controls{{grid-template-columns:1fr 1fr}}}}
+@media print{{body{{background:#fff}}.side,.top,.no-print,.page>h1,.page>.muted{{display:none!important}}.main{{margin-left:0!important;padding:0!important}}.page{{padding:0!important;margin:0!important;max-width:none!important}}.blank-marksheet-card{{border:0!important;box-shadow:none!important;margin:0!important;padding:0!important}}.blank-scroll{{overflow:visible!important}}.blank-marksheet{{width:100%!important}}.blank-marksheet th,.blank-marksheet td{{font-size:8px;padding:5px}}.blank-school{{font-size:16px}}.blank-title{{font-size:13px}}}}
+</style>"""
+        return _school_page(request, "Blank MarkSheet", body)
+    except Exception as exc:
+        try: con.close()
+        except Exception: pass
+        return HTMLResponse("Unable to generate the blank marksheet: " + escape(str(exc)), 500)
 
 @router.get("/app/finance", response_class=HTMLResponse)
 def finance_page(request: Request):
