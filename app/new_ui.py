@@ -1361,7 +1361,8 @@ function printDocument(){
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
         stream_col_html + header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
         "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
-        rows_html + "</tbody></table>" + marksheet_pagination + "</div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>"        "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
+        rows_html + "</tbody></table>" + marksheet_pagination + "</div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
+        "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
         print_script +
         "<style>"
         ".field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}"
