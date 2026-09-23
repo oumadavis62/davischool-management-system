@@ -1287,6 +1287,24 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     colspan = 3 + len(subjects) * 3 + 5 if combined_mode else 2 + len(subjects) * 3 + 5
     selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
+    marksheet_page_query = (
+        f"exam_id={quote(str(eid), safe='')}"
+        f"&class_id={selected_class_param}"
+        f"&term={quote(str(term or ''), safe='')}"
+        f"&year={quote(str(year or ''), safe='')}"
+        f"&stream={quote(str(stream or ''), safe='')}"
+    )
+    prev_page = max(1, page - 1)
+    next_page = min(total_pages, page + 1)
+    prev_disabled = "opacity:.45;pointer-events:none" if page <= 1 else ""
+    next_disabled = "opacity:.45;pointer-events:none" if page >= total_pages else ""
+    marksheet_pagination = (
+        "<div class='marksheet-pagination no-print'>"
+        f"<a class='btnlink' style='{prev_disabled}' href='/app/academics/marksheets?page={prev_page}&{marksheet_page_query}'>← Previous</a>"
+        f"<span class='marksheet-page-info'>Page {page} of {total_pages} · {total_students} students</span>"
+        f"<a class='btnlink' style='{next_disabled}' href='/app/academics/marksheets?page={next_page}&{marksheet_page_query}'>Next →</a>"
+        "</div>"
+    )
 
     print_script = '''<script>
 function printDocument(){
@@ -1343,7 +1361,7 @@ function printDocument(){
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
         stream_col_html + header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
         "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
-        rows_html + "</tbody></table><div class='marksheet-pagination no-print'><a class='btnlink' href='/app/academics/marksheets?page={max(1,page-1)}&exam_id={quote(str(eid),safe='')}&class_id={selected_class_param}&term={quote(str(term or ''),safe='')}&year={quote(str(year or ''),safe='')}&stream={quote(str(stream or ''),safe='')}'>← Previous</a><span>Page {page} of {total_pages} · {total_students} students</span><a class='btnlink' href='/app/academics/marksheets?page={min(total_pages,page+1)}&exam_id={quote(str(eid),safe='')}&class_id={selected_class_param}&term={quote(str(term or ''),safe='')}&year={quote(str(year or ''),safe='')}&stream={quote(str(stream or ''),safe='')}'>Next →</a></div></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
+        rows_html + "</tbody></table>{marksheet_pagination}</div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
         "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
         print_script +
         "<style>"
