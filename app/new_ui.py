@@ -912,7 +912,11 @@ def _subject_marksheet_label(subject):
         initial = str(subject["initial"] or "").strip()
     except Exception:
         initial = ""
-    return initial or str(subject["name"] or "").strip()
+    label = initial or str(subject["name"] or "").strip()
+    # Pre-technical Studies is displayed as PRET on both electronic and blank MarkSheets.
+    if label.upper() == "PRE" or "pre-technical" in str(subject["name"] or "").strip().lower():
+        return "PRET"
+    return label
 
 def _marksheet_subject_order(subjects):
     # Fixed MarkSheet curriculum order. Only the MarkSheet display order is
