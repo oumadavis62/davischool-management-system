@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "IDLE_TIMEOUT_PENDING"
+BUILD_COMMIT = "ce8c0d9f32dd275dda2aa27c605a344402f7c0a2"
 
 app = FastAPI()
 
