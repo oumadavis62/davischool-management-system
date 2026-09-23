@@ -54,7 +54,7 @@ SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-se
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
 
 
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+
 
 # Automatic inactivity protection. An authenticated session expires after the
 # configured idle period, even though the normal session cookie can live longer.
@@ -83,6 +83,8 @@ async def idle_session_timeout(request: Request, call_next):
         session["_last_activity"] = now
     response = await call_next(request)
     return response
+
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
 @app.get("/healthz")
 def healthz():
