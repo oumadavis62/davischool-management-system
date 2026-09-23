@@ -2493,7 +2493,7 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/analysis", response_class=HTMLResponse)
-def new_analysis(request: Request, exam_id:str="", class_id:str=""):
+def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "reports.view"):
@@ -2515,7 +2515,10 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
         try: con.rollback()
         except Exception: pass
         exams=[]; classes=[]
-    eid=int(exam_id) if exam_id.isdigit() else (int(exams[0]["id"]) if exams else 0)
+    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+    if not selected_exam_ids and exams:
+        selected_exam_ids=[int(exams[0]["id"])]
+    eid=selected_exam_ids[0] if selected_exam_ids else 0
     cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     try: grading_rules = _load_grading_rules(cur, sid)
     except Exception as exc:
@@ -2561,7 +2564,7 @@ def new_analysis(request: Request, exam_id:str="", class_id:str=""):
     ranked=sorted(student_results,key=lambda z:(-float(z[1]["total"]),str(z[0]["name"])))
     rank_map={int(z[0]["id"]):i+1 for i,z in enumerate(ranked)}
     student_rows="".join(f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['count']}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td><td>{rank_map.get(int(st['id']),'—')} / {len(ranked)}</td></tr>" for st,res,_ in student_results)
-    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='3'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' action='/app/academics/analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='3'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Academic Analysis",body)
 
 @router.post("/app/report-cards/subject-comment")
