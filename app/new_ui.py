@@ -3394,7 +3394,14 @@ def timetable_page(request: Request):
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     con.close()
+    school_name=escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+    school_email=escape(str(school["email"] or "")) if school else ""
+    school_phone=escape(str(school["phone"] or "")) if school else ""
+    school_postal=escape("P.O. Box %s" % str(school["postal_address"] or "")) if school and "postal_address" in school.keys() and school["postal_address"] else ""
+    school_postal_code=escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() and school["postal_code"] else ""
+    school_logo=escape(str(school["logo_data"] or "")) if school and "logo_data" in school.keys() and school["logo_data"] else ""
     class_id=request.query_params.get("class_id","")
     selected=next((c for c in classes if str(c["id"])==str(class_id)),None)
     msg=request.query_params.get("msg","")
