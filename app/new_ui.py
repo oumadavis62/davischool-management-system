@@ -2764,7 +2764,7 @@ def subject_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
         eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]
-        if eid:
+        if selected_exam_ids:
             sql="""SELECT sub.id,sub.name subject,COUNT(m.id) entries,
                     COALESCE(AVG(m.marks),0) average,
                     COALESCE(MAX(m.marks),0) highest,
@@ -2815,8 +2815,8 @@ def student_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
     result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,analysis_grading_rules,None) if st and eid else {"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     sopts="".join(f"<option value='{s['id']}' {'selected' if int(s['id'])==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    con.close()
     rows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(r['subject_id']),mark,analysis_grading_rules)[2] or ''))}</td></tr>" for r,mark,grade,points in result["details"])
+    con.close()
     body=f"""<div class='page'><h1>Student Analysis</h1><div class='muted'>Detailed performance for one learner using the same grading engine as the report card.</div>
 <div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='4'>{eopts}</select><select name='student_id' class='field'>{sopts}</select><button class='btn'>Analyse</button><a class='btn' style='text-decoration:none;text-align:center' href='/app/academics/student-analysis/pdf?exam_ids={",".join(str(x) for x in selected_exam_ids)}&student_id={stid}'>⬇️ Download PDF</a></form></div>
 <div class='grid'><div class='card'><div class='label'>Student</div><div class='kpi' style='font-size:18px'>{escape(str(st["name"] if st else "—"))}</div></div><div class='card'><div class='label'>Total</div><div class='kpi'>{result["total"]:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{result["average"]:.1f}%</div></div><div class='card'><div class='label'>Overall Grade</div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div></div>
@@ -2842,13 +2842,14 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
         eid=selected_exam_ids[0] if selected_exam_ids else 0
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]; ranking=[]
-        if eid and cid:
+        if selected_exam_ids and cid:
+            placeholders=",".join("?" for _ in selected_exam_ids)
             stats=cur.execute("""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
-                FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id=? AND m.school_id=?
+                FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-                WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""",
-                (eid,sid,sid,cid)).fetchall()
+                WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
+                list(selected_exam_ids)+[sid,sid,cid]).fetchall()
             students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
             for st in students:
                 try:
