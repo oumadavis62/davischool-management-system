@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "55b60176ee54ae4a7c531b8346092a75dc6c4078"
+BUILD_COMMIT = "IDLE_TIMEOUT_PENDING"
 
 app = FastAPI()
 
@@ -53,6 +53,29 @@ def _startup_database_initialization():
 SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+
+# Automatic inactivity protection. An authenticated session expires after the
+# configured idle period, even though the normal session cookie can live longer.
+# Active users remain signed in because every authenticated request refreshes the
+# last-activity timestamp.
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("DAVISCHOOL_IDLE_TIMEOUT_SECONDS", str(15 * 60)))
+
+@app.middleware("http")
+async def idle_session_timeout(request: Request, call_next):
+    now = datetime.now().timestamp()
+    session = request.session
+    if session.get("email"):
+        last_activity = session.get("_last_activity")
+        try:
+            last_activity = float(last_activity) if last_activity is not None else None
+        except (TypeError, ValueError):
+            last_activity = None
+        if last_activity is not None and now - last_activity > IDLE_TIMEOUT_SECONDS:
+            session.clear()
+            return RedirectResponse("/", status_code=303)
+        session["_last_activity"] = now
+    response = await call_next(request)
+    return response
 
 @app.get("/healthz")
 def healthz():
