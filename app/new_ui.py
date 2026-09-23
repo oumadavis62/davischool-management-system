@@ -924,9 +924,10 @@ def _marksheet_subject_order(subjects):
             return 2
         if "mathematics" in tokens or "math" in tokens:
             return 3
-        if "integrated" in tokens and "science" in tokens:
-            return 4
-        if name == "science":
+        # Treat all Integrated Science/Science naming variants as the
+        # Science slot. Agriculture-related names are excluded so a subject
+        # such as Agriculture Science cannot accidentally take this position.
+        if "science" in tokens and "agriculture" not in tokens:
             return 4
         if "agriculture" in tokens:
             return 5
