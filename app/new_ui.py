@@ -959,7 +959,7 @@ def _marksheet_subject_order(subjects):
     )
 
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
-def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = ""):
+def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
@@ -1233,6 +1233,12 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 )
         computed.append((student,total,total_points,count,cells))
     computed.sort(key=lambda x:x[1],reverse=True)
+    page_size=30
+    total_students=len(computed)
+    total_pages=max(1,(total_students+page_size-1)//page_size)
+    page=max(1,min(int(page or 1),total_pages))
+    page_students=set(id(x) for x in computed[(page-1)*page_size:page*page_size])
+
     rows=""
     last_total=None
     last_position=0
@@ -1250,6 +1256,8 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         average=(total/count) if count else 0
         student_stream = str(student["stream"] or "").strip() or class_stream_by_id.get(int(student["class_id"] or 0), "")
         stream_cell = "<td class='stream-cell'><b>%s</b></td>" % escape(student_stream) if combined_mode else ""
+        if id(item) not in page_students:
+            continue
         rows+=("<tr><td class='adm-no-cell'>%s</td><td class='name-cell'><b>%s</b></td>%s%s"
           "<td><b>%.1f</b></td><td><b>%.1f</b></td><td><b>%.1f%%</b></td><td><b>%s</b></td><td><b>%d</b></td></tr>"
           %(escape(str(student["admission_no"] or "")),escape(str(student["name"] or "")),stream_cell,cells,total,total_points,average,escape(str(overall_grade)),last_position))
@@ -1281,21 +1289,6 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}'>⬇️ Download PDF</a>"
 
     print_script = '''<script>
-var marksheetCurrentPage=1,marksheetPageSize=30;
-function renderMarksheetPage(){
-  var rows=Array.prototype.slice.call(document.querySelectorAll('.marksheet tbody tr'));
-  rows=rows.filter(function(r){return !r.querySelector('td[colspan]');});
-  var totalPages=Math.max(1,Math.ceil(rows.length/marksheetPageSize));
-  if(marksheetCurrentPage>totalPages)marksheetCurrentPage=totalPages;
-  if(marksheetCurrentPage<1)marksheetCurrentPage=1;
-  rows.forEach(function(row,i){row.style.display=(i>=(marksheetCurrentPage-1)*marksheetPageSize&&i<marksheetCurrentPage*marksheetPageSize)?'table-row':'';});
-  var info=document.getElementById('marksheetPageInfo'),prev=document.getElementById('marksheetPrev'),next=document.getElementById('marksheetNext');
-  if(info)info.textContent='Page '+marksheetCurrentPage+' of '+totalPages+' · '+rows.length+' students';
-  if(prev)prev.disabled=marksheetCurrentPage<=1;
-  if(next)next.disabled=marksheetCurrentPage>=totalPages;
-}
-function marksheetPage(step){marksheetCurrentPage+=step;renderMarksheetPage();var box=document.querySelector('.marksheet-scroll');if(box)box.scrollTop=0;window.scrollTo({top:document.querySelector('.marksheet-card').offsetTop-80,behavior:'smooth'});}
-document.addEventListener('DOMContentLoaded',renderMarksheetPage);
 function printDocument(){
   var doc=document.querySelector('.marksheet-card');
   if(!doc){window.print();return;}
@@ -1350,7 +1343,7 @@ function printDocument(){
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
         stream_col_html + header_cells + "<th colspan='5'>OVERALL</th></tr><tr>" + sub_header_cells +
         "<th>MKS</th><th>PTS</th><th>AVG %</th><th>GRD</th><th>POS</th></tr></thead><tbody>" +
-        rows_html + "</tbody></table><div class='marksheet-pagination no-print'><button type='button' class='btnlink' id='marksheetPrev' onclick='marksheetPage(-1)'>← Previous</button><span id='marksheetPageInfo'>Page 1 of 1</span><button type='button' class='btnlink' id='marksheetNext' onclick='marksheetPage(1)'>Next →</button></div></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
+        rows_html + "</tbody></table><div class='marksheet-pagination no-print'><a class='btnlink' href='/app/academics/marksheets?page={max(1,page-1)}&exam_id={quote(str(eid),safe='')}&class_id={selected_class_param}&term={quote(str(term or ''),safe='')}&year={quote(str(year or ''),safe='')}&stream={quote(str(stream or ''),safe='')}'>← Previous</a><span>Page {page} of {total_pages} · {total_students} students</span><a class='btnlink' href='/app/academics/marksheets?page={min(total_pages,page+1)}&exam_id={quote(str(eid),safe='')}&class_id={selected_class_param}&term={quote(str(term or ''),safe='')}&year={quote(str(year or ''),safe='')}&stream={quote(str(stream or ''),safe='')}'>Next →</a></div></div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
         "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
         print_script +
         "<style>"
