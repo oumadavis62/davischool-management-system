@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from html import escape
 import base64
 import re
