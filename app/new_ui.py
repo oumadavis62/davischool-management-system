@@ -4264,7 +4264,9 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         styles=_pdf_styles();story=[];_ensure_academic_locks_table(cur)
         grading_rules=_load_grading_rules(cur,sid)
         for student_index,st in enumerate(students):
-            result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,None)
+            result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,_load_overall_grading_rules(cur,sid))
+            class_teacher_name, principal_name = _report_signatories(cur,sid,int(st["class_id"] or 0))
+            grade_comment_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",(sid,str(result["overall_grade"]))).fetchone() if result.get("overall_grade") and result.get("overall_grade")!="—" else None
             rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
                 WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,st["id"],eid)).fetchall()
             marked=[r["subject_id"] for r in rows if r["marks"] is not None and str(r["marks"])!=""]
@@ -4297,8 +4299,11 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1)
             t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#176B3A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
             story += [t,Spacer(1,7),Paragraph("<b>Subjects:</b> %d · <b>Total:</b> %.1f · <b>Average:</b> %.1f%% · <b>Points:</b> %.1f · <b>Overall Grade:</b> %s · <b>Position:</b> %s / %d"%(result["count"],result["total"],result["average"],result["points"],escape(str(result["overall_grade"])),escape(str(position)),len(totals)),styles["normal"])]
-            if tc:story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
-            if rc:story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
+            story += [Spacer(1,6),Paragraph("<b>Class Teacher's Comment:</b> "+escape(str((grade_comment_rule["class_teacher_comment"] if grade_comment_rule else "") or tc["comment"] if tc else "")),styles["normal"])]
+            story += [Spacer(1,4),Paragraph("<b>Principal's Comment:</b> "+escape(str((grade_comment_rule["principal_comment"] if grade_comment_rule else "") or "")),styles["normal"])]
+            story += [Spacer(1,8),Paragraph("<b>Class Teacher:</b> "+escape(str(class_teacher_name or "Not Assigned"))+"    <b>Signature:</b> ______________________________",styles["normal"])]
+            story += [Spacer(1,4),Paragraph("<b>Principal:</b> "+escape(str(principal_name or "Not Assigned"))+"    <b>Signature:</b> ______________________________",styles["normal"])]
+            if rc:story += [Spacer(1,4),Paragraph("<b>Additional Report Comment:</b> "+escape(str(rc["comment"] or "")),styles["normal"])]
             if rs:story += [Spacer(1,4),Paragraph("<b>Date of Opening:</b> %s    <b>Date of Closing:</b> %s"%(escape(str(rs["opening_date"] or "")),escape(str(rs["closing_date"] or ""))),styles["normal"])]
             if student_index<len(students)-1:story.append(PageBreak())
         con.close()
@@ -4331,7 +4336,9 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
         if not st:
             con.close();return HTMLResponse("Student not found.",404)
-        result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),None)
+        result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),_load_overall_grading_rules(cur,sid))
+        class_teacher_name, principal_name = _report_signatories(cur,sid,int(st["class_id"] or 0))
+        grade_comment_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",(sid,str(result["overall_grade"]))).fetchone() if result.get("overall_grade") and result.get("overall_grade")!="—" else None
         rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
             WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
         _ensure_academic_locks_table(cur)
@@ -4373,8 +4380,11 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         if len(data)==1:data.append(["No marks recorded.","","","",""])
         t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#176B3A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
         story += [t,Spacer(1,7),Paragraph(f"<b>Subjects:</b> {result['count']} · <b>Total:</b> {result['total']:.1f} · <b>Average:</b> {result['average']:.1f}% · <b>Points:</b> {result['points']:.1f} · <b>Overall Grade:</b> {escape(str(result['overall_grade']))} · <b>Position:</b> {escape(str(position))} / {len(totals)}",styles["normal"])]
-        if tc: story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
-        if rc: story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
+        story += [Spacer(1,6),Paragraph("<b>Class Teacher's Comment:</b> "+escape(str((grade_comment_rule["class_teacher_comment"] if grade_comment_rule else "") or tc["comment"] if tc else "")),styles["normal"])]
+        story += [Spacer(1,4),Paragraph("<b>Principal's Comment:</b> "+escape(str((grade_comment_rule["principal_comment"] if grade_comment_rule else "") or "")),styles["normal"])]
+        story += [Spacer(1,8),Paragraph("<b>Class Teacher:</b> "+escape(str(class_teacher_name or "Not Assigned"))+"    <b>Signature:</b> ______________________________",styles["normal"])]
+        story += [Spacer(1,4),Paragraph("<b>Principal:</b> "+escape(str(principal_name or "Not Assigned"))+"    <b>Signature:</b> ______________________________",styles["normal"])]
+        if rc: story += [Spacer(1,4),Paragraph("<b>Additional Report Comment:</b> "+escape(str(rc["comment"] or "")),styles["normal"])]
         if rs: story += [Spacer(1,4),Paragraph(f"<b>Date of Opening:</b> {escape(str(rs['opening_date'] or ''))}    <b>Date of Closing:</b> {escape(str(rs['closing_date'] or ''))}",styles["normal"])]
         pdf=_pdf_build(story,A4,"Student Report Card")
         return _pdf_response(pdf,f"report_card_{st['name']}.pdf")
