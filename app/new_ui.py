@@ -798,14 +798,29 @@ def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
                 "WHERE school_id=? ORDER BY min_total DESC,id DESC",
                 (school_id,)
             ).fetchall()
+        valid_rules = []
         for rule in (rules or []):
             try:
-                if float(rule["min_total"]) <= float(average_percentage) <= float(rule["max_total"]):
-                    return str(rule["grade"])
+                valid_rules.append((float(rule["min_total"]), float(rule["max_total"]), str(rule["grade"])))
             except (TypeError, ValueError, KeyError):
                 continue
-        # No configured band matched: do not invent D/E/etc. from the default scale.
-        return "—"
+        if not valid_rules:
+            return "—"
+        average = float(average_percentage)
+        # First honor an explicitly configured range.
+        for minimum, maximum, grade in sorted(valid_rules, key=lambda x: (x[0], x[1]), reverse=True):
+            if minimum <= average <= maximum:
+                return grade
+        # If the school entered whole-number boundaries (e.g. 70-79 and 80-100),
+        # decimal averages such as 79.5 can fall into the tiny gap between bands.
+        # In that case use the configured band's lower boundary rather than
+        # reverting to the unrelated default D/E grading scale.
+        lower_rules = [r for r in valid_rules if r[0] <= average]
+        if lower_rules:
+            return max(lower_rules, key=lambda x: x[0])[2]
+        # Below the lowest configured band: use the school's lowest configured grade
+        # rather than inventing a grade from the default scale.
+        return min(valid_rules, key=lambda x: x[0])[2]
     except Exception as exc:
         print("DAVISCHOOL OVERALL GRADING ERROR:", repr(exc), flush=True)
         return "—"
