@@ -4000,7 +4000,8 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         if len(data)==2:
             data.append(["","No students or marks found."]+[""]*(len(header1)-2))
         subject_width_count = len(header1) - (8 if combined_mode else 7)
-        col_widths=[22*mm,42*mm] + ([18*mm] if combined_mode else []) + [15*mm]*subject_width_count + [16*mm]*5
+        # Give the student-name column more room so names do not crowd or wrap unnecessarily.
+        col_widths=[22*mm,58*mm] + ([18*mm] if combined_mode else []) + [15*mm]*subject_width_count + [16*mm]*5
         table=Table(data,colWidths=col_widths,repeatRows=2)
         table.setStyle(TableStyle([
             ("GRID",(0,0),(-1,-1),0.65,colors.black),("LINEABOVE",(0,2),(-1,-1),0.45,colors.black),("LINEBELOW",(0,2),(-1,-1),0.45,colors.black),("BACKGROUND",(0,0),(-1,1),colors.white),("TEXTCOLOR",(0,0),(-1,1),colors.black),
