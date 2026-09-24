@@ -786,23 +786,29 @@ def _load_overall_grading_rules(cur, school_id):
         return []
 
 def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
-    if overall_rules is not None:
-        for rule in overall_rules:
+    """Return the school's configured overall grade only.
+    Never silently substitute the subject/default grading scale for an overall grade.
+    """
+    try:
+        rules = overall_rules
+        if rules is None:
+            _ensure_overall_grading_table(cur)
+            rules = cur.execute(
+                "SELECT min_total,max_total,grade FROM overall_grading_rules "
+                "WHERE school_id=? ORDER BY min_total DESC,id DESC",
+                (school_id,)
+            ).fetchall()
+        for rule in (rules or []):
             try:
                 if float(rule["min_total"]) <= float(average_percentage) <= float(rule["max_total"]):
                     return str(rule["grade"])
-            except Exception:
+            except (TypeError, ValueError, KeyError):
                 continue
-        return _default_grade_points(average_percentage)[0]
-    try:
-        _ensure_overall_grading_table(cur)
-        rule=cur.execute("""SELECT grade FROM overall_grading_rules
-            WHERE school_id=? AND ? BETWEEN min_total AND max_total
-            ORDER BY min_total DESC,id DESC LIMIT 1""",(school_id,average_percentage)).fetchone()
-        return str(rule["grade"]) if rule else _default_grade_points(average_percentage)[0]
+        # No configured band matched: do not invent D/E/etc. from the default scale.
+        return "—"
     except Exception as exc:
-        print("DAVISCHOOL OVERALL GRADING FALLBACK:", repr(exc), flush=True)
-        return _default_grade_points(average_percentage)[0]
+        print("DAVISCHOOL OVERALL GRADING ERROR:", repr(exc), flush=True)
+        return "—"
 
 @router.get("/app/academics/overall-grading", response_class=HTMLResponse)
 def overall_grading(request: Request):
@@ -1007,6 +1013,11 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     try:
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+        try:
+            overall_rules = _load_overall_grading_rules(cur, sid)
+        except Exception as exc:
+            print("DAVISCHOOL MARKSHEET PDF OVERALL RULES ERROR:", repr(exc), flush=True)
+            overall_rules = []
         subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
         subjects = _marksheet_subject_order(subjects)
         selected_subject_ids = []
@@ -3947,7 +3958,8 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
                     total+=float(value or 0); points+=float(pts or 0); count+=1
                     vals.extend([f"{float(value):.1f}",str(grade),f"{float(pts):.1f}"])
             average=(total/count) if count else 0.0
-            computed.append((st,total,points,count,vals,_overall_grade(cur,sid,average) if count else "—"))
+            overall_grade = _overall_grade(cur, sid, average, overall_rules) if count else "—"
+            computed.append((st,total,points,count,vals,overall_grade))
         computed.sort(key=lambda x:x[1],reverse=True)
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
         con.close()
