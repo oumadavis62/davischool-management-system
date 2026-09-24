@@ -3824,7 +3824,7 @@ def timetable_page(request: Request):
                 cells.append("<td>"+cell_text+"</td>")
         weekly_rows+=f"<tr><th class='day-cell'>{day}</th>{''.join(cells)}</tr>"
 
-    break_rows_html="".join(f"<tr><td><b>{escape(str(b['name']))}</b></td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/breaks/delete/{b['id']}' onsubmit='return confirm("Delete this break period?")'><button class='mini danger'>🗑️</button></form></td></tr>" for b in breaks) or "<tr><td colspan='4'>No break periods saved.</td></tr>"
+    break_rows_html="".join(f"<tr><td><b>{escape(str(b['name']))}</b></td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/breaks/delete/{b['id']}' onsubmit='return confirm(\"Delete this break period?\")'><button class='mini danger'>🗑️</button></form></td></tr>" for b in breaks) or "<tr><td colspan='4'>No break periods saved.</td></tr>"
 
     table_rows="".join(
         f"<tr><td>{escape(str(r['day']))}</td><td>{escape(str(r['start_time']))}–{escape(str(r['end_time']))}</td>"
