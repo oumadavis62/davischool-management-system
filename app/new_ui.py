@@ -4175,7 +4175,8 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             tc=cur.execute("SELECT comment FROM class_teacher_comments WHERE school_id=? AND student_id=? AND exam_id=? LIMIT 1",(sid,st["id"],eid)).fetchone()
             rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,st["id"],eid)).fetchone()
             rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
-            story += _pdf_school_header(school,styles,"Student Report Card","%s · Admission %s · %s"%(st["name"],st["admission_no"] or "",er["name"]))
+            story += _pdf_school_header(school,styles,"Student Report Card")
+            story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), ParagraphStyle("ReportStudentName%d" % student_index, parent=styles["normal"], fontSize=12, leading=14, spaceAfter=2)), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] or ""))), styles["normal"]), Spacer(1,5)]
             story += [Paragraph("Class: %s %s · Status: %s"%(st["class_name"] or "",st["stream"] or "",status),styles["normal"]),Spacer(1,5)]
             data=[["Subject","Mark","Grade","Points","Performance Comment"]]
             for r,mark,grade,points in result["details"]:
@@ -4250,8 +4251,8 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
-        styles=_pdf_styles(); subtitle=f"{st['name']} · Admission {st['admission_no'] or ''} · {er['name'] if er else 'Examination'}"
-        story=_pdf_school_header(school,styles,"Student Report Card",subtitle)
+        styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Report Card")
+        story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), ParagraphStyle("ReportStudentNameSingle", parent=styles["normal"], fontSize=12, leading=14, spaceAfter=2)), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] if er else "Examination"))), styles["normal"]), Spacer(1,5)]
         status="FINAL" if report_final else "DRAFT"
         story += [Paragraph(f"Class: {st['class_name'] or ''} {st['stream'] or ''} · Status: {status}",styles["normal"]),Spacer(1,5)]
         data=[["Subject","Mark","Grade","Points","Performance Comment"]]
