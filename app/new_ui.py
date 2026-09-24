@@ -3014,8 +3014,19 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                     try: cur.connection.rollback()
                     except Exception: pass
                     sc=None
+                saved_comment=str(sc["comment"] or "").strip() if sc else ""
+                # If a saved subject comment is missing, derive it from the same
+                # subject grading rule used for the displayed mark/grade.
+                if not saved_comment:
+                    try:
+                        _, _, saved_comment = _subject_grade_details(
+                            cur, sid, int(rr["subject_id"]), float(mark), grading_rules
+                        )
+                    except Exception as exc:
+                        print("DAVISCHOOL BULK REPORT COMMENT DERIVATION FALLBACK:", repr(exc), flush=True)
+                        saved_comment = ""
                 details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
-                               (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(sc["comment"] if sc else ""))))
+                               (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(saved_comment))))
             try:
                 grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
                                        (sid,str(result.get("overall_grade","")))).fetchone()
