@@ -548,7 +548,7 @@ def timetable_period_settings(request: Request, periods_per_day:int=Form(...), p
         if not (1<=periods_per_day<=12 and 20<=period_minutes<=180 and 1<=periods_per_week<=84):
             return RedirectResponse("/app/timetable?tab=periods&error=Invalid+period+settings",303)
         cur=con.cursor()
-        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) ON CONFLICT(school_id) DO UPDATE SET periods_per_day=excluded.periods_per_day,period_minutes=excluded.period_minutes,periods_per_week=excluded.periods_per_week",(sid,periods_per_day,period_minutes,periods_per_week))
+        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) ON CONFLICT(school_id) DO UPDATE SET periods_per_day=excluded.periods_per_day,period_minutes=excluded.period_minutes,periods_per_week=excluded.periods_per_week RETURNING school_id",(sid,periods_per_day,period_minutes,periods_per_week))
         cur.execute("DELETE FROM timetable_periods WHERE school_id=? AND period_no>?",(sid,periods_per_day))
         base=datetime.strptime("08:00","%H:%M")
         for n in range(1,periods_per_day+1):
