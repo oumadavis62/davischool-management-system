@@ -812,12 +812,26 @@ def _report_signatories(cur, school_id, class_id):
         except Exception:
             pass
     if not class_teacher:
-        class_teacher = cur.execute(
-            """SELECT id,name,role FROM teachers WHERE school_id=?
-               AND lower(COALESCE(role,'')) IN ('class teacher','class_teacher')
-               AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
-            (school_id,)
-        ).fetchone()
+        try:
+            class_teacher = cur.execute(
+                """SELECT id,name,role FROM teachers WHERE school_id=?
+                   AND lower(COALESCE(role,'')) IN ('class teacher','class_teacher')
+                   AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
+                (school_id,)
+            ).fetchone()
+        except Exception as exc:
+            print("DAVISCHOOL TEACHER STATUS FALLBACK:", repr(exc), flush=True)
+            try: cur.connection.rollback()
+            except Exception: pass
+            try:
+                class_teacher = cur.execute(
+                    """SELECT id,name,role FROM teachers WHERE school_id=?
+                       AND lower(COALESCE(role,'')) IN ('class teacher','class_teacher')
+                       ORDER BY id DESC LIMIT 1""",
+                    (school_id,)
+                ).fetchone()
+            except Exception:
+                class_teacher = None
     # The Principal shown on report cards is the school administrator.
     # This keeps the report card synchronized with the school admin account
     # instead of requiring a separate Principal teacher profile.
@@ -2972,12 +2986,24 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
             result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
             details=[]
             for rr,mark,grade,points in result["details"]:
-                sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
-                               (sid,st["id"],selected_exam_ids[0],rr["subject_id"])).fetchone()
+                try:
+                    sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
+                                   (sid,st["id"],selected_exam_ids[0],rr["subject_id"])).fetchone()
+                except Exception as exc:
+                    print("DAVISCHOOL BULK REPORT SUBJECT COMMENT FALLBACK:", repr(exc), flush=True)
+                    try: cur.connection.rollback()
+                    except Exception: pass
+                    sc=None
                 details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
                                (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(sc["comment"] if sc else ""))))
-            grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
-                                   (sid,str(result.get("overall_grade","")))).fetchone()
+            try:
+                grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
+                                       (sid,str(result.get("overall_grade","")))).fetchone()
+            except Exception as exc:
+                print("DAVISCHOOL BULK REPORT GRADE COMMENT FALLBACK:", repr(exc), flush=True)
+                try: cur.connection.rollback()
+                except Exception: pass
+                grade_rule=None
             cards.append("""<section class='report-card'>
               %s<h1>Student Report Card</h1>
               <div class='student'><b>%s</b><span>Admission No: %s</span><span>Assessment: %s</span></div>
