@@ -328,15 +328,21 @@ def _subjects(con, sid):
     rows = con.execute("SELECT id,name,code,initial FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
     html_parts=[]
     for r in rows:
-        total = con.execute("""SELECT COALESCE(SUM(l.lessons_per_week * l.duration * (
-                1 + (SELECT COUNT(*) FROM timetable_lesson_classes lc WHERE lc.school_id=l.school_id AND lc.lesson_id=l.id)
-                - CASE WHEN l.class_id IS NOT NULL THEN 1 ELSE 0 END
-            )),0) total
+        total = con.execute("""SELECT COALESCE(SUM(
+                l.lessons_per_week * l.duration *
+                CASE
+                    WHEN (SELECT COUNT(*) FROM timetable_lesson_classes lc
+                          WHERE lc.school_id=l.school_id AND lc.lesson_id=l.id) > 0
+                    THEN (SELECT COUNT(*) FROM timetable_lesson_classes lc
+                          WHERE lc.school_id=l.school_id AND lc.lesson_id=l.id)
+                    ELSE 1
+                END
+            ),0) total
             FROM timetable_lessons l
             WHERE l.school_id=? AND l.subject_id=?""", (sid,r["id"])).fetchone()
         html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['code'] or ''))}</td><td>{escape(str(r['initial'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
     html="".join(html_parts)
-    return f"""<div class='tt-card'><h2>📚 Subjects</h2><div class='tt-muted'>The weekly subject load counts each period of a lesson. A double lesson counts as 2; combined classes are counted separately for each participating class/stream.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Subject</th><th>Code</th><th>Initial</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=5>No subjects found.</td></tr>'}</tbody></table></div></div>"""
+    return f"""<div class='tt-card'><h2>📚 Subjects</h2><div class='tt-muted'>The weekly subject load is calculated directly from every saved Lesson Card allocation: Lessons per week × duration, with a multiplier for every participating class/stream in a combined lesson. Each allocation is therefore reflected in the subject total.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Subject</th><th>Code</th><th>Initial</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=5>No subjects found.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _teachers(con, sid):
