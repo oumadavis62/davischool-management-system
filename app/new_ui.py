@@ -2937,7 +2937,9 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
-    # Do not silently select the first student when a class/stream was generated for bulk reports.\n    # A class-only selection must stay in bulk mode so the preview contains every student in that class/stream.\n    stid=int(student_id) if student_id.isdigit() else (0 if cid else (int(students[0]["id"]) if students else 0))
+    # Do not silently select the first student when a class/stream was generated for bulk reports.
+    # A class-only selection must stay in bulk mode so the preview contains every student in that class/stream.
+    stid=int(student_id) if student_id.isdigit() else (0 if cid else (int(students[0]["id"]) if students else 0))
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
     rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
