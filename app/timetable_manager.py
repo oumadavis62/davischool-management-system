@@ -322,14 +322,32 @@ def _subjects(con, sid):
 
 def _teachers(con, sid):
     rows = con.execute("SELECT id,name,email,phone,role,department FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    html = "".join(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['email'] or ''))}</td><td>{escape(str(r['phone'] or ''))}</td><td>{escape(str(r['department'] or r['role'] or ''))}</td></tr>" for r in rows)
-    return f"""<div class='tt-card'><h2>👨‍🏫 Teachers</h2><div class='tt-muted'>Existing staff records are used as timetable resources. Teacher allocations are shown in Lessons.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role / Department</th></tr></thead><tbody>{html or '<tr><td colspan=5>No teachers found.</td></tr>'}</tbody></table></div></div>"""
+    html_parts=[]
+    for r in rows:
+        # Count weekly teaching requirements from lesson-card inputs. Co-teachers each receive
+        # the full lesson count because each teacher is occupied for every co-taught lesson.
+        total = con.execute("""SELECT COALESCE(SUM(lessons_per_week * duration),0) total
+            FROM timetable_lessons l
+            WHERE l.school_id=? AND (l.teacher_id=? OR l.id IN
+                (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))""",
+            (sid,r["id"],sid,r["id"])).fetchone()
+        html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['email'] or ''))}</td><td>{escape(str(r['phone'] or ''))}</td><td>{escape(str(r['department'] or r['role'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
+    html="".join(html_parts)
+    return f"""<div class='tt-card'><h2>👨‍🏫 Teachers</h2><div class='tt-muted'>The weekly load is calculated automatically from the saved Lesson Cards. A co-teacher receives the full lesson load because they teach each co-taught lesson.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role / Department</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=6>No teachers found.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _classes(con, sid):
     rows = con.execute("SELECT id,name,level,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-    html = "".join(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['level'] or ''))}</td><td>{escape(str(r['stream'] or ''))}</td></tr>" for r in rows)
-    return f"""<div class='tt-card'><h2>🏫 Classes</h2><div class='tt-muted'>Classes and streams come directly from DaviSchool. Each timetable lesson is linked to a class ID, so stream data is preserved.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Class</th><th>Level</th><th>Stream</th></tr></thead><tbody>{html or '<tr><td colspan=4>No classes found.</td></tr>'}</tbody></table></div></div>"""
+    html_parts=[]
+    for r in rows:
+        total = con.execute("""SELECT COALESCE(SUM(l.lessons_per_week * l.duration),0) total
+            FROM timetable_lessons l
+            WHERE l.school_id=? AND (l.class_id=? OR l.id IN
+                (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))""",
+            (sid,r["id"],sid,r["id"])).fetchone()
+        html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['level'] or ''))}</td><td>{escape(str(r['stream'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
+    html="".join(html_parts)
+    return f"""<div class='tt-card'><h2>🏫 Classes</h2><div class='tt-muted'>The weekly class load is calculated automatically from the saved Lesson Cards, including lessons where this stream is combined with other streams.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Class</th><th>Level</th><th>Stream</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=5>No classes found.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _rooms(con, sid):
