@@ -89,6 +89,13 @@ def _ensure_live_postgres_schema():
 
     with psycopg.connect(database_url) as pg:
         with pg.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS timetable_breaks(
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL
+            )""")
             cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL,
