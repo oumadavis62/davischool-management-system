@@ -807,14 +807,30 @@ def _report_signatories(cur, school_id, class_id):
                AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
             (school_id,)
         ).fetchone()
+    # The Principal shown on report cards is the school administrator.
+    # This keeps the report card synchronized with the school admin account
+    # instead of requiring a separate Principal teacher profile.
     principal = cur.execute(
-        """SELECT id,name,role FROM teachers WHERE school_id=?
-           AND lower(COALESCE(role,''))='principal'
-           AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
+        """SELECT id,full_name,email FROM users
+           WHERE school_id=? AND role='school_admin'
+             AND TRIM(COALESCE(full_name,''))<>''
+           ORDER BY id DESC LIMIT 1""",
         (school_id,)
     ).fetchone()
+    if principal:
+        principal_name = str(principal["full_name"] or "").strip()
+    else:
+        # Compatibility fallback for older schools whose admin account has
+        # no full_name yet: use the most recent school-admin email.
+        principal = cur.execute(
+            """SELECT id,full_name,email FROM users
+               WHERE school_id=? AND role='school_admin'
+               ORDER BY id DESC LIMIT 1""",
+            (school_id,)
+        ).fetchone()
+        principal_name = str((principal["full_name"] if principal else "") or (principal["email"] if principal else "")).strip()
     return (str(class_teacher["name"] or "") if class_teacher else "",
-            str(principal["name"] or "") if principal else "")
+            principal_name)
 
 def _load_overall_grading_rules(cur, school_id):
     try:
