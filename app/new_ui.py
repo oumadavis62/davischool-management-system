@@ -3006,15 +3006,23 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                 continue
             details=[]
             for rr,mark,grade,points in result["details"]:
-                try:
-                    sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
-                                   (sid,st["id"],selected_exam_ids[0],rr["subject_id"])).fetchone()
-                except Exception as exc:
-                    print("DAVISCHOOL BULK REPORT SUBJECT COMMENT FALLBACK:", repr(exc), flush=True)
-                    try: cur.connection.rollback()
-                    except Exception: pass
-                    sc=None
-                saved_comment=str(sc["comment"] or "").strip() if sc else ""
+                saved_comment=""
+                # Comments are stored per student + subject + assessment.
+                # Check every selected assessment so a saved comment is not
+                # missed merely because it belongs to a different selected exam.
+                for comment_exam_id in selected_exam_ids:
+                    try:
+                        sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
+                                       (sid,st["id"],int(comment_exam_id),rr["subject_id"])).fetchone()
+                    except Exception as exc:
+                        print("DAVISCHOOL BULK REPORT SUBJECT COMMENT FALLBACK:", repr(exc), flush=True)
+                        try: cur.connection.rollback()
+                        except Exception: pass
+                        sc=None
+                    candidate=str(sc["comment"] or "").strip() if sc else ""
+                    if candidate:
+                        saved_comment=candidate
+                        break
                 # If a saved subject comment is missing, derive it from the same
                 # subject grading rule used for the displayed mark/grade.
                 if not saved_comment:
@@ -3134,8 +3142,17 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
             print("DAVISCHOOL REPORT GRADING COMMENT FALLBACK:",repr(exc),flush=True)
             report_grading_rules={}
         for sr in rows:
-            sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,stid,eid,sr["subject_id"])).fetchone()
-            saved_comment=(sc["comment"] if sc else "") or ""
+            saved_comment=""
+            # A multi-assessment report may display an averaged subject mark.
+            # Find the saved comment across all selected assessments instead
+            # of only checking the first assessment.
+            for comment_exam_id in selected_exam_ids:
+                sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
+                               (sid,stid,int(comment_exam_id),sr["subject_id"])).fetchone()
+                candidate=str(sc["comment"] or "").strip() if sc else ""
+                if candidate:
+                    saved_comment=candidate
+                    break
             if not saved_comment and sr["marks"] is not None:
                 try:
                     _,_,saved_comment=_subject_grade_details(cur,sid,int(sr["subject_id"]),sr["marks"],report_grading_rules)
