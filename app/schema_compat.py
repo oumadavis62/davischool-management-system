@@ -69,6 +69,7 @@ def _ensure_live_postgres_schema():
             "out_of": "INTEGER", "created_at": "TEXT",
         },
         "timetable": {"school_id": "INTEGER", "day": "TEXT", "start_time": "TEXT", "end_time": "TEXT", "class_name": "TEXT", "stream": "TEXT", "subject": "TEXT", "teacher": "TEXT", "room": "TEXT"},
+        "timetable_breaks": {"school_id": "INTEGER", "name": "TEXT", "start_time": "TEXT", "end_time": "TEXT"},
         "fees": {"school_id": "INTEGER", "student_id": "INTEGER", "amount": "REAL", "paid": "REAL", "description": "TEXT", "due_date": "TEXT", "status": "TEXT"},
         "announcements": {"school_id": "INTEGER", "title": "TEXT", "message": "TEXT", "audience": "TEXT", "created_at": "TEXT"},
         "sms_logs": {"school_id": "INTEGER", "recipient": "TEXT", "message": "TEXT", "status": "TEXT", "created_at": "TEXT"},
