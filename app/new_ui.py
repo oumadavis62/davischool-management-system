@@ -2983,6 +2983,8 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         brand="<div class='brand'>%s<div><div class='school'>%s</div><div>%s</div><div>%s</div></div><div class='admin-contact'><b>School Admin Phone</b><br>%s</div></div>" % (("<img src='%s'>" % escape(logo)) if logo else "🏫",school_name,postal,postal_code,admin_phone)
         exam_text=", ".join(escape(str(e["name"] or "")) for e in exams)
         cards=[]
+        generated_at=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M:%S EAT")
+        footer_html="<div class='print-footer'><i>DaviSchool Management System</i> · Generated: %s</div>" % generated_at
         for st in students:
             try:
                 result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
@@ -3034,8 +3036,6 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                               escape(str(result["overall_grade"])),escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
                               escape(str((grade_rule["principal_comment"] if grade_rule else "") or "")),
                               escape(str(class_teacher_name or "Not Assigned")),escape(str(principal_name or "Not Assigned"))) + footer_html)
-        generated_at=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M:%S EAT")
-        footer_html="<div class='print-footer'><i>DaviSchool Management System</i> · Generated: %s</div>" % generated_at
         body="".join(cards) if cards else "<section class='report-card'><h2>No students found in this class/stream.</h2></section>"
         html="""<!doctype html><html><head><meta charset='utf-8'><title>Class Report Cards Preview</title>
         <style>
