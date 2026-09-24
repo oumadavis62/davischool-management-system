@@ -351,14 +351,23 @@ def _teachers(con, sid):
     for r in rows:
         # Count weekly teaching requirements from lesson-card inputs. Co-teachers each receive
         # the full lesson count because each teacher is occupied for every co-taught lesson.
-        total = con.execute("""SELECT COALESCE(SUM(lessons_per_week * duration),0) total
+        total = con.execute("""SELECT COALESCE(SUM(
+                l.lessons_per_week * l.duration *
+                CASE
+                    WHEN (SELECT COUNT(*) FROM timetable_lesson_classes lc
+                          WHERE lc.school_id=l.school_id AND lc.lesson_id=l.id) > 0
+                    THEN (SELECT COUNT(*) FROM timetable_lesson_classes lc
+                          WHERE lc.school_id=l.school_id AND lc.lesson_id=l.id)
+                    ELSE 1
+                END
+            ),0) total
             FROM timetable_lessons l
             WHERE l.school_id=? AND (l.teacher_id=? OR l.id IN
                 (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))""",
             (sid,r["id"],sid,r["id"])).fetchone()
         html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['email'] or ''))}</td><td>{escape(str(r['phone'] or ''))}</td><td>{escape(str(r['department'] or r['role'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
     html="".join(html_parts)
-    return f"""<div class='tt-card'><h2>👨‍🏫 Teachers</h2><div class='tt-muted'>The weekly load counts each period taught. A double lesson counts as 2, and a teacher covering combined classes receives the load for each participating class/stream.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role / Department</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=6>No teachers found.</td></tr>'}</tbody></table></div></div>"""
+    return f"""<div class='tt-card'><h2>👨‍🏫 Teachers</h2><div class='tt-muted'>The weekly teacher load is calculated directly from every saved Lesson Card allocation: Lessons per week × duration, multiplied by the number of participating classes/streams. Co-teachers receive the same full allocation because they are teaching the combined lesson.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role / Department</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=6>No teachers found.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _classes(con, sid):
