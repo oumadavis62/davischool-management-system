@@ -765,8 +765,56 @@ def _ensure_overall_grading_table(cur):
         school_id INTEGER,
         min_total REAL,
         max_total REAL,
-        grade TEXT
+        grade TEXT,
+        class_teacher_comment TEXT,
+        principal_comment TEXT
     )""")
+    for col, definition in [("class_teacher_comment","TEXT"),("principal_comment","TEXT")]:
+        try:
+            cur.execute("SAVEPOINT davischool_overall_comment_column")
+            cur.execute("ALTER TABLE overall_grading_rules ADD COLUMN %s %s" % (col, definition))
+            cur.execute("RELEASE SAVEPOINT davischool_overall_comment_column")
+        except Exception:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_overall_comment_column")
+                cur.execute("RELEASE SAVEPOINT davischool_overall_comment_column")
+            except Exception:
+                pass
+
+def _ensure_class_teacher_assignments_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS class_teacher_assignments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        assigned_at TEXT,
+        UNIQUE(school_id,class_id)
+    )""")
+
+def _report_signatories(cur, school_id, class_id):
+    _ensure_class_teacher_assignments_table(cur)
+    class_teacher = cur.execute(
+        """SELECT t.id,t.name,t.role FROM class_teacher_assignments a
+           JOIN teachers t ON t.id=a.teacher_id
+           WHERE a.school_id=? AND a.class_id=? AND t.school_id=?
+             AND COALESCE(t.status,'active')='active' LIMIT 1""",
+        (school_id, class_id, school_id)
+    ).fetchone()
+    if not class_teacher:
+        class_teacher = cur.execute(
+            """SELECT id,name,role FROM teachers WHERE school_id=?
+               AND lower(COALESCE(role,'')) IN ('class teacher','class_teacher')
+               AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
+            (school_id,)
+        ).fetchone()
+    principal = cur.execute(
+        """SELECT id,name,role FROM teachers WHERE school_id=?
+           AND lower(COALESCE(role,''))='principal'
+           AND COALESCE(status,'active')='active' ORDER BY id DESC LIMIT 1""",
+        (school_id,)
+    ).fetchone()
+    return (str(class_teacher["name"] or "") if class_teacher else "",
+            str(principal["name"] or "") if principal else "")
 
 def _load_overall_grading_rules(cur, school_id):
     try:
@@ -849,6 +897,12 @@ def overall_grading(request: Request):
       "<input name='min_total' type='number' min='0' max='100' step='0.01' required placeholder='Minimum average %' class='field'>"
       "<input name='max_total' type='number' min='0' max='100' step='0.01' required placeholder='Maximum average %' class='field'>"
       "<input name='grade' required placeholder='Overall grade e.g. A' class='field'><button class='btn'>Save</button></form></div>"
+      "<div class='card section'><h2>Report Card Comments by Overall Grade</h2><div class='muted'>Set the class teacher and principal comment that will automatically appear on report cards for each overall grade.</div>"
+      "<table><thead><tr><th>Grade</th><th>Class Teacher Comment</th><th>Principal Comment</th><th>Action</th></tr></thead><tbody>"
+      + "".join("<tr><td><b>%s</b></td><td colspan='2'><form method='post' action='/app/report-cards/overall-grade-comments'><input type='hidden' name='rule_id' value='%s'><input name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'><input name='principal_comment' value='%s' class='field' style='margin-top:6px' placeholder='Principal comment'><button class='btn' style='margin-top:6px'>Save Comments</button></form></td><td></td></tr>" %
+          (escape(str(r["grade"])),r["id"],escape(str(r["class_teacher_comment"] or "")),escape(str(r["principal_comment"] or ""))) for r in rules)
+      + ("<tr><td colspan='4'>No overall grading bands configured yet.</td></tr>" if not rules else "")
+      + "</tbody></table></div>
       "<div class='card section'><table><thead><tr><th>Minimum Average %</th><th>Maximum Average %</th><th>Overall Grade</th><th>Action</th></tr></thead><tbody>"+(rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")+"</tbody></table></div>"
       "<div class='card section'><b>Overall grade:</b> Based on average percentage. <b>Position:</b> ranked automatically by total marks, highest total first; equal totals receive the same position.</div>"
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style></div>")
@@ -2781,6 +2835,19 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
     body=f"""<div class='page'><h1>Academic Analysis</h1><div class='muted'>Analysis uses the same configured grading and points engine used by report cards.</div><div class='card section'><form method='get' action='/app/academics/analysis' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='exam_ids' class='field' multiple size='3'>{eopts}</select><select name='class_id' class='field'><option value=''>All classes</option>{copts}</select><button class='btn'>Analyse</button></form></div><div class='card section'><h2>Subject Performance</h2><table><thead><tr><th>Subject</th><th>Entries</th><th>Average</th><th>Highest</th><th>Lowest</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No marks found.</td></tr>'}</tbody></table></div><div class='card section'><h2>Student Results</h2><table><thead><tr><th>Admission</th><th>Student</th><th>Subjects</th><th>Total</th><th>Average</th><th>Overall Grade</th><th>Position</th></tr></thead><tbody>{student_rows or '<tr><td colspan=7>No student results found.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Academic Analysis",body)
 
+@router.post("/app/report-cards/overall-grade-comments")
+def save_overall_grade_comments(request: Request, rule_id:int=Form(...), class_teacher_comment:str=Form(""), principal_comment:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "reports.edit"):
+        return HTMLResponse("You do not have permission to edit overall-grade report comments.",403)
+    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
+    cur.execute("UPDATE overall_grading_rules SET class_teacher_comment=?, principal_comment=? WHERE id=? AND school_id=?",
+                (class_teacher_comment.strip(),principal_comment.strip(),rule_id,sid))
+    _audit(cur,sid,request,"OVERALL_GRADE_REPORT_COMMENTS","Updated grade-based report card comments")
+    con.commit();con.close()
+    return RedirectResponse("/app/report-cards?tab=overall-comments",303)
+
 @router.post("/app/report-cards/subject-comment")
 def save_subject_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), subject_id:int=Form(...), comment:str=Form("")):
     sid=_school_session(request)
@@ -2839,7 +2906,7 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
     con.commit();con.close()
     return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}",303)
 @router.get("/app/report-cards", response_class=HTMLResponse)
-def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:str="", class_id:str=""):
+def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:str="", class_id:str="", tab:str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "reports.view"):
@@ -2855,7 +2922,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
-    rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0
+    rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
         rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
           WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
@@ -2911,8 +2978,12 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     eopts="".join(f"<option value='{e['id']}' {'selected' if e['id']==eid else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))}{(' · '+escape(str(c['stream'] or ''))) if c['stream'] else ''}</option>" for c in classes)
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids) if st and selected_exam_ids else {"rows":[],"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
+    result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),_load_overall_grading_rules(cur,sid)) if st and selected_exam_ids else {"rows":[],"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
     total=result["total"];avg=result["average"]
+    if st:
+        class_teacher_name, principal_name = _report_signatories(cur,sid,int(st["class_id"] or 0))
+    if result.get("overall_grade") and result.get("overall_grade") != "—":
+        grade_comment_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",(sid,str(result["overall_grade"]))).fetchone()
     markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td></tr>" for r,mark,grade,points in result["details"])
     school_row=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     school_name=escape(str(school_row["name"] or "DaviSchool")) if school_row else "DaviSchool"
@@ -3629,12 +3700,45 @@ def roles_page(request: Request):
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
-    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall();con.close()
+    con=_db();cur=con.cursor()
+    rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall()
+    _ensure_class_teacher_assignments_table(cur)
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? AND COALESCE(status,'active')='active' ORDER BY name",(sid,)).fetchall()
+    assignments=cur.execute("""SELECT a.class_id,a.teacher_id,c.name class_name,c.stream,t.name teacher_name
+        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id JOIN teachers t ON t.id=a.teacher_id
+        WHERE a.school_id=? ORDER BY c.name,c.stream""",(sid,)).fetchall()
+    con.close()
     tr=_simple_rows(rows,["role","permission","enabled"])
+    class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
+    teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
+    assignment_rows="".join("<tr><td>%s%s</td><td>%s</td></tr>"%(escape(str(a["class_name"])),(" · "+escape(str(a["stream"] or ""))) if a["stream"] else "",escape(str(a["teacher_name"]))) for a in assignments)
     body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
+<div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class. Report cards automatically use this assignment for the class teacher name and signature line.</div>
+<form method='post' action='/app/roles/class-teacher-assignment' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select><select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select><button class='btn'>Save Assignment</button></form>
+<table style='margin-top:14px'><thead><tr><th>Class</th><th>Class Teacher</th></tr></thead><tbody>{assignment_rows or "<tr><td colspan='2'>No class teacher assignments yet.</td></tr>"}</tbody></table></div>
 <div class='card section'><h2>Grant permission</h2><form method='post' action='/app/roles/add' style='display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px'><select name='role' class='field'><option>school_admin</option><option>teacher</option><option>parent</option><option>student</option><option>accountant</option><option>registrar</option></select><select name='permission' required class='field'><option value=''>Select permission</option><option>students.view</option><option>students.create</option><option>students.edit</option><option>classes.view</option><option>classes.create</option><option>subjects.view</option><option>subjects.create</option><option>exams.view</option><option>exams.create</option><option>marks.view</option><option>marks.edit</option><option>attendance.view</option><option>attendance.edit</option><option>timetable.view</option><option>timetable.edit</option><option>fees.view</option><option>fees.edit</option><option>finance.view</option><option>finance.edit</option><option>reports.view</option><option>reports.edit</option><option>staff.view</option><option>staff.create</option><option>staff.edit</option><option>communications.view</option><option>communications.edit</option><option>settings.view</option><option>settings.edit</option><option>audit.view</option><option>users.manage</option><option>settings.manage</option></select><select name='enabled' class='field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
 <div class='card section'><h2>Configured permissions ({len(rows)})</h2><table><thead><tr><th>Role</th><th>Permission</th><th>Enabled</th></tr></thead><tbody>{tr or '<tr><td colspan=3>No custom permissions yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Roles & Permissions",body)
+
+@router.post("/app/roles/class-teacher-assignment")
+def save_class_teacher_assignment(request: Request, class_id:int=Form(...), teacher_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
+    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
+    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND COALESCE(status,'active')='active'",(teacher_id,sid)).fetchone()
+    if not valid_class or not valid_teacher:
+        con.close();return HTMLResponse("Invalid class or teacher selection. <a href='/app/roles'>Back</a>",400)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at) VALUES(?,?,?,?)
+                   ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
+                (sid,class_id,teacher_id,now))
+    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned class teacher for class %s"%class_id)
+    con.commit();con.close()
+    return RedirectResponse("/app/roles",303)
 
 @router.post("/app/roles/add")
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
