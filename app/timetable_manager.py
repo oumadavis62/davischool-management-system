@@ -298,7 +298,7 @@ def _periods(request, con, sid):
         for p in periods
     )
     br = "".join(
-        f"<tr><td>{escape(str(b['name']))}</td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/break/delete/{b['id']}' onsubmit='return confirm("Delete this break?")'><button class='tt-btn danger'>🗑️</button></form></td></tr>"
+        f"<tr><td>{escape(str(b['name']))}</td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/break/delete/{b['id']}' onsubmit='return confirm(&quot;Delete this break?&quot;)'><button class='tt-btn danger'>🗑️</button></form></td></tr>"
         for b in breaks
     ) or "<tr><td colspan='4'>No breaks saved.</td></tr>"
     return f"""<div class='tt-card'><h2>🕐 Periods & Bells</h2><div class='tt-muted'>Set the number of periods and exact bell times. Saved breaks are treated as unavailable timetable time.</div>
