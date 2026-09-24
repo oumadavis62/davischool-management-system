@@ -71,6 +71,16 @@ def _ensure_tables(con):
         lesson_id INTEGER NOT NULL,
         teacher_id INTEGER NOT NULL
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_availability(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id INTEGER NOT NULL,
+        day_name TEXT NOT NULL,
+        period_no INTEGER NOT NULL,
+        allowed INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(school_id,resource_type,resource_id,day_name,period_no)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_constraints(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -201,7 +211,7 @@ def _guard(request, permission="timetable.view"):
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"setup","periods","subjects","teachers","classes","rooms","lessons","constraints","generate","verify","timetable","print"}
+    allowed = {"setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","print"}
     return tab if tab in allowed else "timetable"
 
 
@@ -209,7 +219,7 @@ def _tabs(active):
     labels = [
         ("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
-        ("lessons","📝 Lessons"),("constraints","🧩 Constraints"),("generate","🚀 Generate"),
+        ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
         ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("print","🖨️ Print")
     ]
     return "<div class='tt-tabs'>" + "".join(
@@ -265,7 +275,7 @@ def timetable_manager(request: Request):
         elif tab == "classes": body = _classes(con, sid)
         elif tab == "rooms": body = _rooms(con, sid)
         elif tab == "lessons": body = _lessons(request, con, sid)
-        elif tab == "constraints": body = _constraints(con, sid)
+        elif tab == "availability": body = _availability(request, con, sid)
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
         elif tab == "print": body = _print_view(con, sid)
@@ -291,7 +301,7 @@ def _setup(request, con, sid):
 <label><span class='tt-label'>Constraint mode</span><select name='relaxation' class='tt-field'><option value='draft' {'selected' if relaxation=='draft' else ''}>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label>
 <div><button class='tt-btn'>💾 Save Setup</button></div></form></div>
 <div class='tt-grid'><div class='tt-stat'><b>1</b>School timetable</div><div class='tt-stat'><b>4</b>Core resource types</div><div class='tt-stat'><b>3</b>Generation modes</div></div>
-<div class='tt-card'><h3>Workflow</h3><div class='tt-muted'>Setup → Periods & Bells → Subjects / Teachers / Classes / Rooms → Lessons → Constraints → Generate → Verify → Timetable → Print</div></div>"""
+<div class='tt-card'><h3>Workflow</h3><div class='tt-muted'>Setup → Periods & Bells → Subjects / Teachers / Classes / Rooms → Lessons → Availability → Generate → Verify → Timetable → Print</div></div>"""
 
 
 def _periods(request, con, sid):
@@ -411,6 +421,45 @@ def _lessons(request, con, sid):
         edit = con.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=?", (int(edit_id), sid)).fetchone()
     return _lesson_form(con,sid,edit) + f"""<div class='tt-card'><h3>Lesson Cards ({len(rows)})</h3><div class='tt-muted'>This is the timetable equivalent of aSc lesson cards/contracts. One row is one weekly teaching requirement.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Classes / Streams</th><th>Subject</th><th>Teachers</th><th>/Week</th><th>Length</th><th>Group</th><th></th><th></th></tr></thead><tbody>{html or '<tr><td colspan=8>No lesson cards yet.</td></tr>'}</tbody></table></div></div>"""
 
+
+def _availability(request, con, sid):
+    kind = str(request.query_params.get("kind","teacher") or "teacher").lower()
+    if kind not in ("teacher","subject"): kind="teacher"
+    selected = int(request.query_params.get("resource_id") or 0) if str(request.query_params.get("resource_id") or "").isdigit() else 0
+    teachers = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    subjects = con.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    resources = teachers if kind=="teacher" else subjects
+    if not selected and resources: selected=int(resources[0]["id"])
+    days=[r["name"] for r in con.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
+    periods=con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+    saved={}
+    if selected:
+        for r in con.execute("SELECT day_name,period_no,allowed FROM timetable_availability WHERE school_id=? AND resource_type=? AND resource_id=?",(sid,kind,selected)).fetchall():
+            saved[(str(r["day_name"]),int(r["period_no"]))]=bool(int(r["allowed"] or 0))
+    resource_options="".join(f"<option value='{r['id']}' {'selected' if int(r['id'])==selected else ''}>{escape(str(r['name'] or ''))}</option>" for r in resources)
+    head="".join(f"<th>{escape(d)}</th>" for d in days)
+    cells=[]
+    for p in periods:
+        row=[f"<tr><td><b>Period {int(p['period_no'])}</b><br><small>{escape(str(p['start_time']))}–{escape(str(p['end_time']))}</small></td>"]
+        for d in days:
+            allowed=saved.get((d,int(p["period_no"])),True)
+            val=f"{d}|{int(p['period_no'])}"
+            row.append(f"<td style='text-align:center'><input type='checkbox' name='slot' value='{escape(val)}' {'checked' if allowed else ''} aria-label='{escape(d)} period {int(p['period_no'])}'></td>")
+        row.append("</tr>");cells.append("".join(row))
+    table="".join(cells) or "<tr><td>No periods configured.</td></tr>"
+    return f"""<div class='tt-card'><h2>🎯 Teacher & Subject Availability</h2><div class='tt-muted'>This replaces the old generic Constraints page with a period-by-period availability grid. Tick a period when the teacher or subject is allowed to be scheduled; untick it to block that period during automatic generation. Unconfigured cells remain available.</div>
+<div class='tt-grid' style='margin-top:12px'>
+<form method='get' action='/app/timetable' class='tt-form'>
+<input type='hidden' name='tab' value='availability'>
+<label><span class='tt-label'>Resource type</span><select class='tt-field' name='kind' onchange='this.form.submit()'><option value='teacher' {'selected' if kind=='teacher' else ''}>👨‍🏫 Teacher</option><option value='subject' {'selected' if kind=='subject' else ''}>📚 Subject</option></select></label>
+<label><span class='tt-label'>{'Teacher' if kind=='teacher' else 'Subject'}</span><select class='tt-field' name='resource_id' onchange='this.form.submit()'>{resource_options or '<option value="">No resources found</option>'}</select></label>
+</form>
+<div class='tt-card' style='margin:0'><h3>How it works</h3><div class='tt-muted'>✅ Tick = available for generation<br>⬜ Untick = unavailable for generation<br>Only the selected teacher/subject is affected.</div></div></div>
+<form method='post' action='/app/timetable/availability/save' style='margin-top:12px'>
+<input type='hidden' name='kind' value='{escape(kind)}'><input type='hidden' name='resource_id' value='{selected}'>
+<div class='tt-scroll'><table class='tt-table'><thead><tr><th>Period</th>{head}</tr></thead><tbody>{table}</tbody></table></div>
+<div style='margin-top:12px'><button class='tt-btn'>💾 Save Availability</button></div></form></div>
+<div class='tt-card'><h3>🧩 aSc-style scheduling controls</h3><div class='tt-muted'>Use this grid before generation to define teacher working availability and subject time restrictions. The generator will not place a lesson in an unticked cell for its teacher or subject. You can still use Lesson Cards, locked placements, rooms, breaks and normal collision checking.</div></div>"""
 
 def _constraints(con, sid):
     rows = con.execute("SELECT * FROM timetable_constraints WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
@@ -747,6 +796,34 @@ def timetable_lesson_delete(request:Request,rid:int):
     finally:con.close()
 
 
+@router.post("/app/timetable/availability/save")
+def timetable_availability_save(request:Request,kind:str=Form(...),resource_id:int=Form(...)):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        if kind not in ("teacher","subject"):
+            return RedirectResponse("/app/timetable?tab=availability&error=Invalid+resource+type",303)
+        valid_table="teachers" if kind=="teacher" else "subjects"
+        if not con.execute(f"SELECT id FROM {valid_table} WHERE school_id=? AND id=?",(sid,resource_id)).fetchone():
+            return RedirectResponse("/app/timetable?tab=availability&error=Invalid+resource",303)
+        days=[str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
+        periods=[int(r["period_no"]) for r in con.execute("SELECT period_no FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()]
+        allowed={(d,p) for d in days for p in periods}
+        selected=set()
+        form=await request.form()
+        for raw in form.getlist("slot"):
+            parts=str(raw).split("|",1)
+            if len(parts)==2 and parts[0] in days and parts[1].isdigit() and (parts[0],int(parts[1])) in allowed:
+                selected.add((parts[0],int(parts[1])))
+        cur=con.cursor()
+        cur.execute("DELETE FROM timetable_availability WHERE school_id=? AND resource_type=? AND resource_id=?",(sid,kind,resource_id))
+        for d,p in allowed:
+            if (d,p) not in selected:
+                cur.execute("INSERT INTO timetable_availability(school_id,resource_type,resource_id,day_name,period_no,allowed) VALUES(?,?,?,?,?,0)",(sid,kind,resource_id,d,p))
+        con.commit()
+        return RedirectResponse(f"/app/timetable?tab=availability&kind={kind}&resource_id={resource_id}&msg=Availability+saved",303)
+    finally: con.close()
+
 @router.post("/app/timetable/constraint/save")
 def timetable_constraint_save(request:Request,scope:str=Form(...),constraint_type:str=Form(...),target_id:str=Form(""),value:str=Form(""),priority:str=Form("preferred")):
     sid,con,response=_guard(request,"timetable.edit")
@@ -820,7 +897,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     rooms=cur.execute("SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)).fetchall()
     lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
                         (sid,class_filter,sid,class_filter) if class_filter else (sid,)).fetchall()
-    constraints=_constraint_maps(cur,sid)
+    constraints=_constraint_maps(cur,sid)\n    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}\n    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
     if replace_existing:
         if class_filter:
             cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0 AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?)",(sid,sid,class_filter))
@@ -842,6 +919,13 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     pno=int(p["period_no"])
                     ok,room_id=_is_available_slot(cur,sid,lesson,day,pno,int(lesson["duration"] or 1),occupied,rooms,mode=="strict")
                     if not ok:continue
+                    # Respect aSc-style teacher and subject period availability for every occupied period.
+                    teacher_ids={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson["id"])).fetchall()} or ({int(lesson["teacher_id"])} if lesson["teacher_id"] else set())
+                    blocked=False
+                    for xp in range(pno,pno+int(lesson["duration"] or 1)):
+                        if int(lesson["subject_id"]) and (day,xp,int(lesson["subject_id"])) in blocked_subject: blocked=True
+                        if any((day,xp,tid) in blocked_teacher for tid in teacher_ids): blocked=True
+                    if blocked: continue
                     # Strict mode respects simple constraints; relaxed mode may ignore preferred constraints.
                     bad=False
                     for c in constraints.get("Teacher max lessons/day",[]):
