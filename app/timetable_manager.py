@@ -655,29 +655,51 @@ def timetable_room_delete(request:Request,rid:int):
 
 
 @router.post("/app/timetable/lesson/save")
-def timetable_lesson_save(request:Request,lesson_id:int=Form(0),class_id:int=Form(...),subject_id:int=Form(...),teacher_id:str=Form(""),room_id:str=Form(""),lessons_per_week:int=Form(...),duration:int=Form(...),cycle:str=Form("Every week"),group_name:str=Form(""),locked:str=Form(""),notes:str=Form("")):
+async def timetable_lesson_save(request:Request):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        cur=con.cursor()
-        valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+        form=await request.form();cur=con.cursor()
+        lesson_id=int(str(form.get("lesson_id") or 0)) if str(form.get("lesson_id") or "").isdigit() else 0
+        class_ids=[]
+        for v in form.getlist("class_ids"):
+            if str(v).isdigit() and int(v) not in class_ids: class_ids.append(int(v))
+        teacher_ids=[]
+        for v in form.getlist("teacher_ids"):
+            if str(v).isdigit() and int(v) not in teacher_ids: teacher_ids.append(int(v))
+        subject_id=int(str(form.get("subject_id") or 0)) if str(form.get("subject_id") or "").isdigit() else 0
+        lessons_per_week=int(str(form.get("lessons_per_week") or 0) or 0)
+        duration=int(str(form.get("duration") or 1) or 1)
+        cycle=str(form.get("cycle") or "Every week")
+        group_name=str(form.get("group_name") or "").strip()
+        notes=str(form.get("notes") or "").strip()
+        locked=1 if form.get("locked") else 0
+        room_value=str(form.get("room_id") or "")
+        room=int(room_value) if room_value.isdigit() else None
+        if not class_ids or not subject_id or not 1<=lessons_per_week<=30 or not 1<=duration<=3:
+            return RedirectResponse("/app/timetable?tab=lessons&error=Select+at+least+one+class+and+valid+lesson+details",303)
+        valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN ("+(",".join(["?"]*len(class_ids)))+")",(sid,*class_ids)).fetchall()
+        valid_class_ids=[int(x["id"]) for x in valid_classes]
         valid_subject=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-        if not valid_class or not valid_subject or not 1<=lessons_per_week<=30 or not 1<=duration<=3:return RedirectResponse("/app/timetable?tab=lessons&error=Invalid+lesson+card",303)
-        teacher=int(teacher_id) if str(teacher_id).isdigit() else None
-        room=int(room_id) if str(room_id).isdigit() else None
-        if teacher and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher,sid)).fetchone(): teacher=None
+        valid_teachers=cur.execute("SELECT id FROM teachers WHERE school_id=? AND id IN ("+(",".join(["?"]*len(teacher_ids)))+")",(sid,*teacher_ids)).fetchall() if teacher_ids else []
+        valid_teacher_ids=[int(x["id"]) for x in valid_teachers]
+        if len(valid_class_ids)!=len(class_ids) or not valid_subject or len(valid_teacher_ids)!=len(teacher_ids):
+            return RedirectResponse("/app/timetable?tab=lessons&error=Invalid+class%2C+subject+or+teacher+selection",303)
         if room and not cur.execute("SELECT id FROM timetable_rooms WHERE id=? AND school_id=?",(room,sid)).fetchone(): room=None
-        vals=(class_id,subject_id,teacher,room,group_name.strip(),lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",1 if locked else 0,room,notes.strip())
+        primary_class=valid_class_ids[0]
+        primary_teacher=valid_teacher_ids[0] if valid_teacher_ids else None
+        vals=(primary_class,subject_id,primary_teacher,room,group_name,lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",locked,room,notes)
         if lesson_id:
             cur.execute("""UPDATE timetable_lessons SET class_id=?,subject_id=?,teacher_id=?,room_id=?,group_name=?,lessons_per_week=?,duration=?,cycle=?,locked=?,preferred_room=?,notes=? WHERE id=? AND school_id=?""",vals+(lesson_id,sid))
-            action="TIMETABLE_LESSON_UPDATE"
+            cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
+            cur.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
         else:
             cur.execute("""INSERT INTO timetable_lessons(school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,duration,cycle,locked,preferred_room,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(sid,)+vals)
-            action="TIMETABLE_LESSON_CREATE"
+            lesson_id=cur.lastrowid
+        for cid in valid_class_ids: cur.execute("INSERT INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,lesson_id,cid))
+        for tid in valid_teacher_ids: cur.execute("INSERT INTO timetable_lesson_teachers(school_id,lesson_id,teacher_id) VALUES(?,?,?)",(sid,lesson_id,tid))
         con.commit();return RedirectResponse("/app/timetable?tab=lessons&msg=Lesson+card+saved",303)
     finally:con.close()
-
-
 @router.post("/app/timetable/lesson/delete/{rid}")
 def timetable_lesson_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
