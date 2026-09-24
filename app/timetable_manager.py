@@ -232,7 +232,7 @@ def timetable_manager(request: Request):
         elif tab == "teachers": body = _teachers(con, sid)
         elif tab == "classes": body = _classes(con, sid)
         elif tab == "rooms": body = _rooms(con, sid)
-        elif tab == "lessons": body = _lessons(con, sid)
+        elif tab == "lessons": body = _lessons(request, con, sid)
         elif tab == "constraints": body = _constraints(con, sid)
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
