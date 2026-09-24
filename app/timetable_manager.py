@@ -58,6 +58,13 @@ def _ensure_tables(con):
         preferred_room INTEGER,
         notes TEXT
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lesson_classes(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        lesson_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        UNIQUE(school_id,lesson_id,class_id)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lesson_teachers(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
