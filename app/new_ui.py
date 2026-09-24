@@ -3789,6 +3789,7 @@ def timetable_page(request: Request):
         return HTMLResponse("You do not have permission to view the timetable.", 403)
     con=_db();cur=con.cursor()
     rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY CASE day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,start_time,id",(sid,)).fetchall()
+    breaks=cur.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -3808,15 +3809,22 @@ def timetable_page(request: Request):
     to="<option value=''>-- Optional teacher --</option>"+"".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
 
     selected_rows=[r for r in rows if selected and str(r["class_name"]).strip()==str(selected["name"]).strip() and str(r["stream"] or "").strip()==str(selected["stream"] or "").strip()]
-    slot_keys=sorted({(r["start_time"],r["end_time"]) for r in selected_rows})
+    slot_keys=sorted({(r["start_time"],r["end_time"]) for r in selected_rows} | {(b["start_time"],b["end_time"]) for b in breaks})
+    weekly_header="<tr><th>DAY</th>"+"".join(f"<th>{escape(str(st))}–{escape(str(et))}</th>" for st,et in slot_keys)+"</tr>"
     weekly_rows=""
-    for st,et in slot_keys:
+    for day in ("Monday","Tuesday","Wednesday","Thursday","Friday"):
         cells=[]
-        for day in ("Monday","Tuesday","Wednesday","Thursday","Friday"):
-            found=[r for r in selected_rows if r["day"]==day and r["start_time"]==st and r["end_time"]==et]
-            cell_text="<br>".join(f"<b>{escape(str(r['subject']))}</b>{('<br>'+escape(str(r['teacher']))) if r['teacher'] else ''}" for r in found) or "—"
-            cells.append("<td>"+cell_text+"</td>")
-        weekly_rows+=f"<tr><th>{escape(str(st))}–{escape(str(et))}</th>{''.join(cells)}</tr>"
+        for st,et in slot_keys:
+            br=next((b for b in breaks if str(b["start_time"])==str(st) and str(b["end_time"])==str(et)),None)
+            if br:
+                cells.append("<td class='break-cell'><b>☕ "+escape(str(br["name"]))+"</b></td>")
+            else:
+                found=[r for r in selected_rows if r["day"]==day and r["start_time"]==st and r["end_time"]==et]
+                cell_text="<br>".join(f"<b>{escape(str(r['subject']))}</b>{('<br>'+escape(str(r['teacher']))) if r['teacher'] else ''}" for r in found) or "—"
+                cells.append("<td>"+cell_text+"</td>")
+        weekly_rows+=f"<tr><th class='day-cell'>{day}</th>{''.join(cells)}</tr>"
+
+    break_rows_html="".join(f"<tr><td><b>{escape(str(b['name']))}</b></td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/breaks/delete/{b['id']}' onsubmit='return confirm("Delete this break period?")'><button class='mini danger'>🗑️</button></form></td></tr>" for b in breaks) or "<tr><td colspan='4'>No break periods saved.</td></tr>"
 
     table_rows="".join(
         f"<tr><td>{escape(str(r['day']))}</td><td>{escape(str(r['start_time']))}–{escape(str(r['end_time']))}</td>"
@@ -3836,17 +3844,50 @@ def timetable_page(request: Request):
 <label class='field' style='display:flex;align-items:center;gap:8px'><input type='checkbox' name='replace_existing' value='1' checked style='width:auto'> Replace existing timetable for this class</label>
 <button class='btn' style='grid-column:1/-1'>🚀 Generate Timetable</button></form></div>
 
+<div class='card section'><h2>☕ Break Periods</h2>
+<form method='post' action='/app/timetable/breaks/save' style='display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px'>
+<input name='name' required maxlength='80' placeholder='Break name' class='field'><input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><button class='btn'>💾 Save Break</button></form>
+<div style='overflow:auto;margin-top:10px'><table><thead><tr><th>Name</th><th>Start</th><th>End</th><th>Action</th></tr></thead><tbody>{break_rows_html}</tbody></table></div></div>
+
 <div class='card section'><h2>➕ Add Lesson</h2><form method='post' action='/app/timetable/add' style='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px'>
 <select name='day' required class='field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select>
 <input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><select name='class_id' required class='field'><option value=''>-- Class / Stream --</option>{co}</select>
 <select name='subject_id' required class='field'><option value=''>-- Subject --</option>{so}</select><select name='teacher_id' class='field'>{to}</select><input name='room' placeholder='Room / Venue' class='field'><button class='btn'>Save Lesson</button></form></div>
 
-{("<div class='card section timetable-print-card'><div class='timetable-doc-header'><div class='timetable-logo'>"+(" <img src='"+escape(str(school_logo))+"' alt='School logo'>" if school_logo else "🏫")+"</div><div class='timetable-school'><div>"+school_name+"</div><small>"+school_postal+"</small><small>"+school_postal_code+"</small></div><div class='timetable-right'><small>"+(("☎ "+school_phone) if school_phone else "")+"</small><small>"+(("✉ "+school_email) if school_email else "")+"</small></div><div class='no-print'><button class='btn' onclick='window.print()'>🖨️ Print</button></div></div><div class='timetable-title'>WEEKLY TIMETABLE — "+escape(str(selected['name']))+" "+escape(str(selected['stream'] or ''))+"</div><div style='overflow:auto'><table class='week'><tr><th>TIME</th><th>MONDAY</th><th>TUESDAY</th><th>WEDNESDAY</th><th>THURSDAY</th><th>FRIDAY</th></tr>"+(weekly_rows or "<tr><td colspan='6' style='padding:30px;text-align:center'>No lessons for this class.</td></tr>")+"</table></div></div>") if selected else ""}
+{("<div class='card section timetable-print-card'><div class='timetable-doc-header'><div class='timetable-logo'>"+(" <img src='"+escape(str(school_logo))+"' alt='School logo'>" if school_logo else "🏫")+"</div><div class='timetable-school'><div>"+school_name+"</div><small>"+school_postal+"</small><small>"+school_postal_code+"</small></div><div class='timetable-right'><small>"+(("☎ "+school_phone) if school_phone else "")+"</small><small>"+(("✉ "+school_email) if school_email else "")+"</small></div><div class='no-print'><button class='btn' onclick='window.print()'>🖨️ Print</button></div></div><div class='timetable-title'>WEEKLY TIMETABLE — "+escape(str(selected['name']))+" "+escape(str(selected['stream'] or ''))+"</div><div style='overflow:auto'><table class='week'>"+weekly_header+(weekly_rows or "<tr><td colspan='99' style='padding:30px;text-align:center'>No lessons for this class.</td></tr>")+"</table></div></div>") if selected else ""}
 
 <div class='card section'><div style='display:flex;justify-content:space-between;align-items:center;gap:10px'><div><h2>📋 Saved Lessons ({len(rows)})</h2><div class='muted'>All timetable records are isolated to this school.</div></div><form method='get'><select name='class_id' onchange='this.form.submit()' class='field' style='min-width:230px'><option value=''>View class timetable</option>{co}</select></form></div>
 <div style='overflow:auto'><table><thead><tr><th>Day</th><th>Time</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Room</th><th>Action</th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
-<style>.timetable-doc-header{{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px}}.timetable-logo{{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}}.timetable-logo img{{max-width:82px;max-height:66px;object-fit:contain}}.timetable-school{{flex:1;min-width:0;color:#176B3A;font-weight:900;text-transform:uppercase;font-size:20px;line-height:1.15}}.timetable-school small{{display:block;color:#334155;font-weight:500;font-size:10px;line-height:1.55;margin:1px 0}}.timetable-right{{color:#176B3A;font-size:10px;line-height:1.65;min-width:155px;padding-top:2px}}.timetable-right small{{display:block;margin:1px 0}}.timetable-title{{text-align:center;color:#176B3A;font-size:15px;font-weight:900;padding:8px}}.week td,.week th{{border:1px solid #176B3A;padding:12px;vertical-align:top}}.week th{{background:#176B3A;color:#fff;font-size:11px}}.week td{{min-width:150px;font-size:12px;line-height:1.45}}.mini{{border:0;padding:6px 8px;border-radius:7px;cursor:pointer}}.danger{{background:#fee2e2;color:#991b1b}}@media print{{@page{{size:A4 landscape;margin:8mm}}.side,.top,.page>h1,.page>.muted,.section:not(:has(.week)),button,form{{display:none!important}}.page{{padding:0!important}}.card{{border:0!important;box-shadow:none!important}}.timetable-print-card{{display:block!important}}.timetable-doc-header{{margin-top:0}}}}</style></div>"""
+<style>.timetable-doc-header{{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px}}.timetable-logo{{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}}.timetable-logo img{{max-width:82px;max-height:66px;object-fit:contain}}.timetable-school{{flex:1;min-width:0;color:#176B3A;font-weight:900;text-transform:uppercase;font-size:20px;line-height:1.15}}.timetable-school small{{display:block;color:#334155;font-weight:500;font-size:10px;line-height:1.55;margin:1px 0}}.timetable-right{{color:#176B3A;font-size:10px;line-height:1.65;min-width:155px;padding-top:2px}}.timetable-right small{{display:block;margin:1px 0}}.timetable-title{{text-align:center;color:#176B3A;font-size:15px;font-weight:900;padding:8px}}.week td,.week th{{border:1px solid #176B3A;padding:10px;vertical-align:top}}.week th{{background:#176B3A;color:#fff;font-size:11px;white-space:nowrap}}.week td{{min-width:125px;font-size:12px;line-height:1.45}}.week .day-cell{{min-width:90px}}.week .break-cell{{background:#fff7ed;color:#9a3412;text-align:center;font-weight:800}}.mini{{border:0;padding:6px 8px;border-radius:7px;cursor:pointer}}.danger{{background:#fee2e2;color:#991b1b}}@media print{{@page{{size:A4 landscape;margin:8mm}}.side,.top,.page>h1,.page>.muted,.section:not(:has(.week)),button,form{{display:none!important}}.page{{padding:0!important}}.card{{border:0!important;box-shadow:none!important}}.timetable-print-card{{display:block!important}}.timetable-doc-header{{margin-top:0}}}}</style></div>"""
     return _school_page(request,"Timetable",body)
+
+@router.post("/app/timetable/breaks/save")
+def timetable_break_save(request: Request,name:str=Form(...),start_time:str=Form(...),end_time:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"timetable.edit"):
+        return HTMLResponse("You do not have permission to edit timetable break periods.",403)
+    name=name.strip()
+    if not name or not start_time or not end_time or end_time<=start_time:
+        return RedirectResponse("/app/timetable?msg=Invalid+break+period",303)
+    con=_db();cur=con.cursor()
+    overlap=cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,end_time,start_time)).fetchone()
+    if overlap:
+        con.close();return RedirectResponse("/app/timetable?msg=Break+overlaps+an+existing+break",303)
+    cur.execute("INSERT INTO timetable_breaks(school_id,name,start_time,end_time) VALUES(?,?,?,?)",(sid,name,start_time,end_time))
+    con.commit();con.close()
+    return RedirectResponse("/app/timetable?msg=Break+saved",303)
+
+@router.post("/app/timetable/breaks/delete/{rid}")
+def timetable_break_delete(request: Request,rid:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"timetable.edit"):
+        return HTMLResponse("You do not have permission to edit timetable break periods.",403)
+    con=_db();cur=con.cursor()
+    cur.execute("DELETE FROM timetable_breaks WHERE id=? AND school_id=?",(rid,sid))
+    con.commit();con.close()
+    return RedirectResponse("/app/timetable?msg=Break+deleted",303)
 
 @router.post("/app/timetable/add")
 def timetable_add(request: Request,day:str=Form(...),start_time:str=Form(...),end_time:str=Form(...),class_id:int=Form(...),subject_id:int=Form(...),teacher_id:str=Form(""),room:str=Form("")):
