@@ -1507,6 +1507,11 @@ def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", str
         if not students:
             student_rows = "<tr><td colspan='%d'>No students found for the selected class/stream.</td></tr>" % (len(subjects) + 3)
         school_name = escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+        school_logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+        school_email = escape(str(school["email"] or "")) if school and "email" in school.keys() else ""
+        school_phone = escape(str(school["phone"] or "")) if school and "phone" in school.keys() else ""
+        school_postal = escape("P.O. Box " + str(school["postal_address"])) if school and "postal_address" in school.keys() and school["postal_address"] else ""
+        school_postal_code = escape(str(school["postal_code"])) if school and "postal_code" in school.keys() and school["postal_code"] else ""
         contacts = []
         if school:
             for key in ("email", "phone", "postal_address", "postal_code"):
