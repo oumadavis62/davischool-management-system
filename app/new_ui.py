@@ -2979,7 +2979,8 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         postal=escape("P.O. Box %s" % str(school["postal_address"] or "")) if school and "postal_address" in school.keys() and school["postal_address"] else ""
         postal_code=escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() and school["postal_code"] else ""
         logo=str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
-        brand="<div class='brand'>%s<div><div class='school'>%s</div><div>%s</div><div>%s</div></div></div>" % (("<img src='%s'>" % escape(logo)) if logo else "🏫",school_name,postal,postal_code)
+        admin_phone=escape(str(school["phone"] or "")) if school and "phone" in school.keys() and school["phone"] else "Not Provided"
+        brand="<div class='brand'>%s<div><div class='school'>%s</div><div>%s</div><div>%s</div></div><div class='admin-contact'><b>School Admin Phone</b><br>%s</div></div>" % (("<img src='%s'>" % escape(logo)) if logo else "🏫",school_name,postal,postal_code,admin_phone)
         exam_text=", ".join(escape(str(e["name"] or "")) for e in exams)
         cards=[]
         for st in students:
@@ -3040,10 +3041,10 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         .toolbar{position:sticky;top:0;z-index:20;background:#172033;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
         .toolbar button{border:0;border-radius:8px;padding:10px 15px;font-weight:800;cursor:pointer;margin-left:6px}
         .toolbar .print{background:#176B3A;color:#fff}.report-card{background:#fff;max-width:1000px;margin:18px auto;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always}
-        .brand{display:flex;align-items:center;gap:14px;border-bottom:2px solid #172033;padding-bottom:12px}.brand img{width:58px;height:58px;object-fit:contain}.school{font-size:20px;font-weight:900}
+        .brand{display:flex;align-items:center;gap:14px;border-bottom:2px solid #172033;padding-bottom:12px}.brand img{width:58px;height:58px;object-fit:contain}.school{font-size:20px;font-weight:900}.admin-contact{margin-left:auto;text-align:right;font-size:12px;line-height:1.4;white-space:nowrap}
         h1{text-align:center;font-size:20px;margin:18px 0 8px}.student{display:flex;gap:18px;flex-wrap:wrap;font-size:14px}.student span{font-weight:600}.classline{margin:8px 0 14px;font-weight:700}
         table{width:100%%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:28px;border:0;border-top:1px solid #172033;width:90%%;margin-left:0}
-        @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;min-height:260mm}}
+        @page{size:A4 portrait;margin:12mm} @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;width:100%;min-height:0;page-break-after:always;break-after:page}}
         </style></head><body><div class='toolbar'><div><b>🖨️ Class / Stream Report Cards Preview</b><div style='font-size:12px;opacity:.8'>%s · %d student(s)</div></div><div><button class='print' onclick='window.print()'>🖨️ Print All Report Cards</button><button onclick='window.close()'>✕ Close</button></div></div>%s</body></html>""" % (escape(str(cls["name"] or ""))+(((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else "")),len(students),body)
         return HTMLResponse(html)
     except Exception as exc:
