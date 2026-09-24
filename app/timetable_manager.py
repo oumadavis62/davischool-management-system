@@ -151,7 +151,7 @@ def _seed(con, sid):
     cur = con.cursor()
     row = cur.execute("SELECT school_id FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
     if not row:
-        cur.execute("INSERT INTO timetable_manager_settings(school_id,days_json,complexity,relaxation) VALUES(?,?,?,?)",
+        cur.execute("INSERT INTO timetable_manager_settings(school_id,days_json,complexity,relaxation) VALUES(?,?,?,?) RETURNING school_id",
                     (sid, json.dumps(list(DEFAULT_DAYS)), "normal", "relaxed"))
     existing = cur.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=?", (sid,)).fetchone()
     if not int(existing["c"] or 0):
@@ -160,7 +160,7 @@ def _seed(con, sid):
                         (sid, i, day, day[:3].upper(), 1 if day in DEFAULT_DAYS else 0))
     settings = cur.execute("SELECT * FROM timetable_settings WHERE school_id=?", (sid,)).fetchone()
     if not settings:
-        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?)",
+        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) RETURNING school_id",
                     (sid, 7, 40, 35))
         settings = cur.execute("SELECT * FROM timetable_settings WHERE school_id=?", (sid,)).fetchone()
     count = int(settings["periods_per_day"] or 7)
