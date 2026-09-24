@@ -1337,7 +1337,14 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     doc_contact_lines = "".join("<div>%s</div>" % x for x in [school_postal, school_postal_code] if x)
     doc_right_lines = "".join("<div>%s</div>" % x for x in [("☎ "+school_phone) if school_phone else "", ("✉ "+school_email) if school_email else ""] if x)
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-right'>%s</div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,doc_contact_lines,doc_right_lines)
-    class_title = escape(str(combined_grade)) + " — ALL STREAMS" if combined_mode and combined_grade else (escape(str(class_row["name"])) if class_row else "Select a class")
+    if combined_mode and combined_grade:
+        class_title = escape(str(combined_grade)) + " — ALL STREAMS"
+    elif class_row:
+        class_title = escape(str(class_row["name"]))
+        selected_stream = str(stream or class_row["stream"] or "").strip()
+        class_title += " — STREAM: " + escape(selected_stream) if selected_stream else " — ALL STREAMS"
+    else:
+        class_title = "Select a class"
     exam_name = escape(" + ".join(str(e["name"]) for e in exams if int(e["id"]) in selected_exam_ids)) if selected_exam_ids else "Select examinations"
     stream_col_html = "<th rowspan='2'>STREAM</th>" if combined_mode else ""
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
