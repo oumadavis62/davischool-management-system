@@ -262,7 +262,7 @@ def timetable_manager(request: Request):
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
         elif tab == "print": body = _print_view(con, sid)
-        else: body = _timetable(con, sid)
+        else: body = _timetable(request, con, sid)
         return _layout(request, tab, body)
     finally:
         con.close()
@@ -445,29 +445,33 @@ def _verify(con, sid):
 <div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{''.join(f"<tr><td>⚠️</td><td>{escape(x)}</td></tr>" for x in issues) if issues else '<tr><td>✅</td><td>Verification passed for the current basic checks.</td></tr>'}</tbody></table></div></div>"""
 
 
-def _timetable(con, sid):
-    classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-    class_id=classes[0]["id"] if classes else None
-    # The active class is selected through the query parameter; this view remains safe
-    # if no class exists.
+def _timetable(request, con, sid):
+    classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    rooms=con.execute("SELECT id,name FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY name",(sid,)).fetchall()
+    periods=con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+    breaks=con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time",(sid,)).fetchall()
+    days=[r["name"] for r in con.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
+    class_filter=request.query_params.get("class_id","")
+    teacher_filter=request.query_params.get("teacher_id","")
+    room_filter=request.query_params.get("room_id","")
+    where=["s.school_id=?"];params=[sid]
+    if str(class_filter).isdigit(): where.append("l.class_id=?");params.append(int(class_filter))
+    if str(teacher_filter).isdigit(): where.append("l.teacher_id=?");params.append(int(teacher_filter))
+    if str(room_filter).isdigit(): where.append("s.room_id=?");params.append(int(room_filter))
     rows=con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
         JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=s.room_id
-        WHERE s.school_id=? ORDER BY CASE s.day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,s.period_no""",(sid,)).fetchall()
-    periods=con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
-    breaks=con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time",(sid,)).fetchall()
-    selected=str(request.query_params.get("class_id","")) if False else ""
-    # Use all classes in the manager; filters are available as links below.
+        WHERE """+" AND ".join(where)+""" ORDER BY CASE s.day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,s.period_no""",params).fetchall()
     slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
-    days=[r["name"] for r in con.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
     header="<tr><th>DAY</th>"+"".join(f"<th>P{int(p['period_no'])}<br>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</th>" for p in periods)+"</tr>"
     body=""
     for day in days:
         cells=[]
         for p in periods:
-            br=next((b for b in breaks if str(b["start_time"])==str(p["start_time"]) or (str(b["start_time"])<=str(p["start_time"])<str(b["end_time"]))),None)
+            br=next((b for b in breaks if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"])) and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),None)
             if br:
                 cells.append(f"<td class='tt-break'>☕ {escape(str(br['name']))}</td>")
                 continue
@@ -477,11 +481,15 @@ def _timetable(con, sid):
             else:
                 cells.append(f"<td><b>{escape(str(r['subject']))}</b><br>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}<br>{escape(str(r['teacher'] or ''))}{('<br>'+escape(str(r['room']))) if r['room'] else ''}<br><small>{'🔒 Locked' if int(r['locked'] or 0) else ''}</small></td>")
         body+=f"<tr><th>{escape(day)}</th>{''.join(cells)}</tr>"
-    return f"""<div class='tt-card'><h2>🗓️ Timetable Grid</h2><div class='tt-muted'>Days run vertically and periods/times horizontally. Generated placements are editable and can be locked.</div>
+    class_opts="".join(f"<option value='{c['id']}' {'selected' if str(class_filter)==str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    teacher_opts="".join(f"<option value='{t['id']}' {'selected' if str(teacher_filter)==str(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
+    room_opts="".join(f"<option value='{r['id']}' {'selected' if str(room_filter)==str(r['id']) else ''}>{escape(str(r['name']))}</option>" for r in rooms)
+    placement_rows="".join(f"<tr><td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td>{escape(str(r['day_name']))}</td><td>P{int(r['period_no'])}</td><td><b>{escape(str(r['subject']))}</b></td><td>{escape(str(r['teacher'] or ''))}</td><td>{escape(str(r['room'] or ''))}</td><td>{'🔒' if int(r['locked'] or 0) else ''}</td><td>{'' if int(r['locked'] or 0) else f"<form method='post' action='/app/timetable/placement/lock/{r['id']}' style='display:inline'><button class='tt-btn alt'>🔒</button></form> <form method='post' action='/app/timetable/placement/delete/{r['id']}' style='display:inline' onsubmit='return confirm(\"Remove this placement?\")'><button class='tt-btn danger'>🗑️</button></form>"}</td></tr>" for r in rows)
+    return f"""<div class='tt-card'><h2>🗓️ Timetable Grid</h2><div class='tt-muted'>Days run vertically and periods/times horizontally. Use the filters to inspect class, teacher or room views. Locked placements are protected from regeneration.</div>
+<form method='get' class='tt-form' style='margin-top:12px'><input type='hidden' name='tab' value='timetable'><label><span class='tt-label'>Class</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label><label><span class='tt-label'>Teacher</span><select class='tt-field' name='teacher_id'><option value=''>All teachers</option>{teacher_opts}</select></label><label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>All rooms</option>{room_opts}</select></label><div><button class='tt-btn'>🔎 View</button></div></form>
 <div class='tt-scroll' style='margin-top:12px'><table class='tt-week'>{header}{body or '<tr><td colspan=20>No timetable placements yet.</td></tr>'}</table></div>
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print</a></div></div>
-<div class='tt-card'><h3>Manual adjustment</h3><div class='tt-muted'>Use the lock action in the placement list on the Print/Timetable workspace. Locked cards are protected from replacement by the generator.</div></div>"""
-
+<div class='tt-card'><h3>Placement control</h3><div class='tt-muted'>Lock a lesson to protect it from future generation. Delete an unlocked placement to return that lesson card to the unplaced pool.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Class</th><th>Day</th><th>Period</th><th>Subject</th><th>Teacher</th><th>Room</th><th></th><th>Action</th></tr></thead><tbody>{placement_rows or '<tr><td colspan=8>No placements.</td></tr>'}</tbody></table></div></div>"""
 
 def _print_view(con, sid):
     rows=con.execute("""SELECT s.*,c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room,l.duration
