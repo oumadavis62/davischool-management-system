@@ -2983,7 +2983,21 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         exam_text=", ".join(escape(str(e["name"] or "")) for e in exams)
         cards=[]
         for st in students:
-            result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            try:
+                result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            except Exception as exc:
+                import traceback
+                print("DAVISCHOOL BULK REPORT STUDENT RESULT ERROR: id=%s name=%s error=%r" %
+                      (st["id"], st["name"], exc), flush=True)
+                print(traceback.format_exc(), flush=True)
+                cards.append("""<section class='report-card'>
+                    <h1>Student Report Card</h1>
+                    <div class='student'><b>%s</b><span>Admission No: %s</span></div>
+                    <div style='margin-top:20px;padding:14px;border:1px solid #fca5a5;background:#fff1f2'>
+                      This student's report could not be generated. Other students in the selected class/stream remain available.
+                    </div>
+                </section>""" % (escape(str(st["name"] or "")), escape(str(st["admission_no"] or ""))))
+                continue
             details=[]
             for rr,mark,grade,points in result["details"]:
                 try:
@@ -3032,6 +3046,14 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;min-height:260mm}}
         </style></head><body><div class='toolbar'><div><b>🖨️ Class / Stream Report Cards Preview</b><div style='font-size:12px;opacity:.8'>%s · %d student(s)</div></div><div><button class='print' onclick='window.print()'>🖨️ Print All Report Cards</button><button onclick='window.close()'>✕ Close</button></div></div>%s</body></html>""" % (escape(str(cls["name"] or ""))+(((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else "")),len(students),body)
         return HTMLResponse(html)
+    except Exception as exc:
+        import traceback
+        print("DAVISCHOOL BULK REPORT PREVIEW ERROR:", repr(exc), flush=True)
+        print(traceback.format_exc(), flush=True)
+        detail=escape("%s: %s" % (type(exc).__name__, str(exc) or "no exception message"))
+        return HTMLResponse("""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Report Card Preview Error</title>
+        <style>body{font-family:Arial,sans-serif;background:#f8fafc;padding:24px;color:#172033}.box{max-width:850px;margin:auto;background:#fff;border:1px solid #fecaca;border-radius:12px;padding:22px}code{display:block;background:#f1f5f9;padding:12px;border-radius:8px;white-space:pre-wrap}</style></head>
+        <body><div class='box'><h2>Report Card Preview could not be generated</h2><p>The selected class/stream could not be rendered. No student data has been deleted.</p><b>Technical detail</b><code>%s</code><p>Please use this exact technical detail when reporting the error.</p></div></body></html>""" % detail, status_code=500)
     finally:
         con.close()
 
