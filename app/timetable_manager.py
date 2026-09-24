@@ -898,7 +898,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
                         (sid,class_filter,sid,class_filter) if class_filter else (sid,)).fetchall()
     constraints=_constraint_maps(cur,sid)
-    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}\n    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
+    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}
+    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
     if replace_existing:
         if class_filter:
             cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0 AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?)",(sid,sid,class_filter))
