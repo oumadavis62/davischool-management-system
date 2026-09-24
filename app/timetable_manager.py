@@ -944,18 +944,23 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         if int(lesson["locked"] or 0) and already: need=0
         for _ in range(need):
             found=None
+            rejection_counts={"period":0,"break_or_collision":0,"availability":0,"constraint":0}
             for day in days:
                 for p in periods:
                     pno=int(p["period_no"])
                     ok,room_id=_is_available_slot(cur,sid,lesson,day,pno,int(lesson["duration"] or 1),occupied,rooms,mode=="strict")
-                    if not ok:continue
+                    if not ok:
+                        rejection_counts["break_or_collision"]+=1
+                        continue
                     # Respect aSc-style teacher and subject period availability for every occupied period.
                     teacher_ids={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson["id"])).fetchall()} or ({int(lesson["teacher_id"])} if lesson["teacher_id"] else set())
                     blocked=False
                     for xp in range(pno,pno+int(lesson["duration"] or 1)):
                         if int(lesson["subject_id"]) and (day,xp,int(lesson["subject_id"])) in blocked_subject: blocked=True
                         if any((day,xp,tid) in blocked_teacher for tid in teacher_ids): blocked=True
-                    if blocked: continue
+                    if blocked:
+                        rejection_counts["availability"]+=1
+                        continue
                     # Strict mode respects simple constraints; relaxed mode may ignore preferred constraints.
                     bad=False
                     for c in constraints.get("Teacher max lessons/day",[]):
@@ -968,15 +973,24 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                             limit=int(c["value"] or 0)
                             count=sum(1 for o in occupied if o["day_name"]==day and o["class_id"]==lesson["class_id"])
                             if limit and count>=limit:bad=True
-                    if mode=="strict" and bad:continue
-                    if bad and mode!="strict":continue
+                    if mode=="strict" and bad:
+                        rejection_counts["constraint"]+=1
+                        continue
+                    if bad and mode!="strict":
+                        rejection_counts["constraint"]+=1
+                        continue
                     # Avoid placing the same subject twice on a day unless explicitly relaxed.
                     same_day_subject=sum(1 for o in occupied if o["day_name"]==day and o["class_id"]==lesson["class_id"] and o["subject_id"]==lesson["subject_id"])
                     if same_day_subject and mode=="strict":continue
                     found=(day,p,room_id);break
                 if found:break
             if not found:
-                unplaced.append(int(lesson["id"]));continue
+                reasons=[]
+                if rejection_counts["availability"]: reasons.append("teacher/subject availability")
+                if rejection_counts["break_or_collision"]: reasons.append("breaks or class/teacher/room collisions")
+                if rejection_counts["constraint"]: reasons.append("daily constraints")
+                reason=", ".join(reasons) if reasons else "no compatible period"
+                unplaced.append((int(lesson["id"]),reason));continue
             day,p,room_id=found
             row={"lesson_id":int(lesson["id"]),"class_id":int(lesson["class_id"]),"teacher_id":lesson["teacher_id"],"room_id":room_id,"day_name":day,"period_no":int(p["period_no"]),"duration":int(lesson["duration"] or 1)}
             cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -996,10 +1010,10 @@ def timetable_generate_new(request:Request,class_id:str=Form(""),mode:str=Form("
         cf=int(class_id) if str(class_id).isdigit() else None
         run,requested,placed,unplaced,status=_generate_algorithm(con.cursor(),sid,cf,mode,complexity,bool(replace_existing))
         cur=con.cursor();cur.execute("INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
-            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,("Unplaced lesson cards: "+",".join(map(str,unplaced))) if unplaced else "All requested cards placed"))
+            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,("Unplaced lesson cards: "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)) if unplaced else "All requested cards placed"))
         con.commit()
-        message=f"Generation {status}: {placed} of {requested} lesson cards placed"
-        if unplaced:message+="; unplaced cards "+",".join(map(str,unplaced))
+        message=f"Generation {status}: {placed} of {requested} lesson placements made"
+        if unplaced:message+="; unplaced cards "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)
         return RedirectResponse("/app/timetable?tab=generate&msg="+quote(message),303)
     finally:con.close()
 
