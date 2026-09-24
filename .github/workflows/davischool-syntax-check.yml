@@ -1,0 +1,14 @@
+name: DaviSchool syntax check
+on:
+  push:
+    branches: [diagnose/syntax-check]
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Compile Python sources
+        run: python -m compileall -q app
