@@ -568,12 +568,33 @@ async def timetable_periods_save(request: Request):
     try:
         form=await request.form();cur=con.cursor()
         periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+
+        # Validate the complete submitted timetable first, then update it.
+        # Updating one period before validating the next used to make a
+        # legitimate shift (for example 08:20-09:00, 09:00-09:40) look like
+        # an overlap because the database contained a mixture of old and new
+        # times during the loop.
+        submitted=[]
         for p in periods:
-            st=str(form.get(f"start_{p['period_no']}") or "");et=str(form.get(f"end_{p['period_no']}") or "")
-            if not st or not et or et<=st:return RedirectResponse(f"/app/timetable?tab=periods&error=Invalid+time+for+period+{p['period_no']}",303)
-            overlap=cur.execute("SELECT id FROM timetable_periods WHERE school_id=? AND period_no<>? AND start_time<? AND end_time>? LIMIT 1",(sid,p["period_no"],et,st)).fetchone()
-            if overlap:return RedirectResponse(f"/app/timetable?tab=periods&error=Period+{p['period_no']}+overlaps+another+period",303)
-            cur.execute("UPDATE timetable_periods SET start_time=?,end_time=? WHERE id=?",(st,et,p["id"]))
+            st=str(form.get(f"start_{p['period_no']}") or "").strip()
+            et=str(form.get(f"end_{p['period_no']}") or "").strip()
+            if not st or not et or et<=st:
+                return RedirectResponse(f"/app/timetable?tab=periods&error=Invalid+time+for+period+{p['period_no']}",303)
+            submitted.append((int(p["period_no"]),st,et,p["id"]))
+
+        for i,(pno,st,et,pid) in enumerate(submitted):
+            for other_no,other_st,other_et,other_id in submitted:
+                if pno == other_no:
+                    continue
+                # Touching at the exact boundary is allowed; actual overlap
+                # exists only when one period starts before the other ends and
+                # ends after the other starts.
+                if st < other_et and et > other_st:
+                    return RedirectResponse(f"/app/timetable?tab=periods&error=Period+{pno}+overlaps+period+{other_no}",303)
+
+        for pno,st,et,pid in submitted:
+            cur.execute("UPDATE timetable_periods SET start_time=?,end_time=? WHERE id=? AND school_id=?",(st,et,pid,sid))
+
         con.commit();return RedirectResponse("/app/timetable?tab=periods&msg=Period+times+saved",303)
     finally:con.close()
 
