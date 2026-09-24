@@ -3412,24 +3412,63 @@ def classes_page(request: Request):
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "classes.view"):
         return HTMLResponse("You do not have permission to view classes.", 403)
-    con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall();con.close()
-    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['level'] or ''))}</td><td>{escape(str(x['stream'] or ''))}</td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Classes & Streams</h1><div class='card section'><form method='post' action='/app/classes/add' class='formgrid'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><select name='level' class='field'><option value=''>Select level</option><option>Pre-Primary</option><option>Lower Primary</option><option>Upper Primary</option><option>Junior Secondary</option><option>Senior Secondary</option><option>College</option><option>Other</option></select><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div><div class='card section'><table><thead><tr><th>Name</th><th>Level</th><th>Stream</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No classes.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    con=_db();cur=con.cursor()
+    _ensure_class_teacher_assignments_table(cur)
+    rows=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role,status FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    assignments=cur.execute("""SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?""",(sid,)).fetchall()
+    con.close()
+    assigned_by_class={int(a["class_id"]):int(a["teacher_id"]) for a in assignments}
+    teacher_options=lambda selected_id: "".join(
+        "<option value='%s' %s>%s%s</option>" % (
+            t["id"],
+            "selected" if selected_id and int(t["id"])==int(selected_id) else "",
+            escape(str(t["name"] or "")),
+            (" — "+escape(str(t["role"] or ""))) if t["role"] else ""
+        )
+        for t in teachers
+    )
+    trs="".join(
+        "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><form method='post' action='/app/classes/class-teacher' style='display:flex;gap:7px;align-items:center;flex-wrap:wrap'>"
+        "<input type='hidden' name='class_id' value='%s'><select name='teacher_id' class='field teacher-select' required><option value=''>Select Class Teacher</option>%s</select>"
+        "<button class='btn teacher-btn'>👨‍🏫 Set Class Teacher</button></form></td></tr>" % (
+            escape(str(x["name"])),
+            escape(str(x["level"] or "")),
+            escape(str(x["stream"] or "")),
+            escape(str(next((t["name"] for t in teachers if int(t["id"])==assigned_by_class.get(int(x["id"]),-1)), "Not Assigned"))),
+            x["id"],
+            teacher_options(assigned_by_class.get(int(x["id"])))
+        )
+        for x in rows
+    )
+    body=f"""<div class='page'><h1>Classes & Streams</h1>
+<div class='card section'><form method='post' action='/app/classes/add' class='formgrid'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><select name='level' class='field'><option value=''>Select level</option><option>Pre-Primary</option><option>Lower Primary</option><option>Upper Primary</option><option>Junior Secondary</option><option>Senior Secondary</option><option>College</option><option>Other</option></select><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div>
+<div class='card section'><h2>👨‍🏫 Class Teachers</h2><div class='muted'>Select a teacher for each class or stream. The selected teacher is automatically used as the Class Teacher on that class's report cards, including the name and signature line.</div>
+<table><thead><tr><th>Name</th><th>Level</th><th>Stream</th><th>Current Class Teacher</th><th>Set Class Teacher</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No classes.</td></tr>'}</tbody></table></div></div>
+<style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;cursor:pointer}}.teacher-select{{min-width:220px}}.teacher-btn{{white-space:nowrap}}</style>"""
     return _school_page(request,"Classes",body)
 
-@router.post("/app/classes/add")
-def classes_add(request: Request,name:str=Form(...),level:str=Form(""),stream:str=Form("")):
+@router.post("/app/classes/class-teacher")
+def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "classes.create"):
-        return HTMLResponse("You do not have permission to create classes.", 403)
-    name_v=name.strip(); level_v=level.strip(); stream_v=stream.strip()
-    if not name_v:return HTMLResponse("Class name is required. <a href='/app/classes'>Back</a>",400)
+    if not (_require_permission(request, sid, "settings.manage") or _require_permission(request, sid, "classes.create")):
+        return HTMLResponse("You do not have permission to assign class teachers.",403)
     con=_db();cur=con.cursor()
-    if cur.execute("SELECT id FROM classes WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(stream,''))=lower(?)",(sid,name_v,stream_v)).fetchone():
-        con.close();return HTMLResponse("That class and stream already exists. <a href='/app/classes'>Back</a>",400)
-    cur.execute("INSERT INTO classes(school_id,name,level,stream) VALUES(?,?,?,?)",(sid,name_v,level_v,stream_v))
-    _audit(cur,sid,request,"CLASS_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/classes",303)
+    _ensure_class_teacher_assignments_table(cur)
+    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    valid_teacher=cur.execute("SELECT id,name FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    if not valid_class or not valid_teacher:
+        con.close()
+        return HTMLResponse("Invalid class or teacher selection. <a href='/app/classes'>Back</a>",400)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+                   VALUES(?,?,?,?)
+                   ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
+                (sid,class_id,teacher_id,now))
+    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned %s as class teacher for class %s"%(str(valid_teacher["name"] or ""),class_id))
+    con.commit();con.close()
+    return RedirectResponse("/app/classes",303)
 
 @router.get("/app/subjects", response_class=HTMLResponse)
 def subjects_page(request: Request):
