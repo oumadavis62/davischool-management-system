@@ -26,7 +26,7 @@ def _ensure_tables(con):
         relaxation TEXT NOT NULL DEFAULT 'relaxed'
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_days(
-        id INTEGER PRIMARY KEY,
+        id INTEGER PRIMARY KEY
         school_id INTEGER NOT NULL,
         day_no INTEGER NOT NULL,
         name TEXT NOT NULL,
@@ -35,7 +35,7 @@ def _ensure_tables(con):
         UNIQUE(school_id,day_no)
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_rooms(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         code TEXT,
@@ -44,7 +44,7 @@ def _ensure_tables(con):
         active INTEGER NOT NULL DEFAULT 1
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lessons(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         class_id INTEGER NOT NULL,
         subject_id INTEGER NOT NULL,
@@ -59,13 +59,13 @@ def _ensure_tables(con):
         notes TEXT
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lesson_teachers(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         lesson_id INTEGER NOT NULL,
         teacher_id INTEGER NOT NULL
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_constraints(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         scope TEXT NOT NULL,
         constraint_type TEXT NOT NULL,
@@ -76,7 +76,7 @@ def _ensure_tables(con):
         notes TEXT
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_slots(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         lesson_id INTEGER NOT NULL,
         day_name TEXT NOT NULL,
@@ -88,7 +88,7 @@ def _ensure_tables(con):
         generated_run TEXT
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_generation_runs(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         created_at TEXT NOT NULL,
         mode TEXT NOT NULL,
@@ -99,7 +99,7 @@ def _ensure_tables(con):
         message TEXT
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_periods(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         period_no INTEGER NOT NULL,
         start_time TEXT NOT NULL,
@@ -107,7 +107,7 @@ def _ensure_tables(con):
         UNIQUE(school_id,period_no)
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_breaks(
-        id INTEGER PRIMARY KEY,
+        id {pk},
         school_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         start_time TEXT NOT NULL,
