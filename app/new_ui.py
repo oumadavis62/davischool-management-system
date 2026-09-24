@@ -3833,6 +3833,12 @@ def timetable_page(request: Request):
         for r in rows
     ) or "<tr><td colspan='7' style='padding:30px;text-align:center'>No timetable entries yet.</td></tr>"
 
+    break_rows_html="".join(
+        f"<tr><td><b>{escape(str(b['name']))}</b></td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td>"
+        f"<td><form method='post' action='/app/timetable/breaks/delete/{b['id']}' onsubmit='return confirm(\"Delete this break period?\")'><button class='mini danger'>🗑️</button></form></td></tr>"
+        for b in breaks
+    ) or "<tr><td colspan='4'>No break periods saved yet.</td></tr>"
+
     body=f"""<div class='page'><h1>🗓️ Smart Timetable</h1><div class='muted'>Create, automatically generate, edit and print the school's weekly timetable.</div>
 {("<div class='card' style='background:#ecfdf5;border-color:#a7f3d0;color:#065f46'>✅ "+escape(msg)+"</div>") if msg else ""}
 <div class='card section'><h2>✨ Generate Weekly Timetable</h2><div class='muted'>DaviSchool uses your classes, subjects and teacher allocations where available, while checking teacher/class conflicts.</div>
@@ -3846,7 +3852,7 @@ def timetable_page(request: Request):
 <div class='card section' id='break-periods'><h2>☕ Break Periods</h2><div class='muted'>Save school-wide break periods once. They automatically appear as named break columns in every generated timetable.</div>
 <form method='post' action='/app/timetable/breaks/save' style='display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;margin-top:12px'>
 <input name='name' required maxlength='80' placeholder='Break name (e.g. Tea Break, Lunch Break)' class='field'><input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><button class='btn'>💾 Save Break</button></form>
-<div style='overflow:auto;margin-top:12px'><table><thead><tr><th>Break Name</th><th>Start</th><th>End</th><th>Action</th></tr></thead><tbody>{''.join(f"<tr><td><b>{escape(str(b['name']))}</b></td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/breaks/delete/{b["id"]}' onsubmit='return confirm("Delete this break period?")'><button class='mini danger'>🗑️</button></form></td></tr>" for b in breaks) or "<tr><td colspan='4'>No break periods saved yet.</td></tr>"}</tbody></table></div></div>
+<div style='overflow:auto;margin-top:12px'><table><thead><tr><th>Break Name</th><th>Start</th><th>End</th><th>Action</th></tr></thead><tbody>{break_rows_html}</tbody></table></div></div>
 <div class='card section'><h2>➕ Add Lesson</h2><form method='post' action='/app/timetable/add' style='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px'>
 <select name='day' required class='field'><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select>
 <input name='start_time' required type='time' class='field'><input name='end_time' required type='time' class='field'><select name='class_id' required class='field'><option value=''>-- Class / Stream --</option>{co}</select>
