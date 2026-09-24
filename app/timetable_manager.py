@@ -26,7 +26,7 @@ def _ensure_tables(con):
         relaxation TEXT NOT NULL DEFAULT 'relaxed'
     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_days(
-        id INTEGER PRIMARY KEY
+        id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
         day_no INTEGER NOT NULL,
         name TEXT NOT NULL,
