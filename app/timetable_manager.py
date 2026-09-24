@@ -119,13 +119,7 @@ def _ensure_tables(con):
         period_minutes INTEGER NOT NULL DEFAULT 40,
         periods_per_week INTEGER NOT NULL DEFAULT 35
     )""")
-    # Seed days/settings from the already-existing period configuration.
-    row = cur.execute("SELECT school_id FROM timetable_manager_settings WHERE school_id=?", (request_school_id(con),)).fetchone() if False else None
     return cur
-
-
-def request_school_id(con):
-    return 0
 
 
 def _seed(con, sid):
@@ -337,7 +331,7 @@ def _lesson_form(con, sid, existing=None):
 <div><button class='tt-btn'>💾 Save Lesson</button></div></form></div>"""
 
 
-def _lessons(con, sid):
+def _lessons(request, con, sid):
     rows = con.execute("""SELECT l.*,c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
         FROM timetable_lessons l JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=l.room_id
@@ -346,16 +340,11 @@ def _lessons(con, sid):
         f"<tr><td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td><b>{escape(str(r['subject']))}</b></td><td>{escape(str(r['teacher'] or ''))}</td><td>{int(r['lessons_per_week'])}</td><td>{int(r['duration'])}</td><td>{escape(str(r['group_name'] or 'Entire class'))}</td><td>{'🔒' if int(r['locked'] or 0) else ''}</td><td><a class='tt-btn alt' href='/app/timetable?tab=lessons&edit={r['id']}'>Edit</a> <form style='display:inline' method='post' action='/app/timetable/lesson/delete/{r['id']}' onsubmit='return confirm("Delete this lesson card?")'><button class='tt-btn danger'>🗑️</button></form></td></tr>"
         for r in rows
     )
-    edit_id=request_get_int = None
-    # Edit form is selected by query parameter and rendered below the list.
-    return _lessons_body(con,sid,rows,html)
-
-
-def _lessons_body(con,sid,rows,html):
-    import builtins
-    # Query parameter is not available here, so use a compact new-card form and
-    # a separate edit route for existing cards.
-    return _lesson_form(con,sid) + f"""<div class='tt-card'><h3>Lesson Cards ({len(rows)})</h3><div class='tt-muted'>This is the timetable equivalent of aSc lesson cards/contracts. One row is one weekly teaching requirement.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>/Week</th><th>Length</th><th>Group</th><th></th><th></th></tr></thead><tbody>{html or '<tr><td colspan=8>No lesson cards yet.</td></tr>'}</tbody></table></div></div>"""
+    edit_id = request.query_params.get("edit", "")
+    edit = None
+    if str(edit_id).isdigit():
+        edit = con.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=?", (int(edit_id), sid)).fetchone()
+    return _lesson_form(con,sid,edit) + f"""<div class='tt-card'><h3>Lesson Cards ({len(rows)})</h3><div class='tt-muted'>This is the timetable equivalent of aSc lesson cards/contracts. One row is one weekly teaching requirement.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>/Week</th><th>Length</th><th>Group</th><th></th><th></th></tr></thead><tbody>{html or '<tr><td colspan=8>No lesson cards yet.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _constraints(con, sid):
