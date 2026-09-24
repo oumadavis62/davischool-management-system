@@ -792,14 +792,25 @@ def _ensure_class_teacher_assignments_table(cur):
     )""")
 
 def _report_signatories(cur, school_id, class_id):
-    _ensure_class_teacher_assignments_table(cur)
-    class_teacher = cur.execute(
-        """SELECT t.id,t.name,t.role FROM class_teacher_assignments a
-           JOIN teachers t ON t.id=a.teacher_id
-           WHERE a.school_id=? AND a.class_id=? AND t.school_id=?
-             AND COALESCE(t.status,'active')='active' LIMIT 1""",
-        (school_id, class_id, school_id)
-    ).fetchone()
+    # Assignment storage is optional for compatibility with older databases.
+    # If the assignment table cannot be created/read on a legacy database,
+    # fall back to the teacher role instead of breaking report-card generation.
+    class_teacher = None
+    try:
+        _ensure_class_teacher_assignments_table(cur)
+        class_teacher = cur.execute(
+            """SELECT t.id,t.name,t.role FROM class_teacher_assignments a
+               JOIN teachers t ON t.id=a.teacher_id
+               WHERE a.school_id=? AND a.class_id=? AND t.school_id=?
+                 AND COALESCE(t.status,'active')='active' LIMIT 1""",
+            (school_id, class_id, school_id)
+        ).fetchone()
+    except Exception as exc:
+        print("DAVISCHOOL CLASS TEACHER ASSIGNMENT FALLBACK:", repr(exc), flush=True)
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
     if not class_teacher:
         class_teacher = cur.execute(
             """SELECT id,name,role FROM teachers WHERE school_id=?
@@ -2946,7 +2957,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         exams=cur.execute("SELECT id,name,year FROM exams WHERE school_id=? AND id IN (%s) ORDER BY id" %
                            ",".join("?" for _ in selected_exam_ids), [sid]+selected_exam_ids).fetchall()
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
-        _ensure_report_card_fields(cur); _ensure_overall_grading_table(cur); _ensure_class_teacher_assignments_table(cur)
+        _ensure_report_card_fields(cur); _ensure_overall_grading_table(cur)
         grading_rules=_load_grading_rules(cur,sid)
         overall_rules=_load_overall_grading_rules(cur,sid)
         class_teacher_name,principal_name=_report_signatories(cur,sid,cid)
