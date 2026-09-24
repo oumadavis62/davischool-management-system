@@ -3896,6 +3896,7 @@ def class_marksheets_pdf(request: Request, exam_id: str = "", class_id: str = ""
         from reportlab.lib.pagesizes import A3, landscape
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.units import mm
+        from reportlab.lib.styles import ParagraphStyle
         con = _db(); cur = con.cursor()
         try:
             _ensure_grading_table(cur)
@@ -4051,6 +4052,7 @@ def class_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = "", 
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
         from reportlab.lib.units import mm
+        from reportlab.lib.styles import ParagraphStyle
         con=_db();cur=con.cursor()
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
