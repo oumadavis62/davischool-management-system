@@ -269,6 +269,7 @@ def _pdf_styles():
         "title": ParagraphStyle("DaviTitle", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER, spaceAfter=5, textColor="#176B3A"),
         "subtitle": ParagraphStyle("DaviSubtitle", parent=styles["Normal"], fontSize=8, leading=10, alignment=TA_CENTER, spaceAfter=8, textColor="#176B3A"),
         "normal": ParagraphStyle("DaviNormal", parent=styles["Normal"], fontSize=8, leading=10),
+        "report_student_name": ParagraphStyle("DaviReportStudentName", parent=styles["Normal"], fontSize=12, leading=14, spaceAfter=2, fontName="Helvetica-Bold"),
         "small": ParagraphStyle("DaviSmall", parent=styles["Normal"], fontSize=7, leading=9),
         "table": ParagraphStyle("DaviTable", parent=styles["Normal"], fontSize=6.5, leading=8),
         "table_head": ParagraphStyle("DaviTableHead", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=TA_CENTER),
@@ -4178,7 +4179,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,st["id"],eid)).fetchone()
             rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
             story += _pdf_school_header(school,styles,"Student Report Card")
-            story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), ParagraphStyle("ReportStudentName%d" % student_index, parent=styles["normal"], fontSize=12, leading=14, spaceAfter=2)), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] or ""))), styles["normal"]), Spacer(1,5)]
+            story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] or ""))), styles["normal"]), Spacer(1,5)]
             story += [Paragraph("Class: %s %s · Status: %s"%(st["class_name"] or "",st["stream"] or "",status),styles["normal"]),Spacer(1,5)]
             data=[["Subject","Mark","Grade","Points","Performance Comment"]]
             for r,mark,grade,points in result["details"]:
@@ -4254,7 +4255,7 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
         styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Report Card")
-        story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), ParagraphStyle("ReportStudentNameSingle", parent=styles["normal"], fontSize=12, leading=14, spaceAfter=2)), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] if er else "Examination"))), styles["normal"]), Spacer(1,5)]
+        story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] if er else "Examination"))), styles["normal"]), Spacer(1,5)]
         status="FINAL" if report_final else "DRAFT"
         story += [Paragraph(f"Class: {st['class_name'] or ''} {st['stream'] or ''} · Status: {status}",styles["normal"]),Spacer(1,5)]
         data=[["Subject","Mark","Grade","Points","Performance Comment"]]
