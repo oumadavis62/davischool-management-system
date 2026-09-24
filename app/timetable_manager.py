@@ -316,8 +316,14 @@ def _periods(request, con, sid):
 
 def _subjects(con, sid):
     rows = con.execute("SELECT id,name,code,initial FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    html = "".join(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['code'] or ''))}</td><td>{escape(str(r['initial'] or ''))}</td></tr>" for r in rows)
-    return f"""<div class='tt-card'><h2>📚 Subjects</h2><div class='tt-muted'>These are the existing DaviSchool subjects. Edit them in the main Academic/Subjects area; the Timetable Manager consumes them directly.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Subject</th><th>Code</th><th>Initial</th></tr></thead><tbody>{html or '<tr><td colspan=4>No subjects found.</td></tr>'}</tbody></table></div></div>"""
+    html_parts=[]
+    for r in rows:
+        total = con.execute("""SELECT COALESCE(SUM(lessons_per_week * duration),0) total
+            FROM timetable_lessons
+            WHERE school_id=? AND subject_id=?""", (sid,r["id"])).fetchone()
+        html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['code'] or ''))}</td><td>{escape(str(r['initial'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
+    html="".join(html_parts)
+    return f"""<div class='tt-card'><h2>📚 Subjects</h2><div class='tt-muted'>The weekly subject load is calculated automatically from the saved Lesson Cards. It includes all classes/streams assigned to that subject.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Subject</th><th>Code</th><th>Initial</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=5>No subjects found.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _teachers(con, sid):
