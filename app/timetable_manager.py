@@ -759,8 +759,12 @@ def _is_available_slot(cur,sid,lesson,day,pno,duration,occupied,rooms,strict):
     for other in occupied:
         if other["day_name"]!=day:continue
         if _overlaps({"period_no":pno,"duration":duration},other):
-            if lesson["class_id"]==other["class_id"]:return False,None
-            if lesson["teacher_id"] and other["teacher_id"] and lesson["teacher_id"]==other["teacher_id"]:return False,None
+            lesson_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson["id"])).fetchall()} or {int(lesson["class_id"])}
+            lesson_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson["id"])).fetchall()} or ({int(lesson["teacher_id"])} if lesson["teacher_id"] else set())
+            other_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,other["lesson_id"])).fetchall()} or {int(other["class_id"])}
+            other_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,other["lesson_id"])).fetchall()} or ({int(other["teacher_id"])} if other["teacher_id"] else set())
+            if lesson_classes.intersection(other_classes):return False,None
+            if lesson_teachers.intersection(other_teachers):return False,None
     room_id=lesson["room_id"]
     if room_id:
         for other in occupied:
@@ -777,8 +781,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     days=[r["name"] for r in cur.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
     periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
     rooms=cur.execute("SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)).fetchall()
-    lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND class_id=?" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
-                        (sid,class_filter) if class_filter else (sid,)).fetchall()
+    lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
+                        (sid,class_filter,sid,class_filter) if class_filter else (sid,)).fetchall()
     constraints=_constraint_maps(cur,sid)
     if replace_existing:
         if class_filter:
