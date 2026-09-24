@@ -258,7 +258,7 @@ def _base_css():
 
 
 def _layout(request, tab, content):
-    return _page(request, "Timetable Manager", f"<div class='tt-wrap'><h1>🗓️ Timetable Manager</h1><div class='tt-muted'>A complete school timetable workspace for setup, lesson cards, constraints, generation, verification, manual adjustment and printing.</div>{_notice(request)}{_tabs(tab)}{content}{_base_css()}</div>")
+    return _page(request, "Timetable Manager", f"<div class='tt-wrap'><h1>🗓️ Timetable Manager</h1><div class='tt-muted'>A complete school timetable workspace for setup, lesson cards, availability, generation, verification, manual adjustment and printing.</div>{_notice(request)}{_tabs(tab)}{content}{_base_css()}</div>")
 
 
 @router.get("/app/timetable", response_class=HTMLResponse)
@@ -797,7 +797,7 @@ def timetable_lesson_delete(request:Request,rid:int):
 
 
 @router.post("/app/timetable/availability/save")
-def timetable_availability_save(request:Request,kind:str=Form(...),resource_id:int=Form(...)):
+async def timetable_availability_save(request:Request,kind:str=Form(...),resource_id:int=Form(...)):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
@@ -897,7 +897,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     rooms=cur.execute("SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)).fetchall()
     lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
                         (sid,class_filter,sid,class_filter) if class_filter else (sid,)).fetchall()
-    constraints=_constraint_maps(cur,sid)\n    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}\n    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
+    constraints=_constraint_maps(cur,sid)
+    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}\n    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
     if replace_existing:
         if class_filter:
             cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0 AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?)",(sid,sid,class_filter))
