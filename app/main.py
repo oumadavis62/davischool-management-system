@@ -254,6 +254,8 @@ def init_extended_db():
     con = get_db(); cur = con.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS timetable (id INTEGER PRIMARY KEY, school_id INTEGER, day TEXT, start_time TEXT, end_time TEXT, class_name TEXT, stream TEXT, subject TEXT, teacher TEXT, room TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS timetable_breaks (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, name TEXT, start_time TEXT, end_time TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS timetable_settings (school_id INTEGER PRIMARY KEY, periods_per_day INTEGER, period_minutes INTEGER, periods_per_week INTEGER)")
+    cur.execute("CREATE TABLE IF NOT EXISTS timetable_periods (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, period_no INTEGER, start_time TEXT, end_time TEXT, UNIQUE(school_id, period_no))")
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, amount REAL, paid REAL DEFAULT 0, description TEXT, due_date TEXT, status TEXT DEFAULT 'Pending')")
     cur.execute("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY, school_id INTEGER, title TEXT, message TEXT, audience TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS sms_logs (id INTEGER PRIMARY KEY, school_id INTEGER, recipient TEXT, message TEXT, status TEXT, created_at TEXT)")
