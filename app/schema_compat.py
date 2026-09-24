@@ -70,6 +70,8 @@ def _ensure_live_postgres_schema():
         },
         "timetable": {"school_id": "INTEGER", "day": "TEXT", "start_time": "TEXT", "end_time": "TEXT", "class_name": "TEXT", "stream": "TEXT", "subject": "TEXT", "teacher": "TEXT", "room": "TEXT"},
         "timetable_breaks": {"school_id": "INTEGER", "name": "TEXT", "start_time": "TEXT", "end_time": "TEXT"},
+        "timetable_settings": {"periods_per_day": "INTEGER", "period_minutes": "INTEGER", "periods_per_week": "INTEGER"},
+        "timetable_periods": {"school_id": "INTEGER", "period_no": "INTEGER", "start_time": "TEXT", "end_time": "TEXT"},
         "fees": {"school_id": "INTEGER", "student_id": "INTEGER", "amount": "REAL", "paid": "REAL", "description": "TEXT", "due_date": "TEXT", "status": "TEXT"},
         "announcements": {"school_id": "INTEGER", "title": "TEXT", "message": "TEXT", "audience": "TEXT", "created_at": "TEXT"},
         "sms_logs": {"school_id": "INTEGER", "recipient": "TEXT", "message": "TEXT", "status": "TEXT", "created_at": "TEXT"},
@@ -89,6 +91,20 @@ def _ensure_live_postgres_schema():
 
     with psycopg.connect(database_url) as pg:
         with pg.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS timetable_settings(
+                school_id INTEGER PRIMARY KEY,
+                periods_per_day INTEGER NOT NULL,
+                period_minutes INTEGER NOT NULL,
+                periods_per_week INTEGER NOT NULL
+            )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS timetable_periods(
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL,
+                period_no INTEGER NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                UNIQUE(school_id,period_no)
+            )""")
             cur.execute("""CREATE TABLE IF NOT EXISTS timetable_breaks(
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL,
