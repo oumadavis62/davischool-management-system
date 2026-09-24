@@ -2922,6 +2922,82 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
     cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?) ON CONFLICT(school_id,exam_id) DO UPDATE SET opening_date=excluded.opening_date,closing_date=excluded.closing_date",(sid,exam_id,opening_date,closing_date))
     con.commit();con.close()
     return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}",303)
+@router.get("/app/report-cards/class-preview", response_class=HTMLResponse)
+def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str=""):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to view report cards.", 403)
+    try:
+        cid=int(class_id)
+    except Exception:
+        cid=0
+    selected_exam_ids=_parse_assessment_ids(exam_ids, "")
+    if not cid or not selected_exam_ids:
+        return HTMLResponse("<h2>Choose a class/stream and assessment first.</h2>", 400)
+    con=_db(); cur=con.cursor()
+    try:
+        cls=cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
+        if not cls:
+            return HTMLResponse("Class/stream not found.",404)
+        students=cur.execute("""SELECT s.* FROM students s
+            WHERE s.school_id=? AND s.class_id=? ORDER BY s.name,s.id""",(sid,cid)).fetchall()
+        exams=cur.execute("SELECT id,name,year FROM exams WHERE school_id=? AND id IN (%s) ORDER BY id" %
+                           ",".join("?" for _ in selected_exam_ids), [sid]+selected_exam_ids).fetchall()
+        school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+        _ensure_report_card_fields(cur); _ensure_overall_grading_table(cur); _ensure_class_teacher_assignments_table(cur)
+        grading_rules=_load_grading_rules(cur,sid)
+        overall_rules=_load_overall_grading_rules(cur,sid)
+        class_teacher_name,principal_name=_report_signatories(cur,sid,cid)
+        school_name=escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+        postal=escape("P.O. Box %s" % str(school["postal_address"] or "")) if school and "postal_address" in school.keys() and school["postal_address"] else ""
+        postal_code=escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() and school["postal_code"] else ""
+        logo=str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+        brand="<div class='brand'>%s<div><div class='school'>%s</div><div>%s</div><div>%s</div></div></div>" % (("<img src='%s'>" % escape(logo)) if logo else "🏫",school_name,postal,postal_code)
+        exam_text=", ".join(escape(str(e["name"] or "")) for e in exams)
+        cards=[]
+        for st in students:
+            result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            details=[]
+            for rr,mark,grade,points in result["details"]:
+                sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
+                               (sid,st["id"],selected_exam_ids[0],rr["subject_id"])).fetchone()
+                details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
+                               (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(sc["comment"] if sc else ""))))
+            grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
+                                   (sid,str(result.get("overall_grade","")))).fetchone()
+            cards.append("""<section class='report-card'>
+              %s<h1>Student Report Card</h1>
+              <div class='student'><b>%s</b><span>Admission No: %s</span><span>Assessment: %s</span></div>
+              <div class='classline'>Class: %s%s</div>
+              <table><thead><tr><th>Subject</th><th>Mark</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead>
+              <tbody>%s</tbody></table>
+              <div class='summary'><div>Total<br><b>%.1f</b></div><div>Average<br><b>%.1f%%</b></div><div>Points<br><b>%.1f</b></div><div>Overall Grade<br><b>%s</b></div></div>
+              <div class='comments'><b>Class Teacher's Comment</b><p>%s</p><b>Principal's Comment</b><p>%s</p></div>
+              <div class='sign'><div><b>Class Teacher: %s</b><hr>Signature</div><div><b>Principal: %s</b><hr>Signature</div></div>
+            </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),exam_text,
+                              escape(str(cls["name"] or "")),((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else ""),
+                              "".join(details),float(result["total"]),float(result["average"]),float(result["points"]),
+                              escape(str(result["overall_grade"])),escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
+                              escape(str((grade_rule["principal_comment"] if grade_rule else "") or "")),
+                              escape(str(class_teacher_name or "Not Assigned")),escape(str(principal_name or "Not Assigned"))))
+        body="".join(cards) if cards else "<section class='report-card'><h2>No students found in this class/stream.</h2></section>"
+        html="""<!doctype html><html><head><meta charset='utf-8'><title>Class Report Cards Preview</title>
+        <style>
+        *{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#172033;font-family:Arial,sans-serif}
+        .toolbar{position:sticky;top:0;z-index:20;background:#172033;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+        .toolbar button{border:0;border-radius:8px;padding:10px 15px;font-weight:800;cursor:pointer;margin-left:6px}
+        .toolbar .print{background:#176B3A;color:#fff}.report-card{background:#fff;max-width:1000px;margin:18px auto;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always}
+        .brand{display:flex;align-items:center;gap:14px;border-bottom:2px solid #172033;padding-bottom:12px}.brand img{width:58px;height:58px;object-fit:contain}.school{font-size:20px;font-weight:900}
+        h1{text-align:center;font-size:20px;margin:18px 0 8px}.student{display:flex;gap:18px;flex-wrap:wrap;font-size:14px}.student span{font-weight:600}.classline{margin:8px 0 14px;font-weight:700}
+        table{width:100%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:28px;border:0;border-top:1px solid #172033;width:90%;margin-left:0}
+        @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;min-height:260mm}}
+        </style></head><body><div class='toolbar'><div><b>🖨️ Class / Stream Report Cards Preview</b><div style='font-size:12px;opacity:.8'>%s · %d student(s)</div></div><div><button class='print' onclick='window.print()'>🖨️ Print All Report Cards</button><button onclick='window.close()'>✕ Close</button></div></div>%s</body></html>""" % (escape(str(cls["name"] or ""))+(((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else "")),len(students),body)
+        return HTMLResponse(html)
+    finally:
+        con.close()
+
 @router.get("/app/report-cards", response_class=HTMLResponse)
 def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:str="", class_id:str="", tab:str=""):
     sid=_school_session(request)
