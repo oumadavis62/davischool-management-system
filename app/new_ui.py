@@ -2937,7 +2937,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
-    stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
+    # Do not silently select the first student when a class/stream was generated for bulk reports.\n    # A class-only selection must stay in bulk mode so the preview contains every student in that class/stream.\n    stid=int(student_id) if student_id.isdigit() else (0 if cid else (int(students[0]["id"]) if students else 0))
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
     rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
@@ -3031,7 +3031,7 @@ function printReportCard(){
   w.document.open();w.document.write(html);w.document.close();w.focus();
 }
 </script>""";
-    bulk_btn=(f"<div style='margin-top:10px'><a class='btn' style='display:inline-block;text-decoration:none' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>⬇️ Download All Class Report Cards</a> <a class='btn' style='display:inline-block;text-decoration:none' target='_blank' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}&inline=1'>🖨️ Print All Class Report Cards</a></div>" if cid and eid else "")
+    bulk_btn=(f"<div style='margin-top:10px;padding:12px;border:2px solid #176B3A;border-radius:10px;background:#f0fdf4'><b>📚 Whole Class / Stream Report</b><div class='muted' style='margin:5px 0 9px'>The preview below contains every student in the selected class/stream, not just the first student.</div><a class='btn' style='display:inline-block;text-decoration:none;background:#176B3A' target='_blank' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}&inline=1'>🖨️ Print All Class / Stream Reports</a> <a class='btn' style='display:inline-block;text-decoration:none' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>⬇️ Download All Class / Stream Reports</a></div>" if cid and eid else "")
     report_pdf_query=quote(",".join(str(x) for x in selected_exam_ids))
     print_btn=((
         "<button type='button' class='btn' style='margin-top:8px;background:#176B3A' onclick='printReportCard()'>🖨️ Print MarkSheet / Report Preview</button> "
