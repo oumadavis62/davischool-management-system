@@ -500,7 +500,7 @@ def _timetable(request, con, sid):
             if not r:
                 cells.append("<td>—</td>")
             else:
-                cells.append(f"<td><b>{escape(str(r['subject']))}</b><br>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}<br>{escape(str(r['teacher'] or ''))}{('<br>'+escape(str(r['room']))) if r['room'] else ''}<br><small>{'🔒 Locked' if int(r['locked'] or 0) else ''}</small></td>")
+                cells.append(f"<td><b>{escape(str(r['subject']))}</b><br>{escape(str(r['combined_classes']))}<br>{escape(str(r['combined_teachers']))}{('<br>'+escape(str(r['room']))) if r['room'] else ''}<br><small>{'🔒 Locked' if int(r['locked'] or 0) else ''}</small></td>")
         body+=f"<tr><th>{escape(day)}</th>{''.join(cells)}</tr>"
     class_opts="".join(f"<option value='{c['id']}' {'selected' if str(class_filter)==str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     teacher_opts="".join(f"<option value='{t['id']}' {'selected' if str(teacher_filter)==str(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
@@ -513,8 +513,8 @@ def _timetable(request, con, sid):
             action=(f"<form method='post' action='/app/timetable/placement/lock/{r['id']}' style='display:inline'><button class='tt-btn alt'>🔒</button></form> "
                     f"<form method='post' action='/app/timetable/placement/delete/{r['id']}' style='display:inline' onsubmit=" + '"return confirm(\'Remove this placement?\')" ' + "><button class='tt-btn danger'>🗑️</button></form>")
         placement_parts.append(
-            f"<tr><td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td>{escape(str(r['day_name']))}</td>"
-            f"<td>P{int(r['period_no'])}</td><td><b>{escape(str(r['subject']))}</b></td><td>{escape(str(r['teacher'] or ''))}</td>"
+            f"<tr><td>{escape(str(r['combined_classes']))}</td><td>{escape(str(r['day_name']))}</td>"
+            f"<td>P{int(r['period_no'])}</td><td><b>{escape(str(r['subject']))}</b></td><td>{escape(str(r['combined_teachers']))}</td>"
             f"<td>{escape(str(r['room'] or ''))}</td><td>{'🔒' if int(r['locked'] or 0) else ''}</td><td>{action}</td></tr>"
         )
     placement_rows="".join(placement_parts)
