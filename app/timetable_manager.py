@@ -524,13 +524,18 @@ def _generate(con, sid):
 def _verify(con, sid):
     lessons=con.execute("SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?", (sid,)).fetchall()
     placements=con.execute("SELECT lesson_id FROM timetable_slots WHERE school_id=?", (sid,)).fetchall()
-    placed={int(r["lesson_id"]) for r in placements}
+    placed_counts={}
+    for r in placements:
+        lid=int(r["lesson_id"])
+        placed_counts[lid]=placed_counts.get(lid,0)+1
     issues=[]
     for l in lessons:
-        # Duration is counted as occupied periods, so each weekly card needs its count.
-        # Slots store one row per starting card; generator keeps duration metadata on lesson.
-        if int(l["id"]) not in placed:
-            issues.append(f"Lesson card {l['id']} has no placement.")
+        lid=int(l["id"])
+        required=int(l["lessons_per_week"] or 0)
+        actual=int(placed_counts.get(lid,0))
+        missing=max(0,required-actual)
+        if missing:
+            issues.append(f"Lesson card {lid}: {actual} of {required} weekly placements made; {missing} missing.")
     # Hard collision checks.
     rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
@@ -911,6 +916,11 @@ def _is_available_slot(cur,sid,lesson,day,pno,duration,occupied,rooms,strict):
 
 def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     days=[r["name"] for r in cur.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
+    if not days:
+        # Never allow an empty teaching-day configuration to silently produce zero placements.
+        days=list(DEFAULT_DAYS)
+        for i,day in enumerate(days,1):
+            cur.execute("UPDATE timetable_days SET enabled=1 WHERE school_id=? AND name=?",(sid,day))
     periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
     rooms=cur.execute("SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)).fetchall()
     lessons=cur.execute("""SELECT * FROM timetable_lessons WHERE school_id=?""" + (" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))" if class_filter else "") + " ORDER BY duration DESC,lessons_per_week DESC,id",
