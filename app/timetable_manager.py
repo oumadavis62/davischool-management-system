@@ -497,7 +497,15 @@ def _timetable(request, con, sid):
             f"<td>{escape(str(r['room'] or ''))}</td><td>{'🔒' if int(r['locked'] or 0) else ''}</td><td>{action}</td></tr>"
         )
     placement_rows="".join(placement_parts)
-    return f"""<div class='tt-card'><h2>🗓️ Timetable Grid</h2><div class='tt-muted'>Days run vertically and periods/times horizontally. Use the filters to inspect class, teacher or room views. Locked placements are protected from regeneration.</div>
+    move_id=request.query_params.get("move","")
+    move_form=""
+    if str(move_id).isdigit():
+        moving=con.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,c.name class_name,c.stream,sub.name subject FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id WHERE s.id=? AND s.school_id=?",(int(move_id),sid)).fetchone()
+        if moving:
+            day_opts="".join(f"<option {'selected' if d==moving['day_name'] else ''}>{escape(d)}</option>" for d in days)
+            period_opts="".join(f"<option value='{p['period_no']}' {'selected' if int(p['period_no'])==int(moving['period_no']) else ''}>P{p['period_no']} — {escape(str(p['start_time']))}-{escape(str(p['end_time']))}</option>" for p in periods)
+            move_form=f"""<div class='tt-card'><h3>↔️ Move placement</h3><div class='tt-muted'>{escape(str(moving['subject']))} — {escape(str(moving['class_name']))} {escape(str(moving['stream'] or ''))}</div><form method='post' action='/app/timetable/placement/move/{moving['id']}' class='tt-form' style='margin-top:10px'><label><span class='tt-label'>Day</span><select class='tt-field' name='day_name'>{day_opts}</select></label><label><span class='tt-label'>Start period</span><select class='tt-field' name='period_no'>{period_opts}</select></label><label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>Any / unchanged</option>{room_opts}</select></label><div><button class='tt-btn'>💾 Move</button> <a class='tt-btn alt' href='/app/timetable?tab=timetable'>Cancel</a></div></form></div>"""
+    return f"""{move_form}<div class='tt-card'><h2>🗓️ Timetable Grid</h2><div class='tt-muted'>Days run vertically and periods/times horizontally. Use the filters to inspect class, teacher or room views. Locked placements are protected from regeneration.</div>
 <form method='get' class='tt-form' style='margin-top:12px'><input type='hidden' name='tab' value='timetable'><label><span class='tt-label'>Class</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label><label><span class='tt-label'>Teacher</span><select class='tt-field' name='teacher_id'><option value=''>All teachers</option>{teacher_opts}</select></label><label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>All rooms</option>{room_opts}</select></label><div><button class='tt-btn'>🔎 View</button></div></form>
 <div class='tt-scroll' style='margin-top:12px'><table class='tt-week'>{header}{body or '<tr><td colspan=20>No timetable placements yet.</td></tr>'}</table></div>
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print</a></div></div>
@@ -786,6 +794,46 @@ def timetable_generate_new(request:Request,class_id:str=Form(""),mode:str=Form("
     finally:con.close()
 
 
+
+
+
+@router.post("/app/timetable/placement/move/{rid}")
+def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),period_no:int=Form(...),room_id:str=Form("")):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        cur=con.cursor()
+        moving=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration FROM timetable_slots s
+            JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.id=? AND s.school_id=?""",(rid,sid)).fetchone()
+        if not moving or int(moving["locked"] or 0):
+            return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
+        if day_name not in DAYS:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        period=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,period_no)).fetchone()
+        if not period:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
+        room=int(room_id) if str(room_id).isdigit() else moving["room_id"]
+        pmap={int(p["period_no"]):p for p in cur.execute("SELECT * FROM timetable_periods WHERE school_id=?",(sid,)).fetchall()}
+        for pno in range(period_no,period_no+int(moving["duration"] or 1)):
+            if pno not in pmap:
+                return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+duration+does+not+fit",303)
+            if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
+                return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
+        others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.room_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.school_id=? AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
+        probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
+        for o in others:
+            if not _overlaps(probe,o): continue
+            if int(o["class_id"])==int(moving["class_id"]) or (moving["teacher_id"] and o["teacher_id"] and int(o["teacher_id"])==int(moving["teacher_id"])):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Class+or+teacher+conflict",303)
+            if room and o["room_id"] and int(o["room_id"])==int(room):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Room+conflict",303)
+        cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
+                    (day_name,period_no,period["start_time"],period["end_time"],room,rid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
+    finally:
+        con.close()
 @router.post("/app/timetable/placement/delete/{rid}")
 def timetable_placement_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
