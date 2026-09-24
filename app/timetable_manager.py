@@ -19,16 +19,14 @@ def _ctx(request):
 
 def _ensure_tables(con):
     cur = con.cursor()
-    is_pg = con.__class__.__module__.startswith("psycopg")
-    pk = "BIGSERIAL PRIMARY KEY" if is_pg else "INTEGER PRIMARY KEY"
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_manager_settings(
         school_id INTEGER PRIMARY KEY,
         days_json TEXT NOT NULL DEFAULT '["Monday","Tuesday","Wednesday","Thursday","Friday"]',
         complexity TEXT NOT NULL DEFAULT 'normal',
         relaxation TEXT NOT NULL DEFAULT 'relaxed'
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_days(
-        id {pk},
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_days(
+        id INTEGER PRIMARY KEY
         school_id INTEGER NOT NULL,
         day_no INTEGER NOT NULL,
         name TEXT NOT NULL,
@@ -36,7 +34,7 @@ def _ensure_tables(con):
         enabled INTEGER NOT NULL DEFAULT 1,
         UNIQUE(school_id,day_no)
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_rooms(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_rooms(
         id {pk},
         school_id INTEGER NOT NULL,
         name TEXT NOT NULL,
@@ -45,7 +43,7 @@ def _ensure_tables(con):
         room_type TEXT,
         active INTEGER NOT NULL DEFAULT 1
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_lessons(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lessons(
         id {pk},
         school_id INTEGER NOT NULL,
         class_id INTEGER NOT NULL,
@@ -60,13 +58,13 @@ def _ensure_tables(con):
         preferred_room INTEGER,
         notes TEXT
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_lesson_teachers(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_lesson_teachers(
         id {pk},
         school_id INTEGER NOT NULL,
         lesson_id INTEGER NOT NULL,
         teacher_id INTEGER NOT NULL
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_constraints(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_constraints(
         id {pk},
         school_id INTEGER NOT NULL,
         scope TEXT NOT NULL,
@@ -77,7 +75,7 @@ def _ensure_tables(con):
         enabled INTEGER NOT NULL DEFAULT 1,
         notes TEXT
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_slots(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_slots(
         id {pk},
         school_id INTEGER NOT NULL,
         lesson_id INTEGER NOT NULL,
@@ -89,7 +87,7 @@ def _ensure_tables(con):
         locked INTEGER NOT NULL DEFAULT 0,
         generated_run TEXT
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_generation_runs(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_generation_runs(
         id {pk},
         school_id INTEGER NOT NULL,
         created_at TEXT NOT NULL,
@@ -100,7 +98,7 @@ def _ensure_tables(con):
         requested INTEGER NOT NULL DEFAULT 0,
         message TEXT
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_periods(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_periods(
         id {pk},
         school_id INTEGER NOT NULL,
         period_no INTEGER NOT NULL,
@@ -108,7 +106,7 @@ def _ensure_tables(con):
         end_time TEXT NOT NULL,
         UNIQUE(school_id,period_no)
     )""")
-    cur.execute(f"""CREATE TABLE IF NOT EXISTS timetable_breaks(
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_breaks(
         id {pk},
         school_id INTEGER NOT NULL,
         name TEXT NOT NULL,
