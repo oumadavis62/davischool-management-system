@@ -468,8 +468,8 @@ def _timetable(request, con, sid):
     teacher_filter=request.query_params.get("teacher_id","")
     room_filter=request.query_params.get("room_id","")
     where=["s.school_id=?"];params=[sid]
-    if str(class_filter).isdigit(): where.append("l.class_id=?");params.append(int(class_filter))
-    if str(teacher_filter).isdigit(): where.append("l.teacher_id=?");params.append(int(teacher_filter))
+    if str(class_filter).isdigit(): where.append("(l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))");params.extend([int(class_filter),sid,int(class_filter)])
+    if str(teacher_filter).isdigit(): where.append("(l.teacher_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))");params.extend([int(teacher_filter),sid,int(teacher_filter)])
     if str(room_filter).isdigit(): where.append("s.room_id=?");params.append(int(room_filter))
     rows=con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
@@ -477,7 +477,7 @@ def _timetable(request, con, sid):
         JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=s.room_id
         WHERE """+" AND ".join(where)+""" ORDER BY CASE s.day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,s.period_no""",params).fetchall()
-    slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
+    for r in rows:\n        cr=con.execute("SELECT c.name,c.stream FROM timetable_lesson_classes lc JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream",(sid,r["lesson_id"])).fetchall()\n        tr=con.execute("SELECT t.name FROM timetable_lesson_teachers lt JOIN teachers t ON t.id=lt.teacher_id WHERE lt.school_id=? AND lt.lesson_id=? ORDER BY lt.id",(sid,r["lesson_id"])).fetchall()\n        r["combined_classes"]=", ".join(f"{x[\"name\"]}{(\" — \"+x[\"stream\"]) if x[\"stream\"] else \"\"}" for x in cr) or f"{r[\"class_name\"]}{(\" — \"+r[\"stream\"]) if r[\"stream\"] else \"\"}"\n        r["combined_teachers"]=", ".join(str(x["name"]) for x in tr) or str(r["teacher"] or "")\n    slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
     header="<tr><th>DAY</th>"+"".join(f"<th>P{int(p['period_no'])}<br>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</th>" for p in periods)+"</tr>"
     body=""
     for day in days:
