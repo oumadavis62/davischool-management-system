@@ -446,9 +446,13 @@ def _verify(con, sid):
             a_end=int(a["period_no"])+int(a["duration"])-1
             b_end=int(b["period_no"])+int(b["duration"])-1
             if a_end < int(b["period_no"]) or b_end < int(a["period_no"]): continue
-            if a["class_id"]==b["class_id"]:
-                issues.append(f"Class conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
-            if a["teacher_id"] and b["teacher_id"] and a["teacher_id"]==b["teacher_id"]:
+            a_classes={int(x["class_id"]) for x in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,a["lesson_id"])).fetchall()} or {int(a["class_id"])}
+            b_classes={int(x["class_id"]) for x in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,b["lesson_id"])).fetchall()} or {int(b["class_id"])}
+            a_teachers={int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,a["lesson_id"])).fetchall()} or ({int(a["teacher_id"])} if a["teacher_id"] else set())
+            b_teachers={int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,b["lesson_id"])).fetchall()} or ({int(b["teacher_id"])} if b["teacher_id"] else set())
+            if a_classes.intersection(b_classes):
+                issues.append(f"Class/stream conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
+            if a_teachers.intersection(b_teachers):
                 issues.append(f"Teacher conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
             if a["room_id"] and b["room_id"] and a["room_id"]==b["room_id"]:
                 issues.append(f"Room conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
@@ -477,7 +481,7 @@ def _timetable(request, con, sid):
         JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=s.room_id
         WHERE """+" AND ".join(where)+""" ORDER BY CASE s.day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,s.period_no""",params).fetchall()
-    for r in rows:\n        cr=con.execute("SELECT c.name,c.stream FROM timetable_lesson_classes lc JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream",(sid,r["lesson_id"])).fetchall()\n        tr=con.execute("SELECT t.name FROM timetable_lesson_teachers lt JOIN teachers t ON t.id=lt.teacher_id WHERE lt.school_id=? AND lt.lesson_id=? ORDER BY lt.id",(sid,r["lesson_id"])).fetchall()\n        r["combined_classes"]=", ".join(f"{x[\"name\"]}{(\" — \"+x[\"stream\"]) if x[\"stream\"] else \"\"}" for x in cr) or f"{r[\"class_name\"]}{(\" — \"+r[\"stream\"]) if r[\"stream\"] else \"\"}"\n        r["combined_teachers"]=", ".join(str(x["name"]) for x in tr) or str(r["teacher"] or "")\n    slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
+    for r in rows:\n        cr=con.execute("SELECT c.name,c.stream FROM timetable_lesson_classes lc JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream",(sid,r["lesson_id"])).fetchall()\n        tr=con.execute("SELECT t.name FROM timetable_lesson_teachers lt JOIN teachers t ON t.id=lt.teacher_id WHERE lt.school_id=? AND lt.lesson_id=? ORDER BY lt.id",(sid,r["lesson_id"])).fetchall()\n        r["combined_classes"]=", ".join(f"{x['name']}{(' — '+x['stream']) if x['stream'] else ''}" for x in cr) or f"{r['class_name']}{(' — '+r['stream']) if r['stream'] else ''}"\n        r["combined_teachers"]=", ".join(str(x["name"]) for x in tr) or str(r["teacher"] or "")\n    slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
     header="<tr><th>DAY</th>"+"".join(f"<th>P{int(p['period_no'])}<br>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</th>" for p in periods)+"</tr>"
     body=""
     for day in days:
