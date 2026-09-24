@@ -4184,18 +4184,18 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             rc=cur.execute("SELECT comment FROM report_comments WHERE school_id=? AND student_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,st["id"],eid)).fetchone()
             rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,eid)).fetchone()
             story += _pdf_school_header(school,styles,"Student Report Card")
-            story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] or ""))), styles["normal"]), Spacer(1,5)]
-            story += [Paragraph("Class: %s %s · Status: %s"%(st["class_name"] or "",st["stream"] or "",status),styles["normal"]),Spacer(1,5)]
+            story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("<b>Admission No:</b> %s    <b>Assessment:</b> %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] or ""))), styles["normal"]), Spacer(1,5)]
+            story += [Paragraph("<b>Class:</b> %s %s · <b>Status:</b> %s"%(escape(str(st["class_name"] or "")),escape(str(st["stream"] or "")),escape(str(status)),),styles["normal"]),Spacer(1,5)]
             data=[["Subject","Mark","Grade","Points","Performance Comment"]]
             for r,mark,grade,points in result["details"]:
                 data.append([str(r["name"]),"%0.1f"%mark,str(grade),"%0.1f"%points,str(comments.get(int(r["subject_id"]),""))])
             if len(data)==1:data.append(["No marks recorded.","","","",""])
             t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1)
             t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#176B3A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
-            story += [t,Spacer(1,7),Paragraph("Subjects: %d · Total: %.1f · Average: %.1f%% · Points: %.1f · Overall Grade: %s · Position: %s / %d"%(result["count"],result["total"],result["average"],result["points"],result["overall_grade"],position,len(totals)),styles["normal"])]
+            story += [t,Spacer(1,7),Paragraph("<b>Subjects:</b> %d · <b>Total:</b> %.1f · <b>Average:</b> %.1f%% · <b>Points:</b> %.1f · <b>Overall Grade:</b> %s · <b>Position:</b> %s / %d"%(result["count"],result["total"],result["average"],result["points"],escape(str(result["overall_grade"])),escape(str(position)),len(totals)),styles["normal"])]
             if tc:story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
             if rc:story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
-            if rs:story += [Spacer(1,4),Paragraph("Date of Opening: %s    Date of Closing: %s"%(rs["opening_date"] or "",rs["closing_date"] or ""),styles["normal"])]
+            if rs:story += [Spacer(1,4),Paragraph("<b>Date of Opening:</b> %s    <b>Date of Closing:</b> %s"%(escape(str(rs["opening_date"] or "")),escape(str(rs["closing_date"] or ""))),styles["normal"])]
             if student_index<len(students)-1:story.append(PageBreak())
         con.close()
         pdf=_pdf_build(story,A4,"Class Report Cards - %s"%cr["name"])
@@ -4260,18 +4260,18 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         er=cur.execute("SELECT * FROM exams WHERE id=? AND school_id=?",(eid,sid)).fetchone() if eid else None
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone();con.close()
         styles=_pdf_styles(); story=_pdf_school_header(school,styles,"Student Report Card")
-        story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("Admission No: %s    Assessment: %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] if er else "Examination"))), styles["normal"]), Spacer(1,5)]
+        story += [Paragraph("<b>%s</b>" % escape(str(st["name"] or "")), styles["report_student_name"]), Paragraph("<b>Admission No:</b> %s    <b>Assessment:</b> %s" % (escape(str(st["admission_no"] or "")), escape(str(er["name"] if er else "Examination"))), styles["normal"]), Spacer(1,5)]
         status="FINAL" if report_final else "DRAFT"
-        story += [Paragraph(f"Class: {st['class_name'] or ''} {st['stream'] or ''} · Status: {status}",styles["normal"]),Spacer(1,5)]
+        story += [Paragraph(f"<b>Class:</b> {escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))} · <b>Status:</b> {escape(str(status))}",styles["normal"]),Spacer(1,5)]
         data=[["Subject","Mark","Grade","Points","Performance Comment"]]
         for r,mark,grade,points in result["details"]:
             data.append([str(r["name"]),f"{mark:.1f}",str(grade),f"{points:.1f}",str(comments.get(int(r["subject_id"]),""))])
         if len(data)==1:data.append(["No marks recorded.","","","",""])
         t=Table(data,colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm],repeatRows=1);t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#176B3A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("VALIGN",(0,0),(-1,-1),"TOP")]))
-        story += [t,Spacer(1,7),Paragraph(f"Subjects: {result['count']} · Total: {result['total']:.1f} · Average: {result['average']:.1f}% · Points: {result['points']:.1f} · Overall Grade: {result['overall_grade']} · Position: {position} / {len(totals)}",styles["normal"])]
+        story += [t,Spacer(1,7),Paragraph(f"<b>Subjects:</b> {result['count']} · <b>Total:</b> {result['total']:.1f} · <b>Average:</b> {result['average']:.1f}% · <b>Points:</b> {result['points']:.1f} · <b>Overall Grade:</b> {escape(str(result['overall_grade']))} · <b>Position:</b> {escape(str(position))} / {len(totals)}",styles["normal"])]
         if tc: story += [Spacer(1,6),Paragraph("Class Teacher's Comment: "+escape(str(tc["comment"] or "")),styles["normal"])]
         if rc: story += [Spacer(1,4),Paragraph("Additional Report Comment: "+escape(str(rc["comment"] or "")),styles["normal"])]
-        if rs: story += [Spacer(1,4),Paragraph(f"Date of Opening: {rs['opening_date'] or ''}    Date of Closing: {rs['closing_date'] or ''}",styles["normal"])]
+        if rs: story += [Spacer(1,4),Paragraph(f"<b>Date of Opening:</b> {escape(str(rs['opening_date'] or ''))}    <b>Date of Closing:</b> {escape(str(rs['closing_date'] or ''))}",styles["normal"])]
         pdf=_pdf_build(story,A4,"Student Report Card")
         return _pdf_response(pdf,f"report_card_{st['name']}.pdf")
 
