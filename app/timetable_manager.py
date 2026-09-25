@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
+.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -625,11 +625,9 @@ def _class_grid_data(con, sid, class_id=None):
 
 
 def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
-    """Render the saved bell schedule exactly: days vertical, periods/breaks horizontal."""
+    """Render an aligned aSc-style class grid: days vertical, periods/breaks horizontal."""
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
 
-    # Build the horizontal school-day timeline from the ACTUAL saved period and
-    # break times. Never derive breaks from the default period length.
     period_items = [
         ("period", _time_to_min(str(p["start_time"])), _time_to_min(str(p["end_time"])), p)
         for p in periods
@@ -640,15 +638,11 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     ]
     break_ranges = [(x[1], x[2]) for x in break_items]
 
-    # A saved break is a first-class timeline item. If a school accidentally
-    # configured a break overlapping a period, the break wins visually so the
-    # output never hides the school's saved break.
-    visible_periods = [
-        x for x in period_items
-        if not any(x[1] < be and x[2] > bs for bs, be in break_ranges)
-    ]
+    # The visible columns are the school's actual bell schedule. Breaks are
+    # columns of their own; periods are never invented or renumbered.
     visible_timeline = sorted(
-        visible_periods + break_items,
+        [x for x in period_items
+         if not any(x[1] < be and x[2] > bs for bs, be in break_ranges)] + break_items,
         key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2])
     )
 
@@ -662,6 +656,18 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
         for x in visible_timeline
     ) + "</tr>"
 
+    # Expand each saved placement into its occupied period cells. This is
+    # deliberately done WITHOUT colspan: every physical period gets exactly
+    # one table cell, so a double/triple can never shift the break or later
+    # periods out of alignment.
+    occupancy = {}
+    for (day_name, start_pno), lesson in grid.items():
+        duration = max(1, int(lesson["duration"] or 1))
+        for offset in range(duration):
+            pno = int(start_pno) + offset
+            if any(int(x[3]["period_no"]) == pno and x[0] == "period" for x in visible_timeline):
+                occupancy[(day_name, pno)] = (lesson, offset + 1, duration)
+
     body = []
     for day in days:
         row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
@@ -674,40 +680,26 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 continue
 
             pno = int(item["period_no"])
-            lesson = grid.get((day, pno))
-            if not lesson:
+            entry = occupancy.get((day, pno))
+            if not entry:
                 row_cells.append("<td class='tt-empty'>—</td>")
                 continue
 
-            duration = max(1, int(lesson["duration"] or 1))
-            # A lesson placement stores its START period plus its duration;
-            # there is intentionally no duplicate slot row for the second
-            # period of a double/triple lesson. Render the saved duration as
-            # one horizontal block across the following actual period columns.
-            span = 1
-            current_idx = next(
-                (idx for idx, x in enumerate(visible_timeline)
-                 if x[0] == "period" and int(x[3]["period_no"]) == pno),
-                -1
-            )
-            if current_idx >= 0:
-                for next_idx in range(current_idx + 1, min(current_idx + duration, len(visible_timeline))):
-                    next_item = visible_timeline[next_idx]
-                    # A configured break is a hard boundary; a double lesson
-                    # may not visually or logically pass through it.
-                    if next_item[0] != "period":
-                        break
-                    span += 1
-
+            lesson, part, duration = entry
             teachers = str(lesson["teacher"] or "")
             room = str(lesson["room"] or "")
-            duration_note = f"<br><small>×{span} periods</small>" if span > 1 else ""
+            multi = (
+                f"<br><small class='tt-duration'>DOUBLE • {part}/{duration}</small>"
+                if duration == 2 else
+                f"<br><small class='tt-duration'>TRIPLE • {part}/{duration}</small>"
+                if duration >= 3 else ""
+            )
             row_cells.append(
-                f"<td class='tt-lesson' colspan='{span}'>"
+                f"<td class='tt-lesson'>"
                 f"<b>{escape(str(lesson['subject']))}</b>"
                 f"<br><span>{escape(teachers)}</span>"
                 f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
-                f"{duration_note}</td>"
+                f"{multi}</td>"
             )
         body.append("<tr>" + "".join(row_cells) + "</tr>")
 
