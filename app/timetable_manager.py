@@ -1675,9 +1675,11 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Harder requirements first: doubles/triples, high weekly demand,
         # then cards with fewer physical choices.
         occurrences.sort(key=lambda x:(
+            len(all_candidates.get(x[0],[])),
+            -len(lesson_teachers.get(x[0],set())),
+            -len(lesson_classes.get(x[0],set())),
             -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
             -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
-            len(all_candidates.get(x[0],[])),
             x[0],x[1]
         ))
 
@@ -1745,6 +1747,14 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         return None
                     if any((day,xp,tid) in teacher_slot for tid in teachers):
                         return None
+                    # A teacher must not teach two different subjects in
+                    # immediately consecutive slots. The same double/triple
+                    # lesson may occupy its own consecutive periods.
+                    for tid in teachers:
+                        if xp == int(pno) and (day,xp-1,tid) in teacher_slot:
+                            return None
+                        if xp == int(pno)+duration-1 and (day,xp+1,tid) in teacher_slot:
+                            return None
                     if enforce_availability:
                         if any((day,xp,tid) in blocked_teacher for tid in teachers):
                             return None
@@ -1842,7 +1852,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Keep generation inside a normal web-request time budget.
         # The solver retains the best placement found, so bounded randomized
         # passes prevent Render from appearing to ignore the Generate button.
-        attempt_count={"normal":2,"large":3,"huge":4}.get(complexity,2)
+        attempt_count={"normal":8,"large":10,"huge":12}.get(complexity,8)
         for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
