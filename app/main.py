@@ -536,6 +536,19 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                     ORDER BY u.id DESC LIMIT 1""", (login_id,)).fetchone()
             except Exception:
                 u = None
+        # Also accept the username portion of an account email (the value
+        # commonly given to staff as their username).
+        if not u and "@" not in login_id:
+            try:
+                all_users = cur.execute("SELECT * FROM users WHERE email IS NOT NULL").fetchall()
+                wanted = login_id.casefold()
+                for candidate in all_users:
+                    candidate_email = str(candidate["email"] or "").strip()
+                    if candidate_email and candidate_email.split("@",1)[0].casefold() == wanted:
+                        u = candidate
+                        break
+            except Exception:
+                pass
         if not u:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         valid, _ = verify_password(password, u["password"])
