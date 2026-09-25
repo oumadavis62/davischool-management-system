@@ -3728,7 +3728,16 @@ def users_page(request: Request):
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     con.close()
-    rows="".join(f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(str(u['role'] or ''))}</td><td>{escape(str(u['teacher_name'] or u['student_name'] or '—'))}</td></tr>" for u in users)
+    rows=""
+    for u in users:
+        role_name=str(u["role"] or "")
+        linked=escape(str(u["teacher_name"] or u["student_name"] or "—"))
+        safe_name=escape(str(u["full_name"] or "user")).replace("'","&#39;")
+        if role_name=="school_admin":
+            actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
+        else:
+            actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
+        rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
@@ -3737,9 +3746,83 @@ def users_page(request: Request):
 <select name='role' class='field'><option value='school_admin'>School Admin</option><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <button class='btn'>Create Account</button></form></div>
-<div class='card section'><h2>Accounts ({len(users)})</h2><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile</th></tr></thead><tbody>{rows or '<tr><td colspan=4>No users yet.</td></tr>'}</tbody></table></div></div>
+<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"User Management",body)
+
+@router.get("/app/users/edit/{uid}", response_class=HTMLResponse)
+def users_edit_page(request: Request, uid: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "users.manage"):
+        return HTMLResponse("You do not have permission to manage users.",403)
+    con=_db();cur=con.cursor()
+    user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
+    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    con.close()
+    if not user:return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    if str(user["role"] or "")=="school_admin":
+        return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
+    topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
+    sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    body=f"""<div class='page'><h1>✏️ Edit User</h1><div class='muted'>Update the account details and linked profile.</div>
+<div class='card section'><form method='post' action='/app/users/edit/{uid}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+<input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
+<input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'>
+<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
+<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
+<div style='grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end'><a href='/app/users' style='padding:11px 16px;border:1px solid #dbe2ea;border-radius:9px;text-decoration:none;color:#334155'>Cancel</a><button class='btn'>💾 Save Changes</button></div></form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request,"Edit User",body)
+
+@router.post("/app/users/edit/{uid}")
+def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), student_id:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "users.manage"):
+        return HTMLResponse("You do not have permission to manage users.",403)
+    allowed={"teacher","parent","student","accountant","registrar"}
+    con=_db();cur=con.cursor()
+    user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
+    if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    if str(user["role"] or "")=="school_admin": con.close(); return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
+    if role not in allowed: con.close(); return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
+    email_v=email.strip().lower()
+    duplicate=cur.execute("SELECT id FROM users WHERE lower(email)=? AND id<>?",(email_v,uid)).fetchone()
+    if duplicate: con.close(); return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",409)
+    tid=int(teacher_id) if teacher_id.isdigit() else None
+    stid=int(student_id) if student_id.isdigit() else None
+    if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): con.close(); return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
+    if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): con.close(); return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
+    if role=="teacher" and not tid: con.close(); return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
+    if role in ("student","parent") and not stid: con.close(); return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
+    if role not in ("teacher","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+    from app.main import hash_password
+    if password.strip() and len(password.strip())<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    if password.strip():
+        cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password.strip()),role,tid,stid,uid,sid))
+    else:
+        cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
+    _audit(cur,sid,request,"USER_UPDATE",f"Updated {role} account {email_v}")
+    con.commit();con.close();return RedirectResponse("/app/users",303)
+
+@router.post("/app/users/delete/{uid}")
+def users_delete(request: Request, uid: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "users.manage"):
+        return HTMLResponse("You do not have permission to manage users.",403)
+    con=_db();cur=con.cursor()
+    user=cur.execute("SELECT id,role,email,full_name FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
+    if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    if str(user["role"] or "")=="school_admin":
+        con.close(); return HTMLResponse("School Admin accounts can only be deleted by the Super Admin. <a href='/app/users'>Back</a>",403)
+    if int(uid)==int(request.session.get("user_id") or 0):
+        con.close(); return HTMLResponse("You cannot delete your own active account. <a href='/app/users'>Back</a>",400)
+    cur.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,sid))
+    _audit(cur,sid,request,"USER_DELETE",f"Deleted {user['role']} account {user['email']}")
+    con.commit();con.close();return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
 def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), student_id:str=Form("")):
