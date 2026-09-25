@@ -1682,173 +1682,75 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         ))
 
         def run_once(seed):
-            """Fast bounded greedy pass using indexed occupancy sets.
+            """Bounded, reliable greedy pass.
 
-            The previous MRV implementation recomputed every candidate for
-            every pending occurrence, then rescanned the whole occupied
-            timetable inside each candidate. With many lesson cards this
-            became effectively O(n^3) and could leave the web request looking
-            frozen on Render. This pass keeps the same hard rules but indexes
-            class/teacher/room occupancy so each candidate is checked in
-            constant time per resource.
+            This intentionally uses the already-tested candidate() function
+            against the current occupied list. With the current school size
+            (50 cards / 217 physical periods), this is comfortably within a
+            normal web-worker budget and is much less error-prone than the
+            indexed solver.
             """
             rng=random.Random(seed)
             occupied=[dict(x) for x in base]
             placed=[]
 
-            class_slot=set()
-            teacher_slot=set()
-            room_slot=set()
-            class_subject_day=set()
-            class_day_count={}
-            teacher_day_count={}
-            subject_day_count={}
-
-            def add_occupancy(row):
-                day=str(row["day_name"])
-                start_p=int(row["period_no"])
-                duration=max(1,int(row.get("duration") or 1))
-                classes=lesson_classes.get(int(row["lesson_id"]),{int(row["class_id"])})
-                teachers=lesson_teachers.get(
-                    int(row["lesson_id"]),
-                    ({int(row["teacher_id"])} if row.get("teacher_id") else set())
-                )
-                subject=int(row.get("subject_id") or lesson_by_id[int(row["lesson_id"])]["subject_id"])
-                for pno in range(start_p,start_p+duration):
-                    for cid in classes:
-                        class_slot.add((day,pno,cid))
-                    for tid in teachers:
-                        teacher_slot.add((day,pno,tid))
-                    rid=int(row.get("room_id") or 0)
-                    if rid:
-                        room_slot.add((day,pno,rid))
-                for cid in classes:
-                    class_subject_day.add((day,cid,subject))
-                    class_day_count[(day,cid)]=class_day_count.get((day,cid),0)+1
-                for tid in teachers:
-                    teacher_day_count[(day,tid)]=teacher_day_count.get((day,tid),0)+1
-                for cid in classes:
-                    subject_day_count[(day,cid,subject)]=subject_day_count.get((day,cid,subject),0)+1
-
-            for row in occupied:
-                add_occupancy(row)
-
-            def can_place(lesson,day,pno):
-                lid=int(lesson["id"])
-                duration=max(1,int(lesson.get("duration") or 1))
-                classes=lesson_classes[lid]
-                teachers=lesson_teachers[lid]
-                subject=int(lesson["subject_id"])
-
-                # One occurrence of a subject per class/stream per day.
-                if any((day,cid,subject) in class_subject_day for cid in classes):
-                    return None
-
-                for xp in range(int(pno),int(pno)+duration):
-                    if any((day,xp,cid) in class_slot for cid in classes):
-                        return None
-                    if any((day,xp,tid) in teacher_slot for tid in teachers):
-                        return None
-
-                    if enforce_availability:
-                        if any((day,xp,tid) in blocked_teacher for tid in teachers):
-                            return None
-                        if (day,xp,subject) in blocked_subject:
-                            return None
-
-                if enforce_preferred:
-                    for cdef in constraints.get("Teacher max lessons/day",[]):
-                        target=cdef["target_id"]
-                        if target and int(target) in teachers:
-                            lim=int(cdef["value"] or 0)
-                            if lim and teacher_day_count.get((day,int(target)),0)>=lim:
-                                return None
-                    for cdef in constraints.get("Class max lessons/day",[]):
-                        target=cdef["target_id"]
-                        if target and int(target) in classes:
-                            lim=int(cdef["value"] or 0)
-                            if lim and class_day_count.get((day,int(target)),0)>=lim:
-                                return None
-
-                fixed=int(lesson["room_id"]) if lesson.get("room_id") else None
-                if fixed:
-                    for xp in range(int(pno),int(pno)+duration):
-                        if (day,xp,fixed) in room_slot:
-                            return None
-                    return fixed
-
-                if rooms:
-                    for room in rooms:
-                        rid=int(room["id"])
-                        if all((day,xp,rid) not in room_slot for xp in range(int(pno),int(pno)+duration)):
-                            return rid
-                    return -1
-
-                # No active rooms is valid: a lesson can be scheduled
-                # without a room assignment. 0 is the internal "no room"
-                # sentinel; the database value is converted to NULL below.
-                return 0
-
+            # Harder cards first: doubles/triples and high weekly demand.
             pending=list(occurrences)
+            rng.shuffle(pending)
+            pending.sort(key=lambda x:(
+                -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
+                -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
+                len(all_candidates.get(x[0],[])),
+                x[0],x[1]
+            ))
+
             while pending:
-                best_choice=None
+                best_idx=None
+                best_choices=None
                 best_key=None
 
-                # Process the most constrained remaining lesson first, but do
-                # not recompute all choices for every pending occurrence.
-                scan_limit=min(len(pending),80)
+                # MRV over a bounded prefix. Candidate() is the authoritative
+                # conflict checker and includes class, teacher, break, room,
+                # availability and preferred-constraint rules.
+                scan_limit=min(len(pending),50)
                 for idx,(lid,occ_no) in enumerate(pending[:scan_limit]):
                     lesson=lesson_by_id[lid]
                     choices=[]
                     for day,pno in all_candidates.get(lid,[]):
-                        room=can_place(lesson,day,pno)
+                        room=candidate(
+                            lesson,day,pno,occupied,
+                            enforce_availability,enforce_preferred
+                        )
                         if room is None:
                             continue
                         if room==-1:
                             room=None
-                        classes=lesson_classes[lid]
-                        teachers=lesson_teachers[lid]
-                        subject=int(lesson["subject_id"])
-
-                        class_load=sum(class_day_count.get((day,c),0) for c in classes)
-                        teacher_load=sum(teacher_day_count.get((day,t),0) for t in teachers)
-                        subject_load=sum(subject_day_count.get((day,c,subject),0) for c in classes)
-                        period_load=sum(
-                            1 for c in classes if (day,int(pno),c) in class_slot
-                        ) + sum(
-                            1 for t in teachers if (day,int(pno),t) in teacher_slot
-                        )
-
-                        score=(
-                            subject_load*100000 +
-                            class_load*1000 +
-                            teacher_load*700 +
-                            period_load*100 +
-                            int(pno)
-                        )
+                        score=spread_score(lesson,day,pno,occupied)
                         choices.append((score,rng.random(),day,int(pno),room))
 
                     if not choices:
                         continue
                     choices.sort(key=lambda x:(x[0],x[1]))
-                    # Prefer the lesson with fewer legal choices. Tie-break on
-                    # duration and weekly demand, preserving the old MRV goal.
                     key=(len(choices),
                          -max(1,int(lesson.get("duration") or 1)),
                          -int(lesson.get("lessons_per_week") or 0),
                          lid,occ_no)
-                    if best_choice is None or key<best_key:
-                        best_choice=(idx,lid,occ_no,choices)
+                    if best_key is None or key<best_key:
+                        best_idx=idx
+                        best_choices=choices
                         best_key=key
 
-                if best_choice is None:
+                if best_idx is None:
                     break
 
-                idx,lid,occ_no,choices=best_choice
+                lid,occ_no=pending[best_idx]
                 lesson=lesson_by_id[lid]
                 committed=False
-                for _,_,day,pno,room in choices:
-                    checked=can_place(lesson,day,pno)
+                for _,_,day,pno,room in best_choices:
+                    checked=candidate(
+                        lesson,day,pno,occupied,
+                        enforce_availability,enforce_preferred
+                    )
                     if checked is None:
                         continue
                     if checked==-1:
@@ -1858,15 +1760,14 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         "class_id":lesson["class_id"],
                         "teacher_id":lesson["teacher_id"],
                         "subject_id":lesson["subject_id"],
-                        "room_id":checked if checked else None,
+                        "room_id":checked,
                         "day_name":day,
                         "period_no":pno,
                         "duration":max(1,int(lesson.get("duration") or 1))
                     }
                     occupied.append(row)
                     placed.append(row)
-                    add_occupancy(row)
-                    pending.pop(idx)
+                    pending.pop(best_idx)
                     committed=True
                     break
 
