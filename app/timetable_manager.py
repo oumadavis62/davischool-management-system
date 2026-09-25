@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
+.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -678,7 +678,7 @@ def _class_grid_data(con, sid, class_id=None):
 
 
 def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
-    """Render an aligned aSc-style class grid: days vertical, periods/breaks horizontal."""
+    """Render an aSc-style class grid with true merged double/triple lessons."""
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
 
     period_items = [
@@ -691,8 +691,6 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     ]
     break_ranges = [(x[1], x[2]) for x in break_items]
 
-    # The visible columns are the school's actual bell schedule. Breaks are
-    # columns of their own; periods are never invented or renumbered.
     visible_timeline = sorted(
         [x for x in period_items
          if not any(x[1] < be and x[2] > bs for bs, be in break_ranges)] + break_items,
@@ -709,21 +707,25 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
         for x in visible_timeline
     ) + "</tr>"
 
-    # Expand each saved placement into its occupied period cells. This is
-    # deliberately done WITHOUT colspan: every physical period gets exactly
-    # one table cell, so a double/triple can never shift the break or later
-    # periods out of alignment.
-    occupancy = {}
+    # A lesson is stored once at its starting period with duration=2/3.
+    # Render it as ONE merged cell across the physical periods it occupies.
+    # This prevents a double lesson from appearing as "subject + blank".
+    start_cells = {}
+    occupied_periods = {}
+
     for (day_name, start_pno), lesson in grid.items():
         duration = max(1, int(lesson["duration"] or 1))
+        start_cells[(str(day_name), int(start_pno))] = (lesson, duration)
         for offset in range(duration):
-            pno = int(start_pno) + offset
-            if any(int(x[3]["period_no"]) == pno and x[0] == "period" for x in visible_timeline):
-                occupancy[(day_name, pno)] = (lesson, offset + 1, duration)
+            occupied_periods[(str(day_name), int(start_pno) + offset)] = (
+                lesson, offset + 1, duration
+            )
 
     body = []
     for day in days:
         row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
+        skip_periods = set()
+
         for kind, st, et, item in visible_timeline:
             if kind == "break":
                 row_cells.append(
@@ -733,27 +735,59 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 continue
 
             pno = int(item["period_no"])
-            entry = occupancy.get((day, pno))
-            if not entry:
-                row_cells.append("<td class='tt-empty'>—</td>")
+
+            # The second/third physical period of a merged lesson has already
+            # been emitted as part of the starting cell.
+            if pno in skip_periods:
                 continue
 
-            lesson, part, duration = entry
-            teachers = str(lesson["teacher"] or "")
-            room = str(lesson["room"] or "")
-            multi = (
-                f"<br><small class='tt-duration'>DOUBLE • {part}/{duration}</small>"
-                if duration == 2 else
-                f"<br><small class='tt-duration'>TRIPLE • {part}/{duration}</small>"
-                if duration >= 3 else ""
-            )
-            row_cells.append(
-                f"<td class='tt-lesson'>"
-                f"<b>{escape(str(lesson['subject']))}</b>"
-                f"<br><span>{escape(teachers)}</span>"
-                f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
-                f"{multi}</td>"
-            )
+            entry = start_cells.get((str(day), pno))
+            if entry:
+                lesson, duration = entry
+                # Only merge across periods that are actually consecutive
+                # visible teaching-period columns. Breaks cannot be crossed
+                # because the generator rejects such placements.
+                span_periods = []
+                for offset in range(duration):
+                    target = pno + offset
+                    if any(
+                        x[0] == "period" and int(x[3]["period_no"]) == target
+                        for x in visible_timeline
+                    ):
+                        span_periods.append(target)
+
+                span = len(span_periods)
+                if span < duration:
+                    span = 1
+
+                for target in span_periods[1:]:
+                    skip_periods.add(target)
+
+                teachers = str(lesson["teacher"] or "")
+                room = str(lesson["room"] or "")
+                label = (
+                    "<br><small class='tt-duration'>DOUBLE LESSON</small>"
+                    if duration == 2 else
+                    "<br><small class='tt-duration'>TRIPLE LESSON</small>"
+                    if duration >= 3 else ""
+                )
+                row_cells.append(
+                    f"<td class='tt-lesson tt-merged-lesson' colspan='{span}'>"
+                    f"<b>{escape(str(lesson['subject']))}</b>"
+                    f"<br><span>{escape(teachers)}</span>"
+                    f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
+                    f"{label}</td>"
+                )
+                continue
+
+            # A physical period occupied by a lesson that starts earlier should
+            # already have been merged into that earlier cell.
+            occupied = occupied_periods.get((str(day), pno))
+            if occupied:
+                continue
+
+            row_cells.append("<td class='tt-empty'>—</td>")
+
         body.append("<tr>" + "".join(row_cells) + "</tr>")
 
     title = f"<h3>🏫 {escape(class_label)}</h3>" if show_title else ""
@@ -761,7 +795,6 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
         f"<div class='tt-class-sheet'>{title}"
         f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div></div>"
     )
-
 
 def _timetable(request, con, sid):
     class_filter = request.query_params.get("class_id", "")
