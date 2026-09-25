@@ -283,7 +283,48 @@ def timetable_manager(request: Request):
             try:
                 body = _timetable(request, con, sid)
             except Exception as exc:
-                body = f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice bad'>Unable to display the timetable. Please regenerate it after checking Periods & Bells and Breaks. Detail: {escape(str(exc))}</div></div>"
+                # Last-resort read-only renderer. A problem with an optional
+                # timetable relation must never prevent the school from seeing
+                # the saved physical timetable.
+                try:
+                    rows = con.execute("""SELECT s.day_name,s.period_no,s.start_time,s.end_time,
+                        s.lesson_id,l.class_id,l.subject_id,
+                        c.name class_name,c.stream,sub.name subject
+                        FROM timetable_slots s
+                        JOIN timetable_lessons l ON l.id=s.lesson_id
+                        JOIN classes c ON c.id=l.class_id
+                        JOIN subjects sub ON sub.id=l.subject_id
+                        WHERE s.school_id=? ORDER BY c.name,c.stream,s.day_name,s.period_no""",(sid,)).fetchall()
+                    p_rows = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+                    d_rows = con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()
+                    day_names=[str(x["name"]) for x in d_rows] or list(DEFAULT_DAYS)
+                    grouped={}
+                    for r in rows:
+                        grouped.setdefault((int(r["class_id"]),str(r["class_name"]),str(r["stream"] or "")),{})[(str(r["day_name"]),int(r["period_no"]))]=r
+                    sheets=[]
+                    for (cid,cname,cstream),grid in grouped.items():
+                        head="<tr><th>DAY</th>"+"".join(
+                            f"<th>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
+                            for p in p_rows
+                        )+"</tr>"
+                        body_rows=[]
+                        for day in day_names:
+                            cells=[f"<th>{escape(day).upper()}</th>"]
+                            for p in p_rows:
+                                r=grid.get((day,int(p["period_no"])))
+                                cells.append(
+                                    f"<td class='tt-lesson'><b>{escape(str(r['subject']))}</b></td>"
+                                    if r else "<td class='tt-empty'>—</td>"
+                                )
+                            body_rows.append("<tr>"+"".join(cells)+"</tr>")
+                        label=f"{cname}{(' — '+cstream) if cstream else ''}"
+                        sheets.append(
+                            f"<div class='tt-class-sheet'><h3>🏫 {escape(label)}</h3>"
+                            f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body_rows)}</table></div></div>"
+                        )
+                    body=f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice ok'>Showing the saved timetable in safe view.</div>{''.join(sheets) or '<div class="tt-notice bad">No saved timetable placements found.</div>'}</div>"
+                except Exception:
+                    body = f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice bad'>Unable to display the timetable. The saved timetable data is still protected.</div></div>"
         return _layout(request, tab, body)
     finally:
         con.close()
