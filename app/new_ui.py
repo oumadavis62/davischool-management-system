@@ -333,8 +333,9 @@ def _shell(title, name, role, body, school_id=None):
         if role == "teacher":
             nav = [
                 ("/app","⌂","Overview",None),
+                ("/app/class-teacher","🏫","My Class","class_teacher.view"),
                 ("/app/academics","📝","Academics","marks.view"),
-                            ("/app/report-cards","📄","Report Cards","reports.view"),
+                ("/app/report-cards","📄","Report Cards","reports.view"),
             ]
         else:
             nav = [
@@ -477,6 +478,8 @@ def _require_permission(request, school_id, permission):
     if role=="school_admin":
         return True
     if role=="teacher":
+        if permission in {"class_teacher.view","class_teacher.edit"}:
+            return _permission_enabled(cur, school_id, role, permission)
         return permission in {"marks.view","marks.edit","reports.view","reports.edit"}
     con=_db()
     try:
@@ -505,6 +508,44 @@ def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid))
+
+@router.get("/app/class-teacher", response_class=HTMLResponse)
+def class_teacher_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app")
+    con=_db();cur=con.cursor()
+    if not _require_permission(request,sid,"class_teacher.view"):
+        con.close()
+        return HTMLResponse("Class Teacher access has been disabled by the School Admin.",403)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    _ensure_class_teacher_assignments_table(cur)
+    assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
+        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id
+        WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+    if not assignment:
+        con.close()
+        body="""<div class='page'><h1>🏫 My Class</h1><div class='card section'><h2>No class assigned</h2><div class='muted'>The School Admin has not linked your account to a class as Class Teacher yet.</div></div></div>"""
+        return _school_page(request,"My Class",body)
+    cid=int(assignment["class_id"])
+    students=cur.execute("""SELECT s.id,s.admission_no,s.name,s.gender,s.parent_phone,s.status
+        FROM students s WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(sid,cid)).fetchall()
+    edit_enabled=_require_permission(request,sid,"class_teacher.edit")
+    con.close()
+    rows="".join(
+        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] or 'Active'))}</td><td><a class='action' href='/app/students/history/{int(s['id'])}'>📋 History</a></td></tr>"
+        for s in students
+    )
+    controls=f"""<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:12px'>
+<a class='action' href='/app/academics/marks?class_id={cid}'>📝 Class Marks</a>
+<a class='action' href='/app/report-cards?class_id={cid}'>📄 Report Cards</a>
+</div>""" if edit_enabled else """<div class='muted' style='margin-top:12px'>Editing controls are restricted by the School Admin. You currently have view-only class access.</div>"""
+    body=f"""<div class='page'><h1>🏫 My Class</h1><div class='muted'>Class Teacher workspace. Access is limited to the class assigned to your teacher profile.</div>
+<div class='grid'><div class='card'><div class='label'>Class</div><div class='kpi'>{escape(str(assignment['class_name'] or ''))}{(' · '+escape(str(assignment['stream'] or ''))) if assignment['stream'] else ''}</div></div><div class='card'><div class='label'>Level</div><div class='kpi'>{escape(str(assignment['level'] or ''))}</div></div><div class='card'><div class='label'>Students</div><div class='kpi'>{len(students)}</div></div></div>
+<div class='card section'><h2>Class controls</h2>{controls}</div>
+<div class='card section'><h2>Students in my class ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No students are currently assigned to this class.</td></tr>"}</tbody></table></div></div></div>"""
+    return _school_page(request,"My Class",body)
 
 @router.get("/app/students", response_class=HTMLResponse)
 def students_page(request: Request):
@@ -4186,7 +4227,7 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","settings.manage"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
