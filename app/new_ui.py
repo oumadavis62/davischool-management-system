@@ -3644,6 +3644,39 @@ def classes_page(request: Request):
 <style>.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;cursor:pointer}}.teacher-select{{min-width:220px}}.teacher-btn{{white-space:nowrap}}</style>"""
     return _school_page(request,"Classes",body)
 
+@router.post("/app/classes/add")
+def classes_add(request: Request, name: str = Form(...), level: str = Form(""), stream: str = Form("")):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "classes.create"):
+        return HTMLResponse("You do not have permission to create classes.", 403)
+    name_v = name.strip()
+    level_v = level.strip()
+    stream_v = stream.strip()
+    if not name_v:
+        return HTMLResponse("Class name is required. <a href='/app/classes'>Back</a>", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        duplicate = cur.execute(
+            """SELECT id FROM classes
+               WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(stream,''))=lower(?)""",
+            (sid, name_v, stream_v)
+        ).fetchone()
+        if duplicate:
+            con.close()
+            return HTMLResponse("That class/stream already exists in this school. <a href='/app/classes'>Back</a>", 400)
+        cur.execute(
+            "INSERT INTO classes(school_id,name,level,stream) VALUES(?,?,?,?)",
+            (sid, name_v, level_v, stream_v)
+        )
+        _audit(cur, sid, request, "CLASS_CREATE", "%s %s"%(name_v, stream_v))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/classes", 303)
+
 @router.post("/app/classes/class-teacher")
 def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int=Form(...)):
     sid=_school_session(request)
