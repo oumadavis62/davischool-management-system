@@ -4,6 +4,7 @@ from html import escape
 from urllib.parse import quote
 from datetime import datetime, timedelta
 import json
+import random
 
 router = APIRouter()
 
