@@ -254,8 +254,22 @@ def _base_css():
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
 .tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-break-label{display:flex;flex-direction:column;align-items:center;justify-content:space-around;height:100%;min-height:320px;font-size:28px;font-weight:900;line-height:1;letter-spacing:2px;padding:10px 0;box-sizing:border-box}.tt-break-label span{display:block}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}.tt-teacher-sheet{margin:0 0 24px;break-inside:avoid;page-break-after:always;background:#fff}.tt-teacher-sheet:last-child{page-break-after:auto}.tt-teacher-title{font-size:18px;font-weight:900;color:#176B3A;margin:0 0 8px;padding:8px 0}.tt-teacher-grid{width:100%!important;min-width:0!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:7px}.tt-teacher-lesson{height:72px!important;position:relative!important;text-align:center!important;vertical-align:top!important}.tt-teacher-lesson b{font-size:14px!important}.tt-teacher-class{position:absolute;right:6px;bottom:5px;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:800!important;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.tt-teacher-room{position:absolute;left:6px;bottom:5px;font-size:9px;font-weight:600}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
+.tt-print-footer{text-align:center;margin-top:8px;padding-top:4px;border-top:1px solid #176B3A;font-size:8px;color:#176B3A;background:#fff}.tt-generated-at{font-weight:600}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}.tt-teacher-sheet{page-break-after:always;break-after:page;margin:0!important;padding:0!important}.tt-teacher-sheet:last-child{page-break-after:auto;break-after:auto}.tt-teacher-title{font-size:16px!important;padding:4px 0!important;margin:0 0 5px!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:4px!important;font-size:8px!important}.tt-teacher-grid th:first-child,.tt-teacher-grid td:first-child{width:70px!important}.tt-teacher-lesson{height:62px!important}.tt-teacher-lesson b{font-size:11px!important}.tt-teacher-class{font-size:8px!important;right:3px!important;bottom:3px!important}.tt-teacher-room{font-size:7px!important;left:3px!important;bottom:3px!important}}
 </style><script>
+function timetableGeneratedStamp(){
+  return new Intl.DateTimeFormat('en-KE',{
+    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+  }).format(new Date())+' EAT';
+}
+function stampTimetableFooters(root,stamp){
+  (root||document).querySelectorAll('.tt-generated-at').forEach(function(el){el.textContent=stamp;});
+}
+function printClassTimetables(){
+  stampTimetableFooters(document,timetableGeneratedStamp());
+  window.print();
+}
 function printTeacherSheet(id){
   const source=document.getElementById(id);
   if(!source){return;}
@@ -264,6 +278,7 @@ function printTeacherSheet(id){
   const styles=Array.from(document.querySelectorAll('style')).map(s=>s.outerHTML).join('');
   const clone=source.cloneNode(true);
   clone.querySelectorAll('.no-print').forEach(el=>el.remove());
+  stampTimetableFooters(clone,timetableGeneratedStamp());
   win.document.open();
   win.document.write('<!doctype html><html><head><meta charset=\"utf-8\"><title>Teacher Timetable</title>'+styles+'<style>@page{size:A4 landscape;margin:8mm}body{margin:0;background:#fff}.tt-teacher-sheet{page-break-after:auto!important;break-after:auto!important;margin:0!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}</style></head><body>'+clone.outerHTML+'</body></html>');
   win.document.close();
@@ -840,7 +855,8 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     title = f"<h3>🏫 {escape(class_label)}</h3>" if show_title else ""
     return (
         f"<div class='tt-class-sheet'>{title}"
-        f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div></div>"
+        f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div>"
+        f"<div class='tt-print-footer'>D-School Management System · Generated: <span class='tt-generated-at'></span></div></div>"
     )
 
 def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
@@ -911,7 +927,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
             row_cells.append("<td class='tt-empty'>—</td>")
         body.append("<tr>" + "".join(row_cells) + "</tr>")
     sheet_id = 'teacher-sheet-' + str(teacher_row['id'])
-    return f"<div id='{sheet_id}' class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)} <span class='no-print' style='float:right'><button type='button' class='tt-btn alt tt-teacher-print-btn' onclick=\"printTeacherSheet('{sheet_id}')\">🖨️ Print This Sheet</button></span></div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div></div>"
+    return f"<div id='{sheet_id}' class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)} <span class='no-print' style='float:right'><button type='button' class='tt-btn alt tt-teacher-print-btn' onclick=\"printTeacherSheet('{sheet_id}')\">🖨️ Print This Sheet</button></span></div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div><div class='tt-print-footer'>D-School Management System · Generated: <span class='tt-generated-at'></span></div></div>"
 
 
 def _teacher_sheets(con, sid, selected_teacher_id=None):
@@ -1053,7 +1069,7 @@ def _print_view(con, sid):
 
     return f"""<div class='tt-card'><h2>🖨️ Print Class Timetables</h2>
 <div class='tt-muted'>Every class/stream is printed as a separate timetable using the school's exact saved period and break times, with days vertically and periods horizontally.</div>
-<div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='window.print()'>🖨️ Open Print Preview</button></div>
+<div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='printClassTimetables()'>🖨️ Open Print Preview</button></div>
 <div class='tt-print-sheets'>{''.join(sheets) or '<div class="tt-notice bad">No timetable placements yet.</div>'}</div></div>"""
 
 
