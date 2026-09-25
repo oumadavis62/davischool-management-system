@@ -731,7 +731,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
 
     head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
         (
-            "<th class='tt-break-col'><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+            f"<th class='tt-break-col'><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
             if x[0] == "break" else
             f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
         )
@@ -838,7 +838,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
         key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2])
     )
     head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
-        ("<th class='tt-break-col'><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+        (f"<th class='tt-break-col'><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
          if x[0] == "break" else
          f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>")
         for x in visible_timeline
