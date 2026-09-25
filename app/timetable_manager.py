@@ -323,7 +323,7 @@ def _periods(request, con, sid):
         for b in breaks
     ) or "<tr><td colspan='4'>No breaks saved.</td></tr>"
     return f"""<div class='tt-card'><h2>🕐 Periods & Bells</h2><div class='tt-muted'>Set the number of periods and exact bell times. Saved breaks are treated as unavailable timetable time.</div>
-<form method='post' action='/app/timetable/periods/settings' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>Periods per day</span><input class='tt-field' name='periods_per_day' type='number' min='1' max='12' value='{ppd}' required></label><label><span class='tt-label'>Default period minutes</span><input class='tt-field' name='period_minutes' type='number' min='20' max='180' value='{pm}' required></label><label><span class='tt-label'>Maximum lessons per week</span><input class='tt-field' name='periods_per_week' type='number' min='1' max='84' value='{int(settings['periods_per_week'] or 35)}' required></label><div><button class='tt-btn'>💾 Save</button></div></form></div>
+<form method='post' action='/app/timetable/periods/settings' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>Periods per day</span><input class='tt-field' name='periods_per_day' type='number' min='1' max='12' value='{ppd}' required></label><label><span class='tt-label'>Default period minutes</span><input class='tt-field' name='period_minutes' type='number' min='20' max='180' value='{pm}' required></label><label><span class='tt-label'>Teaching periods per week (automatic)</span><input class='tt-field' type='number' value='{int(settings['periods_per_week'] or 35)}' readonly disabled><small class='tt-muted'>Calculated as enabled teaching days × periods per day. Breaks are not counted.</small></label><input type='hidden' name='periods_per_week' value='{int(settings['periods_per_week'] or 35)}'><div><button class='tt-btn'>💾 Save</button></div></form></div>
 <div class='tt-card'><h3>Bell / Period Times</h3><form method='post' action='/app/timetable/periods/save'><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Period</th><th>Start</th><th>End</th></tr></thead><tbody>{rows}</tbody></table></div><button class='tt-btn' style='margin-top:10px'>💾 Save Period Times</button></form></div>
 <div class='tt-card'><h3>☕ Break Periods</h3><form method='post' action='/app/timetable/break/save' class='tt-form'><label><span class='tt-label'>Break name</span><input class='tt-field' name='name' required placeholder='Tea Break / Lunch'></label><label><span class='tt-label'>Start</span><input class='tt-field' name='start_time' type='time' required></label><label><span class='tt-label'>End</span><input class='tt-field' name='end_time' type='time' required></label><div><button class='tt-btn'>💾 Save Break</button></div></form><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Name</th><th>Start</th><th>End</th><th></th></tr></thead><tbody>{br}</tbody></table></div></div>"""
 
@@ -530,7 +530,7 @@ def _generate(con, sid):
 <label><span class='tt-label'>Complexity</span><select class='tt-field' name='complexity'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
 <label class='tt-check'><input type='checkbox' name='replace_existing' value='1' checked> Replace unlocked generated placements</label>
 <div><button class='tt-btn'>🚀 Generate</button></div></form></div>
-<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
+<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>Breaks excluded</b>Weekly capacity rule</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
 
 
 def _verify(con, sid):
@@ -609,7 +609,7 @@ def _class_grid_data(con, sid, class_id=None):
         JOIN timetable_lessons l ON l.id=s.lesson_id
         JOIN classes c ON c.id=l.class_id
         JOIN subjects sub ON sub.id=l.subject_id
-        LEFT JOIN teachers t ON t.id=l.teacher_id
+        LEFT JOIN teachers t ON t.id=s.teacher_id
         LEFT JOIN timetable_rooms r ON r.id=s.room_id
         WHERE s.school_id=?
         ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
@@ -826,7 +826,12 @@ def timetable_period_settings(request: Request, periods_per_day:int=Form(...), p
         if not (1<=periods_per_day<=12 and 20<=period_minutes<=180 and 1<=periods_per_week<=84):
             return RedirectResponse("/app/timetable?tab=periods&error=Invalid+period+settings",303)
         cur=con.cursor()
-        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) ON CONFLICT(school_id) DO UPDATE SET periods_per_day=excluded.periods_per_day,period_minutes=excluded.period_minutes,periods_per_week=excluded.periods_per_week RETURNING school_id",(sid,periods_per_day,period_minutes,periods_per_week))
+        # Weekly capacity is physical: enabled teaching days × periods per day.
+        # It must never be inflated by breaks or by an arbitrary "maximum lessons"
+        # value. For 5 days × 8 periods this is always 40.
+        enabled_days=int(cur.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=? AND enabled=1",(sid,)).fetchone()["c"] or 0)
+        physical_week=max(1, enabled_days or 5) * int(periods_per_day)
+        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) ON CONFLICT(school_id) DO UPDATE SET periods_per_day=excluded.periods_per_day,period_minutes=excluded.period_minutes,periods_per_week=excluded.periods_per_week RETURNING school_id",(sid,periods_per_day,period_minutes,physical_week))
         cur.execute("DELETE FROM timetable_periods WHERE school_id=? AND period_no>?",(sid,periods_per_day))
         base=datetime.strptime("08:00","%H:%M")
         for n in range(1,periods_per_day+1):
