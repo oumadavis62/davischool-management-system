@@ -1621,7 +1621,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Use multiple fast randomized passes so the greedy solver can recover\n        # from an early placement that would otherwise leave later lesson cards\n        # stranded. The best complete/most-filled pass is retained.\n        # Keep the retry count in a clearly scoped variable.  Older deployed
         # versions could reach the return path with the retry-count name
         # undefined, which made Generate fail before any timetable was saved.
-        attempt_count={"normal":100,"large":150,"huge":200}.get(complexity,100)
+        # Keep generation inside a normal web-request time budget.
+        # The solver retains the best placement found, so bounded randomized
+        # passes prevent Render from appearing to ignore the Generate button.
+        attempt_count={"normal":20,"large":30,"huge":40}.get(complexity,20)
         for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
