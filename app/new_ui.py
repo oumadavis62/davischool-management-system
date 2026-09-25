@@ -3791,7 +3791,7 @@ def users_page(request: Request):
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 <div class='card section'><h2>Create user</h2><form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
-<input name='full_name' required placeholder='Full name' class='field'><input name='email' type='email' required placeholder='Email' class='field'><input name='password' type='password' required minlength='8' placeholder='Temporary password' class='field'>
+<input name='full_name' required placeholder='Full name' class='field'><input name='email' type='email' required placeholder='Email' class='field'><input name='password' type='password' required minlength='8' placeholder='Password (minimum 8 characters)' class='field'><input name='password_confirm' type='password' required minlength='8' placeholder='Confirm password' class='field'>
 <select name='role' class='field'><option value='school_admin'>School Admin</option><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <button class='btn'>Create Account</button></form></div>
@@ -3822,7 +3822,7 @@ def users_edit_page(request: Request, uid: int):
     body=f"""<div class='page'><h1>✏️ Edit User</h1><div class='muted'>Update the account details and linked profile.</div>
 <div class='card section'><form method='post' action='/app/users/edit/{uid}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
-<input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'>
+<input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'><input name='password_confirm' type='password' minlength='8' placeholder='Confirm new password' class='field'>
 <select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div style='grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end'><a href='/app/users' style='padding:11px 16px;border:1px solid #dbe2ea;border-radius:9px;text-decoration:none;color:#334155'>Cancel</a><button class='btn'>💾 Save Changes</button></div></form></div></div>
@@ -3830,7 +3830,7 @@ def users_edit_page(request: Request, uid: int):
     return _school_page(request,"Edit User",body)
 
 @router.post("/app/users/edit/{uid}")
-def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
+def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), password_confirm:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -3852,9 +3852,10 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if role in ("student","parent") and not stid: con.close(); return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
     if role not in ("teacher","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
     from app.main import hash_password
-    if password.strip() and len(password.strip())<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
-    if password.strip():
-        cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password.strip()),role,tid,stid,uid,sid))
+    if password and len(password)<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    if password and password != password_confirm: con.close(); return HTMLResponse("New password and confirmation do not match. <a href='/app/users'>Back</a>",400)
+    if password:
+        cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password),role,tid,stid,uid,sid))
     else:
         cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
     if role=="teacher" and tid:
@@ -3894,12 +3895,13 @@ def users_delete(request: Request, uid: int):
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
-def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
+def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), password_confirm:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
     if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    if password != password_confirm:return HTMLResponse("Password and confirmation do not match. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     con=_db();cur=con.cursor()
