@@ -731,8 +731,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
 
     head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
         (
-            f"<th class='tt-break-col'>☕<br><b>{escape(str(x[3]['name']))}</b>"
-            f"<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+            "<th class='tt-break-col' aria-label='Break'></th>"
             if x[0] == "break" else
             f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
         )
@@ -761,8 +760,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
         for kind, st, et, item in visible_timeline:
             if kind == "break":
                 row_cells.append(
-                    f"<td class='tt-break'>☕<br><b>{escape(str(item['name']))}</b><br>"
-                    f"<small>{escape(str(item['start_time']))}-{escape(str(item['end_time']))}</small></td>"
+                    "<td class='tt-break' aria-label='Break'></td>"
                 )
                 continue
 
@@ -839,7 +837,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
         key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2])
     )
     head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
-        (f"<th class='tt-break-col'>☕<br><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+        ("<th class='tt-break-col' aria-label='Break'></th>"
          if x[0] == "break" else
          f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>")
         for x in visible_timeline
@@ -857,7 +855,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
         skip_periods = set()
         for kind, st, et, item in visible_timeline:
             if kind == "break":
-                row_cells.append(f"<td class='tt-break'>☕<br><b>{escape(str(item['name']))}</b><br><small>{escape(str(item['start_time']))}-{escape(str(item['end_time']))}</small></td>")
+                row_cells.append("<td class='tt-break' aria-label='Break'></td>")
                 continue
             pno = int(item["period_no"])
             if pno in skip_periods:
