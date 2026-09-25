@@ -1159,7 +1159,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                                 # repeatedly using the first available period.
                                 same_day=sum(1 for o in occ if o["day_name"]==day and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
                                 same_subject=sum(1 for o in occ if o["day_name"]==day and int(o.get("subject_id") or 0)==int(lesson["subject_id"]) and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
-                                score=(same_subject*20+same_day*5+days.index(day),int(p["period_no"]))
+                                same_period=sum(1 for o in occ if int(o.get("period_no") or 0)==int(p["period_no"]) and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
+                                # Spread a class across the week and across periods
+                                # instead of repeatedly selecting Period 1.
+                                score=(same_day*100+same_period*20+same_subject*15+days.index(day),int(p["period_no"]))
                                 candidates.append((score,day,p,room))
                     if candidates:
                         candidates.sort(key=lambda x:x[0])
