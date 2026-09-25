@@ -530,7 +530,7 @@ def _generate(con, sid):
 <label><span class='tt-label'>Complexity</span><select class='tt-field' name='complexity'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
 <label class='tt-check'><input type='checkbox' name='replace_existing' value='1' checked> Replace unlocked generated placements</label>
 <div><button class='tt-btn'>🚀 Generate</button></div></form></div>
-<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>{int(slot_count)}</b>Generated occurrences across all classes</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
+<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
 
 
 def _verify(con, sid):
@@ -831,9 +831,11 @@ def timetable_period_settings(request: Request, periods_per_day:int=Form(...), p
         base=datetime.strptime("08:00","%H:%M")
         for n in range(1,periods_per_day+1):
             p=cur.execute("SELECT id FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,n)).fetchone()
+            st=(base+timedelta(minutes=(n-1)*period_minutes)).strftime("%H:%M")
+            et=(base+timedelta(minutes=n*period_minutes)).strftime("%H:%M")
             if not p:
-                st=(base+timedelta(minutes=(n-1)*period_minutes)).strftime("%H:%M");et=(base+timedelta(minutes=n*period_minutes)).strftime("%H:%M")
                 cur.execute("INSERT INTO timetable_periods(school_id,period_no,start_time,end_time) VALUES(?,?,?,?)",(sid,n,st,et))
+
         con.commit()
         return RedirectResponse("/app/timetable?tab=periods&msg=Period+settings+saved",303)
     finally: con.close()
