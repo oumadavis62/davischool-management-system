@@ -1422,7 +1422,13 @@ def school_system_settings(sub: str, request: Request):
         rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c[0]}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
         panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add</button></form></div></div>"""
     elif sub=="user-management":
-        urows = "".join([f"<tr><td style='padding:10px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td><a href='{base_path}/delete-user/{u['id']}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
+        urows = "".join([
+            f"<tr><td style='padding:10px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td>" +
+            (f"<span style='display:inline-block;padding:5px 8px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
+             if str(u['role'] or '')=="school_admin" else
+             f"<a href='{base_path}/delete-user/{u['id']}' onclick=\"return confirm('Delete {str(u['full_name'] or 'this user')} account? This cannot be undone.')\" style='background:#fee2e2;color:#991b1b;padding:5px 8px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️ Delete</a>") +
+            f"</td></tr>" for u in users
+        ]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
         teacher_opts=''.join([f"<option value='{x['id']}'>{x['name']} — {x['id_no'] or ''}</option>" for x in teachers_for_users])
         student_opts=''.join([f"<option value='{x['id']}'>{x['name']} — {x['admission_no'] or ''}</option>" for x in students_for_users])
         panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px'><div style='padding:14px'><b>👥 Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User / Portal Account</b><form method='post' action='{base_path}/add-user'><input name='full_name' required class='input-field' placeholder='Name'><input name='email' required class='input-field' placeholder='Email'><input name='password' required class='input-field' placeholder='Password'><select name='role' class='input-field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='school_admin'>School Admin</option></select><select name='teacher_id' class='input-field'><option value=''>Link Teacher (optional)</option>{teacher_opts}</select><select name='student_id' class='input-field'><option value=''>Link Student (for parent/student)</option>{student_opts}</select><button class='add-btn'>Create Account</button></form></div></div>"""
@@ -1491,7 +1497,16 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
 def sys_del_user(request: Request, uid: int):
     school_obj=get_school_obj(request)
     if not school_obj or request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/",303)
-    con=get_db(); con.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
+    con=get_db(); cur=con.cursor()
+    user=cur.execute("SELECT role FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"])).fetchone()
+    if not user:
+        con.close()
+        return RedirectResponse("/school/system-settings/user-management",303)
+    if str(user["role"] or "")=="school_admin" and request.session.get("role")!="super_admin":
+        con.close()
+        return HTMLResponse("School Admin accounts can only be deleted by the Super Admin. <a href='/school/system-settings/user-management'>Back</a>",403)
+    cur.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"]))
+    con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/backup/download")
 def sys_backup_download(request: Request):
     school_obj=get_school_obj(request)
