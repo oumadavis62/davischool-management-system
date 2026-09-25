@@ -1400,14 +1400,18 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         )
 
     def solve(enforce_availability,enforce_preferred):
-        """Fast deterministic greedy solver with bounded restarts.
+        """Automatic timetable solver.
 
-        The previous MRV/backtracking implementation could spend the whole
-        web request exploring a large search tree. This version prebuilds the
-        weekly occurrences, tries the most constrained cards first, and uses
-        bounded deterministic restarts. It always returns promptly.
+        Rules enforced here:
+        - one subject occurrence per class/stream per day;
+        - a double is one occurrence occupying exactly two consecutive periods;
+        - doubles may start only at 1,3,5,7,...;
+        - breaks, class clashes, teacher clashes and fixed-room clashes are hard;
+        - weekly occurrences are deliberately spread across different days.
         """
         import random
+
+        lesson_by_id={int(x["id"]):x for x in lessons}
         occurrences=[]
         for lesson in lessons:
             lid=int(lesson["id"])
@@ -1416,7 +1420,16 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             for n in range(need):
                 occurrences.append((lid,n))
 
-        lesson_by_id={int(x["id"]):x for x in lessons}
+        # If the requested weekly count exceeds the number of teaching days,
+        # the once-per-day rule makes the request mathematically impossible.
+        day_count=max(1,len(days))
+        impossible=set()
+        for lesson in lessons:
+            lid=int(lesson["id"])
+            need=int(lesson.get("lessons_per_week") or 0)
+            if need>day_count:
+                impossible.add(lid)
+
         all_candidates={}
         for lid,_ in occurrences:
             lesson=lesson_by_id[lid]
@@ -1425,23 +1438,50 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             for day in days:
                 for p in periods:
                     pno=int(p["period_no"])
-                    if pno+duration-1 > max(pmap):
+                    if pno+duration-1>max(pmap):
                         continue
                     if not valid_duration_start(pno,duration):
                         continue
-                    # Candidate is independent of other generated placements;
-                    # hard collisions are checked again against occupancy.
                     if crosses_break(pno,duration):
                         continue
                     cand.append((day,pno))
             all_candidates[lid]=cand
 
-        # Harder cards first: fewer physical options, longer duration, then
-        # higher weekly demand.
+        def key_for(lid):
+            return (tuple(sorted(lesson_classes[lid])),int(lesson_by_id[lid]["subject_id"]))
+
+        # Reserve preferred days for each class/subject before choosing periods.
+        # This prevents the greedy scheduler from consuming all five days with
+        # unrelated cards and then leaving a subject unplaceable.
+        def day_score(lesson,day,occupied):
+            lid=int(lesson["id"])
+            classes=lesson_classes[lid]
+            teachers=lesson_teachers[lid]
+            subject=int(lesson["subject_id"])
+            class_day=sum(
+                1 for o in occupied
+                if str(o["day_name"])==day
+                and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+            )
+            teacher_day=sum(
+                1 for o in occupied
+                if str(o["day_name"])==day
+                and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
+            )
+            subject_day=sum(
+                1 for o in occupied
+                if str(o["day_name"])==day
+                and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+                and int(o.get("subject_id") or 0)==subject
+            )
+            return subject_day*100000+class_day*100+teacher_day*80+days.index(day)
+
+        # Harder requirements first: doubles/triples, high weekly demand,
+        # then cards with fewer physical choices.
         occurrences.sort(key=lambda x:(
-            len(all_candidates.get(x[0],[])),
             -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
             -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
+            len(all_candidates.get(x[0],[])),
             x[0],x[1]
         ))
 
@@ -1452,57 +1492,68 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             pending=list(occurrences)
             rng.shuffle(pending)
             pending.sort(key=lambda x:(
-                len(all_candidates.get(x[0],[])),
                 -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
-                x[0]
+                -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
+                len(all_candidates.get(x[0],[])),
+                x[0],x[1]
             ))
 
-            # Prefer spread across days/periods, while keeping a small
-            # deterministic random component so repeated attempts escape
-            # unlucky greedy choices.
             for lid,occ_no in pending:
                 lesson=lesson_by_id[lid]
-                choices=[]
-                for day,pno in all_candidates.get(lid,[]):
-                    room=candidate(
-                        lesson,day,pno,occupied,
-                        enforce_availability,enforce_preferred
-                    )
-                    if room is not None or not lesson.get("room_id"):
-                        choices.append((spread_score(lesson,day,pno,occupied),rng.random(),day,pno,room))
-                choices.sort(key=lambda x:(x[0],x[1]))
-                if not choices:
+                if lid in impossible:
                     continue
-                # Try a small shortlist; if the first choice later causes
-                # failure for another card, the restart changes the ordering.
-                _,_,day,pno,room=choices[0]
-                row={
-                    "lesson_id":lid,
-                    "class_id":lesson["class_id"],
-                    "teacher_id":lesson["teacher_id"],
-                    "subject_id":lesson["subject_id"],
-                    "room_id":room,
-                    "day_name":day,
-                    "period_no":pno,
-                    "duration":max(1,int(lesson.get("duration") or 1))
-                }
-                occupied.append(row)
-                placed.append(row)
-            complete=(len(placed)==len(occurrences))
+
+                choices=[]
+                # First score days so every weekly occurrence naturally moves
+                # to a different day whenever the hard once-per-day rule allows.
+                day_order=sorted(days,key=lambda d:(day_score(lesson,d,occupied),rng.random()))
+                for day in day_order:
+                    period_choices=[]
+                    for d,pno in all_candidates.get(lid,[]):
+                        if d!=day:
+                            continue
+                        room=candidate(lesson,d,pno,occupied,enforce_availability,enforce_preferred)
+                        if room is not None or not lesson.get("room_id"):
+                            # Count actual free physical periods around this
+                            # candidate. Prefer central periods only after day
+                            # distribution has been satisfied.
+                            period_penalty=int(pno)
+                            period_choices.append((period_penalty,rng.random(),pno,room))
+                    period_choices.sort(key=lambda x:(x[0],x[1]))
+                    if period_choices:
+                        _,_,pno,room=period_choices[0]
+                        row={
+                            "lesson_id":lid,
+                            "class_id":lesson["class_id"],
+                            "teacher_id":lesson["teacher_id"],
+                            "subject_id":lesson["subject_id"],
+                            "room_id":room,
+                            "day_name":day,
+                            "period_no":pno,
+                            "duration":max(1,int(lesson.get("duration") or 1))
+                        }
+                        occupied.append(row)
+                        placed.append(row)
+                        break
+
+            complete=(len(placed)==len(occurrences) and not impossible)
             return complete,placed
 
         best=(False,[])
-        # Keep the request safely below Render's web timeout. More complex
-        # timetables get a few additional bounded attempts, never unbounded DFS.
-        attempts={"normal":20,"large":30,"huge":40}.get(complexity,20)
+        attempts={"normal":35,"large":55,"huge":75}.get(complexity,35)
         for attempt in range(attempts):
-            complete,trial=run_once(1009+attempt)
-            if sum(max(1,int(x.get("duration") or 1)) for x in trial) > sum(max(1,int(x.get("duration") or 1)) for x in best[1]):
+            complete,trial=run_once(2009+attempt)
+            score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
+            # Reward completed occurrence counts first, then physical periods.
+            trial_key=(1 if complete else 0,len(trial),score)
+            best_key=(1 if best[0] else 0,len(best[1]),sum(max(1,int(x.get("duration") or 1)) for x in best[1]))
+            if trial_key>best_key:
                 best=(complete,trial)
             if complete:
                 break
 
         return best[0],best[1],attempts
+
     # Strict first; relaxed/draft automatically soften only availability and
     # preferred constraints. Hard timetable collisions and breaks remain hard.
     modes=[(True,True)]
