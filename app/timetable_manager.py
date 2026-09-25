@@ -279,7 +279,11 @@ def timetable_manager(request: Request):
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
         elif tab == "print": body = _print_view(con, sid)
-        else: body = _timetable(request, con, sid)
+        else:
+            try:
+                body = _timetable(request, con, sid)
+            except Exception as exc:
+                body = f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice bad'>Unable to display the timetable. Please regenerate it after checking Periods & Bells and Breaks. Detail: {escape(str(exc))}</div></div>"
         return _layout(request, tab, body)
     finally:
         con.close()
@@ -503,22 +507,30 @@ def _constraints(con, sid):
 <div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>Scope</th><th>Type</th><th>Value</th><th>Priority</th><th>Status</th><th></th></tr></thead><tbody>{html or '<tr><td colspan=6>No constraints configured.</td></tr>'}</tbody></table></div></div>"""
 
 
+def _weekly_period_capacity(con, sid):
+    """Physical teaching periods in one school week; breaks are not periods."""
+    day_count=con.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=? AND enabled=1",(sid,)).fetchone()["c"]
+    period_count=con.execute("SELECT COUNT(*) c FROM timetable_periods WHERE school_id=?",(sid,)).fetchone()["c"]
+    return int(day_count or 0) * int(period_count or 0)
+
+
 def _generate(con, sid):
     settings=con.execute("SELECT * FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
     classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
     lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?", (sid,)).fetchone()["c"]
     slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=?", (sid,)).fetchone()["c"]
+    weekly_capacity=_weekly_period_capacity(con,sid)
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     complexity=str(settings["complexity"] if settings else "normal")
     relaxation=str(settings["relaxation"] if settings else "relaxed")
-    return f"""<div class='tt-card'><h2>🚀 Generate Timetable</h2><div class='tt-muted'>Generate from lesson cards, periods, breaks, rooms and constraints. The generator first creates a draft and then applies constraints according to the selected mode.</div>
+    return f"""<div class='tt-card'><h2>🚀 Generate Timetable</h2><div class='tt-muted'>Generate from lesson cards, periods, breaks, rooms and constraints. Weekly capacity is the physical teaching periods per class; breaks are intervals between periods and never count toward that capacity.</div>
 <form method='post' action='/app/timetable/generate/new' class='tt-form' style='margin-top:12px'>
 <label><span class='tt-label'>Class filter (optional)</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{opts}</select></label>
 <label><span class='tt-label'>Mode</span><select class='tt-field' name='mode'><option value='draft'>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label>
 <label><span class='tt-label'>Complexity</span><select class='tt-field' name='complexity'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
 <label class='tt-check'><input type='checkbox' name='replace_existing' value='1' checked> Replace unlocked generated placements</label>
 <div><button class='tt-btn'>🚀 Generate</button></div></form></div>
-<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(slot_count)}</b>Placed lesson cards</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
+<div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>{int(slot_count)}</b>Generated occurrences across all classes</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
 
 
 def _verify(con, sid):
