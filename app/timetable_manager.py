@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-period{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:150px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
+.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:80px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -614,39 +614,36 @@ def _class_grid_data(con, sid, class_id=None):
 
 
 def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
+    """Render one class/stream exactly like aSc: days vertically, periods horizontally."""
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
-    head = "<tr><th>PERIOD / TIME</th>" + "".join(
-        f"<th>{escape(str(day)).upper()}</th>" for day in days
+    head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
+        f"<th>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
+        for p in periods
     ) + "</tr>"
 
-    cells_by_day = {}
-    period_numbers = [int(x["period_no"]) for x in periods]
-    for day in days:
-        cells_by_day[day] = {}
-        for p in periods:
-            br = next(
-                (b for b in breaks
-                 if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"]))
-                 and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),
-                None
-            )
-            cells_by_day[day][int(p["period_no"])] = br
-
-    covered = set()
-    body = []
+    period_numbers = [int(p["period_no"]) for p in periods]
+    break_by_period = {}
     for p in periods:
-        pno = int(p["period_no"])
-        row_cells = [
-            f"<th class='tt-period'><b>P{pno}</b><br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
-        ]
-        for day in days:
-            if (day, pno) in covered:
+        break_by_period[int(p["period_no"])] = next(
+            (b for b in breaks
+             if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"]))
+             and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),
+            None
+        )
+
+    body = []
+    for day in days:
+        row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
+        covered = set()
+        for p in periods:
+            pno = int(p["period_no"])
+            if pno in covered:
                 continue
 
-            br = cells_by_day[day][pno]
+            br = break_by_period[pno]
             if br:
                 row_cells.append(
-                    f"<td class='tt-break' title='{escape(str(br['name']))}'>☕ {escape(str(br['name']))}</td>"
+                    f"<td class='tt-break'>☕ {escape(str(br['name']))}</td>"
                 )
                 continue
 
@@ -656,25 +653,24 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 continue
 
             duration = max(1, int(lesson["duration"] or 1))
-            rowspan = 1
-            for next_p in range(pno + 1, pno + duration):
-                if next_p not in period_numbers:
+            span = 1
+            for next_p in period_numbers:
+                if next_p <= pno or next_p > pno + duration - 1:
+                    continue
+                if next_p != pno + span:
                     break
-                next_break = cells_by_day[day][next_p]
-                next_lesson = grid.get((day, next_p))
-                if next_break or not next_lesson or int(next_lesson["lesson_id"]) != int(lesson["lesson_id"]):
+                if break_by_period.get(next_p) or not grid.get((day, next_p)):
                     break
-                rowspan += 1
-
-            if rowspan > 1:
-                for next_p in range(pno + 1, pno + rowspan):
-                    covered.add((day, next_p))
+                if int(grid[(day, next_p)]["lesson_id"]) != int(lesson["lesson_id"]):
+                    break
+                covered.add(next_p)
+                span += 1
 
             teachers = str(lesson["teacher"] or "")
             room = str(lesson["room"] or "")
-            duration_note = f"<br><small>×{duration} periods</small>" if duration > 1 else ""
+            duration_note = f"<br><small>×{span} periods</small>" if span > 1 else ""
             row_cells.append(
-                f"<td class='tt-lesson' rowspan='{rowspan}'>"
+                f"<td class='tt-lesson' colspan='{span}'>"
                 f"<b>{escape(str(lesson['subject']))}</b>"
                 f"<br><span>{escape(teachers)}</span>"
                 f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
