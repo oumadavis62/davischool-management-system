@@ -1345,8 +1345,11 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     room_id=rid
                     break
             # Room is optional when the Lesson Card says "Any available room".
-            # Never block an otherwise valid lesson merely because all rooms
-            # are occupied or no rooms have been configured.
+            # Return a distinct sentinel when no room is available. None is
+            # reserved for a hard placement conflict, so the generator must
+            # never mistake a conflicting slot for a valid optional-room slot.
+            if room_id is None:
+                return -1
         return room_id
 
     def spread_score(lesson,day,pno,occ):
@@ -1513,7 +1516,12 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         if d!=day:
                             continue
                         room=candidate(lesson,d,pno,occupied,enforce_availability,enforce_preferred)
-                        if room is not None or not lesson.get("room_id"):
+                        # candidate() returns None only for a hard conflict;
+                        # -1 means the lesson is valid but can run without a
+                        # room because the room is optional.
+                        if room is not None:
+                            if room == -1:
+                                room = None
                             # Spread lessons through the day's physical
                             # periods instead of repeatedly choosing P1.
                             classes=lesson_classes[int(lid)]
