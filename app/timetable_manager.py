@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}
+.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-period{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:150px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -561,85 +561,209 @@ def _verify(con, sid):
 <div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{''.join(f"<tr><td>⚠️</td><td>{escape(x)}</td></tr>" for x in issues) if issues else '<tr><td>✅</td><td>Verification passed for the current basic checks.</td></tr>'}</tbody></table></div></div>"""
 
 
-def _timetable(request, con, sid):
-    classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    teachers=con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    rooms=con.execute("SELECT id,name FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY name",(sid,)).fetchall()
-    periods=con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
-    breaks=con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time",(sid,)).fetchall()
-    days=[r["name"] for r in con.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
-    class_filter=request.query_params.get("class_id","")
-    teacher_filter=request.query_params.get("teacher_id","")
-    room_filter=request.query_params.get("room_id","")
-    where=["s.school_id=?"];params=[sid]
-    if str(class_filter).isdigit(): where.append("(l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))");params.extend([int(class_filter),sid,int(class_filter)])
-    if str(teacher_filter).isdigit(): where.append("(l.teacher_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))");params.extend([int(teacher_filter),sid,int(teacher_filter)])
-    if str(room_filter).isdigit(): where.append("s.room_id=?");params.append(int(room_filter))
-    rows=con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
+def _class_grid_data(con, sid, class_id=None):
+    """Return timetable placements keyed by class, day and period for aSc-style grids."""
+    classes = con.execute(
+        "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",
+        (sid,)
+    ).fetchall()
+    periods = con.execute(
+        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",
+        (sid,)
+    ).fetchall()
+    days = [r["name"] for r in con.execute(
+        "SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",
+        (sid,)
+    ).fetchall()]
+    breaks = con.execute(
+        "SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",
+        (sid,)
+    ).fetchall()
+
+    rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
-        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
-        LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=s.room_id
-        WHERE """+" AND ".join(where)+""" ORDER BY CASE s.day_name WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 ELSE 6 END,s.period_no""",params).fetchall()
-    for r in rows:
-        cr=con.execute("SELECT c.name,c.stream FROM timetable_lesson_classes lc JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream",(sid,r["lesson_id"])).fetchall()
-        tr=con.execute("SELECT t.name FROM timetable_lesson_teachers lt JOIN teachers t ON t.id=lt.teacher_id WHERE lt.school_id=? AND lt.lesson_id=? ORDER BY lt.id",(sid,r["lesson_id"])).fetchall()
-        r["combined_classes"]=", ".join(f"{x['name']}{(' — '+x['stream']) if x['stream'] else ''}" for x in cr) or f"{r['class_name']}{(' — '+r['stream']) if r['stream'] else ''}"
-        r["combined_teachers"]=", ".join(str(x["name"]) for x in tr) or str(r["teacher"] or "")
-    slot_map={(r["day_name"],int(r["period_no"])):r for r in rows}
-    header="<tr><th>DAY</th>"+"".join(f"<th>P{int(p['period_no'])}<br>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</th>" for p in periods)+"</tr>"
-    body=""
-    for day in days:
-        cells=[]
-        for p in periods:
-            br=next((b for b in breaks if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"])) and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),None)
-            if br:
-                cells.append(f"<td class='tt-break'>☕ {escape(str(br['name']))}</td>")
+        FROM timetable_slots s
+        JOIN timetable_lessons l ON l.id=s.lesson_id
+        JOIN classes c ON c.id=l.class_id
+        JOIN subjects sub ON sub.id=l.subject_id
+        LEFT JOIN teachers t ON t.id=l.teacher_id
+        LEFT JOIN timetable_rooms r ON r.id=s.room_id
+        WHERE s.school_id=?
+        ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
+
+    lesson_classes = {}
+    for row in rows:
+        lid = int(row["lesson_id"])
+        lesson_classes[lid] = {
+            int(x["class_id"]) for x in con.execute(
+                "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",
+                (sid, lid)
+            ).fetchall()
+        } or {int(row["class_id"])}
+
+    grids = {}
+    selected_ids = {int(class_id)} if class_id else {int(c["id"]) for c in classes}
+    for row in rows:
+        lid = int(row["lesson_id"])
+        for cid in lesson_classes.get(lid, {int(row["class_id"])}):
+            if cid not in selected_ids:
                 continue
-            r=slot_map.get((day,int(p["period_no"])))
-            if not r:
-                cells.append("<td>—</td>")
-            else:
-                cells.append(f"<td><b>{escape(str(r['subject']))}</b><br>{escape(str(r['combined_classes']))}<br>{escape(str(r['combined_teachers']))}{('<br>'+escape(str(r['room']))) if r['room'] else ''}<br><small>{'🔒 Locked' if int(r['locked'] or 0) else ''}</small></td>")
-        body+=f"<tr><th>{escape(day)}</th>{''.join(cells)}</tr>"
-    class_opts="".join(f"<option value='{c['id']}' {'selected' if str(class_filter)==str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    teacher_opts="".join(f"<option value='{t['id']}' {'selected' if str(teacher_filter)==str(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
-    room_opts="".join(f"<option value='{r['id']}' {'selected' if str(room_filter)==str(r['id']) else ''}>{escape(str(r['name']))}</option>" for r in rooms)
-    placement_parts=[]
-    for r in rows:
-        if int(r["locked"] or 0):
-            action="🔒"
-        else:
-            action=(f"<form method='post' action='/app/timetable/placement/lock/{r['id']}' style='display:inline'><button class='tt-btn alt'>🔒</button></form> "
-                    f"<form method='post' action='/app/timetable/placement/delete/{r['id']}' style='display:inline' onsubmit=" + '"return confirm(\'Remove this placement?\')" ' + "><button class='tt-btn danger'>🗑️</button></form>")
-        placement_parts.append(
-            f"<tr><td>{escape(str(r['combined_classes']))}</td><td>{escape(str(r['day_name']))}</td>"
-            f"<td>P{int(r['period_no'])}</td><td><b>{escape(str(r['subject']))}</b></td><td>{escape(str(r['combined_teachers']))}</td>"
-            f"<td>{escape(str(r['room'] or ''))}</td><td>{'🔒' if int(r['locked'] or 0) else ''}</td><td>{action}</td></tr>"
-        )
-    placement_rows="".join(placement_parts)
-    move_id=request.query_params.get("move","")
-    move_form=""
-    if str(move_id).isdigit():
-        moving=con.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,c.name class_name,c.stream,sub.name subject FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id WHERE s.id=? AND s.school_id=?",(int(move_id),sid)).fetchone()
-        if moving:
-            day_opts="".join(f"<option {'selected' if d==moving['day_name'] else ''}>{escape(d)}</option>" for d in days)
-            period_opts="".join(f"<option value='{p['period_no']}' {'selected' if int(p['period_no'])==int(moving['period_no']) else ''}>P{p['period_no']} — {escape(str(p['start_time']))}-{escape(str(p['end_time']))}</option>" for p in periods)
-            move_form=f"""<div class='tt-card'><h3>↔️ Move placement</h3><div class='tt-muted'>{escape(str(moving['subject']))} — {escape(str(moving['class_name']))} {escape(str(moving['stream'] or ''))}</div><form method='post' action='/app/timetable/placement/move/{moving['id']}' class='tt-form' style='margin-top:10px'><label><span class='tt-label'>Day</span><select class='tt-field' name='day_name'>{day_opts}</select></label><label><span class='tt-label'>Start period</span><select class='tt-field' name='period_no'>{period_opts}</select></label><label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>Any / unchanged</option>{room_opts}</select></label><div><button class='tt-btn'>💾 Move</button> <a class='tt-btn alt' href='/app/timetable?tab=timetable'>Cancel</a></div></form></div>"""
-    return f"""{move_form}<div class='tt-card'><h2>🗓️ Timetable Grid</h2><div class='tt-muted'>Days run vertically and periods/times horizontally. Use the filters to inspect class, teacher or room views. Locked placements are protected from regeneration.</div>
-<form method='get' class='tt-form' style='margin-top:12px'><input type='hidden' name='tab' value='timetable'><label><span class='tt-label'>Class</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label><label><span class='tt-label'>Teacher</span><select class='tt-field' name='teacher_id'><option value=''>All teachers</option>{teacher_opts}</select></label><label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>All rooms</option>{room_opts}</select></label><div><button class='tt-btn'>🔎 View</button></div></form>
-<div class='tt-scroll' style='margin-top:12px'><table class='tt-week'>{header}{body or '<tr><td colspan=20>No timetable placements yet.</td></tr>'}</table></div>
-<div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print</a></div></div>
-<div class='tt-card'><h3>Placement control</h3><div class='tt-muted'>Lock a lesson to protect it from future generation. Delete an unlocked placement to return that lesson card to the unplaced pool.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Class</th><th>Day</th><th>Period</th><th>Subject</th><th>Teacher</th><th>Room</th><th></th><th>Action</th></tr></thead><tbody>{placement_rows or '<tr><td colspan=8>No placements.</td></tr>'}</tbody></table></div></div>"""
+            grids.setdefault(cid, {})[(str(row["day_name"]), int(row["period_no"]))] = row
+
+    return classes, periods, days, breaks, grids
+
+
+def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
+    class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
+    head = "<tr><th>PERIOD / TIME</th>" + "".join(
+        f"<th>{escape(str(day)).upper()}</th>" for day in days
+    ) + "</tr>"
+
+    cells_by_day = {}
+    period_numbers = [int(x["period_no"]) for x in periods]
+    for day in days:
+        cells_by_day[day] = {}
+        for p in periods:
+            br = next(
+                (b for b in breaks
+                 if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"]))
+                 and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),
+                None
+            )
+            cells_by_day[day][int(p["period_no"])] = br
+
+    covered = set()
+    body = []
+    for p in periods:
+        pno = int(p["period_no"])
+        row_cells = [
+            f"<th class='tt-period'><b>P{pno}</b><br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
+        ]
+        for day in days:
+            if (day, pno) in covered:
+                continue
+
+            br = cells_by_day[day][pno]
+            if br:
+                row_cells.append(
+                    f"<td class='tt-break' title='{escape(str(br['name']))}'>☕ {escape(str(br['name']))}</td>"
+                )
+                continue
+
+            lesson = grid.get((day, pno))
+            if not lesson:
+                row_cells.append("<td class='tt-empty'>—</td>")
+                continue
+
+            duration = max(1, int(lesson["duration"] or 1))
+            rowspan = 1
+            for next_p in range(pno + 1, pno + duration):
+                if next_p not in period_numbers:
+                    break
+                next_break = cells_by_day[day][next_p]
+                next_lesson = grid.get((day, next_p))
+                if next_break or not next_lesson or int(next_lesson["lesson_id"]) != int(lesson["lesson_id"]):
+                    break
+                rowspan += 1
+
+            if rowspan > 1:
+                for next_p in range(pno + 1, pno + rowspan):
+                    covered.add((day, next_p))
+
+            teachers = str(lesson["teacher"] or "")
+            room = str(lesson["room"] or "")
+            duration_note = f"<br><small>×{duration} periods</small>" if duration > 1 else ""
+            row_cells.append(
+                f"<td class='tt-lesson' rowspan='{rowspan}'>"
+                f"<b>{escape(str(lesson['subject']))}</b>"
+                f"<br><span>{escape(teachers)}</span>"
+                f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
+                f"{duration_note}</td>"
+            )
+        body.append("<tr>" + "".join(row_cells) + "</tr>")
+
+    title = f"<h3>🏫 {escape(class_label)}</h3>" if show_title else ""
+    return (
+        f"<div class='tt-class-sheet'>{title}"
+        f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div></div>"
+    )
+
+
+def _timetable(request, con, sid):
+    class_filter = request.query_params.get("class_id", "")
+    teacher_filter = request.query_params.get("teacher_id", "")
+    room_filter = request.query_params.get("room_id", "")
+
+    classes, periods, days, breaks, grids = _class_grid_data(
+        con, sid, int(class_filter) if str(class_filter).isdigit() else None
+    )
+
+    if str(teacher_filter).isdigit() or str(room_filter).isdigit():
+        where = ["s.school_id=?"]
+        params = [sid]
+        if str(teacher_filter).isdigit():
+            where.append("(l.teacher_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))")
+            params.extend([int(teacher_filter), sid, int(teacher_filter)])
+        if str(room_filter).isdigit():
+            where.append("s.room_id=?")
+            params.append(int(room_filter))
+        filtered = con.execute(
+            """SELECT DISTINCT s.lesson_id FROM timetable_slots s
+               JOIN timetable_lessons l ON l.id=s.lesson_id
+               WHERE """ + " AND ".join(where),
+            params
+        ).fetchall()
+        allowed_lesson_ids = {int(x["lesson_id"]) for x in filtered}
+        for cid, grid in grids.items():
+            grids[cid] = {
+                key: row for key, row in grid.items()
+                if int(row["lesson_id"]) in allowed_lesson_ids
+            }
+
+    teacher_opts = "".join(
+        f"<option value='{t['id']}' {'selected' if str(teacher_filter)==str(t['id']) else ''}>{escape(str(t['name']))}</option>"
+        for t in con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    )
+    room_opts = "".join(
+        f"<option value='{r['id']}' {'selected' if str(room_filter)==str(r['id']) else ''}>{escape(str(r['name']))}</option>"
+        for r in con.execute("SELECT id,name FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY name",(sid,)).fetchall()
+    )
+    class_opts = "".join(
+        f"<option value='{c['id']}' {'selected' if str(class_filter)==str(c['id']) else ''}>"
+        f"{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
+        for c in classes
+    )
+
+    sheets = [
+        _class_grid_html(c, periods, days, breaks, grids[int(c["id"])])
+        for c in classes if int(c["id"]) in grids
+    ]
+
+    return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
+<div class='tt-muted'>aSc-style class view: each class/stream has its own timetable, with Monday–Friday across the top and periods/times down the side. Combined classes appear in every participating class timetable.</div>
+<form method='get' class='tt-form' style='margin-top:12px'>
+<input type='hidden' name='tab' value='timetable'>
+<label><span class='tt-label'>Class / Stream</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label>
+<label><span class='tt-label'>Teacher filter</span><select class='tt-field' name='teacher_id'><option value=''>All teachers</option>{teacher_opts}</select></label>
+<label><span class='tt-label'>Room filter</span><select class='tt-field' name='room_id'><option value=''>All rooms</option>{room_opts}</select></label>
+<div><button class='tt-btn'>🔎 View</button></div>
+</form>
+<div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
+<div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print</a></div>
+</div>"""
+
 
 def _print_view(con, sid):
-    rows=con.execute("""SELECT s.*,c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room,l.duration
-        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id JOIN classes c ON c.id=l.class_id
-        JOIN subjects sub ON sub.id=l.subject_id LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=s.room_id
-        WHERE s.school_id=? ORDER BY c.name,c.stream,s.day_name,s.period_no""",(sid,)).fetchall()
-    return f"""<div class='tt-card'><h2>🖨️ Print & Publish</h2><div class='tt-muted'>Use the browser print preview to print the timetable grid or the individual class/teacher listings. This is isolated from the other DaviSchool printable documents.</div>
+    classes, periods, days, breaks, grids = _class_grid_data(con, sid)
+    sheets = [
+        _class_grid_html(c, periods, days, breaks, grids[int(c["id"])])
+        for c in classes if int(c["id"]) in grids
+    ]
+
+    return f"""<div class='tt-card'><h2>🖨️ Print Class Timetables</h2>
+<div class='tt-muted'>Every class/stream is printed as a separate aSc-style timetable: periods run vertically and Monday–Friday run horizontally.</div>
 <div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='window.print()'>🖨️ Open Print Preview</button></div>
-<div class='tt-scroll'><table class='tt-table'><thead><tr><th>Class</th><th>Day</th><th>Period</th><th>Subject</th><th>Teacher</th><th>Room</th></tr></thead><tbody>{''.join(f"<tr><td>{escape(str(r['class_name']))} {escape(str(r['stream'] or ''))}</td><td>{escape(str(r['day_name']))}</td><td>{int(r['period_no'])}</td><td>{escape(str(r['subject']))}</td><td>{escape(str(r['teacher'] or ''))}</td><td>{escape(str(r['room'] or ''))}</td></tr>" for r in rows) or '<tr><td colspan=6>No placements yet.</td></tr>'}</tbody></table></div></div>"""
+<div class='tt-print-sheets'>{''.join(sheets) or '<div class="tt-notice bad">No timetable placements yet.</div>'}</div></div>"""
 
 
 @router.post("/app/timetable/setup/save")
