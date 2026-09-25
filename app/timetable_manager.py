@@ -1240,9 +1240,22 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     return True
         return False
 
+    def valid_duration_start(pno,duration):
+        """Keep double lessons inside the school's two-period blocks.
+
+        Teaching periods are grouped as 1-2, 3-4, 5-6, 7-8 because a
+        break follows each pair. A double lesson therefore starts only on
+        1, 3, 5, 7, etc. and occupies that complete pair.
+        """
+        pno=int(pno)
+        duration=max(1,int(duration))
+        return duration != 2 or pno % 2 == 1
+
     def candidate(lesson,day,pno,occ,enforce_availability,enforce_preferred):
         lid=int(lesson["id"])
         duration=max(1,int(lesson.get("duration") or 1))
+        if not valid_duration_start(pno,duration):
+            return None
         if crosses_break(pno,duration):
             return None
 
@@ -1414,6 +1427,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     pno=int(p["period_no"])
                     if pno+duration-1 > max(pmap):
                         continue
+                    if not valid_duration_start(pno,duration):
+                        continue
                     # Candidate is independent of other generated placements;
                     # hard collisions are checked again against occupancy.
                     if crosses_break(pno,duration):
@@ -1581,6 +1596,8 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
         if day_name not in DAYS:
             return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        if int(moving["duration"] or 1) == 2 and int(period_no) % 2 == 0:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+occupy+periods+1-2,+3-4,+5-6,+7-8",303)
         period=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,period_no)).fetchone()
         if not period:
             return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
