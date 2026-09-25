@@ -767,10 +767,37 @@ def _timetable(request, con, sid):
         for c in classes
     )
 
-    sheets = [
-        _class_grid_html(c, periods, days, breaks, grids[int(c["id"])])
-        for c in classes if int(c["id"]) in grids
-    ]
+    # Render each class independently so one malformed lesson/row cannot
+    # take down the entire timetable page.
+    sheets = []
+    for c in classes:
+        cid = int(c["id"])
+        if cid not in grids:
+            continue
+        try:
+            sheets.append(_class_grid_html(c, periods, days, breaks, grids[cid]))
+        except Exception:
+            # Fall back to a plain physical-period grid for this class.
+            label = f"{c['name']}{(' — '+str(c['stream'])) if c['stream'] else ''}"
+            by_slot = grids[cid]
+            head = "<tr><th>DAY</th>" + "".join(
+                f"<th>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
+                for p in periods
+            ) + "</tr>"
+            rows = []
+            for day in days:
+                cells = [f"<th>{escape(str(day)).upper()}</th>"]
+                for p in periods:
+                    item = by_slot.get((str(day), int(p["period_no"])))
+                    cells.append(
+                        f"<td class='tt-lesson'><b>{escape(str(item['subject']))}</b><br>{escape(str(item['teacher'] or ''))}</td>"
+                        if item else "<td class='tt-empty'>—</td>"
+                    )
+                rows.append("<tr>" + "".join(cells) + "</tr>")
+            sheets.append(
+                f"<div class='tt-class-sheet'><h3>🏫 {escape(label)}</h3>"
+                f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(rows)}</table></div></div>"
+            )
 
     return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
 <div class='tt-muted'>aSc-style class view: days run vertically and the school's saved periods and breaks run horizontally using their exact configured bell times. Combined classes appear in every participating class timetable.</div>
