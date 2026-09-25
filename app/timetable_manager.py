@@ -1709,12 +1709,46 @@ def timetable_generate_new(request:Request,class_id:str=Form(""),mode:str=Form("
         if mode not in ("draft","relaxed","strict"):mode="relaxed"
         if complexity not in ("normal","large","huge"):complexity="normal"
         cf=int(class_id) if str(class_id).isdigit() else None
-        run,requested,placed,unplaced,status=_generate_algorithm(con.cursor(),sid,cf,mode,complexity,bool(replace_existing))
-        cur=con.cursor();cur.execute("INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
-            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,("Unplaced lesson cards: "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)) if unplaced else "All requested cards placed"))
+        try:
+            run,requested,placed,unplaced,status=_generate_algorithm(
+                con.cursor(),sid,cf,mode,complexity,bool(replace_existing)
+            )
+        except Exception as exc:
+            # Never leave the Generate button appearing dead. Roll back any
+            # partial database work and return the actual error to the page.
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            cur=con.cursor()
+            try:
+                cur.execute(
+                    "INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
+                    (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
+                     "failed",0,0,"Generation error: "+str(exc)[:500])
+                )
+                con.commit()
+            except Exception:
+                try:
+                    con.rollback()
+                except Exception:
+                    pass
+            return RedirectResponse(
+                "/app/timetable?tab=generate&error="+quote("Generation failed: "+str(exc)[:300]),
+                303
+            )
+
+        cur=con.cursor()
+        cur.execute(
+            "INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
+            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,
+             ("Unplaced lesson cards: "+",".join(f"{lid} ({reason})" for lid,reason in unplaced))
+             if unplaced else "All requested cards placed")
+        )
         con.commit()
         message=f"Generation {status}: {placed} of {requested} timetable periods allocated"
-        if unplaced:message+="; unplaced cards "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)
+        if unplaced:
+            message+="; unplaced cards "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)
         return RedirectResponse("/app/timetable?tab=generate&msg="+quote(message),303)
     finally:con.close()
 
