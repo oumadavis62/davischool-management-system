@@ -2521,7 +2521,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         except Exception: pass
         con.close()
         return HTMLResponse("Academic data is still initializing. Please refresh this page in a few seconds.",503)
-    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+    selected_exam_ids=_parse_assessment_ids(exam_id)
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
