@@ -1249,6 +1249,19 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         classes=lesson_classes[lid]
         teachers=lesson_teachers[lid]
 
+        # A subject may appear only once per class/stream on a day.
+        # A double/triple lesson is still one occurrence, so its consecutive
+        # physical periods are allowed; a second occurrence of that subject on
+        # the same day is not.
+        subject_id=int(lesson["subject_id"])
+        for o in occ:
+            if str(o["day_name"]) != day:
+                continue
+            oid=int(o["lesson_id"])
+            other_classes=lesson_classes.get(oid,{int(o["class_id"])})
+            if classes.intersection(other_classes) and int(o.get("subject_id") or 0)==subject_id:
+                return None
+
         for o in occ:
             if str(o["day_name"]) != day or not overlap(pno,duration,o):
                 continue
