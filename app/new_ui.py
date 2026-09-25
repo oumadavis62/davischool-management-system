@@ -2810,6 +2810,66 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
+def _ensure_teacher_allocations_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS teacher_allocations (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        UNIQUE(school_id,teacher_id,class_id,subject_id)
+    )""")
+
+@router.get("/app/academics/allocations", response_class=HTMLResponse)
+def teacher_allocations_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.edit"):
+        return HTMLResponse("You do not have permission to manage teacher allocations.",403)
+    con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
+    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    rows=cur.execute("""SELECT a.id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name
+                        FROM teacher_allocations a JOIN teachers t ON t.id=a.teacher_id
+                        JOIN classes c ON c.id=a.class_id JOIN subjects s ON s.id=a.subject_id
+                        WHERE a.school_id=? ORDER BY t.name,c.name,s.name""",(sid,)).fetchall()
+    con.close()
+    tops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in teachers)
+    cops="".join("<option value='%s'>%s%s</option>"%(x["id"],escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
+    sops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in subjects)
+    trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><form method='post' action='/app/academics/allocations/delete/%s'><button class='btn danger'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"]) for x in rows)
+    body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
+<div class='card section'><form method='post' action='/app/academics/allocations/add' style='display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px'>
+<select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
+<select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
+<select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
+<button class='btn'>Save Allocation</button></form></div>
+<div class='card section'><h2>Current Allocations ({len(rows)})</h2><table><thead><tr><th>Teacher</th><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div>
+<style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}</style></div>"""
+    return _school_page(request,"Teacher Allocations",body)
+
+@router.post("/app/academics/allocations/add")
+def teacher_allocations_add(request: Request,teacher_id:int=Form(...),class_id:int=Form(...),subject_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.edit"):return HTMLResponse("You do not have permission to manage teacher allocations.",403)
+    con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
+    if not (cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()):
+        con.close();return HTMLResponse("Invalid selection. <a href='/app/academics/allocations'>Back</a>",400)
+    cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",(sid,teacher_id,class_id,subject_id))
+    _audit(cur,sid,request,"TEACHER_ALLOCATION","Teacher %s / Class %s / Subject %s"%(teacher_id,class_id,subject_id))
+    con.commit();con.close();return RedirectResponse("/app/academics/allocations",303)
+
+@router.post("/app/academics/allocations/delete/{allocation_id}")
+def teacher_allocations_delete(request: Request,allocation_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.edit"):return HTMLResponse("You do not have permission to manage teacher allocations.",403)
+    con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
+    cur.execute("DELETE FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid));con.commit();con.close()
+    return RedirectResponse("/app/academics/allocations",303)
+
 @router.get("/app/academics/analysis", response_class=HTMLResponse)
 def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str=""):
     sid=_school_session(request)
