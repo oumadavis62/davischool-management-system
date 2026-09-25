@@ -618,33 +618,29 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
 
     # Build the horizontal school-day timeline from the ACTUAL saved period and
-    # break times. Do not invent a break position or use the default period
-    # length here. A break configured by the school is a real timetable column.
-    timeline = []
-    for p in periods:
-        timeline.append(("period", _time_to_min(str(p["start_time"])), _time_to_min(str(p["end_time"])), p))
-    for b in breaks:
-        timeline.append(("break", _time_to_min(str(b["start_time"])), _time_to_min(str(b["end_time"])), b))
-    timeline.sort(key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2]))
+    # break times. Never derive breaks from the default period length.
+    period_items = [
+        ("period", _time_to_min(str(p["start_time"])), _time_to_min(str(p["end_time"])), p)
+        for p in periods
+    ]
+    break_items = [
+        ("break", _time_to_min(str(b["start_time"])), _time_to_min(str(b["end_time"])), b)
+        for b in breaks
+    ]
+    break_ranges = [(x[1], x[2]) for x in break_items]
 
-    # If a break sits between two periods at an exact bell boundary, it appears
-    # as its own column. If a break overlaps a configured period, the break is
-    # displayed instead of that conflicting period so the timetable visibly
-    # follows the school's saved bell/break configuration rather than silently
-    # inventing its own schedule.
-    visible_timeline = []
-    occupied_break_ranges = []
-    for kind, st, et, item in timeline:
-        if kind == "break":
-            visible_timeline.append((kind, st, et, item))
-            occupied_break_ranges.append((st, et))
-            continue
-        if any(st < be and et > bs for bs, be in occupied_break_ranges):
-            continue
-        visible_timeline.append((kind, st, et, item))
+    # A saved break is a first-class timeline item. If a school accidentally
+    # configured a break overlapping a period, the break wins visually so the
+    # output never hides the school's saved break.
+    visible_periods = [
+        x for x in period_items
+        if not any(x[1] < be and x[2] > bs for bs, be in break_ranges)
+    ]
+    visible_timeline = sorted(
+        visible_periods + break_items,
+        key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2])
+    )
 
-    # Preserve the period numbers used by the generator for looking up lessons.
-    period_columns = [x for x in visible_timeline if x[0] == "period"]
     head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
         (
             f"<th class='tt-break-col'>☕<br><b>{escape(str(x[3]['name']))}</b>"
@@ -673,15 +669,20 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 continue
 
             duration = max(1, int(lesson["duration"] or 1))
-            # Keep multi-period lessons together only across actual consecutive
-            # period columns. A saved break always stops the span.
+            # Merge a multi-period lesson only across immediately adjacent
+            # visible period columns. A break column always interrupts it.
             span = 1
-            period_numbers = [int(x[3]["period_no"]) for x in period_columns]
-            pos = period_numbers.index(pno) if pno in period_numbers else -1
-            if pos >= 0:
-                for next_pos in range(pos + 1, min(pos + duration, len(period_columns))):
-                    next_item = period_columns[next_pos][3]
-                    next_pno = int(next_item["period_no"])
+            current_idx = next(
+                (idx for idx, x in enumerate(visible_timeline)
+                 if x[0] == "period" and int(x[3]["period_no"]) == pno),
+                -1
+            )
+            if current_idx >= 0:
+                for next_idx in range(current_idx + 1, min(current_idx + duration, len(visible_timeline))):
+                    next_item = visible_timeline[next_idx]
+                    if next_item[0] != "period":
+                        break
+                    next_pno = int(next_item[3]["period_no"])
                     next_lesson = grid.get((day, next_pno))
                     if not next_lesson or int(next_lesson["lesson_id"]) != int(lesson["lesson_id"]):
                         break
