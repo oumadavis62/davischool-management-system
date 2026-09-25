@@ -386,7 +386,33 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.brand:before{{content:'DS';font-size:18px}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a></aside>
-<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;function ping(){{const now=Date.now();if(now-lastPing<120000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','touchstart','keydown','scroll'].forEach(function(ev){{document.addEventListener(ev,ping,{{passive:true}});}});}})();</script></main></div></body></html>"""
+<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;function ping(){{const now=Date.now();if(now-lastPing<120000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','touchstart','keydown','scroll'].forEach(function(ev){{document.addEventListener(ev,ping,{{passive:true}});}});}})();</script><script>(function(){{
+// Keep routine school data-entry saves from filling the phone/browser Back stack.
+// A successful POST is followed by a normal page load, but replace that entry
+// so repeated saves on the same workspace do not require dozens of Back presses.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  var action=form.getAttribute('action')||window.location.href;
+  try{{
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin)return;
+    var path=url.pathname.toLowerCase();
+    // Preserve normal browser navigation for downloads/print/PDF actions.
+    if(/\\/(pdf|print|download|export)(\\/|$)/.test(path) || form.target==='_blank' || form.hasAttribute('download'))return;
+    event.preventDefault();
+    var submitter=event.submitter;
+    var data=new FormData(form);
+    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
+    fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+      .then(function(response){{
+        if(!response.ok){{window.location.href=response.url||url.toString();return;}}
+        window.location.replace(response.url||url.toString());
+      }})
+      .catch(function(){{window.location.href=url.toString();}});
+  }}catch(e){{}}
+}},true);
+}})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
