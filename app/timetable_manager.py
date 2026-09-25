@@ -998,6 +998,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     lim=int(cdef["value"] or 0)
                     if lim and sum(1 for o in occ if o["day_name"]==day and lesson_classes.get(int(o["lesson_id"]),set()) & classes)>=lim: return None
         room=room_for(lesson,day,pno,duration,occ)
+        # A room is optional unless the Lesson Card explicitly requires one.
+        # If every configured room is occupied, still allow an "Any available room"
+        # lesson to be scheduled without assigning a room. This prevents room
+        # configuration from blocking the entire timetable.
         if lesson.get("room_id") and room is None:return None
         return room
 
@@ -1030,7 +1034,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         for p in periods:
                             pno=int(p["period_no"])
                             room=candidate(lesson,day,pno,occ,av_ok,pref_ok)
-                            if room is not None or (not rooms and not lesson.get("room_id")):
+                            if room is not None or not lesson.get("room_id"):
                                 # Score spreads lessons across the week and avoids
                                 # repeatedly using the first available period.
                                 same_day=sum(1 for o in occ if o["day_name"]==day and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
