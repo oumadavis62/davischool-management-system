@@ -211,7 +211,7 @@ def _guard(request, permission="timetable.view"):
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","print"}
+    allowed = {"setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print"}
     return tab if tab in allowed else "timetable"
 
 
@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
+.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}.tt-teacher-sheet{margin:0 0 24px;break-inside:avoid;page-break-after:always;background:#fff}.tt-teacher-sheet:last-child{page-break-after:auto}.tt-teacher-title{font-size:18px;font-weight:900;color:#176B3A;margin:0 0 8px;padding:8px 0}.tt-teacher-grid{width:100%!important;min-width:0!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:7px}.tt-teacher-lesson{height:72px!important;position:relative!important;text-align:center!important;vertical-align:top!important}.tt-teacher-lesson b{font-size:14px!important}.tt-teacher-class{position:absolute;right:6px;bottom:5px;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:800!important;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.tt-teacher-room{position:absolute;left:6px;bottom:5px;font-size:9px;font-weight:600}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -278,6 +278,7 @@ def timetable_manager(request: Request):
         elif tab == "availability": body = _availability(request, con, sid)
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
+        elif tab == "teacher_sheets": body = f"<div class='tt-card'><h2>👨‍🏫 Teacher Timetables</h2><div class='tt-muted'>Each teacher has a separate one-page weekly sheet. Lessons run Monday to Friday, with the subject in the period and the assigned class/stream shown at the far bottom-right of that period.</div><div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='window.print()'>🖨️ Print Teacher Sheets</button></div><div class='tt-print-sheets'>{_teacher_sheets(con, sid)}</div></div>"
         elif tab == "print": body = _print_view(con, sid)
         else:
             try:
@@ -796,6 +797,100 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
         f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div></div>"
     )
 
+def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
+    """Render one teacher's complete Monday-Friday timetable on one sheet."""
+    teacher_label = str(teacher_row["name"] or "Teacher")
+    period_items = [("period", _time_to_min(str(p["start_time"])), _time_to_min(str(p["end_time"])), p) for p in periods]
+    break_items = [("break", _time_to_min(str(b["start_time"])), _time_to_min(str(b["end_time"])), b) for b in breaks]
+    break_ranges = [(x[1], x[2]) for x in break_items]
+    visible_timeline = sorted(
+        [x for x in period_items if not any(x[1] < be and x[2] > bs for bs, be in break_ranges)] + break_items,
+        key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2])
+    )
+    head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
+        (f"<th class='tt-break-col'>☕<br><b>{escape(str(x[3]['name']))}</b><br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+         if x[0] == "break" else
+         f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>")
+        for x in visible_timeline
+    ) + "</tr>"
+    start_cells = {}
+    occupied_periods = {}
+    for key, lesson in grid.items():
+        duration = max(1, int(lesson["duration"] or 1))
+        start_cells[key] = (lesson, duration)
+        for offset in range(duration):
+            occupied_periods[(str(lesson["day_name"]), int(lesson["period_no"]) + offset)] = (lesson, offset + 1, duration)
+    body = []
+    for day in days:
+        row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
+        skip_periods = set()
+        for kind, st, et, item in visible_timeline:
+            if kind == "break":
+                row_cells.append(f"<td class='tt-break'>☕<br><b>{escape(str(item['name']))}</b><br><small>{escape(str(item['start_time']))}-{escape(str(item['end_time']))}</small></td>")
+                continue
+            pno = int(item["period_no"])
+            if pno in skip_periods:
+                continue
+            entry = start_cells.get((str(day), pno))
+            if entry:
+                lesson, duration = entry
+                span_periods = [pno + offset for offset in range(duration) if any(x[0] == "period" and int(x[3]["period_no"]) == pno + offset for x in visible_timeline)]
+                span = max(1, len(span_periods))
+                for target in span_periods[1:]:
+                    skip_periods.add(target)
+                classes = str(lesson.get("class_label") or "Class")
+                room = str(lesson.get("room") or "")
+                label = "<br><small class='tt-duration'>DOUBLE LESSON</small>" if duration == 2 else "<br><small class='tt-duration'>TRIPLE LESSON</small>" if duration >= 3 else ""
+                room_html = f"<small class='tt-teacher-room'>{escape(room)}</small>" if room else ""
+                row_cells.append(
+                    f"<td class='tt-lesson tt-teacher-lesson' colspan='{span}'><b>{escape(str(lesson['subject']))}</b>{label}"
+                    f"<span class='tt-teacher-class'>{escape(classes)}</span>{room_html}</td>"
+                )
+                continue
+            if (str(day), pno) in occupied_periods:
+                continue
+            row_cells.append("<td class='tt-empty'>—</td>")
+        body.append("<tr>" + "".join(row_cells) + "</tr>")
+    return f"<div class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)}</div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div></div>"
+
+
+def _teacher_sheets(con, sid):
+    """Build one printable timetable sheet for every teacher."""
+    teachers = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    periods = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no", (sid,)).fetchall()
+    configured_days = [str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no", (sid,)).fetchall()]
+    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    days = [d for d in weekdays if d in configured_days] or weekdays
+    breaks = con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id", (sid,)).fetchall()
+    rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
+        c.name class_name,c.stream,sub.name subject,r.name room
+        FROM timetable_slots s
+        JOIN timetable_lessons l ON l.id=s.lesson_id
+        JOIN classes c ON c.id=l.class_id
+        JOIN subjects sub ON sub.id=l.subject_id
+        LEFT JOIN timetable_rooms r ON r.id=s.room_id
+        WHERE s.school_id=? ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
+    class_cache = {}
+    for row in rows:
+        lid = int(row["lesson_id"])
+        if lid not in class_cache:
+            attached = con.execute("""SELECT c.name,c.stream FROM timetable_lesson_classes lc
+                JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream""", (sid, lid)).fetchall()
+            class_cache[lid] = ", ".join(f"{str(x['name'])}{(' '+str(x['stream'])) if x['stream'] else ''}" for x in attached) if attached else f"{str(row['class_name'])}{(' '+str(row['stream'])) if row['stream'] else ''}"
+    grids = {int(t["id"]): {} for t in teachers}
+    for row in rows:
+        lid = int(row["lesson_id"])
+        tids = {int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?", (sid, lid)).fetchall()}
+        if row["teacher_id"]:
+            tids.add(int(row["teacher_id"]))
+        lesson = dict(row)
+        lesson["class_label"] = class_cache[lid]
+        for tid in tids:
+            if tid in grids:
+                grids[tid][(str(row["day_name"]), int(row["period_no"]))] = lesson
+    return "".join(_teacher_grid_html(t, periods, days, breaks, grids[int(t["id"])]) for t in teachers) or "<div class='tt-notice bad'>No teachers found.</div>"
+
+
 def _timetable(request, con, sid):
     class_filter = request.query_params.get("class_id", "")
     teacher_filter = request.query_params.get("teacher_id", "")
@@ -883,7 +978,7 @@ def _timetable(request, con, sid):
 <div><button class='tt-btn'>🔎 View</button></div>
 </form>
 <div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
-<div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print</a></div>
+<div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=teacher_sheets'>👨‍🏫 Teacher Sheets</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print Classes</a></div>
 </div>"""
 
 
