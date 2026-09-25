@@ -387,6 +387,27 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a></aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button><div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;function ping(){{const now=Date.now();if(now-lastPing<120000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','touchstart','keydown','scroll'].forEach(function(ev){{document.addEventListener(ev,ping,{{passive:true}});}});}})();</script><script>(function(){{
+// Collapse repeated visits to the same school workspace when using the phone Back button.
+// This applies to Students, Staff/Teachers, Teacher Allocations, Academics,
+// Analysis, Report Cards, Attendance, Timetable and the other school modules.
+// A Back action may skip repeated entries of the same workspace, but it still
+// stops normally when the user reaches a different sidebar workspace or Overview.
+(function(){{
+  try{{
+    var currentPath=window.location.pathname;
+    var key='davischool_workspace_path';
+    sessionStorage.setItem(key,currentPath);
+    window.addEventListener('popstate',function(){{
+      var nowPath=window.location.pathname;
+      var lastPath=sessionStorage.getItem(key)||'';
+      if(nowPath===lastPath && nowPath.indexOf('/app')===0){{
+        window.setTimeout(function(){{window.history.go(-1);}},0);
+        return;
+      }}
+      sessionStorage.setItem(key,nowPath);
+    }});
+  }}catch(e){{}}
+}})();
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
