@@ -1514,10 +1514,23 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                             continue
                         room=candidate(lesson,d,pno,occupied,enforce_availability,enforce_preferred)
                         if room is not None or not lesson.get("room_id"):
-                            # Count actual free physical periods around this
-                            # candidate. Prefer central periods only after day
-                            # distribution has been satisfied.
-                            period_penalty=int(pno)
+                            # Spread lessons through the day's physical
+                            # periods instead of repeatedly choosing P1.
+                            classes=lesson_classes[int(lid)]
+                            teachers=lesson_teachers[int(lid)]
+                            period_load=sum(
+                                1 for o in occupied
+                                if str(o["day_name"])==day
+                                and int(o["period_no"])==int(pno)
+                                and (
+                                    classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+                                    or teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
+                                )
+                            )
+                            # Pairs are treated as blocks for doubles, so the
+                            # start period is still preferred over any position
+                            # that would fragment the two-period block.
+                            period_penalty=period_load*10000 + int(pno)
                             period_choices.append((period_penalty,rng.random(),pno,room))
                     period_choices.sort(key=lambda x:(x[0],x[1]))
                     if period_choices:
