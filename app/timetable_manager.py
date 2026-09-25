@@ -220,7 +220,7 @@ def _tabs(active):
         ("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
         ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
-        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("print","🖨️ Print")
+        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print")
     ]
     return "<div class='tt-tabs'>" + "".join(
         f"<a class='tt-tab {'active' if k==active else ''}' href='/app/timetable?tab={k}'>{label}</a>" for k,label in labels
@@ -293,7 +293,23 @@ def timetable_manager(request: Request):
         elif tab == "availability": body = _availability(request, con, sid)
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
-        elif tab == "teacher_sheets": body = f"<div class='tt-card'><h2>👨‍🏫 Teacher Timetables</h2><div class='tt-muted'>Each teacher has a separate one-page weekly sheet. Lessons run Monday to Friday, with the subject in the period and the assigned class/stream shown at the far bottom-right of that period.</div><div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='window.print()'>🖨️ Print Teacher Sheets</button></div><div class='tt-print-sheets'>{_teacher_sheets(con, sid)}</div></div>"
+        elif tab == "teacher_sheets":
+            teacher_id = request.query_params.get("teacher_id", "")
+            teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+            selected_id = int(teacher_id) if str(teacher_id).isdigit() else (int(teacher_rows[0]["id"]) if teacher_rows else None)
+            teacher_opts = "".join(
+                f"<option value='{int(t['id'])}' {'selected' if selected_id == int(t['id']) else ''}>{escape(str(t['name']))}</option>"
+                for t in teacher_rows
+            )
+            body = f"""<div class='tt-card'><h2>👨‍🏫 Teacher Weekly Timetable</h2>
+<div class='tt-muted'>One teacher is shown on one complete Monday–Friday sheet containing ALL lessons assigned to that teacher. The class/stream appears at the far bottom-right of each subject period.</div>
+<form method='get' class='tt-form' style='margin-top:12px'>
+<input type='hidden' name='tab' value='teacher_sheets'>
+<label><span class='tt-label'>Select Teacher</span><select class='tt-field' name='teacher_id' onchange='this.form.submit()'><option value=''>Select teacher</option>{teacher_opts}</select></label>
+<div class='no-print'><button class='tt-btn' type='submit'>👨‍🏫 View Teacher Sheet</button></div>
+</form>
+<div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='printTeacherSheet("teacher-sheet-{selected_id}")'>🖨️ Print This Teacher Sheet</button></div>
+<div class='tt-print-sheets'>{_teacher_sheets(con, sid, selected_id) if selected_id is not None else "<div class='tt-notice bad'>No teachers found.</div>"}</div></div>"""
         elif tab == "print": body = _print_view(con, sid)
         else:
             try:
@@ -870,9 +886,11 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
     return f"<div id='{sheet_id}' class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)} <span class='no-print' style='float:right'><button type='button' class='tt-btn alt tt-teacher-print-btn' onclick=\"printTeacherSheet('{sheet_id}')\">🖨️ Print This Sheet</button></span></div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div></div>"
 
 
-def _teacher_sheets(con, sid):
-    """Build one printable timetable sheet for every teacher."""
+def _teacher_sheets(con, sid, selected_teacher_id=None):
+    """Build one complete weekly timetable sheet for the selected teacher."""
     teachers = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+    if selected_teacher_id is not None:
+        teachers = [t for t in teachers if int(t["id"]) == int(selected_teacher_id)]
     periods = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no", (sid,)).fetchall()
     configured_days = [str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no", (sid,)).fetchall()]
     weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
