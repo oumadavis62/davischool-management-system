@@ -570,7 +570,7 @@ def _generate(con, sid):
 <label><span class='tt-label'>Mode</span><select class='tt-field' name='mode'><option value='draft'>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label>
 <label><span class='tt-label'>Complexity</span><select class='tt-field' name='complexity'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
 <label class='tt-check'><input type='checkbox' name='replace_existing' value='1' checked> Replace unlocked generated placements</label>
-<div><button class='tt-btn' type='submit' onclick="this.disabled=true;this.innerHTML='⏳ Generating…';">🚀 Generate</button><div class='tt-muted' style='margin-top:8px'>Generation may take a few seconds while the timetable solver checks teacher, class, room and period conflicts.</div></div></form></div>
+<div><button class='tt-btn' type='submit'>🚀 Generate</button><div class='tt-muted' style='margin-top:8px'>Generation may take a few seconds while the timetable solver checks teacher, class, room and period conflicts.</div></div></form></div>
 <div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>Breaks excluded</b>Weekly capacity rule</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
 
 
@@ -1624,7 +1624,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Keep generation inside a normal web-request time budget.
         # The solver retains the best placement found, so bounded randomized
         # passes prevent Render from appearing to ignore the Generate button.
-        attempt_count={"normal":20,"large":30,"huge":40}.get(complexity,20)
+        attempt_count={"normal":3,"large":4,"huge":5}.get(complexity,3)
         for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
