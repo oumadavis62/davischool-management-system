@@ -1256,13 +1256,37 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         return room_id
 
     def spread_score(lesson,day,pno,occ):
+        # Spread placements across the physical school week. The old scoring
+        # strongly favored the first available period, which could concentrate
+        # generated lessons in P1. Prefer the least-used day/period for the
+        # participating classes and teachers while still keeping subjects
+        # reasonably distributed.
         lid=int(lesson["id"])
         classes=lesson_classes[lid]
+        teachers=lesson_teachers[lid]
         subject=int(lesson["subject_id"])
-        same_day=sum(
+
+        class_day=sum(
             1 for o in occ
             if str(o["day_name"])==day
             and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+        )
+        teacher_day=sum(
+            1 for o in occ
+            if str(o["day_name"])==day
+            and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
+        )
+        class_period=sum(
+            1 for o in occ
+            if str(o["day_name"])==day
+            and overlap(pno,1,o)
+            and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+        )
+        teacher_period=sum(
+            1 for o in occ
+            if str(o["day_name"])==day
+            and overlap(pno,1,o)
+            and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
         )
         same_subject=sum(
             1 for o in occ
@@ -1270,7 +1294,16 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             and int(o.get("subject_id") or 0)==subject
             and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
         )
-        return same_day*100+same_subject*15+days.index(day)*2+int(pno)
+        # Exact period occupancy is the strongest penalty; then day load.
+        return (
+            class_period*1000 +
+            teacher_period*800 +
+            class_day*40 +
+            teacher_day*30 +
+            same_subject*8 +
+            int(pno)*0.01 +
+            days.index(day)*0.001
+        )
 
     def solve(enforce_availability,enforce_preferred):
         """Fast deterministic greedy solver with bounded restarts.
