@@ -251,7 +251,7 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:80px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
+.tt-scroll{overflow:auto}.tt-week{min-width:900px;border-collapse:collapse;width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:760px}.tt-class-grid th:first-child{min-width:105px}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:600}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}}
 </style>"""
@@ -614,57 +614,78 @@ def _class_grid_data(con, sid, class_id=None):
 
 
 def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
-    """Render one class/stream exactly like aSc: days vertically, periods horizontally."""
+    """Render the saved bell schedule exactly: days vertical, periods/breaks horizontal."""
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
-    head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
-        f"<th>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
-        for p in periods
-    ) + "</tr>"
 
-    period_numbers = [int(p["period_no"]) for p in periods]
-    break_by_period = {}
+    # Build the horizontal school-day timeline from the ACTUAL saved period and
+    # break times. Do not invent a break position or use the default period
+    # length here. A break configured by the school is a real timetable column.
+    timeline = []
     for p in periods:
-        break_by_period[int(p["period_no"])] = next(
-            (b for b in breaks
-             if _time_to_min(str(b["start_time"])) < _time_to_min(str(p["end_time"]))
-             and _time_to_min(str(b["end_time"])) > _time_to_min(str(p["start_time"]))),
-            None
+        timeline.append(("period", _time_to_min(str(p["start_time"])), _time_to_min(str(p["end_time"])), p))
+    for b in breaks:
+        timeline.append(("break", _time_to_min(str(b["start_time"])), _time_to_min(str(b["end_time"])), b))
+    timeline.sort(key=lambda x: (x[1], 0 if x[0] == "period" else 1, x[2]))
+
+    # If a break sits between two periods at an exact bell boundary, it appears
+    # as its own column. If a break overlaps a configured period, the break is
+    # displayed instead of that conflicting period so the timetable visibly
+    # follows the school's saved bell/break configuration rather than silently
+    # inventing its own schedule.
+    visible_timeline = []
+    occupied_break_ranges = []
+    for kind, st, et, item in timeline:
+        if kind == "break":
+            visible_timeline.append((kind, st, et, item))
+            occupied_break_ranges.append((st, et))
+            continue
+        if any(st < be and et > bs for bs, be in occupied_break_ranges):
+            continue
+        visible_timeline.append((kind, st, et, item))
+
+    # Preserve the period numbers used by the generator for looking up lessons.
+    period_columns = [x for x in visible_timeline if x[0] == "period"]
+    head = "<tr><th class='tt-day-col'>DAY</th>" + "".join(
+        (
+            f"<th class='tt-break-col'>☕<br><b>{escape(str(x[3]['name']))}</b>"
+            f"<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
+            if x[0] == "break" else
+            f"<th>P{int(x[3]['period_no'])}<br><small>{escape(str(x[3]['start_time']))}-{escape(str(x[3]['end_time']))}</small></th>"
         )
+        for x in visible_timeline
+    ) + "</tr>"
 
     body = []
     for day in days:
         row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
-        covered = set()
-        for p in periods:
-            pno = int(p["period_no"])
-            if pno in covered:
-                continue
-
-            br = break_by_period[pno]
-            if br:
+        for kind, st, et, item in visible_timeline:
+            if kind == "break":
                 row_cells.append(
-                    f"<td class='tt-break'>☕ {escape(str(br['name']))}</td>"
+                    f"<td class='tt-break'>☕<br><b>{escape(str(item['name']))}</b><br>"
+                    f"<small>{escape(str(item['start_time']))}-{escape(str(item['end_time']))}</small></td>"
                 )
                 continue
 
+            pno = int(item["period_no"])
             lesson = grid.get((day, pno))
             if not lesson:
                 row_cells.append("<td class='tt-empty'>—</td>")
                 continue
 
             duration = max(1, int(lesson["duration"] or 1))
+            # Keep multi-period lessons together only across actual consecutive
+            # period columns. A saved break always stops the span.
             span = 1
-            for next_p in period_numbers:
-                if next_p <= pno or next_p > pno + duration - 1:
-                    continue
-                if next_p != pno + span:
-                    break
-                if break_by_period.get(next_p) or not grid.get((day, next_p)):
-                    break
-                if int(grid[(day, next_p)]["lesson_id"]) != int(lesson["lesson_id"]):
-                    break
-                covered.add(next_p)
-                span += 1
+            period_numbers = [int(x[3]["period_no"]) for x in period_columns]
+            pos = period_numbers.index(pno) if pno in period_numbers else -1
+            if pos >= 0:
+                for next_pos in range(pos + 1, min(pos + duration, len(period_columns))):
+                    next_item = period_columns[next_pos][3]
+                    next_pno = int(next_item["period_no"])
+                    next_lesson = grid.get((day, next_pno))
+                    if not next_lesson or int(next_lesson["lesson_id"]) != int(lesson["lesson_id"]):
+                        break
+                    span += 1
 
             teachers = str(lesson["teacher"] or "")
             room = str(lesson["room"] or "")
@@ -736,7 +757,7 @@ def _timetable(request, con, sid):
     ]
 
     return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
-<div class='tt-muted'>aSc-style class view: each class/stream has its own timetable, with Monday–Friday across the top and periods/times down the side. Combined classes appear in every participating class timetable.</div>
+<div class='tt-muted'>aSc-style class view: days run vertically and the school's saved periods and breaks run horizontally using their exact configured bell times. Combined classes appear in every participating class timetable.</div>
 <form method='get' class='tt-form' style='margin-top:12px'>
 <input type='hidden' name='tab' value='timetable'>
 <label><span class='tt-label'>Class / Stream</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label>
@@ -757,7 +778,7 @@ def _print_view(con, sid):
     ]
 
     return f"""<div class='tt-card'><h2>🖨️ Print Class Timetables</h2>
-<div class='tt-muted'>Every class/stream is printed as a separate aSc-style timetable: periods run vertically and Monday–Friday run horizontally.</div>
+<div class='tt-muted'>Every class/stream is printed as a separate timetable using the school's exact saved period and break times, with days vertically and periods horizontally.</div>
 <div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='window.print()'>🖨️ Open Print Preview</button></div>
 <div class='tt-print-sheets'>{''.join(sheets) or '<div class="tt-notice bad">No timetable placements yet.</div>'}</div></div>"""
 
