@@ -1682,19 +1682,104 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         ))
 
         def run_once(seed):
-            """Bounded, reliable greedy pass.
+            """Fast single-pass scheduler using indexed occupancy.
 
-            This intentionally uses the already-tested candidate() function
-            against the current occupied list. With the current school size
-            (50 cards / 217 physical periods), this is comfortably within a
-            normal web-worker budget and is much less error-prone than the
-            indexed solver.
+            The HTTP/background job must not spend minutes repeatedly scanning
+            every existing placement for every candidate. All hard conflicts
+            are represented by sets, making a candidate check O(duration *
+            resources) rather than O(number of placements).
             """
             rng=random.Random(seed)
             occupied=[dict(x) for x in base]
             placed=[]
 
-            # Harder cards first: doubles/triples and high weekly demand.
+            class_slot=set()
+            teacher_slot=set()
+            room_slot=set()
+            subject_day=set()
+            class_day_load={}
+            teacher_day_load={}
+
+            def index_row(row):
+                lid=int(row["lesson_id"])
+                classes=lesson_classes.get(lid,{int(row["class_id"])})
+                teachers=lesson_teachers.get(
+                    lid,({int(row["teacher_id"])} if row.get("teacher_id") else set())
+                )
+                duration=max(1,int(row.get("duration") or 1))
+                day=str(row["day_name"])
+                start=int(row["period_no"])
+                subject=int(row.get("subject_id") or lesson_by_id[lid]["subject_id"])
+                for pno in range(start,start+duration):
+                    for cid in classes:
+                        class_slot.add((day,pno,cid))
+                    for tid in teachers:
+                        teacher_slot.add((day,pno,tid))
+                    rid=int(row.get("room_id") or 0)
+                    if rid:
+                        room_slot.add((day,pno,rid))
+                for cid in classes:
+                    subject_day.add((day,cid,subject))
+                    class_day_load[(day,cid)]=class_day_load.get((day,cid),0)+1
+                for tid in teachers:
+                    teacher_day_load[(day,tid)]=teacher_day_load.get((day,tid),0)+1
+
+            for row in occupied:
+                index_row(row)
+
+            def placeable(lesson,day,pno):
+                lid=int(lesson["id"])
+                duration=max(1,int(lesson.get("duration") or 1))
+                if not valid_duration_start(pno,duration) or crosses_break(pno,duration):
+                    return None
+
+                classes=lesson_classes[lid]
+                teachers=lesson_teachers[lid]
+                subject=int(lesson["subject_id"])
+
+                if any((day,cid,subject) in subject_day for cid in classes):
+                    return None
+
+                for xp in range(int(pno),int(pno)+duration):
+                    if any((day,xp,cid) in class_slot for cid in classes):
+                        return None
+                    if any((day,xp,tid) in teacher_slot for tid in teachers):
+                        return None
+                    if enforce_availability:
+                        if any((day,xp,tid) in blocked_teacher for tid in teachers):
+                            return None
+                        if (day,xp,subject) in blocked_subject:
+                            return None
+
+                if enforce_preferred:
+                    for cdef in constraints.get("Teacher max lessons/day",[]):
+                        target=cdef["target_id"]
+                        if target and int(target) in teachers:
+                            lim=int(cdef["value"] or 0)
+                            if lim and teacher_day_load.get((day,int(target)),0)>=lim:
+                                return None
+                    for cdef in constraints.get("Class max lessons/day",[]):
+                        target=cdef["target_id"]
+                        if target and int(target) in classes:
+                            lim=int(cdef["value"] or 0)
+                            if lim and class_day_load.get((day,int(target)),0)>=lim:
+                                return None
+
+                fixed=int(lesson["room_id"]) if lesson.get("room_id") else 0
+                if fixed:
+                    if any((day,xp,fixed) in room_slot for xp in range(int(pno),int(pno)+duration)):
+                        return None
+                    return fixed
+
+                if rooms:
+                    for room in rooms:
+                        rid=int(room["id"])
+                        if all((day,xp,rid) not in room_slot for xp in range(int(pno),int(pno)+duration)):
+                            return rid
+
+                # Room is optional. Zero means "no room assigned".
+                return 0
+
             pending=list(occurrences)
             rng.shuffle(pending)
             pending.sort(key=lambda x:(
@@ -1704,75 +1789,48 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                 x[0],x[1]
             ))
 
-            while pending:
-                best_idx=None
-                best_choices=None
-                best_key=None
-
-                # MRV over a bounded prefix. Candidate() is the authoritative
-                # conflict checker and includes class, teacher, break, room,
-                # availability and preferred-constraint rules.
-                scan_limit=min(len(pending),50)
-                for idx,(lid,occ_no) in enumerate(pending[:scan_limit]):
-                    lesson=lesson_by_id[lid]
-                    choices=[]
-                    for day,pno in all_candidates.get(lid,[]):
-                        room=candidate(
-                            lesson,day,pno,occupied,
-                            enforce_availability,enforce_preferred
-                        )
-                        if room is None:
-                            continue
-                        if room==-1:
-                            room=None
-                        score=spread_score(lesson,day,pno,occupied)
-                        choices.append((score,rng.random(),day,int(pno),room))
-
-                    if not choices:
-                        continue
-                    choices.sort(key=lambda x:(x[0],x[1]))
-                    key=(len(choices),
-                         -max(1,int(lesson.get("duration") or 1)),
-                         -int(lesson.get("lessons_per_week") or 0),
-                         lid,occ_no)
-                    if best_key is None or key<best_key:
-                        best_idx=idx
-                        best_choices=choices
-                        best_key=key
-
-                if best_idx is None:
-                    break
-
-                lid,occ_no=pending[best_idx]
+            # Greedy placement with bounded look-ahead. We do not repeatedly
+            # rescan the pending list; this keeps generation fast and stable.
+            for lid,occ_no in pending:
                 lesson=lesson_by_id[lid]
+                choices=[]
+                for day,pno in all_candidates.get(lid,[]):
+                    room=placeable(lesson,day,pno)
+                    if room is None:
+                        continue
+                    classes=lesson_classes[lid]
+                    teachers=lesson_teachers[lid]
+                    load=sum(class_day_load.get((day,c),0) for c in classes)
+                    load+=sum(teacher_day_load.get((day,t),0) for t in teachers)
+                    choices.append((load+int(pno)*0.01+rng.random(),day,int(pno),room))
+
+                if not choices:
+                    continue
+                choices.sort(key=lambda x:x[0])
+
                 committed=False
-                for _,_,day,pno,room in best_choices:
-                    checked=candidate(
-                        lesson,day,pno,occupied,
-                        enforce_availability,enforce_preferred
-                    )
+                for _,day,pno,room in choices[:12]:
+                    checked=placeable(lesson,day,pno)
                     if checked is None:
                         continue
-                    if checked==-1:
-                        checked=None
                     row={
                         "lesson_id":lid,
                         "class_id":lesson["class_id"],
                         "teacher_id":lesson["teacher_id"],
                         "subject_id":lesson["subject_id"],
-                        "room_id":checked,
+                        "room_id":checked or None,
                         "day_name":day,
                         "period_no":pno,
                         "duration":max(1,int(lesson.get("duration") or 1))
                     }
                     occupied.append(row)
                     placed.append(row)
-                    pending.pop(best_idx)
+                    index_row(row)
                     committed=True
                     break
 
                 if not committed:
-                    break
+                    continue
 
             complete=(len(placed)==len(occurrences) and not impossible)
             return complete,placed
@@ -1784,7 +1842,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Keep generation inside a normal web-request time budget.
         # The solver retains the best placement found, so bounded randomized
         # passes prevent Render from appearing to ignore the Generate button.
-        attempt_count={"normal":3,"large":4,"huge":5}.get(complexity,3)
+        attempt_count={"normal":2,"large":3,"huge":4}.get(complexity,2)
         for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
