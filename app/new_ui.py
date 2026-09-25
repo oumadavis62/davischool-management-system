@@ -4017,10 +4017,32 @@ def audit_page(request: Request):
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "audit.view"):
         return HTMLResponse("You do not have permission to view the audit trail.", 403)
-    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall();con.close()
+    con=_db();cur=con.cursor()
+    rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall()
+    con.close()
     tr=_simple_rows(rows,["timestamp","user_email","action","details"])
-    body=f"""<div class='page'><h1>Audit Trail</h1><div class='muted'>Security and activity history for this school.</div><div class='card section'><h2>Recent activity ({len(rows)})</h2><table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table></div></div>"""
+    body=f"""<div class='page'><h1>Audit Trail</h1>
+<div class='muted'>Security and activity history for this school.</div>
+<div class='card section'>
+<div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
+<h2 style='margin:0'>Recent activity ({len(rows)})</h2>
+<form method='post' action='/app/audit/clear' onsubmit="return confirm('Clear all audit trail records for this school? This action cannot be undone.');">
+<button class='btn' type='submit' style='background:#b91c1c!important;border-color:#b91c1c!important'>🗑️ Clear</button>
+</form></div>
+<table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table>
+</div></div>"""
     return _school_page(request,"Audit Trail",body)
+
+@router.post("/app/audit/clear")
+def audit_clear(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "audit.view"):
+        return HTMLResponse("You do not have permission to clear the audit trail.",403)
+    con=_db();cur=con.cursor()
+    cur.execute("DELETE FROM system_audit WHERE school_id=?",(sid,))
+    con.commit();con.close()
+    return RedirectResponse("/app/audit",303)
 
 @router.get("/app/accounting", response_class=HTMLResponse)
 def accounting_page(request: Request):
