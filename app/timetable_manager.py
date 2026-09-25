@@ -1605,12 +1605,21 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
 
     run=datetime.now().strftime("%Y%m%d%H%M%S%f")
     for row in placements:
+        # Store one placement at the start of the lesson, but also reserve
+        # every physical period occupied by a double/triple through the
+        # duration field. The class-grid renderer expands this into each
+        # consecutive period cell.
         p=pmap[int(row["period_no"])]
+        duration=max(1,int(row.get("duration") or 1))
+        if int(row["period_no"])+duration-1 > max(pmap):
+            continue
         cur.execute("""INSERT INTO timetable_slots(
             school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run
         ) VALUES(?,?,?,?,?,?,?,?,?)""",(
             sid,row["lesson_id"],row["day_name"],row["period_no"],
-            p["start_time"],p["end_time"],row["room_id"],0,run
+            p["start_time"],
+            pmap[int(row["period_no"])+duration-1]["end_time"],
+            row["room_id"],0,run
         ))
 
     requested=sum(
