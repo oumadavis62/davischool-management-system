@@ -266,6 +266,36 @@ function timetableGeneratedStamp(){
 function stampTimetableFooters(root,stamp){
   (root||document).querySelectorAll('.tt-generated-at').forEach(function(el){el.textContent=stamp;});
 }
+// Keep the Timetable Manager as one browser-history workspace. Repeated
+// lesson saves and tab changes must not force a phone user to press Back once
+// for every lesson. If Back lands on another timetable page, skip it and keep
+// going until the user reaches the page outside the timetable workspace.
+(function(){
+  function isTimetableUrl(url){
+    try{return new URL(url,window.location.href).pathname==='/app/timetable';}
+    catch(e){return false;}
+  }
+  window.addEventListener('popstate',function(){
+    if(isTimetableUrl(window.location.href)){
+      window.setTimeout(function(){window.history.go(-1);},0);
+    }
+  });
+  document.addEventListener('submit',function(event){
+    var form=event.target;
+    if(!form)return;
+    var action=form.getAttribute('action')||'';
+    if(action.indexOf('/app/timetable/lesson/save')===-1 && action.indexOf('/app/timetable/lesson/delete/')===-1)return;
+    event.preventDefault();
+    var data=new FormData(form);
+    var submitter=event.submitter;
+    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
+    fetch(new URL(action,window.location.href).toString(),{
+      method:'POST',body:data,credentials:'same-origin',redirect:'follow',cache:'no-store'
+    }).then(function(response){
+      window.location.replace(response.url||'/app/timetable?tab=lessons');
+    }).catch(function(){window.location.href='/app/timetable?tab=lessons';});
+  },true);
+})();
 function printClassTimetables(){
   stampTimetableFooters(document,timetableGeneratedStamp());
   window.print();
