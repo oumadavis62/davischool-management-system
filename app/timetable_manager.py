@@ -1618,7 +1618,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             return complete,placed
 
         best=(False,[])
-        attempts={"normal":35,"large":55,"huge":75}.get(complexity,35)
+        # Use multiple fast randomized passes so the greedy solver can recover\n        # from an early placement that would otherwise leave later lesson cards\n        # stranded. The best complete/most-filled pass is retained.\n        attempts={"normal":100,"large":150,"huge":200}.get(complexity,100)
         for attempt in range(attempts):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
