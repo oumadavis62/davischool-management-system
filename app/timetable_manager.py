@@ -1779,7 +1779,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                             return rid
                     return -1
 
-                return None
+                # No active rooms is valid: a lesson can be scheduled
+                # without a room assignment. 0 is the internal "no room"
+                # sentinel; the database value is converted to NULL below.
+                return 0
 
             pending=list(occurrences)
             while pending:
@@ -1850,7 +1853,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         "class_id":lesson["class_id"],
                         "teacher_id":lesson["teacher_id"],
                         "subject_id":lesson["subject_id"],
-                        "room_id":checked if checked is not None else room,
+                        "room_id":checked if checked else None,
                         "day_name":day,
                         "period_no":pno,
                         "duration":max(1,int(lesson.get("duration") or 1))
