@@ -1273,66 +1273,80 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         return same_day*100+same_subject*15+days.index(day)*2+int(pno)
 
     def solve(enforce_availability,enforce_preferred):
-        occupied=[dict(x) for x in base]
+        """Fast deterministic greedy solver with bounded restarts.
+
+        The previous MRV/backtracking implementation could spend the whole
+        web request exploring a large search tree. This version prebuilds the
+        weekly occurrences, tries the most constrained cards first, and uses
+        bounded deterministic restarts. It always returns promptly.
+        """
+        import random
         occurrences=[]
         for lesson in lessons:
             lid=int(lesson["id"])
-            already=sum(1 for o in occupied if int(o["lesson_id"])==lid)
+            already=sum(1 for o in base if int(o["lesson_id"])==lid)
             need=max(0,int(lesson.get("lessons_per_week") or 0)-already)
             for n in range(need):
                 occurrences.append((lid,n))
 
-        # Most constrained cards are searched first. MRV below re-evaluates
-        # candidates after every placement, so a difficult card cannot be
-        # stranded by an easy card placed earlier.
-        occurrence_order=list(occurrences)
-        nodes=0
-        node_limit=8000
-        chosen=[]
-
-        def dfs(remaining):
-            nonlocal nodes
-            nodes+=1
-            if not remaining:
-                return True
-            if nodes>node_limit:
-                return False
-
-            best_idx=None
-            best_candidates=None
-            best_key=None
-
-            for idx,(lid,occ_no) in enumerate(remaining):
-                lesson=next(x for x in lessons if int(x["id"])==lid)
-                candidates=[]
-                for day in days:
-                    for p in periods:
-                        pno=int(p["period_no"])
-                        room=candidate(
-                            lesson,day,pno,occupied,
-                            enforce_availability,enforce_preferred
-                        )
-                        if room is not None or not lesson.get("room_id"):
-                            candidates.append((
-                                spread_score(lesson,day,pno,occupied),
-                                day,pno,room
-                            ))
-                candidates.sort(key=lambda x:x[0])
-                key=(len(candidates),-max(1,int(lesson.get("duration") or 1)),
-                     -int(lesson.get("lessons_per_week") or 0),lid)
-                if best_candidates is None or key<best_key:
-                    best_idx=idx
-                    best_candidates=candidates
-                    best_key=key
-                if not candidates:
-                    return False
-
-            lid,occ_no=remaining[best_idx]
-            lesson=next(x for x in lessons if int(x["id"])==lid)
+        lesson_by_id={int(x["id"]):x for x in lessons}
+        all_candidates={}
+        for lid,_ in occurrences:
+            lesson=lesson_by_id[lid]
             duration=max(1,int(lesson.get("duration") or 1))
+            cand=[]
+            for day in days:
+                for p in periods:
+                    pno=int(p["period_no"])
+                    if pno+duration-1 > max(pmap):
+                        continue
+                    # Candidate is independent of other generated placements;
+                    # hard collisions are checked again against occupancy.
+                    if crosses_break(pno,duration):
+                        continue
+                    cand.append((day,pno))
+            all_candidates[lid]=cand
 
-            # Try spread-out placements first, then backtrack automatically.
-            for _,day,pno,room in best_candidates:
+        # Harder cards first: fewer physical options, longer duration, then
+        # higher weekly demand.
+        occurrences.sort(key=lambda x:(
+            len(all_candidates.get(x[0],[])),
+            -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
+            -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
+            x[0],x[1]
+        ))
+
+        def run_once(seed):
+            rng=random.Random(seed)
+            occupied=[dict(x) for x in base]
+            placed=[]
+            pending=list(occurrences)
+            rng.shuffle(pending)
+            pending.sort(key=lambda x:(
+                len(all_candidates.get(x[0],[])),
+                -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
+                x[0]
+            ))
+
+            # Prefer spread across days/periods, while keeping a small
+            # deterministic random component so repeated attempts escape
+            # unlucky greedy choices.
+            for lid,occ_no in pending:
+                lesson=lesson_by_id[lid]
+                choices=[]
+                for day,pno in all_candidates.get(lid,[]):
+                    room=candidate(
+                        lesson,day,pno,occupied,
+                        enforce_availability,enforce_preferred
+                    )
+                    if room is not None or not lesson.get("room_id"):
+                        choices.append((spread_score(lesson,day,pno,occupied),rng.random(),day,pno,room))
+                choices.sort(key=lambda x:(x[0],x[1]))
+                if not choices:
+                    continue
+                # Try a small shortlist; if the first choice later causes
+                # failure for another card, the restart changes the ordering.
+                _,_,day,pno,room=choices[0]
                 row={
                     "lesson_id":lid,
                     "class_id":lesson["class_id"],
@@ -1341,20 +1355,25 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     "room_id":room,
                     "day_name":day,
                     "period_no":pno,
-                    "duration":duration
+                    "duration":max(1,int(lesson.get("duration") or 1))
                 }
                 occupied.append(row)
-                chosen.append(row)
-                next_remaining=remaining[:best_idx]+remaining[best_idx+1:]
-                if dfs(next_remaining):
-                    return True
-                chosen.pop()
-                occupied.pop()
-            return False
+                placed.append(row)
+            complete=(len(placed)==len(occurrences))
+            return complete,placed
 
-        complete=dfs(occurrence_order)
-        return complete,chosen,nodes
+        best=(False,[])
+        # Keep the request safely below Render's web timeout. More complex
+        # timetables get a few additional bounded attempts, never unbounded DFS.
+        attempts={"normal":20,"large":30,"huge":40}.get(complexity,20)
+        for attempt in range(attempts):
+            complete,trial=run_once(1009+attempt)
+            if sum(max(1,int(x.get("duration") or 1)) for x in trial) > sum(max(1,int(x.get("duration") or 1)) for x in best[1]):
+                best=(complete,trial)
+            if complete:
+                break
 
+        return best[0],best[1],attempts
     # Strict first; relaxed/draft automatically soften only availability and
     # preferred constraints. Hard timetable collisions and breaks remain hard.
     modes=[(True,True)]
