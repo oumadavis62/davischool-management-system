@@ -609,7 +609,7 @@ def _class_grid_data(con, sid, class_id=None):
         JOIN timetable_lessons l ON l.id=s.lesson_id
         JOIN classes c ON c.id=l.class_id
         JOIN subjects sub ON sub.id=l.subject_id
-        LEFT JOIN teachers t ON t.id=s.teacher_id
+        LEFT JOIN teachers t ON t.id=l.teacher_id
         LEFT JOIN timetable_rooms r ON r.id=s.room_id
         WHERE s.school_id=?
         ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
