@@ -1529,90 +1529,116 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             occupied=[dict(x) for x in base]
             placed=[]
             pending=list(occurrences)
-            rng.shuffle(pending)
-            pending.sort(key=lambda x:(
-                -max(1,int(lesson_by_id[x[0]].get("duration") or 1)),
-                -int(lesson_by_id[x[0]].get("lessons_per_week") or 0),
-                len(all_candidates.get(x[0],[])),
-                x[0],x[1]
-            ))
 
-            for lid,occ_no in pending:
+            def placement_choices(lid):
                 lesson=lesson_by_id[lid]
-                if lid in impossible:
-                    continue
-
                 choices=[]
-                # First score days so every weekly occurrence naturally moves
-                # to a different day whenever the hard once-per-day rule allows.
-                day_order=sorted(days,key=lambda d:(day_score(lesson,d,occupied),rng.random()))
-                for day in day_order:
-                    period_choices=[]
+                # Recalculate choices against the current occupied grid. This
+                # is an MRV (minimum-remaining-values) strategy: the lesson
+                # occurrence with the fewest legal positions is placed first.
+                # It prevents an early greedy choice from consuming the only
+                # remaining slot for a difficult subject/teacher combination.
+                for day in days:
                     for d,pno in all_candidates.get(lid,[]):
                         if d!=day:
                             continue
-                        room=candidate(lesson,d,pno,occupied,enforce_availability,enforce_preferred)
-                        # candidate() returns None only for a hard conflict;
-                        # -1 means the lesson is valid but can run without a
-                        # room because the room is optional.
-                        if room is not None:
-                            if room == -1:
-                                room = None
-                            # Spread lessons through the day's physical
-                            # periods instead of repeatedly choosing P1.
-                            classes=lesson_classes[int(lid)]
-                            teachers=lesson_teachers[int(lid)]
-                            period_load=sum(
-                                1 for o in occupied
-                                if str(o["day_name"])==day
-                                and int(o["period_no"])==int(pno)
-                                and (
-                                    classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
-                                    or teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
-                                )
+                        room=candidate(lesson,day,pno,occupied,enforce_availability,enforce_preferred)
+                        if room is None:
+                            continue
+                        if room == -1:
+                            room=None
+                        classes=lesson_classes[int(lid)]
+                        teachers=lesson_teachers[int(lid)]
+                        period_load=sum(
+                            1 for o in occupied
+                            if str(o["day_name"])==day
+                            and int(o["period_no"])==int(pno)
+                            and (
+                                classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+                                or teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
                             )
-                            # Do not put a weekly occurrence of the same
-                            # class/subject in the same period every day.
-                            # This was the reason schedules could show, for
-                            # example, Mathematics at P1 from Monday-Friday.
-                            subject_period_load=sum(
-                                1 for o in occupied
-                                if int(o["period_no"])==int(pno)
-                                and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
-                                and int(o.get("subject_id") or 0)==int(lesson["subject_id"])
-                            )
-                            # Also rotate a teacher's lessons through the
-                            # physical periods where possible.
-                            teacher_period_load=sum(
-                                1 for o in occupied
-                                if int(o["period_no"])==int(pno)
-                                and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
-                            )
-                            # Pairs are treated as blocks for doubles, so the
-                            # start period remains the anchor of the block.
-                            period_penalty=(
-                                subject_period_load*50000 +
-                                period_load*10000 +
-                                teacher_period_load*1000 +
-                                int(pno)
-                            )
-                            period_choices.append((period_penalty,rng.random(),pno,room))
-                    period_choices.sort(key=lambda x:(x[0],x[1]))
-                    if period_choices:
-                        _,_,pno,room=period_choices[0]
-                        row={
-                            "lesson_id":lid,
-                            "class_id":lesson["class_id"],
-                            "teacher_id":lesson["teacher_id"],
-                            "subject_id":lesson["subject_id"],
-                            "room_id":room,
-                            "day_name":day,
-                            "period_no":pno,
-                            "duration":max(1,int(lesson.get("duration") or 1))
-                        }
-                        occupied.append(row)
-                        placed.append(row)
-                        break
+                        )
+                        subject_period_load=sum(
+                            1 for o in occupied
+                            if int(o["period_no"])==int(pno)
+                            and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+                            and int(o.get("subject_id") or 0)==int(lesson["subject_id"])
+                        )
+                        teacher_period_load=sum(
+                            1 for o in occupied
+                            if int(o["period_no"])==int(pno)
+                            and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
+                        )
+                        # Prefer under-used periods while keeping the same
+                        # subject from repeating at one bell time every day.
+                        penalty=(
+                            subject_period_load*50000 +
+                            period_load*10000 +
+                            teacher_period_load*1000 +
+                            int(pno)
+                        )
+                        choices.append((penalty,rng.random(),day,int(pno),room))
+                choices.sort(key=lambda x:(x[0],x[1]))
+                return choices
+
+            # Continue until every occurrence is placed or no legal position
+            # remains. The most constrained occurrence is always selected
+            # first, rather than using a fixed lesson order.
+            while pending:
+                selected=None
+                selected_choices=None
+                for lid,occ_no in pending:
+                    if lid in impossible:
+                        continue
+                    choices=placement_choices(lid)
+                    if not choices:
+                        continue
+                    key=(
+                        len(choices),
+                        -max(1,int(lesson_by_id[lid].get("duration") or 1)),
+                        -int(lesson_by_id[lid].get("lessons_per_week") or 0),
+                        lid,
+                        occ_no
+                    )
+                    if selected is None or key<selected[0]:
+                        selected=(key,lid,occ_no)
+                        selected_choices=choices
+
+                if selected is None:
+                    break
+
+                _,lid,occ_no=selected
+                lesson=lesson_by_id[lid]
+                # The choice list was computed against the current occupancy;
+                # use its best few options and re-check each before committing.
+                committed=False
+                for _,_,day,pno,room in (selected_choices or []):
+                    checked_room=candidate(
+                        lesson,day,pno,occupied,
+                        enforce_availability,enforce_preferred
+                    )
+                    if checked_room is None:
+                        continue
+                    if checked_room == -1:
+                        checked_room=None
+                    row={
+                        "lesson_id":lid,
+                        "class_id":lesson["class_id"],
+                        "teacher_id":lesson["teacher_id"],
+                        "subject_id":lesson["subject_id"],
+                        "room_id":checked_room if checked_room is not None else room,
+                        "day_name":day,
+                        "period_no":pno,
+                        "duration":max(1,int(lesson.get("duration") or 1))
+                    }
+                    occupied.append(row)
+                    placed.append(row)
+                    pending.remove((lid,occ_no))
+                    committed=True
+                    break
+
+                if not committed:
+                    break
 
             complete=(len(placed)==len(occurrences) and not impossible)
             return complete,placed
