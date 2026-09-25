@@ -3727,11 +3727,19 @@ def users_page(request: Request):
         WHERE u.school_id=? ORDER BY u.id DESC""",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    _ensure_class_teacher_assignments_table(cur)
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?",(sid,)).fetchall()
     con.close()
+    class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
     for u in users:
         role_name=str(u["role"] or "")
         linked=escape(str(u["teacher_name"] or u["student_name"] or "—"))
+        if role_name=="teacher" and u["teacher_id"] and class_by_teacher.get(int(u["teacher_id"])):
+            ca=next((x for x in classes if int(x["id"])==class_by_teacher[int(u["teacher_id"])]),None)
+            if ca:
+                linked += " · 🏫 " + escape(str(ca["name"] or "")) + ((" · "+escape(str(ca["stream"] or ""))) if ca["stream"] else "")
         safe_name=escape(str(u["full_name"] or "user")).replace("'","&#39;")
         if role_name=="school_admin":
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
@@ -3744,9 +3752,9 @@ def users_page(request: Request):
 <div class='card section'><h2>Create user</h2><form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
 <input name='full_name' required placeholder='Full name' class='field'><input name='email' type='email' required placeholder='Email' class='field'><input name='password' type='password' required minlength='8' placeholder='Temporary password' class='field'>
 <select name='role' class='field'><option value='school_admin'>School Admin</option><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
-<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
+<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <button class='btn'>Create Account</button></form></div>
-<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
+<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"User Management",body)
 
@@ -3760,24 +3768,28 @@ def users_edit_page(request: Request, uid: int):
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    _ensure_class_teacher_assignments_table(cur)
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    assigned_class=cur.execute("SELECT class_id FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? ORDER BY id DESC LIMIT 1",(sid,int(user["teacher_id"] or 0))).fetchone() if user["teacher_id"] else None
     con.close()
     if not user:return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
     if str(user["role"] or "")=="school_admin":
         return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
     body=f"""<div class='page'><h1>✏️ Edit User</h1><div class='muted'>Update the account details and linked profile.</div>
 <div class='card section'><form method='post' action='/app/users/edit/{uid}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
 <input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'>
 <select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
-<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
+<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div style='grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end'><a href='/app/users' style='padding:11px 16px;border:1px solid #dbe2ea;border-radius:9px;text-decoration:none;color:#334155'>Cancel</a><button class='btn'>💾 Save Changes</button></div></form></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Edit User",body)
 
 @router.post("/app/users/edit/{uid}")
-def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), student_id:str=Form("")):
+def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -3804,6 +3816,22 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
         cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password.strip()),role,tid,stid,uid,sid))
     else:
         cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
+    if role=="teacher" and tid:
+        _ensure_class_teacher_assignments_table(cur)
+        cid=int(class_id) if class_id.isdigit() else None
+        if cid:
+            if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone():
+                con.close(); return HTMLResponse("Selected class does not belong to this school. <a href='/app/users'>Back</a>",400)
+            cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? AND class_id<>?",(sid,tid,cid))
+            now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+                           VALUES(?,?,?,?)
+                           ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",(sid,cid,tid,now))
+        else:
+            cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND teacher_id=?",(sid,tid))
+    elif tid:
+        _ensure_class_teacher_assignments_table(cur)
+        cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND teacher_id=?",(sid,tid))
     _audit(cur,sid,request,"USER_UPDATE",f"Updated {role} account {email_v}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
@@ -3825,7 +3853,7 @@ def users_delete(request: Request, uid: int):
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
-def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), student_id:str=Form("")):
+def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -3851,6 +3879,15 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
         con.close();return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
     from app.main import hash_password
     cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
+    if role=="teacher" and tid and class_id.isdigit():
+        cid=int(class_id)
+        _ensure_class_teacher_assignments_table(cur)
+        if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone():
+            con.close(); return HTMLResponse("Selected class does not belong to this school. <a href='/app/users'>Back</a>",400)
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+                       VALUES(?,?,?,?)
+                       ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",(sid,cid,tid,now))
     _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
