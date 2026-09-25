@@ -1287,7 +1287,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # stranded by an easy card placed earlier.
         occurrence_order=list(occurrences)
         nodes=0
-        node_limit=120000
+        node_limit=8000
         chosen=[]
 
         def dfs(remaining):
