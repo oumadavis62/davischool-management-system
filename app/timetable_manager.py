@@ -1618,8 +1618,11 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             return complete,placed
 
         best=(False,[])
-        # Use multiple fast randomized passes so the greedy solver can recover\n        # from an early placement that would otherwise leave later lesson cards\n        # stranded. The best complete/most-filled pass is retained.\n        attempts={"normal":100,"large":150,"huge":200}.get(complexity,100)
-        for attempt in range(attempts):
+        # Use multiple fast randomized passes so the greedy solver can recover\n        # from an early placement that would otherwise leave later lesson cards\n        # stranded. The best complete/most-filled pass is retained.\n        # Keep the retry count in a clearly scoped variable.  Older deployed
+        # versions could reach the return path with the retry-count name
+        # undefined, which made Generate fail before any timetable was saved.
+        attempt_count={"normal":100,"large":150,"huge":200}.get(complexity,100)
+        for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
             # Reward completed occurrence counts first, then physical periods.
@@ -1630,7 +1633,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             if complete:
                 break
 
-        return best[0],best[1],attempts
+        return best[0],best[1],attempt_count
 
     # Strict first; relaxed/draft automatically soften only availability and
     # preferred constraints. Hard timetable collisions and breaks remain hard.
