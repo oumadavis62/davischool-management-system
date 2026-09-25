@@ -753,15 +753,16 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
             )
 
     body = []
-    for day in days:
+    for day_index, day in enumerate(days):
         row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
         skip_periods = set()
 
         for kind, st, et, item in visible_timeline:
             if kind == "break":
-                row_cells.append(
-                    "<td class='tt-break' aria-label='Break'></td>"
-                )
+                # Merge each break column vertically across Monday-Friday.
+                # The break remains completely blank as requested.
+                if day_index == 0:
+                    row_cells.append(f"<td class='tt-break' aria-label='Break' rowspan='{len(days)}'></td>")
                 continue
 
             pno = int(item["period_no"])
@@ -850,12 +851,15 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
         for offset in range(duration):
             occupied_periods[(str(lesson["day_name"]), int(lesson["period_no"]) + offset)] = (lesson, offset + 1, duration)
     body = []
-    for day in days:
+    for day_index, day in enumerate(days):
         row_cells = [f"<th class='tt-day'>{escape(str(day)).upper()}</th>"]
         skip_periods = set()
         for kind, st, et, item in visible_timeline:
             if kind == "break":
-                row_cells.append("<td class='tt-break' aria-label='Break'></td>")
+                # Merge each break column vertically across Monday-Friday.
+                # The break remains completely blank as requested.
+                if day_index == 0:
+                    row_cells.append(f"<td class='tt-break' aria-label='Break' rowspan='{len(days)}'></td>")
                 continue
             pno = int(item["period_no"])
             if pno in skip_periods:
