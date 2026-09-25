@@ -1510,6 +1510,9 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                 and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
                 and int(o.get("subject_id") or 0)==subject
             )
+            # Spread the same subject's weekly occurrences across different
+            # periods as well as different days. A subject should not simply
+            # repeat at the same bell time from Monday to Friday.
             return subject_day*100000+class_day*100+teacher_day*80+days.index(day)
 
         # Harder requirements first: doubles/triples, high weekly demand,
@@ -1568,10 +1571,31 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                                     or teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
                                 )
                             )
+                            # Do not put a weekly occurrence of the same
+                            # class/subject in the same period every day.
+                            # This was the reason schedules could show, for
+                            # example, Mathematics at P1 from Monday-Friday.
+                            subject_period_load=sum(
+                                1 for o in occupied
+                                if int(o["period_no"])==int(pno)
+                                and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+                                and int(o.get("subject_id") or 0)==int(lesson["subject_id"])
+                            )
+                            # Also rotate a teacher's lessons through the
+                            # physical periods where possible.
+                            teacher_period_load=sum(
+                                1 for o in occupied
+                                if int(o["period_no"])==int(pno)
+                                and teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),set()))
+                            )
                             # Pairs are treated as blocks for doubles, so the
-                            # start period is still preferred over any position
-                            # that would fragment the two-period block.
-                            period_penalty=period_load*10000 + int(pno)
+                            # start period remains the anchor of the block.
+                            period_penalty=(
+                                subject_period_load*50000 +
+                                period_load*10000 +
+                                teacher_period_load*1000 +
+                                int(pno)
+                            )
                             period_choices.append((period_penalty,rng.random(),pno,room))
                     period_choices.sort(key=lambda x:(x[0],x[1]))
                     if period_choices:
