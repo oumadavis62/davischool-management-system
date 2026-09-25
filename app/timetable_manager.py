@@ -269,7 +269,7 @@ function printTeacherSheet(id){
   win.focus();
   setTimeout(function(){win.print();},300);
 }
-</script></style>"""
+</script>"""
 
 
 def _layout(request, tab, content):
