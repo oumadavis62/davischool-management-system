@@ -2059,8 +2059,10 @@ def _subject_grade_details(cur, school_id, subject_id, mark, grading_rules=None)
                     return str(rule["grade"]), float(rule["points"] or 0), str(rule["performance_comment"] or "")
             except Exception:
                 continue
-        grade, points = _default_grade_points(value)
-        return grade, points, ""
+        # A subject with configured grading rules must never silently fall back
+        # to the automatic A-E scale. If the mark is outside the configured
+        # ranges, surface an ungraded state so the school can correct the rule.
+        return "—", 0, ""
     try:
         _ensure_grading_table(cur)
         rule = cur.execute("""SELECT grade,points,performance_comment FROM subject_grading_rules
@@ -2068,6 +2070,14 @@ def _subject_grade_details(cur, school_id, subject_id, mark, grading_rules=None)
             ORDER BY min_mark DESC, id DESC LIMIT 1""",(school_id, subject_id, value)).fetchone()
         if rule:
             return str(rule["grade"]), float(rule["points"] or 0), str(rule["performance_comment"] or "")
+        # If this subject has custom rules but none matched, do not substitute
+        # the global automatic grading scale.
+        any_rule = cur.execute(
+            "SELECT id FROM subject_grading_rules WHERE school_id=? AND subject_id=? LIMIT 1",
+            (school_id, subject_id)
+        ).fetchone()
+        if any_rule:
+            return "—", 0, ""
     except Exception as exc:
         print("DAVISCHOOL SUBJECT GRADING FALLBACK:", repr(exc), flush=True)
     grade, points = _default_grade_points(value)
@@ -2645,7 +2655,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
       "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",mark_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
-      "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='E',points=1,comment='';for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
+      "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='—',points='—',comment='';var matched=false;for(var i=0;i<gradingRules.length;i++){if(mark>=gradingRules[i][0]&&mark<=gradingRules[i][1]){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';matched=true;break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
 
