@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from html import escape
 from urllib.parse import quote
@@ -594,16 +594,21 @@ def _generate(con, sid):
     lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?", (sid,)).fetchone()["c"]
     slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=?", (sid,)).fetchone()["c"]
     weekly_capacity=_weekly_period_capacity(con,sid)
+    latest_run=con.execute("""SELECT status,placed,requested,message,created_at
+        FROM timetable_generation_runs WHERE school_id=? ORDER BY id DESC LIMIT 1""",(sid,)).fetchone()
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     complexity=str(settings["complexity"] if settings else "normal")
     relaxation=str(settings["relaxation"] if settings else "relaxed")
-    return f"""<div class='tt-card'><h2>🚀 Generate Timetable</h2><div class='tt-muted'>Generate from lesson cards, periods, breaks, rooms and constraints. Weekly capacity is the physical teaching periods per class; breaks are intervals between periods and never count toward that capacity.</div>
+    run_notice=""
+    if latest_run:
+        run_notice=f"<div class='tt-notice {'ok' if str(latest_run['status']) in ('complete','relaxed') else ('bad' if str(latest_run['status'])=='failed' else 'ok')}'>📌 Last generation: {escape(str(latest_run['status']).title())} — {int(latest_run['placed'] or 0)} of {int(latest_run['requested'] or 0)} periods. {escape(str(latest_run['message'] or ''))}</div>"
+    return f"""<div class='tt-card'><h2>🚀 Generate Timetable</h2><div class='tt-muted'>Generate from lesson cards, periods, breaks, rooms and constraints. Weekly capacity is the physical teaching periods per class; breaks are intervals between periods and never count toward that capacity.</div>{run_notice}
 <form method='post' action='/app/timetable/generate/new' class='tt-form' style='margin-top:12px'>
 <label><span class='tt-label'>Class filter (optional)</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{opts}</select></label>
 <label><span class='tt-label'>Mode</span><select class='tt-field' name='mode'><option value='draft'>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label>
 <label><span class='tt-label'>Complexity</span><select class='tt-field' name='complexity'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
 <label class='tt-check'><input type='checkbox' name='replace_existing' value='1' checked> Replace unlocked generated placements</label>
-<div><button class='tt-btn' type='submit'>🚀 Generate</button><div class='tt-muted' style='margin-top:8px'>Generation may take a few seconds while the timetable solver checks teacher, class, room and period conflicts.</div></div></form></div>
+<div><button class='tt-btn' type='submit' onclick="this.disabled=true;this.innerText='⏳ Starting…';this.form.submit();return false;">🚀 Generate</button><div class='tt-muted' style='margin-top:8px'>Generation runs in the background so this page will not stall while the timetable solver works.</div></div></form></div>
 <div class='tt-grid'><div class='tt-stat'><b>{int(lesson_count)}</b>Lesson cards</div><div class='tt-stat'><b>{int(weekly_capacity)}</b>Teaching periods / class / week</div><div class='tt-stat'><b>Breaks excluded</b>Weekly capacity rule</div><div class='tt-stat'><b>{escape(relaxation.title())}</b>Default mode</div></div>"""
 
 
@@ -1961,59 +1966,69 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     return run,requested,placed,unplaced,status
 
 
-@router.post("/app/timetable/generate/new")
-def timetable_generate_new(request:Request,class_id:str=Form(""),mode:str=Form("relaxed"),complexity:str=Form("normal"),replace_existing:str=Form("")):
-    sid,con,response=_guard(request,"timetable.edit")
-    if response:return response
+def _run_generation_job(sid,class_filter,mode,complexity,replace_existing,run_id):
+    """Run generation outside the HTTP request so the Generate tab never waits."""
+    from app.new_ui import _db
+    con=_db()
     try:
-        if mode not in ("draft","relaxed","strict"):mode="relaxed"
-        if complexity not in ("normal","large","huge"):complexity="normal"
-        cf=int(class_id) if str(class_id).isdigit() else None
+        _ensure_tables(con)
         try:
             run,requested,placed,unplaced,status=_generate_algorithm(
-                con.cursor(),sid,cf,mode,complexity,bool(replace_existing)
+                con.cursor(),sid,class_filter,mode,complexity,replace_existing
             )
+            message=(("Unplaced lesson cards: "+",".join(
+                f"{lid} ({reason})" for lid,reason in unplaced
+            )) if unplaced else "All requested cards placed")
+            con.execute("""UPDATE timetable_generation_runs
+                SET status=?,placed=?,requested=?,message=? WHERE id=? AND school_id=?""",
+                (status,placed,requested,message,run_id,sid))
+            con.commit()
         except Exception as exc:
-            # Never leave the Generate button appearing dead. Roll back any
-            # partial database work and return the actual error to the page.
             try:
                 con.rollback()
             except Exception:
                 pass
-            cur=con.cursor()
-            try:
-                cur.execute(
-                    "INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
-                    (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
-                     "failed",0,0,"Generation error: "+str(exc)[:500])
-                )
-                con.commit()
-            except Exception:
-                try:
-                    con.rollback()
-                except Exception:
-                    pass
-            return RedirectResponse(
-                "/app/timetable?tab=generate&error="+quote("Generation failed: "+str(exc)[:300]),
-                303
-            )
+            con.execute("""UPDATE timetable_generation_runs
+                SET status=?,placed=?,requested=?,message=? WHERE id=? AND school_id=?""",
+                ("failed",0,0,"Generation error: "+str(exc)[:500],run_id,sid))
+            con.commit()
+    finally:
+        con.close()
 
+
+@router.post("/app/timetable/generate/new")
+def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,class_id:str=Form(""),mode:str=Form("relaxed"),complexity:str=Form("normal"),replace_existing:str=Form("")):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:
+        return response
+    try:
+        if mode not in ("draft","relaxed","strict"):
+            mode="relaxed"
+        if complexity not in ("normal","large","huge"):
+            complexity="normal"
+        cf=int(class_id) if str(class_id).isdigit() else None
+
+        # Register the job before returning. The actual solver runs as a
+        # background task, so the browser receives a response immediately.
         cur=con.cursor()
         cur.execute(
-            "INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
-            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,
-             ("Unplaced lesson cards: "+",".join(f"{lid} ({reason})" for lid,reason in unplaced))
-             if unplaced else "All requested cards placed")
+            """INSERT INTO timetable_generation_runs(
+                school_id,created_at,mode,complexity,status,placed,requested,message
+            ) VALUES(?,?,?,?,?,?,?,?)""",
+            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
+             "running",0,0,"Generation started in background")
         )
+        run_id=cur.lastrowid
         con.commit()
-        message=f"Generation {status}: {placed} of {requested} timetable periods allocated"
-        if unplaced:
-            message+="; unplaced cards "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)
-        return RedirectResponse("/app/timetable?tab=generate&msg="+quote(message),303)
-    finally:con.close()
-
-
-
+        background_tasks.add_task(
+            _run_generation_job,sid,cf,mode,complexity,bool(replace_existing),run_id
+        )
+        return RedirectResponse(
+            "/app/timetable?tab=generate&msg="+quote("Generation started. You can remain on this tab; it will not stall."),
+            303
+        )
+    finally:
+        con.close()
 
 
 @router.post("/app/timetable/placement/move/{rid}")
