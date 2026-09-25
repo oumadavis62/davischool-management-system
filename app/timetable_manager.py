@@ -1079,168 +1079,340 @@ def _is_available_slot(cur,sid,lesson,day,pno,duration,occupied,rooms,strict):
 
 
 def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
-    """Generate a complete timetable automatically, using retries/backtracking-like restarts.
+    """Automatically solve the timetable with deterministic backtracking.
 
-    The generator keeps hard collisions impossible, but in relaxed/draft mode it can
-    progressively relax availability/preferred constraints when those rules would
-    otherwise leave requirements unplaced. This makes generation self-solving while
-    preserving explicit hard class/teacher conflicts.
+    Hard rules are never relaxed: class/stream collisions, teacher collisions,
+    breaks, fixed-room collisions and period boundaries. In relaxed/draft mode
+    availability and preferred daily limits may be relaxed only when necessary.
+    A lesson occurrence occupies its full duration, so double/triple lessons
+    consume 2/3 physical periods while remaining one occurrence.
     """
-    days=[str(r["name"]) for r in cur.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
-    if not days: days=list(DEFAULT_DAYS)
-    periods=[dict(r) for r in cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()]
-    rooms=[dict(r) for r in cur.execute("SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)).fetchall()]
+    days=[str(r["name"]) for r in cur.execute(
+        "SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)
+    ).fetchall()]
+    if not days:
+        days=list(DEFAULT_DAYS)
+
+    periods=[dict(r) for r in cur.execute(
+        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)
+    ).fetchall()]
+    rooms=[dict(r) for r in cur.execute(
+        "SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)
+    ).fetchall()]
+
     lesson_sql="SELECT * FROM timetable_lessons WHERE school_id=?"
     params=(sid,)
     if class_filter:
-        lesson_sql+=" AND (class_id=? OR id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))"
+        lesson_sql += """ AND (class_id=? OR id IN (
+            SELECT lesson_id FROM timetable_lesson_classes
+            WHERE school_id=? AND class_id=?
+        ))"""
         params=(sid,class_filter,sid,class_filter)
-    lessons=[dict(r) for r in cur.execute(lesson_sql+" ORDER BY duration DESC,lessons_per_week DESC,id",params).fetchall()]
-    constraints=_constraint_maps(cur,sid)
-    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)).fetchall()}
-    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute("SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)).fetchall()}
+    lessons=[dict(r) for r in cur.execute(
+        lesson_sql+" ORDER BY duration DESC,lessons_per_week DESC,id",params
+    ).fetchall()]
 
-    if replace_existing:
-        if class_filter:
-            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0 AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?)",(sid,sid,class_filter))
-        else:
-            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0",(sid,))
+    if not periods or not lessons:
+        return datetime.now().strftime("%Y%m%d%H%M%S%f"),0,0,[],"complete"
 
-    base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
-        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=?""",(sid,)).fetchall()]
+    pmap={int(p["period_no"]):p for p in periods}
+    breaks=[dict(r) for r in cur.execute(
+        "SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",(sid,)
+    ).fetchall()]
+
     lesson_classes={}
     lesson_teachers={}
     for l in lessons:
         lid=int(l["id"])
-        lesson_classes[lid]={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or {int(l["class_id"])}
-        lesson_teachers[lid]={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or ({int(l["teacher_id"])} if l["teacher_id"] else set())
+        cls={int(x["class_id"]) for x in cur.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or {int(l["class_id"])}
+        tea={int(x["teacher_id"]) for x in cur.execute(
+            "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or ({int(l["teacher_id"])} if l["teacher_id"] else set())
+        lesson_classes[lid]=cls
+        lesson_teachers[lid]=tea
 
-    breaks=[dict(r) for r in cur.execute("SELECT * FROM timetable_breaks WHERE school_id=?",(sid,)).fetchall()]
-    pmap={int(p["period_no"]):p for p in periods}
+    blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
+        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)
+    ).fetchall()}
+    blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
+        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
+    ).fetchall()}
+    constraints=_constraint_maps(cur,sid)
 
-    def fits_break(pno,duration):
-        for x in range(pno,pno+duration):
-            if x not in pmap:return False
-            st=_time_to_min(pmap[x]["start_time"]); et=_time_to_min(pmap[x]["end_time"])
+    if replace_existing:
+        if class_filter:
+            cur.execute("""DELETE FROM timetable_slots
+                WHERE school_id=? AND locked=0 AND lesson_id IN (
+                    SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
+                )""",(sid,sid,class_filter))
+        else:
+            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0",(sid,))
+
+    base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
+        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+        WHERE s.school_id=?""",(sid,)).fetchall()]
+
+    def overlap(a_pno,a_duration,b):
+        return (
+            int(a_pno) <= int(b["period_no"])+max(1,int(b.get("duration",1)))-1
+            and int(b["period_no"]) <= int(a_pno)+max(1,int(a_duration))-1
+        )
+
+    def crosses_break(pno,duration):
+        for x in range(int(pno),int(pno)+int(duration)):
+            p=pmap.get(x)
+            if not p:
+                return True
+            st=_time_to_min(p["start_time"])
+            et=_time_to_min(p["end_time"])
             for b in breaks:
-                if st<_time_to_min(str(b["end_time"])) and et>_time_to_min(str(b["start_time"])):
-                    return False
-        return True
+                if st < _time_to_min(b["end_time"]) and et > _time_to_min(b["start_time"]):
+                    return True
+        return False
 
-    def room_for(lesson,day,pno,duration,occ):
-        fixed=lesson.get("room_id")
-        if fixed:
-            if any(o["day_name"]==day and o.get("room_id") and int(o["room_id"])==int(fixed) and _overlaps({"period_no":pno,"duration":duration},o) for o in occ):
-                return None
-            return int(fixed)
-        for room in rooms:
-            rid=int(room["id"])
-            if not any(o["day_name"]==day and o.get("room_id") and int(o["room_id"])==rid and _overlaps({"period_no":pno,"duration":duration},o) for o in occ):
-                return rid
-        # A room is optional in DaviSchool; allow placement without one when none are configured.
-        return None if rooms else None
+    def candidate(lesson,day,pno,occ,enforce_availability,enforce_preferred):
+        lid=int(lesson["id"])
+        duration=max(1,int(lesson.get("duration") or 1))
+        if crosses_break(pno,duration):
+            return None
 
-    def candidate(lesson,day,pno,occ,enforce_availability=True,enforce_preferred=True):
-        lid=int(lesson["id"]); duration=max(1,int(lesson.get("duration") or 1))
-        if not fits_break(pno,duration): return None
-        classes=lesson_classes[lid]; teachers=lesson_teachers[lid]
+        classes=lesson_classes[lid]
+        teachers=lesson_teachers[lid]
+
         for o in occ:
-            if o["day_name"]!=day or not _overlaps({"period_no":pno,"duration":duration},o): continue
-            if classes.intersection(lesson_classes.get(int(o["lesson_id"]),{int(o["class_id"])})): return None
-            if teachers.intersection(lesson_teachers.get(int(o["lesson_id"]),({int(o["teacher_id"])} if o.get("teacher_id") else set()))): return None
+            if str(o["day_name"]) != day or not overlap(pno,duration,o):
+                continue
+            oid=int(o["lesson_id"])
+            if classes.intersection(lesson_classes.get(oid,{int(o["class_id"])})):
+                return None
+            if teachers.intersection(lesson_teachers.get(
+                oid,({int(o["teacher_id"])} if o.get("teacher_id") else set())
+            )):
+                return None
+            fixed=int(lesson["room_id"]) if lesson.get("room_id") else None
+            other_room=int(o["room_id"]) if o.get("room_id") else None
+            if fixed and other_room==fixed:
+                return None
+
         if enforce_availability:
-            for xp in range(pno,pno+duration):
-                if any((day,xp,t) in blocked_teacher for t in teachers): return None
-                if (day,xp,int(lesson["subject_id"])) in blocked_subject: return None
+            for xp in range(int(pno),int(pno)+duration):
+                if any((day,xp,t) in blocked_teacher for t in teachers):
+                    return None
+                if (day,xp,int(lesson["subject_id"])) in blocked_subject:
+                    return None
+
         if enforce_preferred:
             for cdef in constraints.get("Teacher max lessons/day",[]):
                 if cdef["target_id"] and teachers and int(cdef["target_id"]) in teachers:
                     lim=int(cdef["value"] or 0)
-                    if lim and sum(1 for o in occ if o["day_name"]==day and lesson_teachers.get(int(o["lesson_id"]),set()) & teachers)>=lim: return None
+                    if lim:
+                        used=sum(
+                            1 for o in occ
+                            if str(o["day_name"])==day
+                            and lesson_teachers.get(int(o["lesson_id"]),set()).intersection(teachers)
+                        )
+                        if used>=lim:
+                            return None
             for cdef in constraints.get("Class max lessons/day",[]):
-                if cdef["target_id"] and any(int(cdef["target_id"])==x for x in classes):
-                    lim=int(cdef["value"] or 0)
-                    if lim and sum(1 for o in occ if o["day_name"]==day and lesson_classes.get(int(o["lesson_id"]),set()) & classes)>=lim: return None
-        room=room_for(lesson,day,pno,duration,occ)
-        # A room is optional unless the Lesson Card explicitly requires one.
-        # If every configured room is occupied, still allow an "Any available room"
-        # lesson to be scheduled without assigning a room. This prevents room
-        # configuration from blocking the entire timetable.
-        if lesson.get("room_id") and room is None:return None
-        return room
+                if cdef["target_id"]:
+                    target=int(cdef["target_id"])
+                    if target in classes:
+                        lim=int(cdef["value"] or 0)
+                        if lim:
+                            used=sum(
+                                1 for o in occ
+                                if str(o["day_name"])==day
+                                and lesson_classes.get(int(o["lesson_id"]),set()).intersection(classes)
+                            )
+                            if used>=lim:
+                                return None
 
-    # Several deterministic restarts prevent a greedy early choice from blocking
-    # the rest of the school. More constrained/longer cards are placed first.
-    orders=[]
-    orders.append(sorted(lessons,key=lambda l:(-int(l.get("duration") or 1),-int(l.get("lessons_per_week") or 0),int(l["id"]))))
-    orders.append(sorted(lessons,key=lambda l:(-len(lesson_classes[int(l["id"])]),-len(lesson_teachers[int(l["id"])]),-int(l.get("duration") or 1),int(l["id"]))))
-    orders.append(sorted(lessons,key=lambda l:(-int(l.get("lessons_per_week") or 0),-int(l.get("duration") or 1),int(l["id"]))))
-    orders.append(list(reversed(orders[0])))
-    orders.append(sorted(lessons,key=lambda l:(int(l["id"])%5,-int(l.get("duration") or 1),-int(l.get("lessons_per_week") or 0))))
-    best=None
-    for order_index,order in enumerate(orders):
-        occ=[dict(x) for x in base]
-        placements=[]
-        unplaced=[]
-        # In relaxed/draft generation, start strict and automatically fall back
-        # to availability/constraint relaxation only for cards that cannot fit.
-        for lesson in order:
-            lid=int(lesson["id"]); need=max(0,int(lesson.get("lessons_per_week") or 0)-sum(1 for o in occ if int(o["lesson_id"])==lid))
-            if int(lesson.get("locked") or 0) and need<=0: continue
-            for _ in range(need):
-                found=None
-                candidate_modes=[(True,True)]
-                if mode!="strict":
-                    candidate_modes += [(True,False),(False,True),(False,False)]
-                for av_ok,pref_ok in candidate_modes:
-                    candidates=[]
-                    for day in days:
-                        for p in periods:
-                            pno=int(p["period_no"])
-                            room=candidate(lesson,day,pno,occ,av_ok,pref_ok)
-                            if room is not None or not lesson.get("room_id"):
-                                # Score spreads lessons across the week and avoids
-                                # repeatedly using the first available period.
-                                same_day=sum(1 for o in occ if o["day_name"]==day and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
-                                same_subject=sum(1 for o in occ if o["day_name"]==day and int(o.get("subject_id") or 0)==int(lesson["subject_id"]) and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
-                                same_period=sum(1 for o in occ if int(o.get("period_no") or 0)==int(p["period_no"]) and lesson_classes[lid] & lesson_classes.get(int(o["lesson_id"]),set()))
-                                # Spread a class across the week and across periods
-                                # instead of repeatedly selecting Period 1.
-                                score=(same_day*100+same_period*20+same_subject*15+days.index(day),int(p["period_no"]))
-                                candidates.append((score,day,p,room))
-                    if candidates:
-                        candidates.sort(key=lambda x:x[0])
-                        _,day,p,room=candidates[0]
-                        row={"lesson_id":lid,"class_id":lesson["class_id"],"teacher_id":lesson["teacher_id"],"room_id":room,"day_name":day,"period_no":int(p["period_no"]),"duration":max(1,int(lesson.get("duration") or 1))}
-                        occ.append(row); placements.append(row); found=True; break
-                if not found:
-                    unplaced.append((lid,"no collision-free period after automatic relaxation")); break
-        score=len(placements)
-        if best is None or score>best[0]:
-            best=(score,placements,unplaced)
-        if not unplaced: break
+        fixed=int(lesson["room_id"]) if lesson.get("room_id") else None
+        if fixed:
+            if any(
+                str(o["day_name"])==day and int(o.get("room_id") or 0)==fixed
+                and overlap(pno,duration,o) for o in occ
+            ):
+                return None
+            room_id=fixed
+        else:
+            room_id=None
+            for room in rooms:
+                rid=int(room["id"])
+                if all(
+                    not (
+                        str(o["day_name"])==day
+                        and int(o.get("room_id") or 0)==rid
+                        and overlap(pno,duration,o)
+                    ) for o in occ
+                ):
+                    room_id=rid
+                    break
+            # Room is optional when the Lesson Card says "Any available room".
+            # Never block an otherwise valid lesson merely because all rooms
+            # are occupied or no rooms have been configured.
+        return room_id
 
-    placements=best[1] if best else []
-    # Remove unlocked generated placements for this run and persist the best solution.
+    def spread_score(lesson,day,pno,occ):
+        lid=int(lesson["id"])
+        classes=lesson_classes[lid]
+        subject=int(lesson["subject_id"])
+        same_day=sum(
+            1 for o in occ
+            if str(o["day_name"])==day
+            and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+        )
+        same_subject=sum(
+            1 for o in occ
+            if str(o["day_name"])==day
+            and int(o.get("subject_id") or 0)==subject
+            and classes.intersection(lesson_classes.get(int(o["lesson_id"]),set()))
+        )
+        return same_day*100+same_subject*15+days.index(day)*2+int(pno)
+
+    def solve(enforce_availability,enforce_preferred):
+        occupied=[dict(x) for x in base]
+        occurrences=[]
+        for lesson in lessons:
+            lid=int(lesson["id"])
+            already=sum(1 for o in occupied if int(o["lesson_id"])==lid)
+            need=max(0,int(lesson.get("lessons_per_week") or 0)-already)
+            for n in range(need):
+                occurrences.append((lid,n))
+
+        # Most constrained cards are searched first. MRV below re-evaluates
+        # candidates after every placement, so a difficult card cannot be
+        # stranded by an easy card placed earlier.
+        occurrence_order=list(occurrences)
+        nodes=0
+        node_limit=120000
+        chosen=[]
+
+        def dfs(remaining):
+            nonlocal nodes
+            nodes+=1
+            if not remaining:
+                return True
+            if nodes>node_limit:
+                return False
+
+            best_idx=None
+            best_candidates=None
+            best_key=None
+
+            for idx,(lid,occ_no) in enumerate(remaining):
+                lesson=next(x for x in lessons if int(x["id"])==lid)
+                candidates=[]
+                for day in days:
+                    for p in periods:
+                        pno=int(p["period_no"])
+                        room=candidate(
+                            lesson,day,pno,occupied,
+                            enforce_availability,enforce_preferred
+                        )
+                        if room is not None or not lesson.get("room_id"):
+                            candidates.append((
+                                spread_score(lesson,day,pno,occupied),
+                                day,pno,room
+                            ))
+                candidates.sort(key=lambda x:x[0])
+                key=(len(candidates),-max(1,int(lesson.get("duration") or 1)),
+                     -int(lesson.get("lessons_per_week") or 0),lid)
+                if best_candidates is None or key<best_key:
+                    best_idx=idx
+                    best_candidates=candidates
+                    best_key=key
+                if not candidates:
+                    return False
+
+            lid,occ_no=remaining[best_idx]
+            lesson=next(x for x in lessons if int(x["id"])==lid)
+            duration=max(1,int(lesson.get("duration") or 1))
+
+            # Try spread-out placements first, then backtrack automatically.
+            for _,day,pno,room in best_candidates:
+                row={
+                    "lesson_id":lid,
+                    "class_id":lesson["class_id"],
+                    "teacher_id":lesson["teacher_id"],
+                    "subject_id":lesson["subject_id"],
+                    "room_id":room,
+                    "day_name":day,
+                    "period_no":pno,
+                    "duration":duration
+                }
+                occupied.append(row)
+                chosen.append(row)
+                next_remaining=remaining[:best_idx]+remaining[best_idx+1:]
+                if dfs(next_remaining):
+                    return True
+                chosen.pop()
+                occupied.pop()
+            return False
+
+        complete=dfs(occurrence_order)
+        return complete,chosen,nodes
+
+    # Strict first; relaxed/draft automatically soften only availability and
+    # preferred constraints. Hard timetable collisions and breaks remain hard.
+    modes=[(True,True)]
+    if mode!="strict":
+        modes += [(True,False),(False,True),(False,False)]
+
+    best_solution=None
+    best_score=-1
+    for av_ok,pref_ok in modes:
+        complete,chosen,nodes=solve(av_ok,pref_ok)
+        score=sum(max(1,int(x.get("duration") or 1)) for x in chosen)
+        if score>best_score:
+            best_score=score
+            best_solution=(complete,chosen,av_ok,pref_ok,nodes)
+        if complete:
+            break
+
+    complete,placements,av_ok,pref_ok,nodes=best_solution or (True,[],True,True,0)
+
+    # Persist only the best unlocked generated placements.
     if class_filter:
-        cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0 AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?)",(sid,sid,class_filter))
+        cur.execute("""DELETE FROM timetable_slots
+            WHERE school_id=? AND locked=0 AND lesson_id IN (
+                SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
+            )""",(sid,sid,class_filter))
     else:
         cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0",(sid,))
+
     run=datetime.now().strftime("%Y%m%d%H%M%S%f")
     for row in placements:
         p=pmap[int(row["period_no"])]
-        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",
-            (sid,row["lesson_id"],row["day_name"],row["period_no"],p["start_time"],p["end_time"],row["room_id"],0,run))
-    # "lessons_per_week" is the number of teaching occurrences. The timetable
-    # capacity and generation result, however, are measured in PERIODS. A
-    # double lesson therefore consumes 2 periods, not 1; a triple consumes 3.
+        cur.execute("""INSERT INTO timetable_slots(
+            school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run
+        ) VALUES(?,?,?,?,?,?,?,?,?)""",(
+            sid,row["lesson_id"],row["day_name"],row["period_no"],
+            p["start_time"],p["end_time"],row["room_id"],0,run
+        ))
+
     requested=sum(
-        int(l.get("lessons_per_week") or 0) * max(1, int(l.get("duration") or 1))
+        int(l.get("lessons_per_week") or 0)*max(1,int(l.get("duration") or 1))
         for l in lessons
     )
-    placed=sum(max(1, int(row.get("duration") or 1)) for row in placements)
-    status="complete" if not best or not best[2] else ("relaxed" if mode!="strict" else "incomplete")
-    return run,requested,placed,best[2] if best else [],status
+    placed=sum(max(1,int(row.get("duration") or 1)) for row in placements)
+
+    unplaced=[]
+    if not complete:
+        placed_by={int(x["lesson_id"]) for x in placements}
+        for l in lessons:
+            need=int(l.get("lessons_per_week") or 0)
+            got=sum(1 for x in placements if int(x["lesson_id"])==int(l["id"]))
+            if got<need:
+                unplaced.append((
+                    int(l["id"]),
+                    f"{got}/{need} occurrences placed; automatic solver exhausted its search"
+                ))
+
+    status="complete" if complete else ("relaxed" if mode!="strict" and placed else "incomplete")
+    return run,requested,placed,unplaced,status
 
 
 @router.post("/app/timetable/generate/new")
