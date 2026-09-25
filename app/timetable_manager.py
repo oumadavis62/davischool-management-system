@@ -523,19 +523,30 @@ def _generate(con, sid):
 
 def _verify(con, sid):
     lessons=con.execute("SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?", (sid,)).fetchall()
-    placements=con.execute("SELECT lesson_id FROM timetable_slots WHERE school_id=?", (sid,)).fetchall()
-    placed_counts={}
+    placements=con.execute("""SELECT s.lesson_id,l.lessons_per_week,l.duration
+        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+        WHERE s.school_id=?""",(sid,)).fetchall()
+    placed_occurrences={}
+    placed_periods={}
     for r in placements:
         lid=int(r["lesson_id"])
-        placed_counts[lid]=placed_counts.get(lid,0)+1
+        placed_occurrences[lid]=placed_occurrences.get(lid,0)+1
+        placed_periods[lid]=placed_periods.get(lid,0)+max(1,int(r["duration"] or 1))
     issues=[]
     for l in lessons:
         lid=int(l["id"])
-        required=int(l["lessons_per_week"] or 0)
-        actual=int(placed_counts.get(lid,0))
-        missing=max(0,required-actual)
-        if missing:
-            issues.append(f"Lesson card {lid}: {actual} of {required} weekly placements made; {missing} missing.")
+        required_occurrences=int(l["lessons_per_week"] or 0)
+        required_periods=required_occurrences*max(1,int(l["duration"] or 1))
+        actual_occurrences=int(placed_occurrences.get(lid,0))
+        actual_periods=int(placed_periods.get(lid,0))
+        missing_occ=max(0,required_occurrences-actual_occurrences)
+        missing_periods=max(0,required_periods-actual_periods)
+        if missing_occ or missing_periods:
+            issues.append(
+                f"Lesson card {lid}: {actual_occurrences} of {required_occurrences} weekly occurrences "
+                f"placed ({actual_periods} of {required_periods} periods); "
+                f"{missing_occ} occurrence(s) / {missing_periods} period(s) missing."
+            )
     # Hard collision checks.
     rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
@@ -1233,7 +1244,7 @@ def timetable_generate_new(request:Request,class_id:str=Form(""),mode:str=Form("
         cur=con.cursor();cur.execute("INSERT INTO timetable_generation_runs(school_id,created_at,mode,complexity,status,placed,requested,message) VALUES(?,?,?,?,?,?,?,?)",
             (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,status,placed,requested,("Unplaced lesson cards: "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)) if unplaced else "All requested cards placed"))
         con.commit()
-        message=f"Generation {status}: {placed} of {requested} lesson placements made"
+        message=f"Generation {status}: {placed} of {requested} timetable periods allocated"
         if unplaced:message+="; unplaced cards "+",".join(f"{lid} ({reason})" for lid,reason in unplaced)
         return RedirectResponse("/app/timetable?tab=generate&msg="+quote(message),303)
     finally:con.close()
