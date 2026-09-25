@@ -1209,8 +1209,14 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         p=pmap[int(row["period_no"])]
         cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",
             (sid,row["lesson_id"],row["day_name"],row["period_no"],p["start_time"],p["end_time"],row["room_id"],0,run))
-    requested=sum(int(l.get("lessons_per_week") or 0) for l in lessons)
-    placed=len(placements)
+    # "lessons_per_week" is the number of teaching occurrences. The timetable
+    # capacity and generation result, however, are measured in PERIODS. A
+    # double lesson therefore consumes 2 periods, not 1; a triple consumes 3.
+    requested=sum(
+        int(l.get("lessons_per_week") or 0) * max(1, int(l.get("duration") or 1))
+        for l in lessons
+    )
+    placed=sum(max(1, int(row.get("duration") or 1)) for row in placements)
     status="complete" if not best or not best[2] else ("relaxed" if mode!="strict" else "incomplete")
     return run,requested,placed,best[2] if best else [],status
 
