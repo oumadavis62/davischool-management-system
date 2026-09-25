@@ -669,8 +669,10 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 continue
 
             duration = max(1, int(lesson["duration"] or 1))
-            # Merge a multi-period lesson only across immediately adjacent
-            # visible period columns. A break column always interrupts it.
+            # A lesson placement stores its START period plus its duration;
+            # there is intentionally no duplicate slot row for the second
+            # period of a double/triple lesson. Render the saved duration as
+            # one horizontal block across the following actual period columns.
             span = 1
             current_idx = next(
                 (idx for idx, x in enumerate(visible_timeline)
@@ -680,11 +682,9 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
             if current_idx >= 0:
                 for next_idx in range(current_idx + 1, min(current_idx + duration, len(visible_timeline))):
                     next_item = visible_timeline[next_idx]
+                    # A configured break is a hard boundary; a double lesson
+                    # may not visually or logically pass through it.
                     if next_item[0] != "period":
-                        break
-                    next_pno = int(next_item[3]["period_no"])
-                    next_lesson = grid.get((day, next_pno))
-                    if not next_lesson or int(next_lesson["lesson_id"]) != int(lesson["lesson_id"]):
                         break
                     span += 1
 
