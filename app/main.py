@@ -519,7 +519,23 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     con = get_db()
     try:
         cur = con.cursor()
-        u = cur.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (email.strip(),)).fetchone()
+        login_id = email.strip()
+        u = cur.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (login_id,)).fetchone()
+        # The sign-in form is labelled "Username or Email". School-created
+        # accounts historically stored only an email, so also accept the
+        # account full name and linked teacher profile name as identifiers.
+        if not u:
+            u = cur.execute("""SELECT u.* FROM users u
+                WHERE lower(trim(COALESCE(u.full_name,'')))=lower(trim(?))
+                ORDER BY u.id DESC LIMIT 1""", (login_id,)).fetchone()
+        if not u:
+            try:
+                u = cur.execute("""SELECT u.* FROM users u
+                    JOIN teachers t ON t.id=u.teacher_id AND t.school_id=u.school_id
+                    WHERE lower(trim(COALESCE(t.name,'')))=lower(trim(?))
+                    ORDER BY u.id DESC LIMIT 1""", (login_id,)).fetchone()
+            except Exception:
+                u = None
         if not u:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         valid, _ = verify_password(password, u["password"])
