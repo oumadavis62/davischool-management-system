@@ -154,7 +154,20 @@ def _ensure_tables(con):
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )""")
-    slot_columns={str(x["name"]) for x in cur.execute("PRAGMA table_info(timetable_slots)").fetchall()}
+    # SQLite exposes PRAGMA table_info(), while Render/PostgreSQL does not.
+    # Detect the backend and inspect the existing columns using the appropriate
+    # catalog query so the timetable page can initialize on both databases.
+    if hasattr(con, "create_function"):
+        slot_rows = cur.execute("PRAGMA table_info(timetable_slots)").fetchall()
+        slot_columns = {str(x["name"]) for x in slot_rows}
+    else:
+        slot_rows = cur.execute(
+            """SELECT column_name AS name
+               FROM information_schema.columns
+               WHERE table_schema = current_schema()
+                 AND table_name = 'timetable_slots'"""
+        ).fetchall()
+        slot_columns = {str(x["name"]) for x in slot_rows}
     if "profile_id" not in slot_columns:
         cur.execute("ALTER TABLE timetable_slots ADD COLUMN profile_id INTEGER DEFAULT 1")
     return cur
