@@ -1085,6 +1085,12 @@ def _timetable(request, con, sid):
                 f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(rows)}</table></div></div>"
             )
 
+    teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teacher_legend = "".join(
+        f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(t['id'])}'>{escape(str(t['name']))}</span>"
+        for t in teacher_rows
+    ) or "<span class='tt-muted'>No teachers found.</span>"
+
     return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
 <div class='tt-muted'>aSc-style class view: days run vertically and all saved periods and breaks run horizontally using the exact bell schedule. On a phone, swipe horizontally to see P4–P8; the DAY column stays fixed on the left.</div>
 <form method='get' class='tt-form' style='margin-top:12px'>
@@ -1096,7 +1102,7 @@ def _timetable(request, con, sid):
 </form>
 <div class='tt-card tt-manual-editor'><h3>🖱️ Manual Placement</h3>
 <div class='tt-muted'>Drag any lesson placard and drop it into another period. Placard colors identify teachers. Locked lessons cannot be moved. Existing class, teacher, room, break and double-period checks remain active.</div>
-<div class='tt-legend'>{"".join([f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(t['id'])}'>{escape(str(t['name']))}</span>" for t in con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()]) or "<span class='tt-muted'>No teachers found.</span>"}</div>
+<div class='tt-legend'>{teacher_legend}</div>
 </div>
 <div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
 <script>
