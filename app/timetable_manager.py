@@ -1026,16 +1026,22 @@ def _master_timetable_html(classes, periods, days, grids):
     for cls in classes:
         cid = int(cls["id"])
         grid = grids.get(cid, {})
+        occupied = {}
+        for (key, lesson0) in grid.items():
+            start_day, start_pno = key
+            dur0 = max(1, int(lesson0["duration"] or 1))
+            for off0 in range(dur0):
+                occupied[(str(start_day), int(start_pno)+off0)] = lesson0
         cells = [f"<th class='tt-master-class'>{escape(str(cls['name']))}{(' — '+escape(str(cls['stream']))) if cls['stream'] else ''}</th>"]
         for day in days:
             for p in periods:
                 pno = int(p["period_no"])
-                lesson = grid.get((str(day), pno))
+                lesson = occupied.get((str(day), pno))
                 if lesson:
                     start_pno = int(lesson["period_no"])
                     duration = max(1, int(lesson["duration"] or 1))
                     if pno != start_pno and pno < start_pno + duration:
-                        cells.append("<td class='tt-master-cell tt-master-continuation'>↳</td>")
+                        cells.append(f"<td class='tt-master-cell tt-master-continuation' title='Continuation of {escape(str(lesson['subject']))}'>↳</td>")
                     else:
                         lid = int(lesson["id"])
                         teacher_id = lesson["teacher_id"]
