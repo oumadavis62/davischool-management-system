@@ -320,9 +320,30 @@ def _save_profile_json(con,sid,field,value):
 
 
 def _install_profile_sql_function(con,sid):
+    """Provide the active-profile helper on both SQLite and PostgreSQL.
+    
+    SQLite supports connection.create_function(), while psycopg/PostgreSQL
+    does not.  The timetable module uses this helper in several existing
+    queries, so PostgreSQL gets an equivalent SQL function instead of failing
+    the timetable page during request setup.
+    """
     pid=_active_profile_id(con,sid)
-    con.create_function("timetable_active_profile",1,
-        lambda school_id: pid if str(school_id).isdigit() and int(school_id)==int(sid) else -1)
+    if hasattr(con,"create_function"):
+        con.create_function(
+            "timetable_active_profile",1,
+            lambda school_id: pid if str(school_id).isdigit() and int(school_id)==int(sid) else -1
+        )
+        return
+    con.execute("""CREATE OR REPLACE FUNCTION timetable_active_profile(p_school_id INTEGER)
+        RETURNS INTEGER
+        LANGUAGE SQL
+        STABLE
+        AS $
+            SELECT id FROM timetable_profiles
+            WHERE school_id = p_school_id AND active = 1
+            ORDER BY id
+            LIMIT 1
+        $""")
 
 
 def _page(request, title, body):
