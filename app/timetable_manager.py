@@ -1725,7 +1725,7 @@ async def timetable_availability_save(request:Request,kind:str=Form(...),resourc
         if not con.execute(f"SELECT id FROM {valid_table} WHERE school_id=? AND id=?",(sid,resource_id)).fetchone():
             return RedirectResponse("/app/timetable?tab=availability&error=Invalid+resource",303)
         days=[str(r["name"]) for r in [r for r in _profile_days(con,sid) if int(r["enabled"] or 0)]]
-        periods=[int(r["period_no"]) for r in con.execute("SELECT period_no FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()]
+        periods=[int(r["period_no"]) for r in _profile_periods(con,sid)]
         allowed={(d,p) for d in days for p in periods}
         selected=set()
         form=await request.form()
@@ -2355,11 +2355,15 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
 
         return best[0],best[1],attempt_count
 
-    # Strict first; relaxed/draft automatically soften only availability and
-    # preferred constraints. Hard timetable collisions and breaks remain hard.
+    # Availability is a HARD scheduling rule. Relaxed/draft mode may
+    # relax preferred daily constraints, but it must NEVER place a teacher or
+    # subject in a period that was explicitly marked unavailable.
+    # Previously the fallback modes included enforce_availability=False,
+    # which caused the solver to ignore saved availability whenever the
+    # strict pass could not complete the timetable.
     modes=[(True,True)]
     if mode!="strict":
-        modes += [(True,False),(False,True),(False,False)]
+        modes += [(True,False)]
 
     best_solution=None
     best_score=-1
