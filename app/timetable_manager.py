@@ -338,12 +338,10 @@ def _install_profile_sql_function(con,sid):
         RETURNS INTEGER
         LANGUAGE SQL
         STABLE
-        AS $
-            SELECT id FROM timetable_profiles
+        AS 'SELECT id FROM timetable_profiles
             WHERE school_id = p_school_id AND active = 1
             ORDER BY id
-            LIMIT 1
-        $""")
+            LIMIT 1'""")
 
 
 def _page(request, title, body):
