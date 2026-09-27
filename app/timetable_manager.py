@@ -1125,7 +1125,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
                 label = "<br><small class='tt-duration'>DOUBLE LESSON</small>" if duration == 2 else "<br><small class='tt-duration'>TRIPLE LESSON</small>" if duration >= 3 else ""
                 room_html = f"<small class='tt-teacher-room'>{escape(room)}</small>" if room else ""
                 row_cells.append(
-                    f"<td class='tt-lesson tt-teacher-lesson' colspan='{span}'><b>{escape(_subject_initial(lesson))}</b>{label}"
+                    f"<td class='tt-lesson tt-teacher-lesson' colspan='{span}'><b>{escape(str(lesson['subject']))}</b>{label}"
                     f"<span class='tt-teacher-class'>{escape(classes)}</span>{room_html}</td>"
                 )
                 continue
@@ -1143,7 +1143,9 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
     if selected_teacher_id is not None:
         teachers = [t for t in teachers if int(t["id"]) == int(selected_teacher_id)]
     periods = _profile_periods(con,sid)
-    days = [str(r["name"]) for r in _profile_days(con,sid) if int(r["enabled"] or 0)]
+    configured_days = [str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no", (sid,)).fetchall()]
+    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    days = [d for d in weekdays if d in configured_days] or weekdays
     breaks = _profile_breaks(con,sid)
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,r.name room
@@ -1302,39 +1304,7 @@ def _timetable(request, con, sid):
         for c in classes
     )
 
-    # A class/teacher filter is a request for an independent timetable sheet,
-    # not a filtered copy of the whole-school master sheet.
-    selected_sheet = None
-    selected_view_title = ""
-    if str(class_filter).isdigit():
-        selected_cid = int(class_filter)
-        selected_class = next((c for c in classes if int(c["id"]) == selected_cid), None)
-        if selected_class:
-            selected_sheet = _class_grid_html(
-                selected_class, periods, days, breaks, grids.get(selected_cid, {}), show_title=True
-            )
-            selected_view_title = "🏫 Independent Class Timetable"
-    elif str(teacher_filter).isdigit():
-        selected_tid = int(teacher_filter)
-        selected_teacher = con.execute(
-            "SELECT id,name FROM teachers WHERE id=? AND school_id=?",
-            (selected_tid, sid)
-        ).fetchone()
-        if selected_teacher:
-            selected_sheet = _teacher_sheets(con, sid, selected_tid)
-            selected_view_title = "👨‍🏫 Independent Teacher Timetable"
-
-    master_sheet = (
-        f"<div class='tt-card'><h3>{selected_view_title}</h3>"
-        "<div class='tt-muted'>This is an independent timetable for the selected class or teacher. "
-        "It uses the active timetable profile's exact days, period times and saved breaks. "
-        "Use Print to print only this selected timetable.</div>"
-        "<div class='no-print' style='margin:12px 0'>"
-        "<button class='tt-btn' type='button' onclick='printClassTimetables()'>🖨️ Print This Timetable</button>"
-        "</div>"
-        f"<div class='tt-print-sheets'>{selected_sheet}</div></div>"
-        if selected_sheet else _master_timetable_html(classes, periods, days, grids)
-    )
+    master_sheet = _master_timetable_html(classes, periods, days, grids)
 
     drag_script = """<script>
 (function(){
@@ -1411,7 +1381,7 @@ def _timetable(request, con, sid):
     ) or "<span class='tt-muted'>No teachers found.</span>"
 
     return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
-<div class='tt-muted'>Choose a class/stream or teacher and press View to open that person's independent timetable. The unfiltered view remains the whole-school master timetable for manual placement.</div>
+<div class='tt-muted'>aSc-style class view: days run vertically and all saved periods and breaks run horizontally using the exact bell schedule. On a phone, swipe horizontally to see P4–P8; the DAY column stays fixed on the left.</div>
 <form method='get' class='tt-form' style='margin-top:12px'>
 <input type='hidden' name='tab' value='timetable'>
 <label><span class='tt-label'>Class / Stream</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label>
