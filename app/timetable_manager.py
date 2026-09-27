@@ -1044,12 +1044,12 @@ def _master_timetable_html(classes, periods, days, grids):
                         room = escape(str(lesson["room"] or ""))
                         duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
                         cells.append(
-                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson' draggable='true' data-slot-id='{lid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Drag this lesson to an empty class/period'>"
+                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Drag this lesson to an empty class/period'>"
                             f"<b>{subject}</b><span>{teacher}</span>{('<small>'+room+'</small>') if room else ''}<em>{duration_label}</em></div></td>"
                         )
                 else:
                     cells.append(
-                        f"<td class='tt-master-cell tt-master-drop tt-drop-slot' data-day='{escape(str(day))}' data-period='{pno}' title='Drop a lesson here'>+</td>"
+                        f"<td class='tt-master-cell tt-master-drop tt-drop-slot' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' title='Drop a lesson here'>+</td>"
                     )
         rows.append("<tr>" + "".join(cells) + "</tr>")
     legend = {}
@@ -1130,7 +1130,7 @@ def _timetable(request, con, sid):
     slot.addEventListener('drop',async function(e){
       e.preventDefault();this.classList.remove('tt-drop-hover');
       const id=dragged||e.dataTransfer.getData('text/plain'); if(!id)return;
-      const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period);
+      const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period); fd.append('class_id',this.dataset.classId);
       try{const res=await fetch('/app/timetable/placement/move/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
       catch(err){alert('Unable to move this lesson.');}
     });
@@ -2120,7 +2120,7 @@ def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,clas
 
 
 @router.post("/app/timetable/placement/move/{rid}")
-def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),period_no:int=Form(...),room_id:str=Form("")):
+def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),period_no:int=Form(...),room_id:str=Form(""),class_id:str=Form("")):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
@@ -2131,6 +2131,13 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
         if day_name not in DAYS:
             return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        target_class_id = int(class_id) if str(class_id).isdigit() else int(moving["class_id"])
+        target_class = cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(target_class_id,sid)).fetchone()
+        if not target_class:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+target+class",303)
+        linked_classes = cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()
+        if len(linked_classes) > 1 and target_class_id != int(moving["class_id"]):
+            return RedirectResponse("/app/timetable?tab=timetable&error=Combined+lessons+must+be+moved+as+a+group",303)
         if int(moving["duration"] or 1) == 2 and int(period_no) % 2 == 0:
             return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+occupy+periods+1-2,+3-4,+5-6,+7-8",303)
         period=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,period_no)).fetchone()
@@ -2148,12 +2155,17 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
         for o in others:
             if not _overlaps(probe,o): continue
-            if int(o["class_id"])==int(moving["class_id"]) or (moving["teacher_id"] and o["teacher_id"] and int(o["teacher_id"])==int(moving["teacher_id"])):
+            if int(o["class_id"])==target_class_id or (moving["teacher_id"] and o["teacher_id"] and int(o["teacher_id"])==int(moving["teacher_id"])):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Class+or+teacher+conflict",303)
             if room and o["room_id"] and int(o["room_id"])==int(room):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Room+conflict",303)
         cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
                     (day_name,period_no,period["start_time"],period["end_time"],room,rid,sid))
+        if target_class_id != int(moving["class_id"]):
+            cur.execute("UPDATE timetable_lessons SET class_id=? WHERE id=? AND school_id=?",(target_class_id,int(moving["lesson_id"]),sid))
+            if linked_classes:
+                cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"])))
+            cur.execute("INSERT OR IGNORE INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,int(moving["lesson_id"]),target_class_id))
         con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
     finally:
