@@ -1201,7 +1201,7 @@ def _timetable(request, con, sid):
     slot.addEventListener('dragleave',function(){this.classList.remove('tt-drop-hover');});
     slot.addEventListener('drop',async function(e){
       e.preventDefault();this.classList.remove('tt-drop-hover');
-      const id=dragged||e.dataTransfer.getData('text/plain'); if(!id)return;
+      const raw=e.dataTransfer.getData('text/plain'); if(!dragged && raw.indexOf('tray:')===0)return; const id=dragged||raw; if(!id)return;
       const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period); fd.append('class_id',this.dataset.classId);
       try{const res=await fetch('/app/timetable/placement/move/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
       catch(err){alert('Unable to move this lesson.');}
