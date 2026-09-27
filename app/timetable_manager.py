@@ -1096,7 +1096,10 @@ def _lesson_placard_platform(con, sid):
         label=f"{str(row['class_name'])}{(' — '+str(row['stream'])) if row['stream'] else ''}"
         for _ in range(remaining):
             cards.append(
-                f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(row['id'])}' style='background:{_teacher_placard_color(row['teacher_id'])}'>"
+                f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(row['id'])}' "
+                f"style='background:{_teacher_placard_color(row['teacher_id'])}' "
+                f"onclick='this.classList.toggle("tt-tray-open")' "
+                f"title='Click to show teacher and class details'>"
                 f"<b>{escape(_subject_initial(row))}</b>"
                 f"<div class='tt-tray-detail'><span>Teacher: {escape(str(row['teacher'] or 'Unassigned teacher'))}</span>"
                 f"<small>Class: {escape(label)} · {duration} period{'s' if duration != 1 else ''}</small></div></div>"
