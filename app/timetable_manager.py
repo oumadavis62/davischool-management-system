@@ -168,7 +168,7 @@ def _migrate_legacy(con, sid):
     if int(existing["c"] or 0) or not legacy or not int(legacy["c"] or 0):
         return
     rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY id",(sid,)).fetchall()
-    periods=_profile_periods(cur,sid)
+    periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
     for row in rows:
         cls=cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND COALESCE(stream,'')=? LIMIT 1",(sid,row["class_name"],row["stream"] or "")).fetchone()
         sub=cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? LIMIT 1",(sid,row["subject"])).fetchone()
@@ -206,7 +206,7 @@ def _seed(con, sid):
              "enabled":1 if day in DEFAULT_DAYS else 0}
             for i,day in enumerate(DAYS,1)
         ]
-        legacy_periods=_profile_periods(cur,sid)
+        legacy_periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
         if legacy_periods:
             periods=[
                 {"id":int(x["period_no"]),"period_no":int(x["period_no"]),
@@ -223,7 +223,7 @@ def _seed(con, sid):
                  "end_time":(base+timedelta(minutes=n*pm)).strftime("%H:%M")}
                 for n in range(1,ppd+1)
             ]
-        legacy_breaks=_profile_breaks(cur,sid)
+        legacy_breaks=cur.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",(sid,)).fetchall()
         breaks=[
             {"id":int(x["id"]),"name":str(x["name"]),
              "start_time":str(x["start_time"]),"end_time":str(x["end_time"])}
