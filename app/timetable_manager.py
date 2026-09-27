@@ -1076,6 +1076,40 @@ def _master_timetable_html(classes, periods, days, grids):
 <tbody>{''.join(rows) or "<tr><td>No classes found.</td></tr>"}</tbody>
 </table></div></div>"""
 
+def _lesson_placard_platform(con, sid):
+    rows=con.execute("""SELECT l.id,l.class_id,l.teacher_id,l.duration,l.lessons_per_week,
+        c.name class_name,c.stream,sub.name subject,t.name teacher
+        FROM timetable_lessons l
+        JOIN classes c ON c.id=l.class_id
+        JOIN subjects sub ON sub.id=l.subject_id
+        LEFT JOIN teachers t ON t.id=l.teacher_id
+        WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""",(sid,)).fetchall()
+    placed={int(x["lesson_id"]):int(x["c"] or 0) for x in con.execute(
+        "SELECT lesson_id,COUNT(*) c FROM timetable_slots WHERE school_id=? GROUP BY lesson_id",(sid,)
+    ).fetchall()}
+    cards=[]
+    for r in rows:
+        remaining=max(0,int(r["lessons_per_week"] or 0)-placed.get(int(r["id"]),0))
+        if not remaining: continue
+        label=f"{str(r['class_name'])}{(' — '+str(r['stream'])) if r['stream'] else ''}"
+        for n in range(remaining):
+            cards.append(
+                f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(r['id'])}' style='background:{_teacher_placard_color(r['teacher_id'])}' title='Drag into an empty timetable cell'>"
+                f"<b>{escape(str(r['subject']))}</b><span>{escape(str(r['teacher'] or 'Unassigned teacher'))}</span>"
+                f"<small>{escape(label)} · {max(1,int(r['duration'] or 1))} period{'s' if int(r['duration'] or 1)!=1 else ''}</small></div>"
+            )
+    return "".join(cards) or "<div class='tt-tray-empty'>All lesson occurrences are placed. New unplaced placards will appear here.</div>"
+
+<style>
+.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}
+.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176b45}
+.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}
+.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}
+.tt-tray-placard b{font-size:1rem}.tt-tray-placard span{margin-top:3px}.tt-tray-placard small{margin-top:5px;opacity:.8}
+.tt-tray-dragging{opacity:.55;transform:rotate(1deg)}
+</style>
+
 def _timetable(request, con, sid):
     class_filter = request.query_params.get("class_id", "")
     teacher_filter = request.query_params.get("teacher_id", "")
@@ -1121,7 +1155,7 @@ def _timetable(request, con, sid):
         for c in classes
     )
 
-    master_sheet = _master_timetable_html(classes, periods, days, grids)
+    master_sheet = _master_timetable_html(classes, periods, days, grids) + _lesson_placard_platform(con, sid)
 
     drag_script = """<script>
 (function(){
