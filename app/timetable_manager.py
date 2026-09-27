@@ -872,9 +872,12 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                     "<br><small class='tt-duration'>TRIPLE LESSON</small>"
                     if duration >= 3 else ""
                 )
+                lesson_id = int(lesson["id"])
+                lesson_teacher_id = lesson["teacher_id"]
+                lesson_subject = escape(str(lesson["subject"]))
                 row_cells.append(
-                    f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson' draggable='true' colspan='{span}' data-slot-id='{int(lesson['id'])}' data-day='{escape(str(day))}' data-period='{pno}' title='Drag to another period' style='background:{_teacher_placard_color(lesson['teacher_id'])}'>"
-                    f"<b>{escape(str(lesson['subject']))}</b>"
+                    f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson' draggable='true' colspan='{span}' data-slot-id='{lesson_id}' data-day='{escape(str(day))}' data-period='{pno}' title='Drag to another period' style='background:{_teacher_placard_color(lesson_teacher_id)}'>"
+                    f"<b>{lesson_subject}</b>"
                     f"<br><span>{escape(teachers)}</span>"
                     f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
                     f"{label}</td>"
