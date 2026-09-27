@@ -256,7 +256,7 @@ def _base_css():
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 .tt-print-footer{text-align:center;margin-top:8px;padding-top:4px;border-top:1px solid #176B3A;font-size:8px;color:#176B3A;background:#fff}.tt-generated-at{font-weight:600}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}.tt-teacher-sheet{page-break-after:always;break-after:page;margin:0!important;padding:0!important}.tt-teacher-sheet:last-child{page-break-after:auto;break-after:auto}.tt-teacher-title{font-size:16px!important;padding:4px 0!important;margin:0 0 5px!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:4px!important;font-size:8px!important}.tt-teacher-grid th:first-child,.tt-teacher-grid td:first-child{width:70px!important}.tt-teacher-lesson{height:62px!important}.tt-teacher-lesson b{font-size:11px!important}.tt-teacher-class{font-size:8px!important;right:3px!important;bottom:3px!important}.tt-teacher-room{font-size:7px!important;left:3px!important;bottom:3px!important}}
-.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-placed-card{position:relative}.tt-placed-card.tt-card-options{outline:2px solid #176B3A;outline-offset:-2px}.tt-placed-menu{position:absolute;z-index:40;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #176B3A;border-radius:9px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.22);white-space:nowrap}.tt-placed-menu button{border:0;border-radius:7px;background:#176B3A;color:#fff;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer}.tt-placed-menu button:hover{background:#14532d}.tt-tray-placard b{font-size:1rem;font-weight:900}.tt-tray-detail{display:none;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.18)}.tt-tray-open .tt-tray-detail{display:block}.tt-tray-detail span,.tt-tray-detail small{display:block;margin-top:3px}.tt-tray-detail span{font-weight:800}.tt-tray-detail small{opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
+.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-placed-card{position:relative}.tt-placed-card.tt-card-options{outline:2px solid #176B3A;outline-offset:-2px}.tt-placed-menu{position:absolute;z-index:40;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #176B3A;border-radius:9px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.22);white-space:nowrap}.tt-placed-menu button{border:0;border-radius:7px;background:#176B3A;color:#fff;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer}.tt-tray-placard b{font-size:1rem;font-weight:900}.tt-tray-detail{display:none;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.18)}.tt-tray-open .tt-tray-detail{display:block}.tt-tray-detail span,.tt-tray-detail small{display:block;margin-top:3px}.tt-tray-detail span{font-weight:800}.tt-tray-detail small{opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
 function timetableGeneratedStamp(){
   return new Intl.DateTimeFormat('en-KE',{
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
@@ -887,7 +887,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 lesson_teacher_id = lesson["teacher_id"]
                 lesson_subject = escape(_subject_initial(lesson))
                 row_cells.append(
-                    f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson tt-placed-card' draggable='true' colspan='{span}' data-slot-id='{lesson_id}' data-day='{escape(str(day))}' data-period='{pno}' data-placed-card='1' style='background:{_teacher_placard_color(lesson_teacher_id)}' title='Click this lesson card for options'>"
+                    f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson tt-placed-card' draggable='true' colspan='{span}' data-slot-id='{lesson_id}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(lesson_teacher_id)}' title='Click lesson card for options'>"
                     f"<b>{lesson_subject}</b>"
                     f"<span class='tt-screen-teacher'>{escape(teachers)}</span>"
                     f"<span class='tt-print-teacher'>{escape(teachers)}</span>"
@@ -1059,7 +1059,7 @@ def _master_timetable_html(classes, periods, days, grids):
                         subject = escape(_subject_initial(lesson))
                         duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
                         cells.append(
-                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson tt-placed-card' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Click this lesson card for options'>"
+                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson tt-placed-card' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Click lesson card for options'>"
                             f"<b>{subject}</b><em>{duration_label}</em></div></td>"
                         )
                 else:
@@ -1096,10 +1096,7 @@ def _lesson_placard_platform(con, sid):
         label=f"{str(row['class_name'])}{(' — '+str(row['stream'])) if row['stream'] else ''}"
         for _ in range(remaining):
             cards.append(
-                f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(row['id'])}' "
-                f"style='background:{_teacher_placard_color(row['teacher_id'])}' "
-                f"onclick='this.classList.toggle("tt-tray-open")' "
-                f"title='Click to show teacher and class details'>"
+                f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(row['id'])}' style='background:{_teacher_placard_color(row['teacher_id'])}'>"
                 f"<b>{escape(_subject_initial(row))}</b>"
                 f"<div class='tt-tray-detail'><span>Teacher: {escape(str(row['teacher'] or 'Unassigned teacher'))}</span>"
                 f"<small>Class: {escape(label)} · {duration} period{'s' if duration != 1 else ''}</small></div></div>"
@@ -1161,36 +1158,6 @@ def _timetable(request, con, sid):
   document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
     card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;draggedType='placed';this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
     card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;draggedType=null;});
-  });
-  document.querySelectorAll('.tt-placed-card').forEach(function(card){
-    card.addEventListener('click',function(e){
-      if(e.target.closest('.tt-placed-menu'))return;
-      document.querySelectorAll('.tt-placed-menu').forEach(function(m){m.remove();});
-      document.querySelectorAll('.tt-placed-card.tt-card-options').forEach(function(c){c.classList.remove('tt-card-options');});
-      card.classList.add('tt-card-options');
-      var menu=document.createElement('div');
-      menu.className='tt-placed-menu';
-      var btn=document.createElement('button');
-      btn.type='button';
-      btn.textContent='📌 Place on platform';
-      btn.addEventListener('click',function(ev){
-        ev.preventDefault();
-        ev.stopPropagation();
-        var slotId=card.getAttribute('data-slot-id');
-        if(!confirm('Place this lesson card back on the lesson platform? It will be removed from the timetable and become available to drag again.'))return;
-        fetch('/app/timetable/placement/platform/'+encodeURIComponent(slotId),{method:'POST',credentials:'same-origin'})
-          .then(function(res){window.location.href=res.url||'/app/timetable?tab=timetable';})
-          .catch(function(){alert('Unable to place this card on the platform.');});
-      });
-      menu.appendChild(btn);
-      card.appendChild(menu);
-    });
-  });
-  document.addEventListener('click',function(e){
-    if(!e.target.closest('.tt-placed-card')){
-      document.querySelectorAll('.tt-placed-menu').forEach(function(m){m.remove();});
-      document.querySelectorAll('.tt-placed-card.tt-card-options').forEach(function(c){c.classList.remove('tt-card-options');});
-    }
   });
   document.querySelectorAll('.tt-tray-placard').forEach(function(card){
     card.addEventListener('dragstart',function(e){dragged=this.dataset.lessonId;draggedType='tray';this.classList.add('tt-tray-dragging');e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain','tray:'+dragged);});
@@ -2308,24 +2275,6 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
     finally:
         con.close()
-@router.post("/app/timetable/placement/platform/{rid}")
-def timetable_placement_platform(request:Request,rid:int):
-    sid,con,response=_guard(request,"timetable.edit")
-    if response:
-        return response
-    try:
-        cur=con.cursor()
-        slot=cur.execute("SELECT id,locked FROM timetable_slots WHERE id=? AND school_id=?",(rid,sid)).fetchone()
-        if not slot:
-            return RedirectResponse("/app/timetable?tab=timetable&error=Placed+card+not+found",303)
-        if int(slot["locked"] or 0):
-            return RedirectResponse("/app/timetable?tab=timetable&error=Locked+cards+cannot+be+returned+to+the+platform",303)
-        cur.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND locked=0",(rid,sid))
-        con.commit()
-        return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+card+returned+to+platform",303)
-    finally:
-        con.close()
-
 @router.post("/app/timetable/placement/delete/{rid}")
 def timetable_placement_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
