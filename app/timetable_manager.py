@@ -1157,7 +1157,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
                 label = "<br><small class='tt-duration'>DOUBLE LESSON</small>" if duration == 2 else "<br><small class='tt-duration'>TRIPLE LESSON</small>" if duration >= 3 else ""
                 room_html = f"<small class='tt-teacher-room'>{escape(room)}</small>" if room else ""
                 row_cells.append(
-                    f"<td class='tt-lesson tt-teacher-lesson' colspan='{span}'><b>{escape(str(lesson['subject']))}</b>{label}"
+                    f"<td class='tt-lesson tt-teacher-lesson' colspan='{span}'><b>{escape(_subject_initial(lesson))}</b>{label}"
                     f"<span class='tt-teacher-class'>{escape(classes)}</span>{room_html}</td>"
                 )
                 continue
@@ -1180,7 +1180,7 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
     days = [d for d in weekdays if d in configured_days] or weekdays
     breaks = _profile_breaks(con,sid)
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
-        c.name class_name,c.stream,sub.name subject,r.name room
+        c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,r.name room
         FROM timetable_slots s
         JOIN timetable_lessons l ON l.id=s.lesson_id
         JOIN classes c ON c.id=l.class_id
@@ -1336,7 +1336,17 @@ def _timetable(request, con, sid):
         for c in classes
     )
 
-    master_sheet = _master_timetable_html(classes, periods, days, grids)
+    selected_class_sheet = ""
+    if str(class_filter).isdigit():
+        selected_class = next((c for c in classes if int(c["id"]) == int(class_filter)), None)
+        if selected_class:
+            selected_class_sheet = _class_grid_html(
+                selected_class, periods, days, breaks,
+                grids.get(int(selected_class["id"]), {}),
+                show_title=True
+            )
+
+    master_sheet = selected_class_sheet or _master_timetable_html(classes, periods, days, grids)
 
     drag_script = """<script>
 (function(){
@@ -1413,7 +1423,7 @@ def _timetable(request, con, sid):
     ) or "<span class='tt-muted'>No teachers found.</span>"
 
     return f"""<div class='tt-card'><h2>🗓️ Class Timetable</h2>
-<div class='tt-muted'>aSc-style class view: days run vertically and all saved periods and breaks run horizontally using the exact bell schedule. On a phone, swipe horizontally to see P4–P8; the DAY column stays fixed on the left.</div>
+<div class='tt-muted'>aSc-style class view: days run vertically and all saved periods and breaks run horizontally using the exact bell schedule. When a class is selected, only that class's independent timetable is shown. Subjects use the initials saved in the Subjects module.</div>
 <form method='get' class='tt-form' style='margin-top:12px'>
 <input type='hidden' name='tab' value='timetable'>
 <label><span class='tt-label'>Class / Stream</span><select class='tt-field' name='class_id'><option value=''>All classes</option>{class_opts}</select></label>
