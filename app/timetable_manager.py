@@ -242,7 +242,7 @@ def _base_css():
     return """<style>
 .tt-wrap{padding-bottom:30px}.tt-tabs{display:flex;gap:6px;overflow:auto;padding:8px 0 14px;margin-bottom:10px;border-bottom:1px solid #dbe4ee}
 .tt-tab{white-space:nowrap;text-decoration:none;padding:9px 12px;border:1px solid #d7e0ea;border-radius:9px;background:#f8fafc;color:#334155;font-size:12px;font-weight:800}
-.tt-draggable-lesson{cursor:grab;transition:transform .12s,box-shadow .12s}.tt-draggable-lesson:hover{transform:translateY(-1px);box-shadow:0 3px 9px rgba(15,23,42,.18)}.tt-dragging{opacity:.45;cursor:grabbing}.tt-drop-slot{transition:background .12s,outline .12s}.tt-drop-slot.tt-drop-hover{background:#ecfdf5!important;outline:2px dashed #176B3A;outline-offset:-3px}.tt-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.tt-teacher-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid rgba(15,23,42,.12);border-radius:999px;font-size:11px;font-weight:800}.tt-chip-dot{width:7px;height:7px;border-radius:50%;background:#176B3A}.tt-tab.active{background:#176B3A;color:#fff;border-color:#176B3A}.tt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tt-master-scroll{overflow:auto;max-width:100%;border:1px solid #cbd5e1;border-radius:10px;background:#fff}.tt-master-table{border-collapse:separate;border-spacing:0;min-width:max-content;width:100%;font-size:11px}.tt-master-table th,.tt-master-table td{border-right:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1}.tt-master-day{background:#176B3A;color:#fff;font-weight:900;text-align:center;padding:8px;position:sticky;top:0;z-index:12}.tt-master-period{background:#f1f5f9;font-weight:900;text-align:center;padding:5px;min-width:125px;position:sticky;top:34px;z-index:11}.tt-master-class{background:#176B3A;color:#fff;font-weight:900;text-align:left;padding:8px;min-width:120px;width:120px;position:sticky;left:0;z-index:13}.tt-master-corner{z-index:15}.tt-master-cell{height:78px;min-width:125px;padding:3px;vertical-align:top;text-align:center;background:#fff}.tt-master-drop{color:#94a3b8;font-size:20px;cursor:copy}.tt-master-drop:hover{background:#ecfdf5!important;color:#176B3A}.tt-master-continuation{font-size:18px;color:#64748b;background:#f8fafc;vertical-align:middle}.tt-master-placard{height:70px;box-sizing:border-box;border:1px solid rgba(15,23,42,.15);border-radius:6px;padding:5px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.08);overflow:hidden}.tt-master-placard b{display:block;font-size:12px;font-weight:900;line-height:1.15}.tt-master-placard span{display:block;font-size:10px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tt-master-placard small{display:block;font-size:8px;margin-top:2px}.tt-master-placard em{display:block;font-size:8px;font-style:normal;font-weight:900;margin-top:2px}.tt-master-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:8px}.tt-master-toolbar span{font-size:11px;color:#475569}.tt-master-placard.tt-dragging{opacity:.4}.tt-master-drop.tt-drop-hover{background:#dcfce7!important;outline:2px dashed #176B3A;outline-offset:-3px}.tt-draggable-lesson{cursor:grab;transition:transform .12s,box-shadow .12s}.tt-draggable-lesson:hover{transform:translateY(-1px);box-shadow:0 3px 9px rgba(15,23,42,.18)}.tt-dragging{opacity:.45;cursor:grabbing}.tt-drop-slot{transition:background .12s,outline .12s}.tt-drop-slot.tt-drop-hover{background:#ecfdf5!important;outline:2px dashed #176B3A;outline-offset:-3px}.tt-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.tt-teacher-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid rgba(15,23,42,.12);border-radius:999px;font-size:11px;font-weight:800}.tt-chip-dot{width:7px;height:7px;border-radius:50%;background:#176B3A}.tt-tab.active{background:#176B3A;color:#fff;border-color:#176B3A}.tt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .tt-card{background:#fff;border:1px solid #dbe4ee;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 5px 18px rgba(15,23,42,.04)}
 .tt-card h2{margin:0 0 5px;color:#176B3A;font-size:18px}.tt-card h3{margin:0 0 8px;font-size:14px}.tt-muted{color:#64748b;font-size:12px;line-height:1.5}
 .tt-field{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.tt-label{font-size:11px;font-weight:800;color:#475569;display:block;margin-bottom:5px}
@@ -1011,6 +1011,65 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
     return "".join(_teacher_grid_html(t, periods, days, breaks, grids[int(t["id"])]) for t in teachers) or "<div class='tt-notice bad'>No teachers found.</div>"
 
 
+
+def _master_timetable_html(classes, periods, days, grids):
+    """Render one school-wide drag/drop timetable: classes down, days and periods across."""
+    day_head = "".join(
+        f"<th class='tt-master-day' colspan='{len(periods)}'>{escape(str(day)).upper()}</th>"
+        for day in days
+    )
+    period_head = "".join(
+        f"<th class='tt-master-period'>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
+        for _day in days for p in periods
+    )
+    rows = []
+    for cls in classes:
+        cid = int(cls["id"])
+        grid = grids.get(cid, {})
+        cells = [f"<th class='tt-master-class'>{escape(str(cls['name']))}{(' — '+escape(str(cls['stream']))) if cls['stream'] else ''}</th>"]
+        for day in days:
+            for p in periods:
+                pno = int(p["period_no"])
+                lesson = grid.get((str(day), pno))
+                if lesson:
+                    start_pno = int(lesson["period_no"])
+                    duration = max(1, int(lesson["duration"] or 1))
+                    if pno != start_pno and pno < start_pno + duration:
+                        cells.append("<td class='tt-master-cell tt-master-continuation'>↳</td>")
+                    else:
+                        lid = int(lesson["id"])
+                        teacher_id = lesson["teacher_id"]
+                        subject = escape(str(lesson["subject"]))
+                        teacher = escape(str(lesson["teacher"] or ""))
+                        room = escape(str(lesson["room"] or ""))
+                        duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
+                        cells.append(
+                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson' draggable='true' data-slot-id='{lid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Drag this lesson to an empty class/period'>"
+                            f"<b>{subject}</b><span>{teacher}</span>{('<small>'+room+'</small>') if room else ''}<em>{duration_label}</em></div></td>"
+                        )
+                else:
+                    cells.append(
+                        f"<td class='tt-master-cell tt-master-drop tt-drop-slot' data-day='{escape(str(day))}' data-period='{pno}' title='Drop a lesson here'>+</td>"
+                    )
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    legend = {}
+    for grid in grids.values():
+        for lesson in grid.values():
+            tid = lesson["teacher_id"]
+            if tid is not None:
+                legend[int(tid)] = str(lesson["teacher"] or "")
+    legend_html = "".join(
+        f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(tid)}'>{escape(name)}</span>"
+        for tid, name in sorted(legend.items(), key=lambda x: x[1].lower())
+    ) or "<span class='tt-muted'>No placed teachers found.</span>"
+    return f"""<div class='tt-master-wrap'>
+<div class='tt-master-toolbar'><b>🏫 Whole-School Master Timetable</b><span>Drag lesson placards into empty cells. The server checks teacher, class, room, break and double-period clashes before saving.</span></div>
+<div class='tt-legend'>{legend_html}</div>
+<div class='tt-master-scroll'><table class='tt-master-table'>
+<thead><tr><th class='tt-master-class tt-master-corner'>CLASS / STREAM</th>{day_head}</tr><tr><th class='tt-master-class tt-master-corner'>PERIOD</th>{period_head}</tr></thead>
+<tbody>{''.join(rows) or "<tr><td>No classes found.</td></tr>"}</tbody>
+</table></div></div>"""
+
 def _timetable(request, con, sid):
     class_filter = request.query_params.get("class_id", "")
     teacher_filter = request.query_params.get("teacher_id", "")
@@ -1056,37 +1115,7 @@ def _timetable(request, con, sid):
         for c in classes
     )
 
-    # Render each class independently so one malformed lesson/row cannot
-    # take down the entire timetable page.
-    sheets = []
-    for c in classes:
-        cid = int(c["id"])
-        if cid not in grids:
-            continue
-        try:
-            sheets.append(_class_grid_html(c, periods, days, breaks, grids[cid]))
-        except Exception:
-            # Fall back to a plain physical-period grid for this class.
-            label = f"{c['name']}{(' — '+str(c['stream'])) if c['stream'] else ''}"
-            by_slot = grids[cid]
-            head = "<tr><th>DAY</th>" + "".join(
-                f"<th>P{int(p['period_no'])}<br><small>{escape(str(p['start_time']))}-{escape(str(p['end_time']))}</small></th>"
-                for p in periods
-            ) + "</tr>"
-            rows = []
-            for day in days:
-                cells = [f"<th>{escape(str(day)).upper()}</th>"]
-                for p in periods:
-                    item = by_slot.get((str(day), int(p["period_no"])))
-                    cells.append(
-                        f"<td class='tt-lesson'><b>{escape(str(item['subject']))}</b><br>{escape(str(item['teacher'] or ''))}</td>"
-                        if item else "<td class='tt-empty'>—</td>"
-                    )
-                rows.append("<tr>" + "".join(cells) + "</tr>")
-            sheets.append(
-                f"<div class='tt-class-sheet'><h3>🏫 {escape(label)}</h3>"
-                f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(rows)}</table></div></div>"
-            )
+    master_sheet = _master_timetable_html(classes, periods, days, grids)
 
     drag_script = """<script>
 (function(){
@@ -1126,10 +1155,9 @@ def _timetable(request, con, sid):
 <div><button class='tt-btn'>🔎 View</button></div>
 </form>
 <div class='tt-card tt-manual-editor'><h3>🖱️ Manual Placement</h3>
-<div class='tt-muted'>Drag any lesson placard and drop it into another period. Placard colors identify teachers. Locked lessons cannot be moved. Existing class, teacher, room, break and double-period checks remain active.</div>
-<div class='tt-legend'>{teacher_legend}</div>
+<div class='tt-muted'>Drag lessons directly across the whole-school sheet. Classes stay on the left, days run across the top, and every day contains its periods. A move is rejected if it creates a teacher, class, room, break or double-period clash.</div>
 </div>
-<div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
+<div style='margin-top:14px'>{master_sheet}</div>
 {drag_script}
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=teacher_sheets'>👨‍🏫 Teacher Sheets</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print Classes</a></div>
 </div>"""
