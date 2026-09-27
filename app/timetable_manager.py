@@ -1087,7 +1087,7 @@ def _master_timetable_html(classes, periods, days, grids):
 
 def _lesson_placard_platform(con, sid):
     rows = con.execute("""SELECT l.id,l.class_id,l.teacher_id,l.duration,l.lessons_per_week,
-        c.name class_name,c.stream,sub.name subject,t.name teacher
+        c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher
         FROM timetable_lessons l JOIN classes c ON c.id=l.class_id
         JOIN subjects sub ON sub.id=l.subject_id LEFT JOIN teachers t ON t.id=l.teacher_id
         WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""",(sid,)).fetchall()
