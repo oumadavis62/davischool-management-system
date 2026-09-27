@@ -1060,7 +1060,7 @@ def _master_timetable_html(classes, periods, days, grids):
                         duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
                         cells.append(
                             f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Drag this lesson to an empty class/period'>"
-                            f"<b>{subject}</b><span>{teacher}</span>{('<small>'+room+'</small>') if room else ''}<em>{duration_label}</em></div></td>"
+                            f"<b>{subject}</b><em>{duration_label}</em></div></td>"
                         )
                 else:
                     cells.append(
