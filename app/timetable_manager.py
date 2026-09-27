@@ -877,18 +877,9 @@ def _class_grid_data(con, sid, class_id=None):
         "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",
         (sid,)
     ).fetchall()
-    periods = con.execute(
-        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",
-        (sid,)
-    ).fetchall()
-    days = [r["name"] for r in con.execute(
-        "SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",
-        (sid,)
-    ).fetchall()]
-    breaks = con.execute(
-        "SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",
-        (sid,)
-    ).fetchall()
+    periods = _profile_periods(con,sid)
+    days = [str(r["name"]) for r in _profile_days(con,sid) if int(r["enabled"] or 0)]
+    breaks = _profile_breaks(con,sid)
 
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher,r.name room
@@ -1328,7 +1319,10 @@ def _timetable(request, con, sid):
     card.addEventListener('dragend',function(){this.classList.remove('tt-tray-dragging');dragged=null;draggedType=null;});
   });
   document.querySelectorAll('.tt-placed-card').forEach(function(card){
-    card.addEventListener('click',function(){
+    card.addEventListener('click',function(e){
+      if(e.target.closest('.tt-placed-menu'))return;
+      e.preventDefault();
+      e.stopPropagation();
       document.querySelectorAll('.tt-placed-menu').forEach(function(m){m.remove();});
       var menu=document.createElement('div');
       menu.className='tt-placed-menu';
@@ -1336,8 +1330,24 @@ def _timetable(request, con, sid):
       form.method='POST';
       form.action='/app/timetable/placement/platform/'+encodeURIComponent(card.getAttribute('data-slot-id'));
       var btn=document.createElement('button');
-      btn.type='submit';
+      btn.type='button';
       btn.textContent='📌 Place on platform';
+      btn.addEventListener('click',async function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        btn.disabled=true;
+        btn.textContent='Moving…';
+        try{
+          var res=await fetch(form.action,{method:'POST',credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}});
+          if(!res.ok)throw new Error('HTTP '+res.status);
+          window.location.href=res.url||'/app/timetable?tab=timetable';
+        }catch(err){
+          btn.disabled=false;
+          btn.textContent='📌 Place on platform';
+          alert('Unable to return this lesson to the platform. Please try again.');
+        }
+      });
+      form.addEventListener('click',function(ev){ev.stopPropagation();});
       form.appendChild(btn);
       menu.appendChild(form);
       card.appendChild(menu);
@@ -2561,7 +2571,7 @@ def timetable_placement_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        con.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND locked=0",(rid,sid));con.commit()
+        con.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(rid,sid));con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+deleted",303)
     finally:con.close()
 
@@ -2571,6 +2581,6 @@ def timetable_placement_lock(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        con.execute("UPDATE timetable_slots SET locked=1 WHERE id=? AND school_id=?",(rid,sid));con.commit()
+        con.execute("UPDATE timetable_slots SET locked=1 WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(rid,sid));con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+locked",303)
     finally:con.close()
