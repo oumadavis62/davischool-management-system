@@ -163,7 +163,7 @@ def _ensure_tables(con):
 def _migrate_legacy(con, sid):
     """Import old timetable rows once without deleting the legacy table."""
     cur=con.cursor()
-    existing=cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)",(sid,)).fetchone()
+    existing=cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=?",(sid,)).fetchone()
     legacy=cur.execute("SELECT COUNT(*) c FROM timetable WHERE school_id=?",(sid,)).fetchone()
     if int(existing["c"] or 0) or not legacy or not int(legacy["c"] or 0):
         return
@@ -1490,7 +1490,7 @@ def timetable_profile_delete(request:Request,pid:int):
         total=int(con.execute("SELECT COUNT(*) c FROM timetable_profiles WHERE school_id=?",(sid,)).fetchone()["c"] or 0)
         if pid==current:return RedirectResponse("/app/timetable?tab=profiles&error=Switch+to+another+timetable+before+deleting+this+one",303)
         if total<=1:return RedirectResponse("/app/timetable?tab=profiles&error=The+last+timetable+cannot+be+deleted",303)
-        con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+deleted+without+deleting+lesson+cards",303)
@@ -2327,7 +2327,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     # Persist only the best unlocked generated placements.
     if class_filter:
         cur.execute("""DELETE FROM timetable_slots
-            WHERE school_id=? AND locked=0 AND lesson_id IN (
+            WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
                 SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
             )""",(sid,sid,class_filter))
     else:
@@ -2494,7 +2494,7 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
     try:
         cur=con.cursor()
         moving=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration FROM timetable_slots s
-            JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.id=? AND s.school_id=?""",(rid,sid)).fetchone()
+            JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.id=? AND s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(rid,sid)).fetchone()
         if not moving or int(moving["locked"] or 0):
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
         if day_name not in DAYS:
@@ -2545,12 +2545,12 @@ def timetable_placement_platform(request:Request,rid:int):
         return response
     try:
         cur=con.cursor()
-        slot=cur.execute("SELECT id,locked FROM timetable_slots WHERE id=? AND school_id=?",(rid,sid)).fetchone()
+        slot=cur.execute("SELECT id,locked FROM timetable_slots WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(rid,sid)).fetchone()
         if not slot:
             return RedirectResponse("/app/timetable?tab=timetable&error=Placed+card+not+found",303)
         if int(slot["locked"] or 0):
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+cards+cannot+be+returned+to+the+platform",303)
-        cur.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND locked=0",(rid,sid))
+        cur.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(rid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+card+returned+to+platform",303)
     finally:
