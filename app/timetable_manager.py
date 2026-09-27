@@ -1872,14 +1872,11 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         return None
                     if any((day,xp,tid) in teacher_slot for tid in teachers):
                         return None
-                    # A teacher must not teach two different subjects in
-                    # immediately consecutive slots. The same double/triple
-                    # lesson may occupy its own consecutive periods.
-                    for tid in teachers:
-                        if xp == int(pno) and (day,xp-1,tid) in teacher_slot:
-                            return None
-                        if xp == int(pno)+duration-1 and (day,xp+1,tid) in teacher_slot:
-                            return None
+                    # Consecutive lessons for the same teacher are allowed.
+                    # The hard rule is that a teacher cannot occupy two
+                    # different lessons in the same physical period. Blocking
+                    # adjacent periods here unnecessarily halves a teacher's
+                    # usable capacity and can strand otherwise valid cards.
                     if enforce_availability:
                         if any((day,xp,tid) in blocked_teacher for tid in teachers):
                             return None
@@ -1977,7 +1974,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         # Keep generation inside a normal web-request time budget.
         # The solver retains the best placement found, so bounded randomized
         # passes prevent Render from appearing to ignore the Generate button.
-        attempt_count={"normal":8,"large":10,"huge":12}.get(complexity,8)
+        attempt_count={"normal":20,"large":30,"huge":40}.get(complexity,20)
         for attempt in range(attempt_count):
             complete,trial=run_once(2009+attempt)
             score=sum(max(1,int(x.get("duration") or 1)) for x in trial)
