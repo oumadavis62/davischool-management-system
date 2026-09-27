@@ -252,11 +252,11 @@ def _base_css():
 .tt-notice{padding:11px 13px;border-radius:10px;margin:10px 0;font-weight:800;font-size:12px}.tt-notice.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}.tt-notice.bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239}
 .tt-stat{padding:14px;border:1px solid #dbe4ee;border-radius:12px;background:#f8fafc}.tt-stat b{font-size:23px;display:block;color:#176B3A}.tt-check{display:flex;gap:7px;align-items:center;font-size:12px;font-weight:700}
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
-.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-break-label{display:flex;flex-direction:column;align-items:center;justify-content:space-around;height:100%;min-height:320px;font-size:28px;font-weight:900;line-height:1;letter-spacing:2px;padding:10px 0;box-sizing:border-box}.tt-break-label span{display:block}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}.tt-teacher-sheet{margin:0 0 24px;break-inside:avoid;page-break-after:always;background:#fff}.tt-teacher-sheet:last-child{page-break-after:auto}.tt-teacher-title{font-size:18px;font-weight:900;color:#176B3A;margin:0 0 8px;padding:8px 0}.tt-teacher-grid{width:100%!important;min-width:0!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:7px}.tt-teacher-lesson{height:72px!important;position:relative!important;text-align:center!important;vertical-align:top!important}.tt-teacher-lesson b{font-size:14px!important}.tt-teacher-class{position:absolute;right:6px;bottom:5px;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:800!important;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.tt-teacher-room{position:absolute;left:6px;bottom:5px;font-size:9px;font-weight:600}@media print{.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
+.tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson .tt-screen-teacher{display:none}.tt-class-grid .tt-lesson .tt-print-teacher{display:none}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-break-label{display:flex;flex-direction:column;align-items:center;justify-content:space-around;height:100%;min-height:320px;font-size:28px;font-weight:900;line-height:1;letter-spacing:2px;padding:10px 0;box-sizing:border-box}.tt-break-label span{display:block}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}.tt-teacher-sheet{margin:0 0 24px;break-inside:avoid;page-break-after:always;background:#fff}.tt-teacher-sheet:last-child{page-break-after:auto}.tt-teacher-title{font-size:18px;font-weight:900;color:#176B3A;margin:0 0 8px;padding:8px 0}.tt-teacher-grid{width:100%!important;min-width:0!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:7px}.tt-teacher-lesson{height:72px!important;position:relative!important;text-align:center!important;vertical-align:top!important}.tt-teacher-lesson b{font-size:14px!important}.tt-teacher-class{position:absolute;right:6px;bottom:5px;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:800!important;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.tt-teacher-room{position:absolute;left:6px;bottom:5px;font-size:9px;font-weight:600}@media print{.tt-class-grid .tt-lesson .tt-print-teacher{display:block!important;position:absolute!important;right:7px!important;bottom:7px!important;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:700!important;white-space:nowrap!important;max-width:90%;overflow:hidden;text-overflow:ellipsis}.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 .tt-print-footer{text-align:center;margin-top:8px;padding-top:4px;border-top:1px solid #176B3A;font-size:8px;color:#176B3A;background:#fff}.tt-generated-at{font-weight:600}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}.tt-teacher-sheet{page-break-after:always;break-after:page;margin:0!important;padding:0!important}.tt-teacher-sheet:last-child{page-break-after:auto;break-after:auto}.tt-teacher-title{font-size:16px!important;padding:4px 0!important;margin:0 0 5px!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:4px!important;font-size:8px!important}.tt-teacher-grid th:first-child,.tt-teacher-grid td:first-child{width:70px!important}.tt-teacher-lesson{height:62px!important}.tt-teacher-lesson b{font-size:11px!important}.tt-teacher-class{font-size:8px!important;right:3px!important;bottom:3px!important}.tt-teacher-room{font-size:7px!important;left:3px!important;bottom:3px!important}}
-.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-tray-placard b{font-size:1rem}.tt-tray-placard span{margin-top:3px}.tt-tray-placard small{margin-top:5px;opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
+.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-tray-placard b{font-size:1rem;font-weight:900}.tt-tray-detail{display:none;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.18)}.tt-tray-open .tt-tray-detail{display:block}.tt-tray-detail span,.tt-tray-detail small{display:block;margin-top:3px}.tt-tray-detail span{font-weight:800}.tt-tray-detail small{opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
 function timetableGeneratedStamp(){
   return new Intl.DateTimeFormat('en-KE',{
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
@@ -367,7 +367,7 @@ def timetable_manager(request: Request):
                 try:
                     rows = con.execute("""SELECT s.day_name,s.period_no,s.start_time,s.end_time,
                         s.lesson_id,l.class_id,l.subject_id,
-                        c.name class_name,c.stream,sub.name subject
+                        c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial
                         FROM timetable_slots s
                         JOIN timetable_lessons l ON l.id=s.lesson_id
                         JOIN classes c ON c.id=l.class_id
@@ -391,7 +391,7 @@ def timetable_manager(request: Request):
                             for p in p_rows:
                                 r=grid.get((day,int(p["period_no"])))
                                 cells.append(
-                                    f"<td class='tt-lesson'><b>{escape(str(r['subject']))}</b></td>"
+                                    f"<td class='tt-lesson'><b>{escape(str(r['subject_initial'] or r['subject_code'] or r['subject']))}</b></td>"
                                     if r else "<td class='tt-empty'>—</td>"
                                 )
                             body_rows.append("<tr>"+"".join(cells)+"</tr>")
@@ -544,7 +544,7 @@ def _lesson_form(con, sid, existing=None):
 
 
 def _lessons(request, con, sid):
-    rows = con.execute("""SELECT l.*,c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
+    rows = con.execute("""SELECT l.*,c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher,r.name room
         FROM timetable_lessons l JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=l.room_id
         WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""", (sid,)).fetchall()
@@ -728,7 +728,7 @@ def _class_grid_data(con, sid, class_id=None):
     ).fetchall()
 
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
-        c.name class_name,c.stream,sub.name subject,t.name teacher,r.name room
+        c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher,r.name room
         FROM timetable_slots s
         JOIN timetable_lessons l ON l.id=s.lesson_id
         JOIN classes c ON c.id=l.class_id
@@ -760,6 +760,17 @@ def _class_grid_data(con, sid, class_id=None):
     return classes, periods, days, breaks, grids
 
 
+
+def _subject_initial(lesson):
+    """Return the subject initial configured in the school's Subjects module."""
+    initial = str(lesson.get("subject_initial") or "").strip()
+    if initial:
+        return initial
+    code = str(lesson.get("subject_code") or "").strip()
+    if code:
+        return code
+    name = str(lesson.get("subject") or "").strip()
+    return name[:4].upper() if name else "SUB"
 
 def _teacher_placard_color(teacher_id):
     """Stable soft color for a teacher's lesson placard."""
@@ -874,12 +885,12 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                 )
                 lesson_id = int(lesson["id"])
                 lesson_teacher_id = lesson["teacher_id"]
-                lesson_subject = escape(str(lesson["subject"]))
+                lesson_subject = escape(_subject_initial(lesson))
                 row_cells.append(
                     f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson' draggable='true' colspan='{span}' data-slot-id='{lesson_id}' data-day='{escape(str(day))}' data-period='{pno}' title='Drag to another period' style='background:{_teacher_placard_color(lesson_teacher_id)}'>"
                     f"<b>{lesson_subject}</b>"
-                    f"<br><span>{escape(teachers)}</span>"
-                    f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
+                    f"<span class='tt-screen-teacher'>{escape(teachers)}</span>"
+                    f"<span class='tt-print-teacher'>{escape(teachers)}</span>"
                     f"{label}</td>"
                 )
                 continue
@@ -1041,13 +1052,11 @@ def _master_timetable_html(classes, periods, days, grids):
                     start_pno = int(lesson["period_no"])
                     duration = max(1, int(lesson["duration"] or 1))
                     if pno != start_pno and pno < start_pno + duration:
-                        cells.append(f"<td class='tt-master-cell tt-master-continuation' title='Continuation of {escape(str(lesson['subject']))}'>↳</td>")
+                        cells.append(f"<td class='tt-master-cell tt-master-continuation' title='Continuation of {escape(_subject_initial(lesson))}'>↳</td>")
                     else:
                         lid = int(lesson["id"])
                         teacher_id = lesson["teacher_id"]
-                        subject = escape(str(lesson["subject"]))
-                        teacher = escape(str(lesson["teacher"] or ""))
-                        room = escape(str(lesson["room"] or ""))
+                        subject = escape(_subject_initial(lesson))
                         duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
                         cells.append(
                             f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Drag this lesson to an empty class/period'>"
@@ -1094,8 +1103,9 @@ def _lesson_placard_platform(con, sid):
         for _ in range(remaining):
             cards.append(
                 f"<div class='tt-tray-placard' draggable='true' data-lesson-id='{int(row['id'])}' style='background:{_teacher_placard_color(row['teacher_id'])}'>"
-                f"<b>{escape(str(row['subject']))}</b><span>{escape(str(row['teacher'] or 'Unassigned teacher'))}</span>"
-                f"<small>{escape(label)} · {duration} period{'s' if duration != 1 else ''}</small></div>"
+                f"<b>{escape(_subject_initial(row))}</b>"
+                f"<div class='tt-tray-detail'><span>Teacher: {escape(str(row['teacher'] or 'Unassigned teacher'))}</span>"
+                f"<small>Class: {escape(label)} · {duration} period{'s' if duration != 1 else ''}</small></div></div>"
             )
     return "".join(cards) or "<div class='tt-tray-empty'>All lesson occurrences are placed.</div>"
 
