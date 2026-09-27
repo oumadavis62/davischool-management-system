@@ -1110,7 +1110,9 @@ def _timetable(request, con, sid):
 </script>"""
     teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     teacher_legend = "".join(
-        f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(t["id"])}'>{escape(str(t["name"]))}</span>"
+        "<span class='tt-teacher-chip' style='background:{}'>{}</span>".format(
+            _teacher_placard_color(t["id"]), escape(str(t["name"]))
+        )
         for t in teacher_rows
     ) or "<span class='tt-muted'>No teachers found.</span>"
 
