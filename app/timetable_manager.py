@@ -464,7 +464,8 @@ def _profile_bar(con,sid,tab):
 <a class='tt-btn alt' href='/app/timetable?tab=profiles'>Manage Timetables</a></div>"""
 
 def _layout(request, tab, content, con=None, sid=None):
-    return _page(request, "Timetable Manager", f"<div class='tt-wrap'><h1>🗓️ Timetable Manager</h1><div class='tt-muted'>A complete school timetable workspace for setup, lesson cards, availability, generation, verification, manual adjustment and printing.</div>{_notice(request)}{_tabs(tab)}{content}{_base_css()}</div>")
+    profile_bar=_profile_bar(con,sid,tab) if con is not None and sid is not None else ""
+    return _page(request, "Timetable Manager", f"<div class='tt-wrap'><h1>🗓️ Timetable Manager</h1><div class='tt-muted'>A complete school timetable workspace for setup, lesson cards, availability, generation, verification, manual adjustment and printing.</div>{_notice(request)}{profile_bar}{_tabs(tab)}{content}{_base_css()}</div>")
 
 
 @router.get("/app/timetable", response_class=HTMLResponse)
@@ -562,7 +563,7 @@ def _profiles(request, con, sid):
     for p in rows:
         pid=int(p["id"])
         active=int(p["active"] or 0)
-        slots=int(con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?",(sid,pid)).fetchone()["c"] or 0)
+        slots=int(con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid)).fetchone()["c"] or 0)
         badge="<span class='tt-profile-active'>ACTIVE</span>" if active else ""
         switch="" if active else f"<form method='post' action='/app/timetable/profile/switch/{pid}' style='display:inline'><input type='hidden' name='tab' value='profiles'><button class='tt-btn alt'>Use</button></form>"
         duplicate=f"<form method='post' action='/app/timetable/profile/duplicate/{pid}' style='display:inline'><button class='tt-btn'>Duplicate</button></form>"
@@ -1461,7 +1462,7 @@ def timetable_profile_duplicate(request:Request,pid:int):
         con.execute("""INSERT INTO timetable_slots(
             school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id
         ) SELECT school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,?
-          FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?""",(new_id,sid,pid))
+          FROM timetable_slots WHERE school_id=? AND profile_id=?""",(new_id,sid,pid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+duplicated+with+its+saved+placements",303)
     finally:con.close()
@@ -2343,8 +2344,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         if int(row["period_no"])+duration-1 > max(pmap):
             continue
         cur.execute("""INSERT INTO timetable_slots(
-            school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run
-        ) VALUES(?,?,?,?,?,?,?,?,?)""",(
+            school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id
+        ) VALUES(?,?,?,?,?,?,?,?,?,?)""",(
             sid,row["lesson_id"],row["day_name"],row["period_no"],
             p["start_time"],
             pmap[int(row["period_no"])+duration-1]["end_time"],
@@ -2480,7 +2481,7 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
             if cur.execute("SELECT s.id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.day_name=? AND l.subject_id=? AND (l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?)) LIMIT 1",(sid,day_name,subject_id,cid,sid,cid)).fetchone():
                 return RedirectResponse("/app/timetable?tab=timetable&error=Subject+already+scheduled+for+this+class+that+day",303)
         start=pmap[int(period_no)]["start_time"];end=pmap[int(period_no)+duration-1]["end_time"]
-        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",(sid,lesson_id,day_name,period_no,start,end,room_id,0,None,_active_profile_id(con,sid)))
+        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,lesson_id,day_name,period_no,start,end,room_id,0,None,_active_profile_id(con,sid)))
         con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+placard+placed",303)
     finally:
