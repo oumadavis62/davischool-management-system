@@ -1067,16 +1067,10 @@ def _master_timetable_html(classes, periods, days, grids):
                         f"<td class='tt-master-cell tt-master-drop tt-drop-slot' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' title='Drop a lesson here'>+</td>"
                     )
         rows.append("<tr>" + "".join(cells) + "</tr>")
-    legend = {}
-    for grid in grids.values():
-        for lesson in grid.values():
-            tid = lesson["teacher_id"]
-            if tid is not None:
-                legend[int(tid)] = str(lesson["teacher"] or "")
-    legend_html = "".join(
-        f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(tid)}'>{escape(name)}</span>"
-        for tid, name in sorted(legend.items(), key=lambda x: x[1].lower())
-    ) or "<span class='tt-muted'>No placed teachers found.</span>"
+    # Teacher names are intentionally not shown on the working timetable placards.
+    # They are revealed on the bottom lesson platform when a placard is clicked,
+    # while printed class timetables show the teacher at the bottom-right.
+    legend_html = ""
     return f"""<div class='tt-master-wrap'>
 <div class='tt-master-toolbar'><b>🏫 Whole-School Master Timetable</b><span>Drag lesson placards into empty cells. The server checks teacher, class, room, break and double-period clashes before saving.</span></div>
 <div class='tt-legend'>{legend_html}</div>
