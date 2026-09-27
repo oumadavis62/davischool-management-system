@@ -1175,9 +1175,7 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
     if selected_teacher_id is not None:
         teachers = [t for t in teachers if int(t["id"]) == int(selected_teacher_id)]
     periods = _profile_periods(con,sid)
-    configured_days = [str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no", (sid,)).fetchall()]
-    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    days = [d for d in weekdays if d in configured_days] or weekdays
+    days = [str(r["name"]) for r in _profile_days(con,sid) if int(r["enabled"] or 0)]
     breaks = _profile_breaks(con,sid)
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,r.name room
