@@ -242,7 +242,7 @@ def _base_css():
     return """<style>
 .tt-wrap{padding-bottom:30px}.tt-tabs{display:flex;gap:6px;overflow:auto;padding:8px 0 14px;margin-bottom:10px;border-bottom:1px solid #dbe4ee}
 .tt-tab{white-space:nowrap;text-decoration:none;padding:9px 12px;border:1px solid #d7e0ea;border-radius:9px;background:#f8fafc;color:#334155;font-size:12px;font-weight:800}
-.tt-tab.active{background:#176B3A;color:#fff;border-color:#176B3A}.tt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tt-draggable-lesson{cursor:grab;transition:transform .12s,box-shadow .12s}.tt-draggable-lesson:hover{transform:translateY(-1px);box-shadow:0 3px 9px rgba(15,23,42,.18)}.tt-dragging{opacity:.45;cursor:grabbing}.tt-drop-slot{transition:background .12s,outline .12s}.tt-drop-slot.tt-drop-hover{background:#ecfdf5!important;outline:2px dashed #176B3A;outline-offset:-3px}.tt-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.tt-teacher-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid rgba(15,23,42,.12);border-radius:999px;font-size:11px;font-weight:800}.tt-chip-dot{width:7px;height:7px;border-radius:50%;background:#176B3A}.tt-tab.active{background:#176B3A;color:#fff;border-color:#176B3A}.tt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .tt-card{background:#fff;border:1px solid #dbe4ee;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 5px 18px rgba(15,23,42,.04)}
 .tt-card h2{margin:0 0 5px;color:#176B3A;font-size:18px}.tt-card h3{margin:0 0 8px;font-size:14px}.tt-muted{color:#64748b;font-size:12px;line-height:1.5}
 .tt-field{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}.tt-label{font-size:11px;font-weight:800;color:#475569;display:block;margin-bottom:5px}
@@ -760,6 +760,15 @@ def _class_grid_data(con, sid, class_id=None):
     return classes, periods, days, breaks, grids
 
 
+
+def _teacher_placard_color(teacher_id):
+    """Stable soft color for a teacher's lesson placard."""
+    palette=("#DBEAFE","#DCFCE7","#FEF3C7","#FCE7F3","#EDE9FE","#CFFAFE","#FFEDD5","#E0F2FE","#F3E8FF","#ECFCCB","#FDE2E2","#D1FAE5")
+    try:
+        return palette[(int(teacher_id or 0) * 17) % len(palette)]
+    except Exception:
+        return palette[0]
+
 def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     """Render an aSc-style class grid with true merged double/triple lessons."""
     class_label = f"{class_row['name']}{(' — '+str(class_row['stream'])) if class_row['stream'] else ''}"
@@ -864,7 +873,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
                     if duration >= 3 else ""
                 )
                 row_cells.append(
-                    f"<td class='tt-lesson tt-merged-lesson' colspan='{span}'>"
+                    f"<td class='tt-lesson tt-merged-lesson tt-draggable-lesson' draggable='true' colspan='{span}' data-slot-id='{int(lesson['id'])}' data-day='{escape(str(day))}' data-period='{pno}' title='Drag to another period' style='background:{_teacher_placard_color(lesson['teacher_id'])}'>"
                     f"<b>{escape(str(lesson['subject']))}</b>"
                     f"<br><span>{escape(teachers)}</span>"
                     f"{('<br><small>'+escape(room)+'</small>') if room else ''}"
@@ -878,7 +887,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
             if occupied:
                 continue
 
-            row_cells.append("<td class='tt-empty'>—</td>")
+            row_cells.append(f"<td class='tt-empty tt-drop-slot' data-day='{escape(str(day))}' data-period='{pno}' title='Drop lesson here'>—</td>")
 
         body.append("<tr>" + "".join(row_cells) + "</tr>")
 
@@ -1085,7 +1094,31 @@ def _timetable(request, con, sid):
 <label><span class='tt-label'>Room filter</span><select class='tt-field' name='room_id'><option value=''>All rooms</option>{room_opts}</select></label>
 <div><button class='tt-btn'>🔎 View</button></div>
 </form>
+<div class='tt-card tt-manual-editor'><h3>🖱️ Manual Placement</h3>
+<div class='tt-muted'>Drag any lesson placard and drop it into another period. Placard colors identify teachers. Locked lessons cannot be moved. Existing class, teacher, room, break and double-period checks remain active.</div>
+<div class='tt-legend'>{"".join([f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(t['id'])}'>{escape(str(t['name']))}</span>" for t in con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()]) or "<span class='tt-muted'>No teachers found.</span>"}</div>
+</div>
 <div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
+<script>
+(function(){
+  let dragged=null;
+  document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
+    card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
+    card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;});
+  });
+  document.querySelectorAll('.tt-drop-slot').forEach(function(slot){
+    slot.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('tt-drop-hover');});
+    slot.addEventListener('dragleave',function(){this.classList.remove('tt-drop-hover');});
+    slot.addEventListener('drop',async function(e){
+      e.preventDefault();this.classList.remove('tt-drop-hover');
+      const id=dragged||e.dataTransfer.getData('text/plain'); if(!id)return;
+      const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period);
+      try{const res=await fetch('/app/timetable/placement/move/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
+      catch(err){alert('Unable to move this lesson.');}
+    });
+  });
+})();
+</script>
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=teacher_sheets'>👨‍🏫 Teacher Sheets</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print Classes</a></div>
 </div>"""
 
