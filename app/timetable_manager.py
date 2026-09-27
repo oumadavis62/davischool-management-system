@@ -256,7 +256,7 @@ def _base_css():
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
 .tt-print-footer{text-align:center;margin-top:8px;padding-top:4px;border-top:1px solid #176B3A;font-size:8px;color:#176B3A;background:#fff}.tt-generated-at{font-weight:600}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}.tt-teacher-sheet{page-break-after:always;break-after:page;margin:0!important;padding:0!important}.tt-teacher-sheet:last-child{page-break-after:auto;break-after:auto}.tt-teacher-title{font-size:16px!important;padding:4px 0!important;margin:0 0 5px!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:4px!important;font-size:8px!important}.tt-teacher-grid th:first-child,.tt-teacher-grid td:first-child{width:70px!important}.tt-teacher-lesson{height:62px!important}.tt-teacher-lesson b{font-size:11px!important}.tt-teacher-class{font-size:8px!important;right:3px!important;bottom:3px!important}.tt-teacher-room{font-size:7px!important;left:3px!important;bottom:3px!important}}
-</style><script>
+.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-tray-placard b{font-size:1rem}.tt-tray-placard span{margin-top:3px}.tt-tray-placard small{margin-top:5px;opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
 function timetableGeneratedStamp(){
   return new Intl.DateTimeFormat('en-KE',{
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
@@ -1099,15 +1099,7 @@ def _lesson_placard_platform(con, sid):
             )
     return "".join(cards) or "<div class='tt-tray-empty'>All lesson occurrences are placed.</div>"
 
-<style>
-.tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}
-.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176b45}
-.tt-placard-platform-head span{font-size:.88rem;color:#64748b}
-.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
-.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}
-.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}
-.tt-tray-placard b{font-size:1rem}.tt-tray-placard span{margin-top:3px}.tt-tray-placard small{margin-top:5px;opacity:.8}.tt-tray-dragging{opacity:.55}
-</style>
+
 
 def _timetable(request, con, sid):
     class_filter = request.query_params.get("class_id", "")
