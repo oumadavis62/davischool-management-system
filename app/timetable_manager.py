@@ -400,7 +400,8 @@ def timetable_manager(request: Request):
                             f"<div class='tt-class-sheet'><h3>🏫 {escape(label)}</h3>"
                             f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body_rows)}</table></div></div>"
                         )
-                    body=f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice ok'>Showing the saved timetable in safe view.</div>{''.join(sheets) or '<div class="tt-notice bad">No saved timetable placements found.</div>'}</div>"
+                    empty_notice = '<div class="tt-notice bad">No saved timetable placements found.</div>'
+                    body=f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice ok'>Showing the saved timetable in safe view.</div>{''.join(sheets) or empty_notice}</div>"
                 except Exception:
                     body = f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice bad'>Unable to display the timetable. The saved timetable data is still protected.</div></div>"
         return _layout(request, tab, body)
