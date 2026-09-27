@@ -137,18 +137,38 @@ def _ensure_tables(con):
         period_minutes INTEGER NOT NULL DEFAULT 40,
         periods_per_week INTEGER NOT NULL DEFAULT 35
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_profiles(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        active INTEGER NOT NULL DEFAULT 0,
+        days_json TEXT NOT NULL DEFAULT '[]',
+        periods_json TEXT NOT NULL DEFAULT '[]',
+        breaks_json TEXT NOT NULL DEFAULT '[]',
+        periods_per_day INTEGER NOT NULL DEFAULT 7,
+        period_minutes INTEGER NOT NULL DEFAULT 40,
+        periods_per_week INTEGER NOT NULL DEFAULT 35,
+        complexity TEXT NOT NULL DEFAULT 'normal',
+        relaxation TEXT NOT NULL DEFAULT 'relaxed',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    slot_columns={str(x["name"]) for x in cur.execute("PRAGMA table_info(timetable_slots)").fetchall()}
+    if "profile_id" not in slot_columns:
+        cur.execute("ALTER TABLE timetable_slots ADD COLUMN profile_id INTEGER DEFAULT 1")
     return cur
 
 
 def _migrate_legacy(con, sid):
     """Import old timetable rows once without deleting the legacy table."""
     cur=con.cursor()
-    existing=cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=?",(sid,)).fetchone()
+    existing=cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)",(sid,)).fetchone()
     legacy=cur.execute("SELECT COUNT(*) c FROM timetable WHERE school_id=?",(sid,)).fetchone()
     if int(existing["c"] or 0) or not legacy or not int(legacy["c"] or 0):
         return
     rows=cur.execute("SELECT * FROM timetable WHERE school_id=? ORDER BY id",(sid,)).fetchall()
-    periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+    periods=_profile_periods(cur,sid)
     for row in rows:
         cls=cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND COALESCE(stream,'')=? LIMIT 1",(sid,row["class_name"],row["stream"] or "")).fetchone()
         sub=cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? LIMIT 1",(sid,row["subject"])).fetchone()
@@ -160,36 +180,149 @@ def _migrate_legacy(con, sid):
         lesson_id=cur.lastrowid
         p=next((x for x in periods if str(x["start_time"])==str(row["start_time"]) and str(x["end_time"])==str(row["end_time"])),None)
         if p:
-            cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",
-                        (sid,lesson_id,row["day"],p["period_no"],p["start_time"],p["end_time"],None,0,"legacy-import"))
+            cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (sid,lesson_id,row["day"],p["period_no"],p["start_time"],p["end_time"],None,0,"legacy-import",_active_profile_id(con,sid)))
     con.commit()
 
 
 def _seed(con, sid):
-    cur = con.cursor()
-    row = cur.execute("SELECT school_id FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
-    if not row:
-        cur.execute("INSERT INTO timetable_manager_settings(school_id,days_json,complexity,relaxation) VALUES(?,?,?,?) RETURNING school_id",
-                    (sid, json.dumps(list(DEFAULT_DAYS)), "normal", "relaxed"))
-    existing = cur.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=?", (sid,)).fetchone()
-    if not int(existing["c"] or 0):
-        for i, day in enumerate(DAYS, 1):
-            cur.execute("INSERT INTO timetable_days(school_id,day_no,name,short_name,enabled) VALUES(?,?,?,?,?)",
-                        (sid, i, day, day[:3].upper(), 1 if day in DEFAULT_DAYS else 0))
-    settings = cur.execute("SELECT * FROM timetable_settings WHERE school_id=?", (sid,)).fetchone()
-    if not settings:
-        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) RETURNING school_id",
-                    (sid, 7, 40, 35))
-        settings = cur.execute("SELECT * FROM timetable_settings WHERE school_id=?", (sid,)).fetchone()
-    count = int(settings["periods_per_day"] or 7)
-    base = datetime.strptime("08:00", "%H:%M")
-    for n in range(1, count + 1):
-        if not cur.execute("SELECT id FROM timetable_periods WHERE school_id=? AND period_no=?", (sid, n)).fetchone():
-            st = (base + timedelta(minutes=(n-1)*int(settings["period_minutes"] or 40))).strftime("%H:%M")
-            et = (base + timedelta(minutes=n*int(settings["period_minutes"] or 40))).strftime("%H:%M")
-            cur.execute("INSERT INTO timetable_periods(school_id,period_no,start_time,end_time) VALUES(?,?,?,?)",
-                        (sid,n,st,et))
+    """Create/migrate the school's timetable profiles without deleting legacy data."""
+    cur=con.cursor()
+    profile=cur.execute(
+        "SELECT * FROM timetable_profiles WHERE school_id=? ORDER BY active DESC,id LIMIT 1",
+        (sid,)
+    ).fetchone()
+
+    if not profile:
+        manager=cur.execute("SELECT * FROM timetable_manager_settings WHERE school_id=?",(sid,)).fetchone()
+        settings=cur.execute("SELECT * FROM timetable_settings WHERE school_id=?",(sid,)).fetchone()
+        legacy_days=cur.execute("SELECT * FROM timetable_days WHERE school_id=? ORDER BY day_no",(sid,)).fetchall()
+        days=[
+            {"day_no":int(x["day_no"]),"name":str(x["name"]),
+             "short_name":str(x["short_name"]),"enabled":int(x["enabled"] or 0)}
+            for x in legacy_days
+        ] if legacy_days else [
+            {"day_no":i,"name":day,"short_name":day[:3].upper(),
+             "enabled":1 if day in DEFAULT_DAYS else 0}
+            for i,day in enumerate(DAYS,1)
+        ]
+        legacy_periods=_profile_periods(cur,sid)
+        if legacy_periods:
+            periods=[
+                {"id":int(x["period_no"]),"period_no":int(x["period_no"]),
+                 "start_time":str(x["start_time"]),"end_time":str(x["end_time"])}
+                for x in legacy_periods
+            ]
+        else:
+            ppd=int(settings["periods_per_day"] if settings else 7)
+            pm=int(settings["period_minutes"] if settings else 40)
+            base=datetime.strptime("08:00","%H:%M")
+            periods=[
+                {"id":n,"period_no":n,
+                 "start_time":(base+timedelta(minutes=(n-1)*pm)).strftime("%H:%M"),
+                 "end_time":(base+timedelta(minutes=n*pm)).strftime("%H:%M")}
+                for n in range(1,ppd+1)
+            ]
+        legacy_breaks=_profile_breaks(cur,sid)
+        breaks=[
+            {"id":int(x["id"]),"name":str(x["name"]),
+             "start_time":str(x["start_time"]),"end_time":str(x["end_time"])}
+            for x in legacy_breaks
+        ]
+        now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""INSERT INTO timetable_profiles(
+            school_id,name,description,active,days_json,periods_json,breaks_json,
+            periods_per_day,period_minutes,periods_per_week,complexity,relaxation,
+            created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+            sid,"Weekday Timetable",
+            "Original timetable migrated safely into the profile system.",1,
+            json.dumps(days),json.dumps(periods),json.dumps(breaks),
+            int(settings["periods_per_day"] if settings else len(periods) or 7),
+            int(settings["period_minutes"] if settings else 40),
+            int(settings["periods_per_week"] if settings else max(1,sum(1 for x in days if x["enabled"]))*max(1,len(periods))),
+            str(manager["complexity"] if manager else "normal"),
+            str(manager["relaxation"] if manager else "relaxed"),
+            now,now
+        ))
+        profile=cur.execute("SELECT * FROM timetable_profiles WHERE school_id=? ORDER BY id DESC LIMIT 1",(sid,)).fetchone()
+
+    pid=int(profile["id"])
+    cur.execute("UPDATE timetable_profiles SET active=0 WHERE school_id=? AND id<>?",(sid,pid))
+    cur.execute("UPDATE timetable_profiles SET active=1 WHERE school_id=? AND id=?",(sid,pid))
+    cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND (profile_id IS NULL OR profile_id=1)",(pid,sid))
     con.commit()
+
+
+def _active_profile_id(con,sid):
+    row=con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND active=1 ORDER BY id LIMIT 1",(sid,)).fetchone()
+    if row:return int(row["id"])
+    row=con.execute("SELECT id FROM timetable_profiles WHERE school_id=? ORDER BY id LIMIT 1",(sid,)).fetchone()
+    return int(row["id"]) if row else 0
+
+
+def _active_profile(con,sid):
+    pid=_active_profile_id(con,sid)
+    return con.execute("SELECT * FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid)).fetchone()
+
+
+def _profile_days(db,sid):
+    row=_active_profile(db,sid)
+    if not row:return []
+    try:values=json.loads(str(row["days_json"] or "[]"))
+    except Exception:values=[]
+    return [
+        {"day_no":int(x.get("day_no",i+1)),"name":str(x.get("name") or ""),
+         "short_name":str(x.get("short_name") or str(x.get("name") or "")[:3].upper()),
+         "enabled":int(x.get("enabled",1))}
+        for i,x in enumerate(values) if str(x.get("name") or "").strip()
+    ]
+
+
+def _profile_periods(db,sid):
+    row=_active_profile(db,sid)
+    if not row:return []
+    try:values=json.loads(str(row["periods_json"] or "[]"))
+    except Exception:values=[]
+    return [
+        {"id":int(x.get("id",x.get("period_no",i+1))),
+         "period_no":int(x.get("period_no",i+1)),
+         "start_time":str(x.get("start_time") or ""),
+         "end_time":str(x.get("end_time") or "")}
+        for i,x in enumerate(values)
+        if str(x.get("start_time") or "").strip() and str(x.get("end_time") or "").strip()
+    ]
+
+
+def _profile_breaks(db,sid):
+    row=_active_profile(db,sid)
+    if not row:return []
+    try:values=json.loads(str(row["breaks_json"] or "[]"))
+    except Exception:values=[]
+    return [
+        {"id":int(x.get("id",i+1)),"name":str(x.get("name") or ""),
+         "start_time":str(x.get("start_time") or ""),"end_time":str(x.get("end_time") or "")}
+        for i,x in enumerate(values) if str(x.get("name") or "").strip()
+    ]
+
+
+def _profile_settings(db,sid):
+    row=_active_profile(db,sid)
+    return row or {"periods_per_day":7,"period_minutes":40,"periods_per_week":35,"complexity":"normal","relaxation":"relaxed","name":"Weekday Timetable"}
+
+
+def _save_profile_json(con,sid,field,value):
+    pid=_active_profile_id(con,sid)
+    con.execute(
+        f"UPDATE timetable_profiles SET {field}=?,updated_at=? WHERE id=? AND school_id=?",
+        (json.dumps(value),datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid)
+    )
+
+
+def _install_profile_sql_function(con,sid):
+    pid=_active_profile_id(con,sid)
+    con.create_function("timetable_active_profile",1,
+        lambda school_id: pid if str(school_id).isdigit() and int(school_id)==int(sid) else -1)
 
 
 def _page(request, title, body):
@@ -207,18 +340,19 @@ def _guard(request, permission="timetable.view"):
     con = db()
     _ensure_tables(con)
     _seed(con, sid)
+    _install_profile_sql_function(con, sid)
     return sid, con, None
 
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print"}
+    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print"}
     return tab if tab in allowed else "timetable"
 
 
 def _tabs(active):
     labels = [
-        ("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
+        ("profiles","🗂️ Timetable Profiles"),("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
         ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
         ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print")
@@ -254,6 +388,8 @@ def _base_css():
 .tt-day{display:inline-flex;gap:8px;align-items:center;margin-right:14px;padding:8px 10px;border:1px solid #dbe4ee;border-radius:9px;background:#f8fafc}
 .tt-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.tt-week{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}.tt-week th,.tt-week td{border:1px solid #176B3A;padding:8px;vertical-align:top}.tt-week th{background:#176B3A;color:#fff;white-space:nowrap}.tt-week td{min-width:125px;height:64px;font-size:11px}.tt-break{background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-sheet{margin:0 0 22px;break-inside:avoid}.tt-class-sheet h3{margin:0 0 8px;color:#176B3A}.tt-class-grid{min-width:max-content}.tt-class-grid th:first-child,.tt-class-grid td:first-child{min-width:105px;width:105px;position:sticky;left:0;z-index:5}.tt-class-grid th:first-child{z-index:8}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{background:#176B3A!important;color:#fff!important}.tt-class-grid .tt-lesson{background:#fff;min-width:130px;text-align:center;font-weight:700;vertical-align:top;position:relative}.tt-class-grid .tt-lesson b{display:block;font-size:14px;font-weight:900;line-height:1.25}.tt-class-grid .tt-lesson .tt-screen-teacher{display:none}.tt-class-grid .tt-lesson .tt-print-teacher{display:none}.tt-class-grid .tt-lesson span{position:absolute;right:7px;bottom:7px;left:auto;display:block;text-align:right;font-size:10px;font-weight:500;line-height:1.15;white-space:nowrap}.tt-class-grid .tt-merged-lesson{vertical-align:top!important;text-align:center!important;min-width:260px}.tt-class-grid th{font-weight:900;text-align:center!important;vertical-align:middle!important}.tt-class-grid .tt-day-col,.tt-class-grid .tt-day{font-weight:900;text-align:center!important}.tt-class-grid .tt-break-col{font-weight:900;text-align:center!important}.tt-class-grid .tt-empty{text-align:center;color:#94a3b8}.tt-class-grid .tt-break{min-width:90px;background:#fff7ed;color:#9a3412;text-align:center;font-weight:900}.tt-class-grid .tt-duration{font-weight:800;letter-spacing:.2px}.tt-class-grid .tt-merged-lesson{vertical-align:middle!important;text-align:center!important;min-width:260px}.tt-class-grid .tt-lesson{box-sizing:border-box;overflow:hidden}.tt-class-grid .tt-break-col{background:#fff7ed!important;color:#9a3412!important;min-width:90px}.tt-break-label{display:flex;flex-direction:column;align-items:center;justify-content:space-around;height:100%;min-height:320px;font-size:28px;font-weight:900;line-height:1;letter-spacing:2px;padding:10px 0;box-sizing:border-box}.tt-break-label span{display:block}.tt-print-sheets .tt-class-sheet{margin-bottom:30px}.tt-teacher-sheet{margin:0 0 24px;break-inside:avoid;page-break-after:always;background:#fff}.tt-teacher-sheet:last-child{page-break-after:auto}.tt-teacher-title{font-size:18px;font-weight:900;color:#176B3A;margin:0 0 8px;padding:8px 0}.tt-teacher-grid{width:100%!important;min-width:0!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:7px}.tt-teacher-lesson{height:72px!important;position:relative!important;text-align:center!important;vertical-align:top!important}.tt-teacher-lesson b{font-size:14px!important}.tt-teacher-class{position:absolute;right:6px;bottom:5px;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:800!important;white-space:nowrap;max-width:95%;overflow:hidden;text-overflow:ellipsis}.tt-teacher-room{position:absolute;left:6px;bottom:5px;font-size:9px;font-weight:600}@media print{.tt-class-grid .tt-lesson .tt-print-teacher{display:block!important;position:absolute!important;right:7px!important;bottom:7px!important;left:auto!important;text-align:right!important;font-size:10px!important;font-weight:700!important;white-space:nowrap!important;max-width:90%;overflow:hidden;text-overflow:ellipsis}.tt-print-sheets .tt-class-sheet{page-break-after:always}.tt-print-sheets .tt-class-sheet:last-child{page-break-after:auto}.tt-class-grid{min-width:0;width:100%}.tt-class-grid th,.tt-class-grid td{padding:6px;font-size:9px}.tt-class-grid .tt-lesson{min-width:0}.tt-class-grid th:first-child,.tt-class-grid td:first-child{position:static;width:auto;min-width:0}}
 @media(max-width:900px){.tt-grid,.tt-form{grid-template-columns:1fr}.tt-form .wide{grid-column:auto}}
+.tt-profile-active{display:inline-block;margin-left:6px;padding:3px 6px;border-radius:999px;background:#dcfce7;color:#166534;font-size:9px;font-weight:900}.tt-profile-bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;margin:8px 0 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px}.tt-profile-inline{display:inline-flex;gap:6px;align-items:center;margin:4px 0}.tt-profile-inline .tt-field{min-width:150px}.tt-profile-bar b{color:#166534}
+.tt-profile-active{display:inline-block;margin-left:6px;padding:3px 6px;border-radius:999px;background:#dcfce7;color:#166534;font-size:9px;font-weight:900}.tt-profile-bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;margin:8px 0 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px}.tt-profile-inline{display:inline-flex;gap:6px;align-items:center;margin:4px 0}.tt-profile-inline .tt-field{min-width:150px}.tt-profile-bar b{color:#166534}
 .tt-print-footer{text-align:center;margin-top:8px;padding-top:4px;border-top:1px solid #176B3A;font-size:8px;color:#176B3A;background:#fff}.tt-generated-at{font-weight:600}
 @media print{.side,.top,.tt-tabs,.no-print{display:none!important}.page{padding:0!important}.tt-card{box-shadow:none;border:0}.tt-wrap{padding:0}.tt-week{min-width:0;font-size:9px}.tt-teacher-sheet{page-break-after:always;break-after:page;margin:0!important;padding:0!important}.tt-teacher-sheet:last-child{page-break-after:auto;break-after:auto}.tt-teacher-title{font-size:16px!important;padding:4px 0!important;margin:0 0 5px!important}.tt-teacher-grid{width:100%!important;table-layout:fixed!important}.tt-teacher-grid th,.tt-teacher-grid td{padding:4px!important;font-size:8px!important}.tt-teacher-grid th:first-child,.tt-teacher-grid td:first-child{width:70px!important}.tt-teacher-lesson{height:62px!important}.tt-teacher-lesson b{font-size:11px!important}.tt-teacher-class{font-size:8px!important;right:3px!important;bottom:3px!important}.tt-teacher-room{font-size:7px!important;left:3px!important;bottom:3px!important}}
 .tt-placard-platform{margin-top:16px;border:2px dashed #8bb9a1;border-radius:16px;background:#f4fbf7;padding:14px}.tt-placard-platform-head{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#176B45}.tt-placard-platform-head span{font-size:.88rem;color:#64748b}.tt-placard-tray{min-height:82px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}.tt-tray-placard{min-width:170px;max-width:235px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:10px 12px;box-shadow:0 2px 7px rgba(0,0,0,.08);cursor:grab;user-select:none}.tt-tray-placard:active{cursor:grabbing}.tt-tray-placard b,.tt-tray-placard span,.tt-tray-placard small{display:block}.tt-placed-card{position:relative}.tt-placed-card.tt-card-options{outline:2px solid #176B3A;outline-offset:-2px}.tt-placed-menu{position:absolute;z-index:40;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #176B3A;border-radius:9px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.22);white-space:nowrap}.tt-placed-menu button{border:0;border-radius:7px;background:#176B3A;color:#fff;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer}.tt-tray-placard b{font-size:1rem;font-weight:900}.tt-tray-detail{display:none;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(0,0,0,.18)}.tt-tray-open .tt-tray-detail{display:block}.tt-tray-detail span,.tt-tray-detail small{display:block;margin-top:3px}.tt-tray-detail span{font-weight:800}.tt-tray-detail small{opacity:.8}.tt-tray-dragging{opacity:.55}</style><script>
@@ -318,7 +454,16 @@ function printTeacherSheet(id){
 </script>"""
 
 
-def _layout(request, tab, content):
+def _profile_bar(con,sid,tab):
+    rows=con.execute("SELECT id,name,active FROM timetable_profiles WHERE school_id=? ORDER BY active DESC,id",(sid,)).fetchall()
+    current=next((r for r in rows if int(r["active"] or 0)),rows[0] if rows else None)
+    if not current:return ""
+    opts="".join(f"<option value='{int(r['id'])}' {'selected' if int(r['id'])==int(current['id']) else ''}>{escape(str(r['name']))}</option>" for r in rows)
+    return f"""<div class='tt-profile-bar'><div><b>🗓️ Current timetable:</b> {escape(str(current['name']))}<div class='tt-muted'>Periods, times, breaks and placements are isolated to this timetable.</div></div>
+<form method='post' action='/app/timetable/profile/switch-select'><input type='hidden' name='tab' value='{escape(tab)}'><select class='tt-field' name='profile_id' onchange='this.form.submit()'>{opts}</select></form>
+<a class='tt-btn alt' href='/app/timetable?tab=profiles'>Manage Timetables</a></div>"""
+
+def _layout(request, tab, content, con=None, sid=None):
     return _page(request, "Timetable Manager", f"<div class='tt-wrap'><h1>🗓️ Timetable Manager</h1><div class='tt-muted'>A complete school timetable workspace for setup, lesson cards, availability, generation, verification, manual adjustment and printing.</div>{_notice(request)}{_tabs(tab)}{content}{_base_css()}</div>")
 
 
@@ -329,7 +474,8 @@ def timetable_manager(request: Request):
         return response
     tab = _selected_tab(request)
     try:
-        if tab == "setup": body = _setup(request, con, sid)
+        if tab == "profiles": body = _profiles(request, con, sid)
+        elif tab == "setup": body = _setup(request, con, sid)
         elif tab == "periods": body = _periods(request, con, sid)
         elif tab == "subjects": body = _subjects(con, sid)
         elif tab == "teachers": body = _teachers(con, sid)
@@ -372,9 +518,9 @@ def timetable_manager(request: Request):
                         JOIN timetable_lessons l ON l.id=s.lesson_id
                         JOIN classes c ON c.id=l.class_id
                         JOIN subjects sub ON sub.id=l.subject_id
-                        WHERE s.school_id=? ORDER BY c.name,c.stream,s.day_name,s.period_no""",(sid,)).fetchall()
-                    p_rows = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
-                    d_rows = con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()
+                        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) ORDER BY c.name,c.stream,s.day_name,s.period_no""",(sid,)).fetchall()
+                    p_rows = _profile_periods(con,sid)
+                    d_rows = [r for r in _profile_days(con,sid) if int(r["enabled"] or 0)]
                     day_names=[str(x["name"]) for x in d_rows] or list(DEFAULT_DAYS)
                     grouped={}
                     for r in rows:
@@ -404,48 +550,63 @@ def timetable_manager(request: Request):
                     body=f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice ok'>Showing the saved timetable in safe view.</div>{''.join(sheets) or empty_notice}</div>"
                 except Exception:
                     body = f"<div class='tt-card'><h2>🗓️ Class Timetable</h2><div class='tt-notice bad'>Unable to display the timetable. The saved timetable data is still protected.</div></div>"
-        return _layout(request, tab, body)
+        return _layout(request, tab, body, con, sid)
     finally:
         con.close()
 
 
+def _profiles(request, con, sid):
+    rows=con.execute("SELECT * FROM timetable_profiles WHERE school_id=? ORDER BY active DESC,id",(sid,)).fetchall()
+    current=_active_profile_id(con,sid)
+    table=[]
+    for p in rows:
+        pid=int(p["id"])
+        active=int(p["active"] or 0)
+        slots=int(con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?",(sid,pid)).fetchone()["c"] or 0)
+        badge="<span class='tt-profile-active'>ACTIVE</span>" if active else ""
+        switch="" if active else f"<form method='post' action='/app/timetable/profile/switch/{pid}' style='display:inline'><input type='hidden' name='tab' value='profiles'><button class='tt-btn alt'>Use</button></form>"
+        duplicate=f"<form method='post' action='/app/timetable/profile/duplicate/{pid}' style='display:inline'><button class='tt-btn'>Duplicate</button></form>"
+        rename=f"<form method='post' action='/app/timetable/profile/rename/{pid}' class='tt-profile-inline'><input class='tt-field' name='name' value='{escape(str(p['name']))}' required><button class='tt-btn alt'>Rename</button></form>"
+        delete="" if pid==current or len(rows)<=1 else f"<form method='post' action='/app/timetable/profile/delete/{pid}' style='display:inline' onsubmit='return confirm(&quot;Delete this saved timetable profile? Lesson cards will remain.&quot;)'><button class='tt-btn danger'>Delete</button></form>"
+        table.append(f"<tr><td><b>{escape(str(p['name']))}</b> {badge}<br><small>{escape(str(p['description'] or ''))}</small></td><td>{'Yes' if active else '—'}</td><td>{len(json.loads(str(p['periods_json'] or '[]')))}</td><td>{slots}</td><td>{switch} {duplicate} {delete}</td></tr>")
+    return f"""<div class='tt-card'><h2>🗂️ Timetable Profiles</h2>
+<div class='tt-muted'>Create completely independent schedules such as Weekday, Saturday, Weekend, Exam or Special Activity. Each profile keeps its own days, period times, breaks and lesson placements. The existing timetable is preserved as the first profile.</div>
+<form method='post' action='/app/timetable/profile/create' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>New timetable name</span><input class='tt-field' name='name' required placeholder='Saturday Timetable'></label><label class='wide'><span class='tt-label'>Description</span><input class='tt-field' name='description' placeholder='Different Saturday schedule'></label><div><button class='tt-btn'>➕ Create Timetable</button></div></form></div>
+<div class='tt-card'><h3>Saved Timetables</h3><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Name</th><th>Active</th><th>Periods</th><th>Placements</th><th>Actions</th></tr></thead><tbody>{''.join(table)}</tbody></table></div></div>"""
+
+
 def _setup(request, con, sid):
-    settings = con.execute("SELECT * FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
-    enabled = con.execute("SELECT * FROM timetable_days WHERE school_id=? ORDER BY day_no", (sid,)).fetchall()
-    complexity = str(settings["complexity"] if settings else "normal")
-    relaxation = str(settings["relaxation"] if settings else "relaxed")
-    days = "".join(
-        f"<label class='tt-day'><input type='checkbox' name='days' value='{escape(str(d['name']))}' {'checked' if int(d['enabled'] or 0) else ''}>{escape(str(d['name']))}</label>"
-        for d in enabled
-    )
-    return f"""<div class='tt-card'><h2>⚙️ School Timetable Setup</h2><div class='tt-muted'>Configure the timetable cycle and generation behaviour. The existing school Classes, Subjects and Teachers remain the source of truth.</div>
-<form method='post' action='/app/timetable/setup/save' class='tt-form' style='margin-top:14px'>
-<div class='full'><span class='tt-label'>Teaching days</span>{days}</div>
+    profile=_active_profile(con,sid)
+    enabled=_profile_days(con,sid)
+    complexity=str(profile["complexity"] if profile else "normal")
+    relaxation=str(profile["relaxation"] if profile else "relaxed")
+    days="".join(f"<label class='tt-day'><input type='checkbox' name='days' value='{escape(str(d['name']))}' {'checked' if int(d['enabled'] or 0) else ''}>{escape(str(d['name']))}</label>" for d in enabled)
+    return f"""<div class='tt-card'><h2>⚙️ {escape(str(profile['name']))} Setup</h2><div class='tt-muted'>This setup belongs only to the selected timetable profile. Changing it does not change another saved timetable.</div>
+<form method='post' action='/app/timetable/setup/save' class='tt-form' style='margin-top:14px'><div class='full'><span class='tt-label'>Teaching days</span>{days}</div>
 <label><span class='tt-label'>Generation complexity</span><select name='complexity' class='tt-field'><option value='normal' {'selected' if complexity=='normal' else ''}>Normal</option><option value='large' {'selected' if complexity=='large' else ''}>Large</option><option value='huge' {'selected' if complexity=='huge' else ''}>Huge</option></select></label>
-<label><span class='tt-label'>Constraint mode</span><select name='relaxation' class='tt-field'><option value='draft' {'selected' if relaxation=='draft' else ''}>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label>
-<div><button class='tt-btn'>💾 Save Setup</button></div></form></div>
-<div class='tt-grid'><div class='tt-stat'><b>1</b>School timetable</div><div class='tt-stat'><b>4</b>Core resource types</div><div class='tt-stat'><b>3</b>Generation modes</div></div>
-<div class='tt-card'><h3>Workflow</h3><div class='tt-muted'>Setup → Periods & Bells → Subjects / Teachers / Classes / Rooms → Lessons → Availability → Generate → Verify → Timetable → Print</div></div>"""
+<label><span class='tt-label'>Constraint mode</span><select name='relaxation' class='tt-field'><option value='draft' {'selected' if relaxation=='draft' else ''}>Draft</option><option value='relaxed' {'selected' if relaxation=='relaxed' else ''}>Allow relaxation</option><option value='strict' {'selected' if relaxation=='strict' else ''}>Strict</option></select></label><div><button class='tt-btn'>💾 Save Setup</button></div></form></div>
+<div class='tt-grid'><div class='tt-stat'><b>{sum(1 for d in enabled if int(d['enabled'] or 0))}</b>Teaching days</div><div class='tt-stat'><b>{len(_profile_periods(con,sid))}</b>Periods</div><div class='tt-stat'><b>{len(_profile_breaks(con,sid))}</b>Breaks</div><div class='tt-stat'><b>Independent</b>Profile configuration</div></div>"""
 
 
 def _periods(request, con, sid):
-    settings = con.execute("SELECT * FROM timetable_settings WHERE school_id=?", (sid,)).fetchone()
-    periods = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no", (sid,)).fetchall()
-    breaks = con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id", (sid,)).fetchall()
-    ppd = int(settings["periods_per_day"] or 7)
-    pm = int(settings["period_minutes"] or 40)
-    rows = "".join(
-        f"<tr><td><b>Period {int(p['period_no'])}</b></td><td><input class='tt-field' type='time' name='start_{int(p['period_no'])}' value='{escape(str(p['start_time']))}'></td><td><input class='tt-field' type='time' name='end_{int(p['period_no'])}' value='{escape(str(p['end_time']))}'></td></tr>"
-        for p in periods
-    )
-    br = "".join(
-        f"<tr><td>{escape(str(b['name']))}</td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/break/delete/{b['id']}' onsubmit='return confirm(&quot;Delete this break?&quot;)'><button class='tt-btn danger'>🗑️</button></form></td></tr>"
-        for b in breaks
-    ) or "<tr><td colspan='4'>No breaks saved.</td></tr>"
-    return f"""<div class='tt-card'><h2>🕐 Periods & Bells</h2><div class='tt-muted'>Set the number of periods and exact bell times. Saved breaks are treated as unavailable timetable time.</div>
-<form method='post' action='/app/timetable/periods/settings' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>Periods per day</span><input class='tt-field' name='periods_per_day' type='number' min='1' max='12' value='{ppd}' required></label><label><span class='tt-label'>Default period minutes</span><input class='tt-field' name='period_minutes' type='number' min='20' max='180' value='{pm}' required></label><label><span class='tt-label'>Teaching periods per week (automatic)</span><input class='tt-field' type='number' value='{int(settings['periods_per_week'] or 35)}' readonly disabled><small class='tt-muted'>Calculated as enabled teaching days × periods per day. Breaks are not counted.</small></label><input type='hidden' name='periods_per_week' value='{int(settings['periods_per_week'] or 35)}'><div><button class='tt-btn'>💾 Save</button></div></form></div>
+    settings=_profile_settings(con,sid)
+    periods=_profile_periods(con,sid)
+    breaks=_profile_breaks(con,sid)
+    ppd=int(settings["periods_per_day"] or len(periods) or 7)
+    pm=int(settings["period_minutes"] or 40)
+    rows="".join(f"<tr><td><b>Period {int(p['period_no'])}</b></td><td><input class='tt-field' type='time' name='start_{int(p['period_no'])}' value='{escape(str(p['start_time']))}'></td><td><input class='tt-field' type='time' name='end_{int(p['period_no'])}' value='{escape(str(p['end_time']))}'></td></tr>" for p in periods)
+    br="".join(f"<tr><td>{escape(str(b['name']))}</td><td>{escape(str(b['start_time']))}</td><td>{escape(str(b['end_time']))}</td><td><form method='post' action='/app/timetable/break/delete/{b['id']}' onsubmit='return confirm(&quot;Delete this break?&quot;)'><button class='tt-btn danger'>🗑️</button></form></td></tr>" for b in breaks) or "<tr><td colspan='4'>No breaks saved for this timetable.</td></tr>"
+    return f"""<div class='tt-card'><h2>🕐 Periods & Bells — {escape(str(settings['name']))}</h2><div class='tt-muted'>These period times and breaks belong only to the active timetable profile. Weekday and Saturday profiles can have completely different schedules.</div>
+<form method='post' action='/app/timetable/periods/settings' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>Periods per day</span><input class='tt-field' name='periods_per_day' type='number' min='1' max='12' value='{ppd}' required></label><label><span class='tt-label'>Default period minutes</span><input class='tt-field' name='period_minutes' type='number' min='20' max='180' value='{pm}' required></label><label><span class='tt-label'>Teaching periods per week</span><input class='tt-field' type='number' value='{int(settings['periods_per_week'] or 0)}' readonly disabled><small class='tt-muted'>Calculated from this profile's enabled days × periods.</small></label><input type='hidden' name='periods_per_week' value='{int(settings['periods_per_week'] or 0)}'><div><button class='tt-btn'>💾 Save</button></div></form></div>
 <div class='tt-card'><h3>Bell / Period Times</h3><form method='post' action='/app/timetable/periods/save'><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Period</th><th>Start</th><th>End</th></tr></thead><tbody>{rows}</tbody></table></div><button class='tt-btn' style='margin-top:10px'>💾 Save Period Times</button></form></div>
-<div class='tt-card'><h3>☕ Break Periods</h3><form method='post' action='/app/timetable/break/save' class='tt-form'><label><span class='tt-label'>Break name</span><input class='tt-field' name='name' required placeholder='Tea Break / Lunch'></label><label><span class='tt-label'>Start</span><input class='tt-field' name='start_time' type='time' required></label><label><span class='tt-label'>End</span><input class='tt-field' name='end_time' type='time' required></label><div><button class='tt-btn'>💾 Save Break</button></div></form><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Name</th><th>Start</th><th>End</th><th></th></tr></thead><tbody>{br}</tbody></table></div></div>"""
+<div class='tt-card'><h3>☕ Breaks for {escape(str(settings['name']))}</h3><form method='post' action='/app/timetable/break/save' class='tt-form'><label><span class='tt-label'>Break name</span><input class='tt-field' name='name' required placeholder='Tea Break / Lunch'></label><label><span class='tt-label'>Start</span><input class='tt-field' name='start_time' type='time' required></label><label><span class='tt-label'>End</span><input class='tt-field' name='end_time' type='time' required></label><div><button class='tt-btn'>💾 Save Break</button></div></form><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Name</th><th>Start</th><th>End</th><th></th></tr></thead><tbody>{br}</tbody></table></div></div>"""
+
+
+def _weekly_period_capacity(con, sid):
+    day_count=sum(1 for x in _profile_days(con,sid) if int(x["enabled"] or 0))
+    period_count=len(_profile_periods(con,sid))
+    return int(day_count or 0)*int(period_count or 0)
+
 
 
 def _subjects(con, sid):
@@ -572,8 +733,8 @@ def _availability(request, con, sid):
     subjects = con.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
     resources = teachers if kind=="teacher" else subjects
     if not selected and resources: selected=int(resources[0]["id"])
-    days=[r["name"] for r in con.execute("SELECT * FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
-    periods=con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+    days=[r["name"] for r in [r for r in _profile_days(con,sid) if int(r["enabled"] or 0)]]
+    periods=_profile_periods(con,sid)
     saved={}
     if selected:
         for r in con.execute("SELECT day_name,period_no,allowed FROM timetable_availability WHERE school_id=? AND resource_type=? AND resource_id=?",(sid,kind,selected)).fetchall():
@@ -638,7 +799,7 @@ def _generate(con, sid):
     settings=con.execute("SELECT * FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
     classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
     lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?", (sid,)).fetchone()["c"]
-    slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=?", (sid,)).fetchone()["c"]
+    slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)", (sid,)).fetchone()["c"]
     weekly_capacity=_weekly_period_capacity(con,sid)
     latest_run=con.execute("""SELECT status,placed,requested,message,created_at
         FROM timetable_generation_runs WHERE school_id=? ORDER BY id DESC LIMIT 1""",(sid,)).fetchone()
@@ -662,7 +823,7 @@ def _verify(con, sid):
     lessons=con.execute("SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?", (sid,)).fetchall()
     placements=con.execute("""SELECT s.lesson_id,l.lessons_per_week,l.duration
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=?""",(sid,)).fetchall()
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()
     placed_occurrences={}
     placed_periods={}
     for r in placements:
@@ -687,7 +848,7 @@ def _verify(con, sid):
     # Hard collision checks.
     rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? ORDER BY s.day_name,s.period_no""",(sid,)).fetchall()
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) ORDER BY s.day_name,s.period_no""",(sid,)).fetchall()
     for i,a in enumerate(rows):
         for b in rows[i+1:]:
             if a["day_name"]!=b["day_name"]: continue
@@ -736,7 +897,7 @@ def _class_grid_data(con, sid, class_id=None):
         JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id
         LEFT JOIN timetable_rooms r ON r.id=s.room_id
-        WHERE s.school_id=?
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)
         ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
 
     lesson_classes = {}
@@ -989,11 +1150,11 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
     teachers = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
     if selected_teacher_id is not None:
         teachers = [t for t in teachers if int(t["id"]) == int(selected_teacher_id)]
-    periods = con.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no", (sid,)).fetchall()
+    periods = _profile_periods(con,sid)
     configured_days = [str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no", (sid,)).fetchall()]
     weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     days = [d for d in weekdays if d in configured_days] or weekdays
-    breaks = con.execute("SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id", (sid,)).fetchall()
+    breaks = _profile_breaks(con,sid)
     rows = con.execute("""SELECT s.*,l.class_id,l.subject_id,l.teacher_id,l.room_id,l.duration,
         c.name class_name,c.stream,sub.name subject,r.name room
         FROM timetable_slots s
@@ -1001,7 +1162,7 @@ def _teacher_sheets(con, sid, selected_teacher_id=None):
         JOIN classes c ON c.id=l.class_id
         JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN timetable_rooms r ON r.id=s.room_id
-        WHERE s.school_id=? ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) ORDER BY s.day_name,s.period_no""", (sid,)).fetchall()
     class_cache = {}
     for row in rows:
         lid = int(row["lesson_id"])
@@ -1087,7 +1248,7 @@ def _lesson_placard_platform(con, sid):
         JOIN subjects sub ON sub.id=l.subject_id LEFT JOIN teachers t ON t.id=l.teacher_id
         WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""",(sid,)).fetchall()
     placed={int(x["lesson_id"]):int(x["c"] or 0) for x in con.execute(
-        "SELECT lesson_id,COUNT(*) c FROM timetable_slots WHERE school_id=? GROUP BY lesson_id",(sid,)
+        "SELECT lesson_id,COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) GROUP BY lesson_id",(sid,)
     ).fetchall()}
     cards=[]
     for row in rows:
@@ -1240,113 +1401,191 @@ def _print_view(con, sid):
 <div class='tt-print-sheets'>{''.join(sheets) or '<div class="tt-notice bad">No timetable placements yet.</div>'}</div></div>"""
 
 
+@router.post("/app/timetable/profile/switch-select")
+def timetable_profile_switch_select(request:Request,profile_id:int=Form(...),tab:str=Form("timetable")):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        if not con.execute("SELECT id FROM timetable_profiles WHERE id=? AND school_id=?",(profile_id,sid)).fetchone():
+            return RedirectResponse("/app/timetable?tab="+quote(tab)+"&error=Invalid+timetable+profile",303)
+        con.execute("UPDATE timetable_profiles SET active=0 WHERE school_id=?",(sid,))
+        con.execute("UPDATE timetable_profiles SET active=1,updated_at=? WHERE id=? AND school_id=?",(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),profile_id,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab="+quote(tab),303)
+    finally:con.close()
+
+@router.post("/app/timetable/profile/switch/{pid}")
+def timetable_profile_switch(request:Request,pid:int,tab:str=Form("profiles")):
+    return timetable_profile_switch_select(request,profile_id=pid,tab=tab)
+
+@router.post("/app/timetable/profile/create")
+def timetable_profile_create(request:Request,name:str=Form(...),description:str=Form("")):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        name=name.strip()
+        if not name:return RedirectResponse("/app/timetable?tab=profiles&error=Timetable+name+is+required",303)
+        if con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND lower(name)=lower(?)",(sid,name)).fetchone():
+            return RedirectResponse("/app/timetable?tab=profiles&error=A+timetable+with+that+name+already+exists",303)
+        current=_active_profile(con,sid);now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("""INSERT INTO timetable_profiles(
+            school_id,name,description,active,days_json,periods_json,breaks_json,
+            periods_per_day,period_minutes,periods_per_week,complexity,relaxation,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+            sid,name,description.strip(),0,str(current["days_json"]),str(current["periods_json"]),str(current["breaks_json"]),
+            int(current["periods_per_day"] or 7),int(current["period_minutes"] or 40),int(current["periods_per_week"] or 35),
+            str(current["complexity"] or "normal"),str(current["relaxation"] or "relaxed"),now,now))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=New+timetable+created+from+the+current+schedule",303)
+    finally:con.close()
+
+@router.post("/app/timetable/profile/duplicate/{pid}")
+def timetable_profile_duplicate(request:Request,pid:int):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        source=con.execute("SELECT * FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid)).fetchone()
+        if not source:return RedirectResponse("/app/timetable?tab=profiles&error=Timetable+profile+not+found",303)
+        base=str(source["name"] or "Timetable")+" Copy";name=base;n=2
+        while con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND lower(name)=lower(?)",(sid,name)).fetchone():
+            name=base+" "+str(n);n+=1
+        now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("""INSERT INTO timetable_profiles(
+            school_id,name,description,active,days_json,periods_json,breaks_json,
+            periods_per_day,period_minutes,periods_per_week,complexity,relaxation,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+            sid,name,"Duplicated from "+str(source["name"]),0,str(source["days_json"]),str(source["periods_json"]),str(source["breaks_json"]),
+            int(source["periods_per_day"] or 7),int(source["period_minutes"] or 40),int(source["periods_per_week"] or 35),
+            str(source["complexity"] or "normal"),str(source["relaxation"] or "relaxed"),now,now))
+        new_id=int(con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND name=?",(sid,name)).fetchone()["id"])
+        con.execute("""INSERT INTO timetable_slots(
+            school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id
+        ) SELECT school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,?
+          FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?""",(new_id,sid,pid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+duplicated+with+its+saved+placements",303)
+    finally:con.close()
+
+@router.post("/app/timetable/profile/rename/{pid}")
+def timetable_profile_rename(request:Request,pid:int,name:str=Form(...)):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        name=name.strip()
+        if not name:return RedirectResponse("/app/timetable?tab=profiles&error=Timetable+name+is+required",303)
+        if con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND lower(name)=lower(?) AND id<>?",(sid,name,pid)).fetchone():
+            return RedirectResponse("/app/timetable?tab=profiles&error=A+timetable+with+that+name+already+exists",303)
+        con.execute("UPDATE timetable_profiles SET name=?,updated_at=? WHERE id=? AND school_id=?",(name,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+renamed",303)
+    finally:con.close()
+
+@router.post("/app/timetable/profile/delete/{pid}")
+def timetable_profile_delete(request:Request,pid:int):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        current=_active_profile_id(con,sid)
+        total=int(con.execute("SELECT COUNT(*) c FROM timetable_profiles WHERE school_id=?",(sid,)).fetchone()["c"] or 0)
+        if pid==current:return RedirectResponse("/app/timetable?tab=profiles&error=Switch+to+another+timetable+before+deleting+this+one",303)
+        if total<=1:return RedirectResponse("/app/timetable?tab=profiles&error=The+last+timetable+cannot+be+deleted",303)
+        con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+deleted+without+deleting+lesson+cards",303)
+    finally:con.close()
+
 @router.post("/app/timetable/setup/save")
 def timetable_setup_save(request: Request, complexity: str=Form(...), relaxation: str=Form(...), days: list[str]=Form([])):
-    sid, con, response = _guard(request, "timetable.edit")
-    if response: return response
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
     try:
-        if complexity not in ("normal","large","huge"): complexity="normal"
-        if relaxation not in ("draft","relaxed","strict"): relaxation="relaxed"
-        cur=con.cursor()
-        cur.execute("UPDATE timetable_manager_settings SET days_json=?,complexity=?,relaxation=? WHERE school_id=?",
-                    (json.dumps(days or list(DEFAULT_DAYS)),complexity,relaxation,sid))
-        cur.execute("UPDATE timetable_days SET enabled=0 WHERE school_id=?",(sid,))
-        for d in days:
-            if d in DAYS:
-                cur.execute("UPDATE timetable_days SET enabled=1 WHERE school_id=? AND name=?",(sid,d))
+        complexity=complexity if complexity in ("normal","large","huge") else "normal"
+        relaxation=relaxation if relaxation in ("draft","relaxed","strict") else "relaxed"
+        wanted=[d for d in days if d in DAYS] or list(DEFAULT_DAYS)
+        values=[{"day_no":i,"name":d,"short_name":d[:3].upper(),"enabled":1 if d in wanted else 0} for i,d in enumerate(DAYS,1)]
+        _save_profile_json(con,sid,"days_json",values)
+        pid=_active_profile_id(con,sid)
+        con.execute("UPDATE timetable_profiles SET complexity=?,relaxation=?,periods_per_week=?,updated_at=? WHERE id=? AND school_id=?",
+                    (complexity,relaxation,max(1,len(wanted)*len(_profile_periods(con,sid))),datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
         con.commit()
-        return RedirectResponse("/app/timetable?tab=setup&msg=Timetable+setup+saved",303)
-    finally: con.close()
-
+        return RedirectResponse("/app/timetable?tab=setup&msg=Timetable+profile+setup+saved",303)
+    finally:con.close()
 
 @router.post("/app/timetable/periods/settings")
 def timetable_period_settings(request: Request, periods_per_day:int=Form(...), period_minutes:int=Form(...), periods_per_week:int=Form(...)):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        if not (1<=periods_per_day<=12 and 20<=period_minutes<=180 and 1<=periods_per_week<=84):
+        if not (1<=periods_per_day<=12 and 20<=period_minutes<=180):
             return RedirectResponse("/app/timetable?tab=periods&error=Invalid+period+settings",303)
-        cur=con.cursor()
-        # Weekly capacity is physical: enabled teaching days × periods per day.
-        # It must never be inflated by breaks or by an arbitrary "maximum lessons"
-        # value. For 5 days × 8 periods this is always 40.
-        enabled_days=int(cur.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=? AND enabled=1",(sid,)).fetchone()["c"] or 0)
-        physical_week=max(1, enabled_days or 5) * int(periods_per_day)
-        cur.execute("INSERT INTO timetable_settings(school_id,periods_per_day,period_minutes,periods_per_week) VALUES(?,?,?,?) ON CONFLICT(school_id) DO UPDATE SET periods_per_day=excluded.periods_per_day,period_minutes=excluded.period_minutes,periods_per_week=excluded.periods_per_week RETURNING school_id",(sid,periods_per_day,period_minutes,physical_week))
-        cur.execute("DELETE FROM timetable_periods WHERE school_id=? AND period_no>?",(sid,periods_per_day))
+        old={int(x["period_no"]):x for x in _profile_periods(con,sid)}
         base=datetime.strptime("08:00","%H:%M")
+        values=[]
         for n in range(1,periods_per_day+1):
-            p=cur.execute("SELECT id FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,n)).fetchone()
-            st=(base+timedelta(minutes=(n-1)*period_minutes)).strftime("%H:%M")
-            et=(base+timedelta(minutes=n*period_minutes)).strftime("%H:%M")
-            if not p:
-                cur.execute("INSERT INTO timetable_periods(school_id,period_no,start_time,end_time) VALUES(?,?,?,?)",(sid,n,st,et))
-
+            if n in old:
+                st=str(old[n]["start_time"]);et=str(old[n]["end_time"])
+            else:
+                st=(base+timedelta(minutes=(n-1)*period_minutes)).strftime("%H:%M")
+                et=(base+timedelta(minutes=n*period_minutes)).strftime("%H:%M")
+            values.append({"id":n,"period_no":n,"start_time":st,"end_time":et})
+        _save_profile_json(con,sid,"periods_json",values)
+        pid=_active_profile_id(con,sid)
+        enabled=sum(1 for x in _profile_days(con,sid) if int(x["enabled"] or 0))
+        physical_week=max(1,enabled)*periods_per_day
+        con.execute("UPDATE timetable_profiles SET periods_per_day=?,period_minutes=?,periods_per_week=?,updated_at=? WHERE id=? AND school_id=?",
+                    (periods_per_day,period_minutes,physical_week,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
         con.commit()
-        return RedirectResponse("/app/timetable?tab=periods&msg=Period+settings+saved",303)
-    finally: con.close()
-
+        return RedirectResponse("/app/timetable?tab=periods&msg=Period+settings+saved+for+this+timetable",303)
+    finally:con.close()
 
 @router.post("/app/timetable/periods/save")
 async def timetable_periods_save(request: Request):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        form=await request.form();cur=con.cursor()
-        periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
-
-        # Validate the complete submitted timetable first, then update it.
-        # Updating one period before validating the next used to make a
-        # legitimate shift (for example 08:20-09:00, 09:00-09:40) look like
-        # an overlap because the database contained a mixture of old and new
-        # times during the loop.
+        form=await request.form()
+        periods=_profile_periods(con,sid)
         submitted=[]
+        seen=[]
         for p in periods:
-            st=str(form.get(f"start_{p['period_no']}") or "").strip()
-            et=str(form.get(f"end_{p['period_no']}") or "").strip()
-            if not st or not et or et<=st:
-                return RedirectResponse(f"/app/timetable?tab=periods&error=Invalid+time+for+period+{p['period_no']}",303)
-            submitted.append((int(p["period_no"]),st,et,p["id"]))
-
-        for i,(pno,st,et,pid) in enumerate(submitted):
-            for other_no,other_st,other_et,other_id in submitted:
-                if pno == other_no:
-                    continue
-                # Touching at the exact boundary is allowed; actual overlap
-                # exists only when one period starts before the other ends and
-                # ends after the other starts.
-                if st < other_et and et > other_st:
-                    return RedirectResponse(f"/app/timetable?tab=periods&error=Period+{pno}+overlaps+period+{other_no}",303)
-
-        for pno,st,et,pid in submitted:
-            cur.execute("UPDATE timetable_periods SET start_time=?,end_time=? WHERE id=? AND school_id=?",(st,et,pid,sid))
-
-        con.commit();return RedirectResponse("/app/timetable?tab=periods&msg=Period+times+saved",303)
+            pno=int(p["period_no"]);st=str(form.get(f"start_{pno}") or "").strip();et=str(form.get(f"end_{pno}") or "").strip()
+            if not st or not et or et<=st:return RedirectResponse(f"/app/timetable?tab=periods&error=Invalid+time+for+period+{pno}",303)
+            submitted.append({"id":pno,"period_no":pno,"start_time":st,"end_time":et});seen.append((pno,st,et))
+        for i,(pno,st,et) in enumerate(seen):
+            for other_no,ost,oet in seen[i+1:]:
+                if st<oet and et>ost:return RedirectResponse(f"/app/timetable?tab=periods&error=Period+{pno}+overlaps+period+{other_no}",303)
+        _save_profile_json(con,sid,"periods_json",submitted)
+        pid=_active_profile_id(con,sid)
+        con.execute("UPDATE timetable_profiles SET periods_per_week=?,updated_at=? WHERE id=? AND school_id=?",
+                    (max(1,sum(1 for x in _profile_days(con,sid) if int(x["enabled"] or 0)))*len(submitted),datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=periods&msg=Period+times+saved+for+this+timetable",303)
     finally:con.close()
-
 
 @router.post("/app/timetable/break/save")
 def timetable_break_save(request: Request,name:str=Form(...),start_time:str=Form(...),end_time:str=Form(...)):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        if not name.strip() or not start_time or not end_time or end_time<=start_time:return RedirectResponse("/app/timetable?tab=periods&error=Invalid+break",303)
-        cur=con.cursor(); overlap=cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,end_time,start_time)).fetchone()
-        if overlap:return RedirectResponse("/app/timetable?tab=periods&error=Break+overlaps+another+break",303)
-        cur.execute("INSERT INTO timetable_breaks(school_id,name,start_time,end_time) VALUES(?,?,?,?)",(sid,name.strip(),start_time,end_time));con.commit()
-        return RedirectResponse("/app/timetable?tab=periods&msg=Break+saved",303)
+        name=name.strip()
+        if not name or not start_time or not end_time or end_time<=start_time:return RedirectResponse("/app/timetable?tab=periods&error=Invalid+break",303)
+        breaks=_profile_breaks(con,sid)
+        if any(start_time<str(b["end_time"]) and end_time>str(b["start_time"]) for b in breaks):return RedirectResponse("/app/timetable?tab=periods&error=Break+overlaps+another+break",303)
+        next_id=max([int(b["id"]) for b in breaks] or [0])+1
+        breaks.append({"id":next_id,"name":name,"start_time":start_time,"end_time":end_time});breaks.sort(key=lambda x:(str(x["start_time"]),int(x["id"])))
+        _save_profile_json(con,sid,"breaks_json",breaks);con.commit()
+        return RedirectResponse("/app/timetable?tab=periods&msg=Break+saved+for+this+timetable",303)
     finally:con.close()
-
 
 @router.post("/app/timetable/break/delete/{rid}")
 def timetable_break_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        con.execute("DELETE FROM timetable_breaks WHERE id=? AND school_id=?",(rid,sid));con.commit()
-        return RedirectResponse("/app/timetable?tab=periods&msg=Break+deleted",303)
+        _save_profile_json(con,sid,"breaks_json",[b for b in _profile_breaks(con,sid) if int(b["id"])!=int(rid)])
+        con.commit();return RedirectResponse("/app/timetable?tab=periods&msg=Break+deleted+from+this+timetable",303)
     finally:con.close()
-
 
 @router.post("/app/timetable/room/save")
 def timetable_room_save(request:Request,name:str=Form(...),code:str=Form(""),capacity:int=Form(0),room_type:str=Form("")):
@@ -1434,7 +1673,7 @@ async def timetable_availability_save(request:Request,kind:str=Form(...),resourc
         valid_table="teachers" if kind=="teacher" else "subjects"
         if not con.execute(f"SELECT id FROM {valid_table} WHERE school_id=? AND id=?",(sid,resource_id)).fetchone():
             return RedirectResponse("/app/timetable?tab=availability&error=Invalid+resource",303)
-        days=[str(r["name"]) for r in con.execute("SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)).fetchall()]
+        days=[str(r["name"]) for r in [r for r in _profile_days(con,sid) if int(r["enabled"] or 0)]]
         periods=[int(r["period_no"]) for r in con.execute("SELECT period_no FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()]
         allowed={(d,p) for d in days for p in periods}
         selected=set()
@@ -1491,9 +1730,9 @@ def _constraint_maps(cur,sid):
 
 
 def _is_available_slot(cur,sid,lesson,day,pno,duration,occupied,rooms,strict):
-    periods=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()
+    periods=_profile_periods(cur,sid)
     pmap={int(p["period_no"]):p for p in periods}
-    breaks=cur.execute("SELECT * FROM timetable_breaks WHERE school_id=?",(sid,)).fetchall()
+    breaks=_profile_breaks(cur,sid)
     for x in range(pno,pno+duration):
         if x not in pmap:return False,None
         st=str(pmap[x]["start_time"]);et=str(pmap[x]["end_time"])
@@ -1585,15 +1824,15 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     if replace_existing:
         if class_filter:
             cur.execute("""DELETE FROM timetable_slots
-                WHERE school_id=? AND locked=0 AND lesson_id IN (
+                WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
                     SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
                 )""",(sid,sid,class_filter))
         else:
-            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0",(sid,))
+            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(sid,))
 
     base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=?""",(sid,)).fetchall()]
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()]
 
     def overlap(a_pno,a_duration,b):
         return (
@@ -2091,7 +2330,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                 SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
             )""",(sid,sid,class_filter))
     else:
-        cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND locked=0",(sid,))
+        cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(sid,))
 
     run=datetime.now().strftime("%Y%m%d%H%M%S%f")
     for row in placements:
@@ -2109,7 +2348,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             sid,row["lesson_id"],row["day_name"],row["period_no"],
             p["start_time"],
             pmap[int(row["period_no"])+duration-1]["end_time"],
-            row["room_id"],0,run
+            row["room_id"],0,run,_active_profile_id(cur,sid)
         ))
 
     requested=sum(
@@ -2140,6 +2379,8 @@ def _run_generation_job(sid,class_filter,mode,complexity,replace_existing,run_id
     con=_db()
     try:
         _ensure_tables(con)
+        _seed(con,sid)
+        _install_profile_sql_function(con,sid)
         try:
             run,requested,placed,unplaced,status=_generate_algorithm(
                 con.cursor(),sid,class_filter,mode,complexity,replace_existing
@@ -2214,18 +2455,18 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
         if day_name not in DAYS:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
         duration=max(1,int(lesson["duration"] or 1))
         if duration==2 and int(period_no)%2==0:return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+start+at+1,+3,+5+or+7",303)
-        pmap={int(p["period_no"]):p for p in cur.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)).fetchall()}
+        pmap={int(p["period_no"]):p for p in _profile_periods(cur,sid)}
         if int(period_no) not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
         for pno in range(int(period_no),int(period_no)+duration):
             if pno not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+duration+does+not+fit",303)
             if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
-        count=int(cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchone()["c"] or 0)
+        count=int(cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND lesson_id=?",(sid,lesson_id)).fetchone()["c"] or 0)
         if count>=max(0,int(lesson["lessons_per_week"] or 0)):return RedirectResponse("/app/timetable?tab=timetable&error=All+weekly+occurrences+are+already+placed",303)
         teacher_ids={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()}
         if not teacher_ids and lesson["teacher_id"]:teacher_ids={int(lesson["teacher_id"])}
         room_id=int(lesson["room_id"]) if lesson["room_id"] else None
-        others=cur.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.day_name=?",(sid,day_name)).fetchall()
+        others=cur.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.day_name=?",(sid,day_name)).fetchall()
         for other in others:
             if not _overlaps({"period_no":period_no,"duration":duration},other):continue
             other_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,other["lesson_id"])).fetchall()} or {int(other["class_id"])}
@@ -2236,10 +2477,10 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
             if room_id and other["room_id"] and int(other["room_id"])==room_id:return RedirectResponse("/app/timetable?tab=timetable&error=Room+conflict",303)
         subject_id=int(lesson["subject_id"])
         for cid in linked_ids:
-            if cur.execute("SELECT s.id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.day_name=? AND l.subject_id=? AND (l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?)) LIMIT 1",(sid,day_name,subject_id,cid,sid,cid)).fetchone():
+            if cur.execute("SELECT s.id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.day_name=? AND l.subject_id=? AND (l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?)) LIMIT 1",(sid,day_name,subject_id,cid,sid,cid)).fetchone():
                 return RedirectResponse("/app/timetable?tab=timetable&error=Subject+already+scheduled+for+this+class+that+day",303)
         start=pmap[int(period_no)]["start_time"];end=pmap[int(period_no)+duration-1]["end_time"]
-        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",(sid,lesson_id,day_name,period_no,start,end,room_id,0,None))
+        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",(sid,lesson_id,day_name,period_no,start,end,room_id,0,None,_active_profile_id(con,sid)))
         con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+placard+placed",303)
     finally:
@@ -2277,7 +2518,7 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
         others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.room_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-            WHERE s.school_id=? AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
+            WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
         probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
         for o in others:
             if not _overlaps(probe,o): continue
