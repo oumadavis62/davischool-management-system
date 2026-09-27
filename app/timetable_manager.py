@@ -1085,6 +1085,26 @@ def _timetable(request, con, sid):
                 f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(rows)}</table></div></div>"
             )
 
+    drag_script = """<script>
+(function(){
+  let dragged=null;
+  document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
+    card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
+    card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;});
+  });
+  document.querySelectorAll('.tt-drop-slot').forEach(function(slot){
+    slot.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('tt-drop-hover');});
+    slot.addEventListener('dragleave',function(){this.classList.remove('tt-drop-hover');});
+    slot.addEventListener('drop',async function(e){
+      e.preventDefault();this.classList.remove('tt-drop-hover');
+      const id=dragged||e.dataTransfer.getData('text/plain'); if(!id)return;
+      const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period);
+      try{const res=await fetch('/app/timetable/placement/move/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
+      catch(err){alert('Unable to move this lesson.');}
+    });
+  });
+})();
+</script>"""
     teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     teacher_legend = "".join(
         f"<span class='tt-teacher-chip' style='background:{_teacher_placard_color(t['id'])}'>{escape(str(t['name']))}</span>"
@@ -1105,26 +1125,7 @@ def _timetable(request, con, sid):
 <div class='tt-legend'>{teacher_legend}</div>
 </div>
 <div style='margin-top:14px'>{''.join(sheets) or "<div class='tt-notice bad'>No timetable placements yet. Generate the timetable first.</div>"}</div>
-<script>
-(function(){
-  let dragged=null;
-  document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
-    card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
-    card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;});
-  });
-  document.querySelectorAll('.tt-drop-slot').forEach(function(slot){
-    slot.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('tt-drop-hover');});
-    slot.addEventListener('dragleave',function(){this.classList.remove('tt-drop-hover');});
-    slot.addEventListener('drop',async function(e){
-      e.preventDefault();this.classList.remove('tt-drop-hover');
-      const id=dragged||e.dataTransfer.getData('text/plain'); if(!id)return;
-      const fd=new FormData(); fd.append('day_name',this.dataset.day); fd.append('period_no',this.dataset.period);
-      try{const res=await fetch('/app/timetable/placement/move/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
-      catch(err){alert('Unable to move this lesson.');}
-    });
-  });
-})();
-</script>
+{drag_script}
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=teacher_sheets'>👨‍🏫 Teacher Sheets</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print Classes</a></div>
 </div>"""
 
