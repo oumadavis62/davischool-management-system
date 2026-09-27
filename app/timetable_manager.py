@@ -341,7 +341,39 @@ def timetable_manager(request: Request):
         elif tab == "verify": body = _verify(con, sid)
         elif tab == "teacher_sheets":
             teacher_id = request.query_params.get("teacher_id", "")
-            teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+            tray_drag_script = """<script>
+(function(){
+  let trayLesson=null;
+  document.querySelectorAll('.tt-tray-placard').forEach(function(card){
+    card.addEventListener('dragstart',function(e){
+      trayLesson=this.dataset.lessonId;
+      this.classList.add('tt-tray-dragging');
+      e.dataTransfer.effectAllowed='copy';
+      e.dataTransfer.setData('text/plain','tray:'+trayLesson);
+    });
+    card.addEventListener('dragend',function(){this.classList.remove('tt-tray-dragging');trayLesson=null;});
+  });
+  document.querySelectorAll('.tt-drop-slot').forEach(function(slot){
+    slot.addEventListener('dragover',function(e){
+      if(trayLesson){e.preventDefault();e.dataTransfer.dropEffect='copy';this.classList.add('tt-drop-hover');}
+    });
+    slot.addEventListener('dragleave',function(){this.classList.remove('tt-drop-hover');});
+    slot.addEventListener('drop',async function(e){
+      const raw=e.dataTransfer.getData('text/plain');
+      if(!trayLesson && raw.indexOf('tray:')!==0)return;
+      e.preventDefault();this.classList.remove('tt-drop-hover');
+      const id=trayLesson||raw.slice(5); if(!id)return;
+      const fd=new FormData();
+      fd.append('day_name',this.dataset.day);fd.append('period_no',this.dataset.period);fd.append('class_id',this.dataset.classId);
+      try{
+        const res=await fetch('/app/timetable/placement/place/'+encodeURIComponent(id),{method:'POST',body:fd,credentials:'same-origin'});
+        window.location.href=res.url||'/app/timetable?tab=timetable';
+      }catch(err){alert('Unable to place this lesson placard.');}
+    });
+  });
+})();
+</script>"""
+    teacher_rows = con.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (sid,)).fetchall()
             selected_id = int(teacher_id) if str(teacher_id).isdigit() else (int(teacher_rows[0]["id"]) if teacher_rows else None)
             teacher_opts = "".join(
                 f"<option value='{int(t['id'])}' {'selected' if selected_id == int(t['id']) else ''}>{escape(str(t['name']))}</option>"
@@ -1199,6 +1231,7 @@ def _timetable(request, con, sid):
 </div>
 <div style='margin-top:14px'>{master_sheet}</div>
 {drag_script}
+{tray_drag_script}
 <div style='margin-top:12px'><a class='tt-btn' href='/app/timetable?tab=generate'>🚀 Generate / Regenerate</a> <a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Verify</a> <a class='tt-btn alt' href='/app/timetable?tab=teacher_sheets'>👨‍🏫 Teacher Sheets</a> <a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print Classes</a></div>
 </div>"""
 
@@ -2155,6 +2188,49 @@ def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,clas
     finally:
         con.close()
 
+
+@router.post("/app/timetable/placement/place/{lesson_id}")
+def timetable_placement_place(request:Request,lesson_id:int,day_name:str=Form(...),period_no:int=Form(...),class_id:str=Form("")):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        cur=con.cursor()
+        lesson=cur.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=?",(lesson_id,sid)).fetchone()
+        if not lesson:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+card+not+found",303)
+        target=int(class_id) if str(class_id).isdigit() else int(lesson["class_id"])
+        linked=cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()
+        linked_ids={int(x["class_id"]) for x in linked} or {int(lesson["class_id"])}
+        if target not in linked_ids:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+is+not+assigned+to+this+class",303)
+        if day_name not in DAYS:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        duration=max(1,int(lesson["duration"] or 1))
+        if duration==2 and int(period_no)%2==0:return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+start+at+1,+3,+5+or+7",303)
+        pmap={int(p["period_no"]):p for p in cur.execute("SELECT * FROM timetable_periods WHERE school_id=?",(sid,)).fetchall()}
+        if int(period_no) not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
+        for pno in range(int(period_no),int(period_no)+duration):
+            if pno not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+duration+does+not+fit",303)
+            if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
+                return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
+        count=int(cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchone()["c"] or 0)
+        if count>=max(0,int(lesson["lessons_per_week"] or 0)):return RedirectResponse("/app/timetable?tab=timetable&error=All+weekly+occurrences+are+already+placed",303)
+        teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()} or ({int(lesson["teacher_id"])} if lesson["teacher_id"] else set())
+        room=int(lesson["room_id"]) if lesson["room_id"] else None
+        others=cur.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.day_name=?",(sid,day_name)).fetchall()
+        for o in others:
+            if not _overlaps({"period_no":period_no,"duration":duration},o):continue
+            other_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,o["lesson_id"])).fetchall()} or {int(o["class_id"])}
+            other_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,o["lesson_id"])).fetchall()} or ({int(o["teacher_id"])} if o["teacher_id"] else set())
+            if linked_ids.intersection(other_classes):return RedirectResponse("/app/timetable?tab=timetable&error=Class+conflict",303)
+            if teachers.intersection(other_teachers):return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+conflict",303)
+            if room and o["room_id"] and int(o["room_id"])==room:return RedirectResponse("/app/timetable?tab=timetable&error=Room+conflict",303)
+        subject=int(lesson["subject_id"])
+        for cid in linked_ids:
+            exists=cur.execute("SELECT s.id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.day_name=? AND l.subject_id=? AND (l.class_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?)) LIMIT 1",(sid,day_name,subject,cid,sid,cid)).fetchone()
+            if exists:return RedirectResponse("/app/timetable?tab=timetable&error=Subject+already+scheduled+for+this+class+that+day",303)
+        start=pmap[int(period_no)]["start_time"];end=pmap[int(period_no)+duration-1]["end_time"]
+        cur.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run) VALUES(?,?,?,?,?,?,?,?,?)",(sid,lesson_id,day_name,period_no,start,end,room,0,None))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+placard+placed",303)
+    finally:con.close()
 
 @router.post("/app/timetable/placement/move/{rid}")
 def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),period_no:int=Form(...),room_id:str=Form(""),class_id:str=Form("")):
