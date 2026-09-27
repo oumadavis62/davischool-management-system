@@ -1160,8 +1160,28 @@ def _timetable(request, con, sid):
     card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;draggedType=null;});
   });
   document.querySelectorAll('.tt-tray-placard').forEach(function(card){
+    card.addEventListener('click',function(){card.classList.toggle('tt-tray-open');});
     card.addEventListener('dragstart',function(e){dragged=this.dataset.lessonId;draggedType='tray';this.classList.add('tt-tray-dragging');e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('text/plain','tray:'+dragged);});
     card.addEventListener('dragend',function(){this.classList.remove('tt-tray-dragging');dragged=null;draggedType=null;});
+  });
+  document.querySelectorAll('.tt-placed-card').forEach(function(card){
+    card.addEventListener('click',function(){
+      document.querySelectorAll('.tt-placed-menu').forEach(function(m){m.remove();});
+      var menu=document.createElement('div');
+      menu.className='tt-placed-menu';
+      var form=document.createElement('form');
+      form.method='POST';
+      form.action='/app/timetable/placement/platform/'+encodeURIComponent(card.getAttribute('data-slot-id'));
+      var btn=document.createElement('button');
+      btn.type='submit';
+      btn.textContent='📌 Place on platform';
+      form.appendChild(btn);
+      menu.appendChild(form);
+      card.appendChild(menu);
+    });
+  });
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.tt-placed-card'))document.querySelectorAll('.tt-placed-menu').forEach(function(m){m.remove();});
   });
   document.querySelectorAll('.tt-drop-slot').forEach(function(slot){
     slot.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect=draggedType==='tray'?'copy':'move';this.classList.add('tt-drop-hover');});
@@ -2275,6 +2295,24 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
     finally:
         con.close()
+@router.post("/app/timetable/placement/platform/{rid}")
+def timetable_placement_platform(request:Request,rid:int):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:
+        return response
+    try:
+        cur=con.cursor()
+        slot=cur.execute("SELECT id,locked FROM timetable_slots WHERE id=? AND school_id=?",(rid,sid)).fetchone()
+        if not slot:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Placed+card+not+found",303)
+        if int(slot["locked"] or 0):
+            return RedirectResponse("/app/timetable?tab=timetable&error=Locked+cards+cannot+be+returned+to+the+platform",303)
+        cur.execute("DELETE FROM timetable_slots WHERE id=? AND school_id=? AND locked=0",(rid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+card+returned+to+platform",303)
+    finally:
+        con.close()
+
 @router.post("/app/timetable/placement/delete/{rid}")
 def timetable_placement_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
