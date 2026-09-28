@@ -1095,7 +1095,7 @@ def _class_grid_html(class_row, periods, days, breaks, grid, show_title=True):
     return (
         f"<div class='tt-class-sheet'>{title}"
         f"<div class='tt-scroll'><table class='tt-week tt-class-grid'>{head}{''.join(body)}</table></div>"
-        f"<div class='tt-print-footer'>D-School Management System · Generated: <span class='tt-generated-at'></span></div></div>"
+        f"<div class='tt-print-footer'>DaviSchool Management System · Generated: <span class='tt-generated-at'></span></div></div>"
     )
 
 def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
@@ -1166,7 +1166,7 @@ def _teacher_grid_html(teacher_row, periods, days, breaks, grid):
             row_cells.append("<td class='tt-empty'>—</td>")
         body.append("<tr>" + "".join(row_cells) + "</tr>")
     sheet_id = 'teacher-sheet-' + str(teacher_row['id'])
-    return f"<div id='{sheet_id}' class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)} <span class='no-print' style='float:right'><button type='button' class='tt-btn alt tt-teacher-print-btn' onclick=\"printTeacherSheet('{sheet_id}')\">🖨️ Print This Sheet</button></span></div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div><div class='tt-print-footer'>D-School Management System · Generated: <span class='tt-generated-at'></span></div></div>"
+    return f"<div id='{sheet_id}' class='tt-teacher-sheet'><div class='tt-teacher-title'>👨‍🏫 {escape(teacher_label)} <span class='no-print' style='float:right'><button type='button' class='tt-btn alt tt-teacher-print-btn' onclick=\"printTeacherSheet('{sheet_id}')\">🖨️ Print This Sheet</button></span></div><div class='tt-scroll'><table class='tt-week tt-class-grid tt-teacher-grid'>{head}{''.join(body)}</table></div><div class='tt-print-footer'>DaviSchool Management System · Generated: <span class='tt-generated-at'></span></div></div>"
 
 
 def _teacher_sheets(con, sid, selected_teacher_id=None):
