@@ -1362,10 +1362,14 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             cur = con.cursor()
         students = []
     mark_rows = []
-    if eid and selected_class_ids:
-        class_marks_placeholders = ",".join("?" for _ in selected_class_ids)
-        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND class_id IN (" + class_marks_placeholders + ")"
-        mark_params = [sid, eid] + selected_class_ids
+    if eid and students:
+        # Filter marks by the actual students selected above. This is important
+        # when a stream is selected: subject means/distributions must not include
+        # marks from the other streams in the same grade.
+        student_ids_for_marks = [int(st["id"]) for st in students]
+        student_marks_placeholders = ",".join("?" for _ in student_ids_for_marks)
+        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND student_id IN (" + student_marks_placeholders + ")"
+        mark_params = [sid, eid] + student_ids_for_marks
         if term:
             mark_query += " AND term=?"
             mark_params.append(term)
@@ -1400,7 +1404,33 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 print("DAVISCHOOL MARKSHEET MARK FALLBACK FAILED:", repr(fallback_exc), flush=True)
                 mark_rows = []
     marks = _aggregate_marks_for_students(cur, sid, [int(st["id"]) for st in students], selected_exam_ids, term, year)
-    streams = sorted(set(str(c["stream"] or "") for c in classes if str(c["stream"] or "")))
+    # Stream choices must belong to the currently selected class/grade.
+    # Keeping this scoped prevents a stream from another class from producing
+    # an invalid/empty MarkSheet request.
+    if combined_mode:
+        streams = sorted(set(
+            str(c["stream"] or "") for c in classes
+            if int(c["id"]) in set(selected_class_ids) and str(c["stream"] or "")
+        ))
+    elif cid:
+        streams = sorted(set(
+            str(st["stream"] or "") for st in classes
+            if int(st["id"]) == cid and str(st["stream"] or "")
+        ))
+        # Some installations store the stream on the student rather than the
+        # class record. Fall back to the selected class's students.
+        if not streams:
+            try:
+                stream_rows = cur.execute(
+                    "SELECT DISTINCT stream FROM students WHERE school_id=? AND class_id=? AND stream IS NOT NULL AND stream<>? ORDER BY stream",
+                    (sid, cid, "")
+                ).fetchall()
+                streams = sorted(set(str(row["stream"] or "") for row in stream_rows if str(row["stream"] or "").strip()))
+            except Exception as exc:
+                print("DAVISCHOOL MARKSHEET STREAM LOOKUP FALLBACK:", repr(exc), flush=True)
+                streams = []
+    else:
+        streams = []
 
     eopts = "".join("<option value='%s' %s>%s</option>" % (e["id"], "selected" if int(e["id"]) in selected_exam_ids else "", escape(str(e["name"]))) for e in exams)
     # Offer a combined option for every grade/class name represented by
