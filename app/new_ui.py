@@ -4529,7 +4529,6 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
     email=(email or "").strip()
     password=password or ""
     password_confirm=password_confirm or ""
-    if not full_name:return HTMLResponse("Full name is required. <a href='/app/users'>Back</a>",400)
     if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password != password_confirm:return HTMLResponse("Password and confirmation do not match. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
@@ -4554,13 +4553,15 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
         if role=="teacher":
             teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
             if teacher_row:
+                # The selected Teachers record is authoritative. This also
+                # makes account creation work if browser-side JavaScript did
+                # not populate the readonly name/email fields.
                 full_name=str(teacher_row["name"] or full_name).strip()
-                # Prefer the email stored on the teacher record when the form
-                # was populated from that record, while still allowing the
-                # School Admin to supply an email if the teacher record has none.
                 if teacher_row["email"] and not email_v:
                     email_v=str(teacher_row["email"]).strip().lower()
 
+        if not full_name:
+            return HTMLResponse("Full name is required. Select a teacher from Teachers Records. <a href='/app/users'>Back</a>",400)
         if not email_v:
             return HTMLResponse("A valid email address is required for the account. Please enter an email for the selected teacher.",400)
         if cur.execute("SELECT id FROM users WHERE lower(email)=?",(email_v,)).fetchone():
