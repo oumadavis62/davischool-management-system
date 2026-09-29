@@ -4409,8 +4409,10 @@ def users_page(request: Request):
    if(isTeacher){{
      const t=teacherData[teacher.value]||{{}};
      name.value=t.name||'';
-     email.value=t.email||'';
-     if(!email.value) email.placeholder='Enter email (teacher record has no email)';
+     // Use the teacher-record email when available, but never erase an email
+     // the school admin has manually entered when the teacher record is blank.
+     if(t.email) email.value=t.email;
+     if(!t.email) email.placeholder='Enter email for this teacher';
    }}
    cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
    sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
