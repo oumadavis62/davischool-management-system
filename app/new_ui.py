@@ -4397,27 +4397,27 @@ def users_page(request: Request):
 <div class='muted' style='margin-top:10px'>Class Teacher: select exactly one class/stream. Subject Teacher: select all classes/streams and subjects they teach. Both: assign both.</div>
 </div>
 <script>
-(function(){
+(function(){{
  const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), name=document.getElementById('newTeacherName'), email=document.getElementById('newTeacherEmail');
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
- const teacherData={teacher_data_json};
- function sync(){
+ const teacherData={{{teacher_data_json}}};
+ function sync(){{
    const isTeacher=role.value==='teacher';
    [teacher,type,cs,ss].forEach(x=>x.disabled=!isTeacher);
    name.readOnly=isTeacher;
-   if(isTeacher){
-     const t=teacherData[teacher.value]||{};
+   if(isTeacher){{
+     const t=teacherData[teacher.value]||{{}};
      name.value=t.name||'';
      email.value=t.email||'';
      if(!email.value) email.placeholder='Enter email (teacher record has no email)';
-   }
+   }}
    cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
    sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
- }
+ }}
  role.addEventListener('change',sync); teacher.addEventListener('change',sync); cs.addEventListener('change',sync); ss.addEventListener('change',sync); sync();
- document.getElementById('createUserForm').addEventListener('submit',function(){sync();});
-})();
+ document.getElementById('createUserForm').addEventListener('submit',function(){{sync();}});
+}})();
 </script>
 </div>
 <div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
