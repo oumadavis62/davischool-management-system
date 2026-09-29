@@ -4808,11 +4808,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                     teacher_type="class_teacher" if existing_class_teacher and class_ids else "subject_teacher"
 
             if class_ids:
-                valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
+                valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),[sid]+class_ids).fetchall()
             else:
                 valid_classes=[]
             if subject_ids:
-                valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),subject_ids).fetchall()
+                valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),[sid]+subject_ids).fetchall()
             else:
                 valid_subjects=[]
             if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
