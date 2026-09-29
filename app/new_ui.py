@@ -3732,7 +3732,13 @@ def request_marks_correction(request: Request, exam_id:int=Form(...), class_id:i
         con.close();return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO marks_correction_requests(school_id,exam_id,class_id,subject_id,teacher_id,requested_by,requested_at,reason,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,int(teacher_id),request.session.get("email",""),now,reason,"pending"))
-    _audit(cur,sid,request,"MARKS_CORRECTION_REQUEST",f"Requested mark correction for exam {exam_id}, class {class_id}, subject {subject_id}: {reason}")
+    # The correction request itself must never be lost because an optional audit
+    # record has a legacy schema problem. Save the request first; audit failure
+    # is only a warning and does not block the approval workflow.
+    try:
+        _audit(cur,sid,request,"MARKS_CORRECTION_REQUEST",f"Requested mark correction for exam {exam_id}, class {class_id}, subject {subject_id}: {reason}")
+    except Exception as audit_exc:
+        print("DAVISCHOOL MARKS CORRECTION AUDIT WARNING:",repr(audit_exc),flush=True)
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
