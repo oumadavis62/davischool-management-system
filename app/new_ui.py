@@ -4530,60 +4530,97 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     con=_db();cur=con.cursor()
-    email_v=email.strip().lower()
-    if cur.execute("SELECT id FROM users WHERE lower(email)=?",(email_v,)).fetchone():
-        con.close();return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",400)
-    tid=int(teacher_id) if teacher_id.isdigit() else None
-    stid=int(student_id) if student_id.isdigit() else None
-    if tid and not cur.execute("SELECT id,name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
-        con.close();return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
-    if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
-        con.close();return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
-    if role=="teacher" and not tid:
-        con.close();return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
-    if role in ("student","parent") and not stid:
-        con.close();return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-    if role not in ("teacher","student","parent") and (tid or stid):
-        con.close();return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
-    if role=="teacher":
-        teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
-        if teacher_row:
-            full_name=str(teacher_row["name"] or full_name).strip()
-            if not email_v and teacher_row["email"]: email_v=str(teacher_row["email"]).strip().lower()
-    class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
-    subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
-    class_ids=list(dict.fromkeys(class_ids)); subject_ids=list(dict.fromkeys(subject_ids))
-    if role=="teacher":
-        if teacher_type not in ("class_teacher","subject_teacher","both"): teacher_type="subject_teacher"
-        if teacher_type in ("class_teacher","both") and len(class_ids)!=1:
-            con.close();return HTMLResponse("Select exactly one class/stream for a Class Teacher.",400)
-        if teacher_type in ("subject_teacher","both") and (not class_ids or not subject_ids):
-            con.close();return HTMLResponse("Select at least one class/stream and one subject for a Subject Teacher.",400)
-        if class_ids:
-            valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
-        else: valid_classes=[]
-        if subject_ids:
-            valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),subject_ids).fetchall()
-        else: valid_subjects=[]
-        if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
-            con.close();return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
-    from app.main import hash_password
-    cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
-    if role=="teacher" and tid:
-        _ensure_teacher_allocations_table(cur)
-        _ensure_class_teacher_assignments_table(cur)
-        if teacher_type in ("class_teacher","both"):
-            cid=class_ids[0]
-            now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-            cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
-                           VALUES(?,?,?,?)
-                           ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",(sid,cid,tid,now))
-        if teacher_type in ("subject_teacher","both"):
-            for cid in class_ids:
-                for subject_id in subject_ids:
-                    cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",(sid,tid,cid,subject_id))
-    _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
-    con.commit();con.close();return RedirectResponse("/app/users",303)
+    try:
+        email_v=email.strip().lower()
+        tid=int(teacher_id) if teacher_id.isdigit() else None
+        stid=int(student_id) if student_id.isdigit() else None
+
+        if tid and not cur.execute("SELECT id,name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
+            return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
+        if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
+            return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
+        if role=="teacher" and not tid:
+            return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
+        if role in ("student","parent") and not stid:
+            return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
+        if role not in ("teacher","student","parent") and (tid or stid):
+            return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+
+        if role=="teacher":
+            teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
+            if teacher_row:
+                full_name=str(teacher_row["name"] or full_name).strip()
+                # Prefer the email stored on the teacher record when the form
+                # was populated from that record, while still allowing the
+                # School Admin to supply an email if the teacher record has none.
+                if teacher_row["email"] and not email_v:
+                    email_v=str(teacher_row["email"]).strip().lower()
+
+        if not email_v:
+            return HTMLResponse("A valid email address is required for the account. Please enter an email for the selected teacher.",400)
+        if cur.execute("SELECT id FROM users WHERE lower(email)=?",(email_v,)).fetchone():
+            return HTMLResponse("An account already exists for this email address. Use a different email or edit the existing account.",400)
+
+        class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
+        subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
+        class_ids=list(dict.fromkeys(class_ids)); subject_ids=list(dict.fromkeys(subject_ids))
+
+        if role=="teacher":
+            if teacher_type not in ("class_teacher","subject_teacher","both"): teacher_type="subject_teacher"
+            if teacher_type in ("class_teacher","both") and len(class_ids)!=1:
+                return HTMLResponse("Select exactly one class/stream for a Class Teacher.",400)
+            if teacher_type in ("subject_teacher","both") and (not class_ids or not subject_ids):
+                return HTMLResponse("Select at least one class/stream and one subject for a Subject Teacher.",400)
+            if class_ids:
+                valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
+            else: valid_classes=[]
+            if subject_ids:
+                valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),subject_ids).fetchall()
+            else: valid_subjects=[]
+            if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
+                return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
+
+        from app.main import hash_password
+        cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",
+                    (email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
+
+        if role=="teacher" and tid:
+            _ensure_teacher_allocations_table(cur)
+            _ensure_class_teacher_assignments_table(cur)
+            if teacher_type in ("class_teacher","both"):
+                cid=class_ids[0]
+                now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+                cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+                               VALUES(?,?,?,?)
+                               ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
+                            (sid,cid,tid,now))
+            if teacher_type in ("subject_teacher","both"):
+                for cid in class_ids:
+                    for subject_id in subject_ids:
+                        cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
+                                    (sid,tid,cid,subject_id))
+
+        _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email_v}")
+        con.commit()
+        return RedirectResponse("/app/users",303)
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        import traceback
+        print("DAVISCHOOL USER CREATE ERROR:", repr(exc), flush=True)
+        print(traceback.format_exc(), flush=True)
+        detail=escape(f"{type(exc).__name__}: {str(exc) or 'No exception message'}")[:1000]
+        return HTMLResponse(
+            "Unable to create the account.<br><br><b>Technical detail:</b> " + detail +
+            "<br><br><a href='/app/users'>Back to User Management</a>", 500
+        )
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
 
 
 @router.get("/app/classes", response_class=HTMLResponse)
