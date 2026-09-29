@@ -2476,10 +2476,17 @@ def app_home(request: Request):
     else:
         school_id=request.session.get("school_id",0)
         school=cur.execute("SELECT * FROM schools WHERE id=?",(school_id,)).fetchone()
-        con.close()
         school_name=school["name"] if school else "School"
         if role=="teacher":
-            body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>"""
+            con.close()
+            body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div>
+<div class='grid' style='grid-template-columns:repeat(5,1fr)'>
+<div class='card'><div class='label'>Students</div><div class='kpi'>🎓</div></div>
+<div class='card'><div class='label'>Classes</div><div class='kpi'>🏫</div></div>
+<a class='card' href='/app/academics/marks' style='text-decoration:none;color:inherit;cursor:pointer'><div class='label'>Record Marks</div><div class='kpi'>📝</div></a>
+<div class='card'><div class='label'>Attendance</div><div class='kpi'>✓</div></div>
+<div class='card'><div class='label'>Analysis</div><div class='kpi'>📊</div></div>
+</div></div><style>@media(max-width:900px){.grid[style*='repeat(5,1fr)']{grid-template-columns:repeat(2,1fr)!important}}</style>"""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
