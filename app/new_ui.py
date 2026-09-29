@@ -4428,8 +4428,8 @@ def users_page(request: Request):
         entry["teacher_type"]="both" if ct and has_subject else ("class_teacher" if ct else "subject_teacher")
     teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
     teacher_allocation_json=json.dumps(teacher_alloc_map)
-    modal_username=escape(str((created_credentials or {}).get("username") or ""))
-    modal_password=escape(str((created_credentials or {}).get("password") or ""))
+    modal_username=escape(str((created_account["username"] if created_account else "") or ""))
+    modal_password=escape(str((created_account["temporary_password"] if created_account else "") or ""))
     credential_modal=(f"<div id=\"credentialModal\" style=\"display:flex;position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:99999;align-items:center;justify-content:center;padding:20px\"><div style=\"background:#fff;border-radius:16px;max-width:430px;width:100%;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.25)\"><h2 style=\"margin:0 0 10px\">✅ Account Created</h2><p style=\"margin:0 0 16px;color:#475569\">The teacher account has been created successfully. Save these login credentials.</p><div style=\"background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px\"><b>Username</b><div style=\"font-size:20px;font-weight:800;margin:4px 0 12px\">{modal_username}</div><b>Password</b><div style=\"font-size:20px;font-weight:800;margin-top:4px\">{modal_password}</div></div><button type=\"button\" id=\"credentialOkay\" class=\"btn\" style=\"width:100%\">OK</button></div></div><script>(function(){{const m=document.getElementById("credentialModal"),o=document.getElementById("credentialOkay");if(m&&o){{o.onclick=function(){{m.style.display="none";}};}}}})();</script>" if created_flag and created_credentials else "")
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
@@ -4758,7 +4758,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         if not created:
             return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
         request.session["created_account_credentials"]={"username":username,"password":generated_password}
-        return RedirectResponse("/app/users?created=1",303)
+        return RedirectResponse(f"/app/users?created=1&username={quote(username)}",303)
     except Exception as exc:
         try:
             con.rollback()
