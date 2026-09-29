@@ -4449,74 +4449,48 @@ def users_page(request: Request):
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
- const teacherData={{{teacher_data_json}}};
- const allocationData={{{teacher_allocation_json}}};
-
- function optionValues(select){{
-   return Array.from(select.selectedOptions).map(o=>o.value);
- }}
- function setSelected(select, values){{
-   const wanted=new Set((values||[]).map(String));
-   Array.from(select.options).forEach(o=>o.selected=wanted.has(String(o.value)));
- }}
- function refreshSubjects(){{
-   const selectedClasses=optionValues(cs);
-   const data=allocationData[teacher.value]||{{}};
-   const allowed=new Set();
-   selectedClasses.forEach(cid=>(data.subjects_by_class&&data.subjects_by_class[String(cid)]||[]).forEach(sid=>allowed.add(String(sid))));
-   Array.from(ss.options).forEach(o=>{{
-     const show=allowed.has(String(o.value));
-     o.hidden=!show;
-     o.disabled=!show;
-     if(!show) o.selected=false;
-   }});
-   sw.style.display=selectedClasses.length?'block':'none';
-   if(selectedClasses.length) {{
-     setSelected(ss,Array.from(allowed));
+ async function loadTeacherLinks(){{
+   if(role.value!=='teacher' || !teacher.value){{
+     cw.style.display='none'; sw.style.display='none'; cc.value=''; sc.value=''; return;
    }}
- }}
- function sync(){{
-   const isTeacher=role.value==='teacher';
-   [teacher,type].forEach(x=>x.disabled=!isTeacher);
-   if(!isTeacher){{
-     cw.style.display='none';
+   cw.style.display='block';
+   sw.style.display='none';
+   cc.value=''; sc.value='';
+   try{{
+     const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
+     if(!response.ok) throw new Error('Teacher links request failed');
+     const data=await response.json();
+     if(data.teacher && data.teacher.email) email.value=data.teacher.email;
+     type.value=data.teacher_type||'subject_teacher';
+     const wantedClasses=new Set((data.classes||[]).map(String));
+     Array.from(cs.options).forEach(o=>o.selected=wantedClasses.has(String(o.value)));
+     cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
+     const selectedClasses=Array.from(cs.selectedOptions).map(o=>o.value);
+     const allowed=new Set();
+     selectedClasses.forEach(cid=>(data.subjects_by_class&&data.subjects_by_class[String(cid)]||[]).forEach(sid=>allowed.add(String(sid))));
+     Array.from(ss.options).forEach(o=>{{
+       const show=allowed.has(String(o.value));
+       o.hidden=!show; o.disabled=!show; o.selected=show;
+     }});
+     sw.style.display=selectedClasses.length?'block':'none';
+     sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
+   }}catch(err){{
+     cw.style.display='block';
      sw.style.display='none';
-     cc.value='';
-     sc.value='';
-     return;
+     console.error('Teacher allocation load failed',err);
    }}
-   const t=teacherData[teacher.value]||{{}};
-   const allocation=allocationData[teacher.value]||{{}};
-   if(t.email) email.value=t.email;
-   if(!t.email) email.placeholder='Enter email for this teacher';
-
-   const allocatedClasses=(allocation.classes||[]).map(String);
-   const classTeacherClass=allocation.class_teacher_class ? [String(allocation.class_teacher_class)] : [];
-   let classesToSelect=allocatedClasses.length ? allocatedClasses : classTeacherClass;
-   if(classTeacherClass.length && !classesToSelect.includes(classTeacherClass[0])) classesToSelect.push(classTeacherClass[0]);
-
-   setSelected(cs,classesToSelect);
-   cw.style.display=teacher.value?'block':'none';
-
-   const inferredType=allocation.teacher_type||'subject_teacher';
-   type.value=inferredType;
-   cs.disabled=!teacher.value;
-   refreshSubjects();
-   cc.value=optionValues(cs).join(',');
-   sc.value=optionValues(ss).join(',');
  }}
- role.addEventListener('change',sync);
- teacher.addEventListener('change',sync);
+ teacher.addEventListener('change',loadTeacherLinks);
+ role.addEventListener('change',loadTeacherLinks);
  cs.addEventListener('change',function(){{
-   refreshSubjects();
-   cc.value=optionValues(cs).join(',');
-   sc.value=optionValues(ss).join(',');
+   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
+   if(role.value==='teacher' && teacher.value) loadTeacherLinks();
  }});
- ss.addEventListener('change',function(){{
-   sc.value=optionValues(ss).join(',');
+ ss.addEventListener('change',function(){{sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');}});
+ document.getElementById('createUserForm').addEventListener('submit',function(){{
+   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
+   sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
  }});
- sync();
- document.getElementById('createUserForm').addEventListener('submit',function(){{sync();}});
 }})();
 </script>
 </div>
@@ -4619,6 +4593,49 @@ def users_delete(request: Request, uid: int):
     _audit(cur,sid,request,"USER_DELETE",f"Deleted {user['role']} account {user['email']}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
+@router.get("/app/users/teacher-links")
+def users_teacher_links(request: Request, teacher_id: int = 0):
+    sid=_school_session(request)
+    if not sid:
+        return JSONResponse({"detail":"Not authenticated"}, status_code=401)
+    if not _require_permission(request, sid, "users.manage"):
+        return JSONResponse({"detail":"Not authorized"}, status_code=403)
+    con=_db(); cur=con.cursor()
+    try:
+        teacher=cur.execute("SELECT id,name,email,role FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+        if not teacher:
+            return JSONResponse({"classes":[],"subjects_by_class":{},"teacher_type":"subject_teacher"})
+        _ensure_teacher_allocations_table(cur)
+        _ensure_class_teacher_assignments_table(cur)
+        allocations=cur.execute("""SELECT a.class_id,a.subject_id,c.name class_name,c.stream,s.name subject_name
+            FROM teacher_allocations a
+            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=?
+            ORDER BY c.name,c.stream,s.name""",(sid,teacher_id)).fetchall()
+        class_teacher=cur.execute("SELECT class_id FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? LIMIT 1",(sid,teacher_id)).fetchone()
+        classes=[]
+        subjects_by_class={}
+        for row in allocations:
+            cid=int(row["class_id"])
+            if cid not in classes:
+                classes.append(cid)
+            subjects_by_class.setdefault(str(cid),[])
+            if int(row["subject_id"]) not in subjects_by_class[str(cid)]:
+                subjects_by_class[str(cid)].append(int(row["subject_id"]))
+        if class_teacher and int(class_teacher["class_id"]) not in classes:
+            classes.append(int(class_teacher["class_id"]))
+        ct=bool(class_teacher)
+        st=bool(allocations)
+        teacher_type="both" if ct and st else ("class_teacher" if ct else "subject_teacher")
+        return JSONResponse({"teacher":{"id":int(teacher["id"]),"name":str(teacher["name"] or ""),"email":str(teacher["email"] or "")},
+            "classes":classes,"subjects_by_class":subjects_by_class,
+            "class_teacher_class":int(class_teacher["class_id"]) if class_teacher else None,
+            "teacher_type":teacher_type})
+    finally:
+        con.close()
+
+
 @router.get("/app/users/add")
 def users_add_get(request: Request):
     # The account-creation endpoint is POST-only. Redirect accidental GET
@@ -4696,9 +4713,15 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
 
         from app.main import hash_password
         import secrets
-        generated_password=secrets.token_urlsafe(9)
+        generated_password="DS-"+secrets.token_urlsafe(8)
         base_username=re.sub(r"[^a-z0-9]+","",full_name.lower()) or "user"
         username=base_username
+        if username=="user" and tid:
+            username="teacher"
+        username=username[:40]
+        username_suffix=secrets.randbelow(9000)+1000
+        if cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
+            username=f"{username}{username_suffix}"
         suffix=1
         while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
             suffix += 1
