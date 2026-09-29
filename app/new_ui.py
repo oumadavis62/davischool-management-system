@@ -2478,7 +2478,6 @@ def app_home(request: Request):
         school=cur.execute("SELECT * FROM schools WHERE id=?",(school_id,)).fetchone()
         school_name=school["name"] if school else "School"
         if role=="teacher":
-            con.close()
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div>
 <div class='grid' style='grid-template-columns:repeat(5,1fr)'>
 <div class='card'><div class='label'>Students</div><div class='kpi'>🎓</div></div>
@@ -2486,7 +2485,7 @@ def app_home(request: Request):
 <a class='card' href='/app/academics/marks' style='text-decoration:none;color:inherit;cursor:pointer'><div class='label'>Record Marks</div><div class='kpi'>📝</div></a>
 <div class='card'><div class='label'>Attendance</div><div class='kpi'>✓</div></div>
 <div class='card'><div class='label'>Analysis</div><div class='kpi'>📊</div></div>
-</div></div><style>@media(max-width:900px){.grid[style*='repeat(5,1fr)']{grid-template-columns:repeat(2,1fr)!important}}</style>"""
+</div></div>"""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
@@ -2496,6 +2495,7 @@ def app_home(request: Request):
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>📝</span>Record Marks</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📄</span>Report Cards</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='actions'><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div></div>"""
+    con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
 
