@@ -201,6 +201,22 @@ def init_db():
     con = get_db(); cur = con.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, status TEXT DEFAULT 'active')")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
+    # Additive account fields used by the current login and teacher-account
+    # workflows. Inspect cursor metadata instead of PRAGMA so this works on
+    # both the Render PostgreSQL database and local SQLite without touching
+    # existing user records.
+    try:
+        cur.execute("SELECT * FROM users LIMIT 0")
+        user_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+        for column, definition in (("username","TEXT"),("teacher_id","INTEGER"),("student_id","INTEGER")):
+            if column not in user_columns:
+                try:
+                    cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
+                    user_columns.add(column)
+                except Exception:
+                    pass
+    except Exception:
+        pass
     cur.execute("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, action TEXT, details TEXT, timestamp TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS pending_schools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, auth_code TEXT, timestamp TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, level TEXT, stream TEXT)")
