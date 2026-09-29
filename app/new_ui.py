@@ -4520,12 +4520,12 @@ def users_delete(request: Request, uid: int):
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
-def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), password_confirm:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
+def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), password:str=Form(""), password_confirm:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
-    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    full_name=(full_name or "").strip()\n    email=(email or "").strip()\n    password=password or ""\n    password_confirm=password_confirm or ""\n    if not full_name:return HTMLResponse("Full name is required. <a href='/app/users'>Back</a>",400)\n    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password != password_confirm:return HTMLResponse("Password and confirmation do not match. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
