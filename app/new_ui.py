@@ -4355,7 +4355,18 @@ def users_page(request: Request):
     # Ensure username exists for generated teacher accounts without altering existing records.
     cols=[str(r["name"]) for r in cur.execute("PRAGMA table_info(users)").fetchall()]
     if "username" not in cols:
-        cur.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN username TEXT")
+            con.commit()
+        except Exception:
+            # Another request may have added it concurrently; continue and
+            # verify the column before querying accounts.
+            con.rollback()
+    # Re-check the schema before using the generated-username column.
+    cols=[str(r["name"]) for r in cur.execute("PRAGMA table_info(users)").fetchall()]
+    if "username" not in cols:
+        con.close()
+        return HTMLResponse("User Management is temporarily unavailable because the account username field could not be initialized. Please refresh and try again.", 500)
     # Read only this school's accounts. The joins are also school-scoped so
     # a linked profile from another school can never affect the account row.
     users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
