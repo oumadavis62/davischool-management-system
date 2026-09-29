@@ -3664,6 +3664,27 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
+@router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
+def request_marks_correction_get(request: Request, exam_id:int, class_id:int, subject_id:int):
+    """Gracefully handle clients that submit the correction action as GET instead of POST."""
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if str(request.session.get("role","")) != "teacher":
+        return HTMLResponse("Only teachers can submit a correction request.", 403)
+    return HTMLResponse(
+        "<div style='font-family:Arial,sans-serif;padding:30px'>"
+        "<h2>Request Marks Correction</h2>"
+        "<p>Please enter the reason for requesting correction.</p>"
+        "<form method='post' action='/app/academics/marks/request-correction'>"
+        f"<input type='hidden' name='exam_id' value='{exam_id}'>"
+        f"<input type='hidden' name='class_id' value='{class_id}'>"
+        f"<input type='hidden' name='subject_id' value='{subject_id}'>"
+        "<textarea name='reason' required minlength='5' style='width:100%;max-width:500px;padding:10px' placeholder='Reason for correction'></textarea>"
+        "<br><br><button type='submit'>Submit Correction Request</button>"
+        "</form></div>"
+    )
+
 @router.post("/app/academics/marks/request-correction")
 def request_marks_correction(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), reason:str=Form(...)):
     sid=_school_session(request)
