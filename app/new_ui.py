@@ -1714,9 +1714,13 @@ function printDocument(){
     distribution_grades = [g for g in grade_order if g in all_grades]
     distribution_grades += sorted(g for g in all_grades if g not in grade_order)
 
-    overall_entries = sum(1 for item in computed if int(item.get("count", 0) or 0) > 0)
+    # computed rows are tuples: (student, total, total_points, count, cells).
+    # Keep this summary based on the actual selected students; do not treat the
+    # tuple as a mapping (which previously caused the grade-selection request
+    # to return HTTP 500).
+    overall_entries = sum(1 for item in computed if int(item[3] or 0) > 0)
     overall_class_mean = (
-        sum(float(item.get("average", 0) or 0) for item in computed if int(item.get("count", 0) or 0) > 0)
+        sum((float(item[1]) / int(item[3])) for item in computed if int(item[3] or 0) > 0)
         / overall_entries if overall_entries else None
     )
     overall_distribution_html = ""
