@@ -3302,12 +3302,18 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         try:
             if role=="teacher":
                 _ensure_teacher_mark_drafts_table(cur)
-                students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(d.marks,'') marks
-                  FROM students s LEFT JOIN teacher_mark_drafts d
+                students=cur.execute("""SELECT s.id,s.admission_no,s.name,
+                    CASE WHEN d.marks IS NOT NULL THEN CAST(d.marks AS TEXT)
+                         WHEN m.marks IS NOT NULL THEN CAST(m.marks AS TEXT)
+                         ELSE '' END marks
+                  FROM students s
+                  LEFT JOIN teacher_mark_drafts d
                     ON d.student_id=s.id AND d.exam_id=? AND d.subject_id=? AND d.class_id=?
                     AND d.school_id=? AND d.teacher_id=?
+                  LEFT JOIN marks m
+                    ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
                   WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
-                  (eid,subid,cid,sid,teacher_id,sid,cid)).fetchall()
+                  (eid,subid,cid,sid,teacher_id,eid,subid,sid,sid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,CASE WHEN m.marks IS NULL THEN '' ELSE CAST(m.marks AS TEXT) END marks
                   FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
