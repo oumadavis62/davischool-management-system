@@ -4,6 +4,7 @@ from html import escape
 import base64
 import re
 from urllib.parse import quote
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -4399,7 +4400,7 @@ def users_page(request: Request):
  const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), name=document.getElementById('newTeacherName'), email=document.getElementById('newTeacherEmail');
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
- const teacherData=\${JSON.stringify(Object.fromEntries(teachers.map(t=>[String(t["id"]),{name:String(t["name"]||""),email:String(t["email"]||"")}])))}};
+ const teacherData={json.dumps({str(t["id"]):{"name":str(t["name"] or ""), "email":str(t["email"] or "")} for t in teachers)};
  function sync(){
    const isTeacher=role.value==='teacher';
    [teacher,type,cs,ss].forEach(x=>x.disabled=!isTeacher);
