@@ -4382,7 +4382,10 @@ def users_page(request: Request):
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?",(sid,)).fetchall()
     allocations=cur.execute("""SELECT teacher_id,class_id,subject_id FROM teacher_allocations WHERE school_id=? ORDER BY teacher_id,class_id,subject_id""",(sid,)).fetchall()
-    con.close()
+    # Resolve the just-created account BEFORE closing the database connection.
+    # Previously the fallback query below used a cursor after con.close(), which
+    # caused psycopg.OperationalError: the connection is closed and prevented
+    # the credentials popup from being rendered.
     created_flag=str(request.query_params.get("created","")).strip()=="1"
     created_email=str(request.query_params.get("email","")).strip().lower()
     created_username=str(request.query_params.get("username","")).strip().lower()
@@ -4398,6 +4401,9 @@ def users_page(request: Request):
         created_account=next((u for u in users if str(u["email"] or "").lower()==created_email), None)
     if not created_account and created_flag and users:
         created_account=users[0]
+    # All database reads for this page are complete; close only after the
+    # created-account lookup has finished.
+    con.close()
     class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
     for u in users:
