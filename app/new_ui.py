@@ -1609,7 +1609,7 @@ function printDocument(){
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
   }).format(new Date())+' EAT';
-  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.marksheet-school{display:none!important}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif;table-layout:auto}.marksheet th,.marksheet td{border:1.25px solid #176B3A;padding:5px 6px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff!important;color:#000!important;font-weight:900}.marksheet thead tr:nth-child(2) th{background:#fff!important;color:#000!important;font-weight:900}.marksheet tbody td{border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet .adm-no-col{width:58px;min-width:58px;max-width:58px}.marksheet .name-col{width:170px;min-width:170px;max-width:170px}.marksheet .stream-col,.marksheet .stream-cell{width:55px;min-width:55px;max-width:55px}.marksheet .mks-col,.marksheet .points-col{width:48px;min-width:48px;max-width:48px}.marksheet .grade-col{width:44px;min-width:44px;max-width:44px}.marksheet .overall-marks-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-points-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-avg-col{width:64px;min-width:64px;max-width:64px}.marksheet .overall-grade-col{width:52px;min-width:52px;max-width:52px}.marksheet .overall-pos-col{width:58px;min-width:58px;max-width:58px}.marksheet .subjecthead{font-size:11px;color:#fff;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:170px;width:170px;max-width:170px}.marksheet td b{font-weight:800}.subject-mean-summary{page-break-before:always;break-before:page;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:245mm;margin:0;padding:18mm 10mm 10mm;background:#fff;box-sizing:border-box}.subject-mean-title{font-size:20px;font-weight:900;text-align:center;text-transform:uppercase;margin:0 0 14px;padding:0 0 8px;width:100%;max-width:820px;border-bottom:2px solid #111}.subject-mean-grid{width:100%;max-width:820px;display:flex;justify-content:center}.subject-analysis-wrap{width:100%;max-width:820px;margin:0 auto}.subject-summary{border-collapse:collapse;width:100%;max-width:820px;table-layout:fixed;margin:0 auto}.subject-summary th,.subject-summary td{border:1px solid #111;padding:4px 8px;text-align:center;line-height:1.2}.subject-summary th{font-weight:900;background:#fff;color:#000}.subject-summary th:nth-child(1),.subject-summary td:nth-child(1){width:48%;text-align:left;padding-left:10px}.subject-summary th:nth-child(2),.subject-summary td:nth-child(2){width:17%}.subject-summary th:nth-child(3),.subject-summary td:nth-child(3){width:17%}.subject-summary th:nth-child(4),.subject-summary td:nth-child(4){width:18%;padding-right:10px}.distribution-block{width:100%;margin-top:5px}.distribution-title{font-size:10px;font-weight:900;text-align:center;text-transform:uppercase;margin:3px 0}.grade-distribution{border-collapse:collapse;width:100%;table-layout:fixed;margin:0 auto}.grade-distribution th,.grade-distribution td{border:1px solid #111;padding:3px 4px;text-align:center;font-size:8.5px;line-height:1.1}.grade-distribution th{font-weight:900;background:#fff;color:#000}.subject-distribution th:first-child,.subject-distribution td:first-child{width:32%;text-align:left;padding-left:7px}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.marksheet-school{display:none!important}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif;table-layout:auto}.marksheet th,.marksheet td{border:1.25px solid #176B3A;padding:5px 6px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff!important;color:#000!important;font-weight:900}.marksheet thead tr:nth-child(2) th{background:#fff!important;color:#000!important;font-weight:900}.marksheet tbody td{border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet .adm-no-col{width:58px;min-width:58px;max-width:58px}.marksheet .name-col{width:170px;min-width:170px;max-width:170px}.marksheet .stream-col,.marksheet .stream-cell{width:55px;min-width:55px;max-width:55px}.marksheet .mks-col,.marksheet .points-col{width:48px;min-width:48px;max-width:48px}.marksheet .grade-col{width:44px;min-width:44px;max-width:44px}.marksheet .overall-marks-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-points-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-avg-col{width:64px;min-width:64px;max-width:64px}.marksheet .overall-grade-col{width:52px;min-width:52px;max-width:52px}.marksheet .overall-pos-col{width:58px;min-width:58px;max-width:58px}.marksheet .subjecthead{font-size:11px;color:#fff;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:170px;width:170px;max-width:170px}.marksheet td b{font-weight:800}.subject-mean-summary{page-break-before:always;break-before:page;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:245mm;margin:0;padding:18mm 10mm 10mm;background:#fff;box-sizing:border-box}.subject-mean-title{font-size:20px;font-weight:900;text-align:center;text-transform:uppercase;margin:0 0 14px;padding:0 0 8px;width:100%;max-width:820px;border-bottom:2px solid #111}.subject-mean-grid{width:100%;max-width:820px;display:flex;justify-content:center}.subject-analysis-wrap{width:100%;max-width:820px;margin:0 auto}.distribution-block{width:100%;margin-top:5px}.distribution-title{font-size:10px;font-weight:900;text-align:center;text-transform:uppercase;margin:3px 0}.grade-distribution{border-collapse:collapse;width:100%;table-layout:fixed;margin:0 auto}.grade-distribution th,.grade-distribution td{border:1px solid #111;padding:3px 4px;text-align:center;font-size:8.5px;line-height:1.1}.grade-distribution th{font-weight:900;background:#fff;color:#000}.subject-distribution th:first-child,.subject-distribution td:first-child{width:24%;text-align:left;padding-left:7px}.subject-distribution th:nth-last-child(3),.subject-distribution td:nth-last-child(3){width:10%}.subject-distribution th:nth-last-child(2),.subject-distribution td:nth-last-child(2){width:10%}.subject-distribution th:nth-last-child(1),.subject-distribution td:nth-last-child(1){width:10%}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
   var previewBar='<div class="marksheet-preview-bar no-print"><div><b>🖨️ MarkSheet Print Preview</b><span>Review the complete MarkSheet before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print MarkSheet</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.marksheet-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.marksheet-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.marksheet-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.marksheet-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.marksheet-preview-bar{display:none!important}}';
@@ -1624,20 +1624,10 @@ function printDocument(){
             str(item[0]["name"]).casefold(),
         ),
     )
-    subject_mean_table_html = (
-        "<table class='subject-summary'><thead><tr><th>Subject</th><th>Mean</th><th>Entries</th><th>Position</th></tr></thead><tbody>" +
-        "".join(
-            "<tr><td>%s</td><td>%s</td><td>%d</td><td>%s</td></tr>"
-            % (
-                escape(str(subject["name"])),
-                ("%.2f" % mean) if mean is not None else "—",
-                count,
-                str(subject_positions.get(int(subject["id"]), "—")),
-            )
-            for subject, mean, count in subject_mean_rows
-        ) +
-        "</tbody></table>"
-    ) if subject_means else "<div class='subject-mean-empty'>No subject marks available.</div>"
+    subject_summary_values = {
+        int(subject["id"]): (mean, count, subject_positions.get(int(subject["id"]), "—"))
+        for subject, mean, count in subject_mean_rows
+    }
 
     # Compact on-screen/print-preview grade distributions. They deliberately
     # use horizontal grade columns so the entire analysis fits one landscape page.
@@ -1689,14 +1679,17 @@ function printDocument(){
             "<div class='distribution-block'><div class='distribution-title'>PER-SUBJECT GRADE DISTRIBUTION</div>"
             "<table class='grade-distribution subject-distribution'><thead><tr><th>Subject</th>" +
             "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
-            "</tr></thead><tbody>" +
+            "<th>Entries</th><th>Mean</th><th>Position</th></tr></thead><tbody>" +
             "".join(
-                "<tr><td>%s</td>%s</tr>" % (
+                "<tr><td>%s</td>%s<td>%d</td><td>%s</td><td>%s</td></tr>" % (
                     escape(_subject_marksheet_label(subject)),
                     "".join(
                         "<td>%d</td>" % subject_grade_counts[int(subject["id"])].get(g, 0)
                         for g in distribution_grades
-                    )
+                    ),
+                    int(subject_summary_values.get(int(subject["id"]), (None, 0, "—"))[1] or 0),
+                    ("%.2f" % subject_summary_values[int(subject["id"])][0]) if subject_summary_values.get(int(subject["id"]), (None,))[0] is not None else "—",
+                    str(subject_summary_values.get(int(subject["id"]), (None, 0, "—"))[2]),
                 )
                 for subject in subjects
             ) +
@@ -1705,7 +1698,6 @@ function printDocument(){
 
     subject_mean_html = (
         "<div class='subject-analysis-wrap'>" +
-        subject_mean_table_html +
         overall_distribution_html +
         subject_distribution_html +
         "</div>"
@@ -1747,7 +1739,7 @@ function printDocument(){
         "</colgroup><thead><tr><th rowspan='2' class='adm-no-head'>ADM NO.</th><th rowspan='2' class='name-head'>NAME</th>" +
         stream_col_html + header_cells + "<th colspan='" + str(len(overall_metric_list)) + "'>OVERALL</th></tr><tr>" + sub_header_cells +
         "".join("<th class='overall-%s-col'>%s</th>" % (m, {"mks":"MKS","pts":"PTS","avg":"AVG %","grade":"GRD","pos":"POS"}[m]) for m in overall_metric_list) + "</tr></thead><tbody>" +
-        rows_html + "</tbody></table>" + marksheet_pagination + "</div><div class='subject-mean-summary'><div class='subject-mean-title'>SUBJECT MEANS</div>" +
+        rows_html + "</tbody></table>" + marksheet_pagination + "</div><div class='subject-mean-summary'><div class='subject-mean-title'>GRADE DISTRIBUTION ANALYSIS</div>" +
         "<div class='subject-mean-grid'>" + subject_mean_html + "</div></div></div></div>" +
         print_script +
         "<style>"
@@ -2033,13 +2025,8 @@ def class_marksheets_pdf(
         # Keep the complete analysis together on one dedicated A4-landscape page.
         # This prevents Subject Means / grade distributions from being split across pages.
         story.append(PageBreak())
-        story.append(Paragraph("SUBJECT MEANS", styles["subtitle"]))
-        mean_rows = [[
-            Paragraph("Subject", styles["table_head"]),
-            Paragraph("Mean", styles["table_head"]),
-            Paragraph("Entries", styles["table_head"]),
-            Paragraph("Position", styles["table_head"]),
-        ]]
+        # The per-subject distribution table now carries the exact Entries, Mean,
+        # and Position values that were previously shown in the separate Subject Means table.
         subject_mean_values = []
         for subject in subjects:
             sid_subject = int(subject["id"])
@@ -2058,35 +2045,6 @@ def class_marksheets_pdf(
                 last_pos = idx
                 last_mean = float(item[1])
             subject_positions[int(item[0]["id"])] = last_pos
-
-        for subject, mean, count in sorted(
-            subject_mean_values,
-            key=lambda x: subject_positions.get(int(x[0]["id"]), 9999)
-        ):
-            mean_rows.append([
-                Paragraph(escape(_subject_marksheet_label(subject)), styles["table"]),
-                Paragraph(("%.2f" % mean) if mean is not None else "—", styles["table"]),
-                Paragraph(str(count), styles["table"]),
-                Paragraph(str(subject_positions.get(int(subject["id"]), "—")), styles["table"]),
-            ])
-        mean_table = Table(
-            mean_rows,
-            colWidths=[70 * mm, 30 * mm, 30 * mm, 30 * mm],
-            repeatRows=1,
-            hAlign="CENTER",
-        )
-        mean_table.setStyle(TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.white),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("ALIGN", (0, 1), (0, -1), "LEFT"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        story.append(mean_table)
 
         # Overall grade distribution: grades across columns, counts directly below.
         grade_order = ["A", "B", "C", "D", "E"]
@@ -2149,20 +2107,29 @@ def class_marksheets_pdf(
                 Paragraph("Subject", styles["table_head"])
             ] + [
                 Paragraph(escape(g), styles["table_head"]) for g in subject_grades
+            ] + [
+                Paragraph("Entries", styles["table_head"]),
+                Paragraph("Mean", styles["table_head"]),
+                Paragraph("Position", styles["table_head"]),
             ]]
             for subject in subjects:
                 sid_subject = int(subject["id"])
                 counts = subject_grade_counts[sid_subject]
+                mean = subject_totals[sid_subject] / subject_counts[sid_subject] if subject_counts[sid_subject] else None
                 distribution_rows.append([
                     Paragraph(escape(_subject_marksheet_label(subject)), styles["table"])
                 ] + [
                     Paragraph(str(counts.get(g, 0)), styles["table"])
                     for g in subject_grades
+                ] + [
+                    Paragraph(str(subject_counts[sid_subject]), styles["table"]),
+                    Paragraph(("%.2f" % mean) if mean is not None else "—", styles["table"]),
+                    Paragraph(str(subject_positions.get(sid_subject, "—")), styles["table"]),
                 ])
-            dist_col_widths = [45 * mm] + [
-                max(16 * mm, min(24 * mm, 105 * mm / len(subject_grades)))
+            dist_col_widths = [36 * mm] + [
+                max(12 * mm, min(20 * mm, 88 * mm / len(subject_grades)))
                 for _ in subject_grades
-            ]
+            ] + [20 * mm, 22 * mm, 22 * mm]
             distribution_table = Table(
                 distribution_rows,
                 colWidths=dist_col_widths,
