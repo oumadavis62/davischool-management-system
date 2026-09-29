@@ -479,7 +479,11 @@ def _require_permission(request, school_id, permission):
         return True
     if role=="teacher":
         if permission in {"class_teacher.view","class_teacher.edit"}:
-            return _permission_enabled(cur, school_id, role, permission)
+            con=_db()
+            try:
+                return _permission_enabled(con.cursor(), school_id, role, permission)
+            finally:
+                con.close()
         return permission in {"marks.view","marks.edit","reports.view","reports.edit"}
     con=_db()
     try:
@@ -1100,22 +1104,40 @@ def _parse_exam_ids(exam_ids="", exam_id=""):
     return out
 
 def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year=""):
+    """Safely aggregate marks for MarkSheet display without allowing an optional
+    filter-column/schema mismatch to prevent the entire MarkSheet from loading."""
     if not student_ids or not exam_ids:
         return {}
     sp = ",".join("?" for _ in student_ids)
     ep = ",".join("?" for _ in exam_ids)
-    q = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND student_id IN ("+sp+") AND exam_id IN ("+ep+")"
-    params = [sid] + list(student_ids) + list(exam_ids)
-    if term:
-        q += " AND term=?"; params.append(term)
-    if year:
-        q += " AND year=?"; params.append(year)
-    rows = cur.execute(q, params).fetchall()
+    base_q = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND student_id IN ("+sp+") AND exam_id IN ("+ep+")"
+    base_params = [sid] + list(student_ids) + list(exam_ids)
+
+    rows = None
+    try:
+        q = base_q
+        params = list(base_params)
+        if term:
+            q += " AND term=?"; params.append(term)
+        if year:
+            q += " AND year=?"; params.append(year)
+        rows = cur.execute(q, params).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET AGGREGATE FILTER FALLBACK:", repr(exc), flush=True)
+        try:
+            rows = cur.execute(base_q, base_params).fetchall()
+        except Exception as fallback_exc:
+            print("DAVISCHOOL MARKSHEET AGGREGATE QUERY FAILED:", repr(fallback_exc), flush=True)
+            return {}
+
     buckets = {}
     for r in rows:
         if r["marks"] is None or str(r["marks"]).strip()=="":
             continue
-        buckets.setdefault((int(r["student_id"]),int(r["subject_id"])), []).append(float(r["marks"]))
+        try:
+            buckets.setdefault((int(r["student_id"]),int(r["subject_id"])), []).append(float(r["marks"]))
+        except (TypeError, ValueError, KeyError):
+            continue
     return {k: sum(v)/len(v) for k,v in buckets.items() if v}
 
 MARKSHEET_SUBJECT_ORDER = (
