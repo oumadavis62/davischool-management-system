@@ -3327,8 +3327,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             continue
     js_rules="["+",".join(safe_rules)+"]"
     eopts="".join("<option value='%s' %s>%s (%s)</option>"%(e["id"],"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
-    copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
-    sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
+    if role=="teacher":
+        allowed_pairs={(int(a["class_id"]),int(a["subject_id"])) for a in allocations if a["class_id"] is not None and a["subject_id"] is not None}
+        copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes if any(pair[0]==int(c["id"]) for pair in allowed_pairs))
+        sopts="".join("<option value='%s' data-class-ids='%s' %s>%s</option>"%(s["id"],",".join(str(pair[0]) for pair in sorted(allowed_pairs) if pair[1]==int(s["id"])),"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects if any(pair[1]==int(s["id"]) for pair in allowed_pairs))
+    else:
+        copts="".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in classes)
+        sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     locked = False
     if eid and cid and subid:
         try:
@@ -3349,13 +3354,17 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             pending_correction = None
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     grading_link="" if role=="teacher" else "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a>"%subid
+    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
+    draft_action = ""
     if locked:
         if role == "school_admin":
             mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
-        elif pending_correction:
-            mark_actions = "<span class='muted'>Correction request is awaiting school admin review.</span>"
+        elif role == "teacher" and pending_correction:
+            mark_actions = "<div class='muted'>🔓 Correction request is awaiting school administrator review.</div>"
+        elif role == "teacher":
+            mark_actions = "<form method='post' action='/app/academics/marks/request-correction' style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='width:min(360px,100%%)'><button class='btn' type='submit'>🔓 Request Correction</button></form>"
         else:
-            mark_actions = "<form method='post' action='/app/academics/marks/request-correction' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='display:inline-block;width:min(360px,100%%);margin-right:8px'><button class='btn' type='submit'>🔓 Request Correction</button></form>"%(eid,cid,subid)
+            mark_actions = ""
     else:
         if role=="teacher":
             mark_actions = ""
@@ -3387,10 +3396,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<button class='btn'>Load Students</button></form>"
       "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "+grading_link+"</div></div>" +
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
-      "<div style='margin-bottom:12px'>%s</div><form method='post' action='/app/academics/marks/save'>"
+      "<div style='margin-bottom:12px'>%s</div><form method='post' action='%s'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
-      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",draft_action,mark_actions)+
+      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",draft_action,mark_actions,form_action)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='—',points='—',comment='';var pct=(mark/out_of)*100;for(var i=0;i<gradingRules.length;i++){if((mark>=gradingRules[i][0]&&mark<=gradingRules[i][1])||(pct>=gradingRules[i][0]&&pct<=gradingRules[i][1])){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
