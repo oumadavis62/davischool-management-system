@@ -3513,8 +3513,17 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                 ON CONFLICT(school_id,teacher_id,exam_id,class_id,subject_id,student_id)
                 DO UPDATE SET marks=excluded.marks,comment=excluded.comment,updated_at=excluded.updated_at""",
                 (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now))
-        _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+        # Draft data must be saved even if the optional audit trail has a schema problem.
+        try:
+            _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+        except Exception as audit_exc:
+            print("DAVISCHOOL MARKS DRAFT AUDIT WARNING:",repr(audit_exc),flush=True)
         con.commit()
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        print("DAVISCHOOL MARKS DRAFT SAVE ERROR:",repr(exc),flush=True)
+        return HTMLResponse("Save Draft failed: %s" % escape(str(exc)) , 500)
     finally:
         try: con.close()
         except Exception: pass
