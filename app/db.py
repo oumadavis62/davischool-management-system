@@ -107,7 +107,14 @@ class CompatCursor:
         # the same INSERT statement without changing application behavior.
         if re.match(r"^\s*INSERT\b", translated, flags=re.IGNORECASE) and re.search(r"\bRETURNING\b", translated, flags=re.IGNORECASE) is None:
             candidate = translated.rstrip().rstrip(";")
-            if re.search(r"\bINTO\s+[A-Za-z_][A-Za-z0-9_]*\s*\(", candidate, flags=re.IGNORECASE):
+            # Some additive/private tables intentionally have no id column.
+            # Never append PostgreSQL's RETURNING id to those inserts.
+            table_match = re.search(
+                r"\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                candidate,
+                flags=re.IGNORECASE,
+            )
+            if table_match and table_match.group(1).lower() != "teacher_mark_drafts":
                 translated = candidate + " RETURNING id"
         self._cursor.execute(translated, params)
         self._lastrowid = None
