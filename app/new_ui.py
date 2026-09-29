@@ -80,14 +80,15 @@ def davischool_login_page(request: Request):
     if request.session.get("email"):
         return RedirectResponse("/app", status_code=303)
     error = "<div class='err'>This school account is suspended. Please contact the DaviSchool administrator.</div>" if request.query_params.get("suspended") else ("<div class='err'>Invalid username or password.</div>" if request.query_params.get("error") else "")
-    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>body{{margin:0;background:#eef5fb;font-family:Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}}.box{{width:min(430px,92vw);background:white;border:1px solid #d8e3f0;border-top:4px solid #2E8B57;border-radius:18px;padding:32px;box-shadow:0 18px 50px #176B3A20}}.logo{{font-size:25px;font-weight:900;color:#176B3A;margin-bottom:5px}}.sub{{color:#64748b;margin-bottom:25px}}label{{display:block;font-size:13px;font-weight:800;color:#334155;margin:14px 0 7px}}input{{width:100%;box-sizing:border-box;padding:13px;border:1px solid #dbe2ea;border-radius:10px;font-size:15px}}button{{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#176B3A;color:white;font-weight:900;font-size:15px;cursor:pointer}}.err{{background:#fff1f2;border:1px solid #fda4af;color:#9f1239;padding:11px;border-radius:10px;margin-bottom:14px}}</style></head><body><div class='box'><div class='logo'>🏫 DaviSchool Management System</div><div class='sub'>Secure school management platform</div>{error}<form method='post' action='/login'><label>Email / Username</label><input name='email' type='email' autocomplete='username' required placeholder='Enter your email'><label>Password</label><input name='password' type='password' autocomplete='current-password' required placeholder='Enter password'><button type='submit'>Sign In</button></form></div></body></html>""")
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>body{{margin:0;background:#eef5fb;font-family:Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}}.box{{width:min(430px,92vw);background:white;border:1px solid #d8e3f0;border-top:4px solid #2E8B57;border-radius:18px;padding:32px;box-shadow:0 18px 50px #176B3A20}}.logo{{font-size:25px;font-weight:900;color:#176B3A;margin-bottom:5px}}.sub{{color:#64748b;margin-bottom:25px}}label{{display:block;font-size:13px;font-weight:800;color:#334155;margin:14px 0 7px}}input{{width:100%;box-sizing:border-box;padding:13px;border:1px solid #dbe2ea;border-radius:10px;font-size:15px}}button{{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#176B3A;color:white;font-weight:900;font-size:15px;cursor:pointer}}.err{{background:#fff1f2;border:1px solid #fda4af;color:#9f1239;padding:11px;border-radius:10px;margin-bottom:14px}}</style></head><body><div class='box'><div class='logo'>🏫 DaviSchool Management System</div><div class='sub'>Secure school management platform</div>{error}<form method='post' action='/login'><label>Username / Email</label><input name='email' type='text' autocomplete='username' required placeholder='Enter username or email'><label>Password</label><input name='password' type='password' autocomplete='current-password' required placeholder='Enter password'><button type='submit'>Sign In</button></form></div></body></html>""")
 
 @router.post("/login")
 def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
     from app.main import verify_password
     con = _db()
     try:
-        user = con.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (email.strip(),)).fetchone()
+        login_value = email.strip().lower()
+        user = con.execute("SELECT * FROM users WHERE lower(email)=? OR lower(username)=? LIMIT 1", (login_value, login_value)).fetchone()
     finally:
         con.close()
     if not user:
@@ -4351,6 +4352,10 @@ def users_page(request: Request):
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
     con=_db();cur=con.cursor()
+    # Ensure username exists for generated teacher accounts without altering existing records.
+    cols=[str(r["name"]) for r in cur.execute("PRAGMA table_info(users)").fetchall()]
+    if "username" not in cols:
+        cur.execute("ALTER TABLE users ADD COLUMN username TEXT")
     # Read only this school's accounts. The joins are also school-scoped so
     # a linked profile from another school can never affect the account row.
     users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
@@ -4367,7 +4372,8 @@ def users_page(request: Request):
     con.close()
     created_flag=str(request.query_params.get("created","")).strip()=="1"
     created_email=str(request.query_params.get("email","")).strip().lower()
-    created_account=next((u for u in users if created_email and str(u["email"] or "").lower()==created_email), None) if created_email else (users[0] if created_flag and users else None)
+    created_username=str(request.query_params.get("username","")).strip().lower()
+    created_account=next((u for u in users if created_username and str(u["username"] or "").lower()==created_username), None) if created_username else (next((u for u in users if created_email and str(u["email"] or "").lower()==created_email), None) if created_email else (users[0] if created_flag and users else None))
     class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
     for u in users:
@@ -4382,7 +4388,7 @@ def users_page(request: Request):
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
         else:
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
-        rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
+        rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
     teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
@@ -4427,7 +4433,7 @@ def users_page(request: Request):
 }})();
 </script>
 </div>
-<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
+<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=6>No users yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"User Management",body)
 
@@ -4602,8 +4608,14 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         from app.main import hash_password
         import secrets
         generated_password=secrets.token_urlsafe(9)
-        cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",
-                    (email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid))
+        base_username=re.sub(r"[^a-z0-9]+","",full_name.lower()) or "user"
+        username=base_username
+        suffix=1
+        while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
+            suffix += 1
+            username=f"{base_username}{suffix}"
+        cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?,?)",
+                    (username,email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid))
 
         if role=="teacher" and tid:
             _ensure_teacher_allocations_table(cur)
@@ -4630,7 +4642,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         if not created:
             return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
         from urllib.parse import quote
-        return RedirectResponse(f"/app/users?created=1&login_email={quote(email_v)}&login_password={quote(generated_password)}",303)
+        return RedirectResponse(f"/app/users?created=1&username={quote(username)}&password={quote(generated_password)}",303)
     except Exception as exc:
         try:
             con.rollback()
