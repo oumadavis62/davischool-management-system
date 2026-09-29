@@ -355,15 +355,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/account/change-password","🔑","My Account",None),
         ]
     else:
-        if role == "teacher":
-            nav = [
-                ("/app","⌂","Overview",None),
-                ("/app/class-teacher","🏫","My Class","class_teacher.view"),
-                ("/app/academics","📝","Academics","marks.view"),
-                ("/app/report-cards","📄","Report Cards","reports.view"),
-            ]
-        else:
-            nav = [
+        nav = [
             ("/app","⌂","Overview",None),
             ("/app/students","🎓","Students","students.view"),
             ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
@@ -387,7 +379,7 @@ def _shell(title, name, role, body, school_id=None):
         ]
         if role == "school_admin":
             nav.insert(7, ("/app/academics/marks-corrections","🔓","Marks Corrections",None))
-        if role not in ("school_admin", "teacher") and school_id:
+        if role != "school_admin" and school_id:
             con = _db()
             try:
                 cur = con.cursor()
@@ -499,17 +491,10 @@ def _permission_enabled(cur, school_id, role, permission):
     return True if row is None else bool(int(row["enabled"] or 0))
 
 def _require_permission(request, school_id, permission):
+    """Enforce the School Admin configured permission for every school role."""
     role=str(request.session.get("role",""))
     if role=="school_admin":
         return True
-    if role=="teacher":
-        if permission in {"class_teacher.view","class_teacher.edit"}:
-            con=_db()
-            try:
-                return _permission_enabled(con.cursor(), school_id, role, permission)
-            finally:
-                con.close()
-        return permission in {"marks.view","marks.edit","reports.view","reports.edit"}
     con=_db()
     try:
         return _permission_enabled(con.cursor(),school_id,role,permission)
@@ -2493,8 +2478,8 @@ def app_home(request: Request):
         school_name=school["name"] if school else "School"
         body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
-<div class='section'><h2>Daily operations</h2><div class='actions'><a class='action' href='/app/students'><span>🎓</span>Students</a><a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a><a class='action' href='/app/attendance'><span>✓</span>Attendance</a><a class='action' href='/app/finance'><span>💰</span>Finance</a><a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a><a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a><a class='action' href='/app/accounting'><span>📚</span>Accounting</a><a class='action' href='/app/users'><span>👤</span>Users</a></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a><a class='action' href='/app/students/promotion'><span>🎓</span>Promotion / Transfer</a><a class='action' href='/app/roles'><span>🔐</span>Roles</a><a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a><a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div>"""
+<div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>📝</span>Record Marks</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📄</span>Report Cards</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
+<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div></div>"""
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
 
