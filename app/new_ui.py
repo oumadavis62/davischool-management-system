@@ -4377,7 +4377,7 @@ def users_page(request: Request):
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
         rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
-    teacher_data_json=json.dumps({str(t["id"]):{"name":str(t["name"] or ""), "email":str(t["email"] or "")} for t in teachers)
+    teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 <div class='card section'><h2>Create user account</h2>
