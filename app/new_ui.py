@@ -1958,7 +1958,9 @@ def class_marksheets_pdf(
         ]))
         story.append(table)
 
-        story.append(Spacer(1, 8 * mm))
+        # Keep the complete analysis together on one dedicated A4-landscape page.
+        # This prevents Subject Means / grade distributions from being split across pages.
+        story.append(PageBreak())
         story.append(Paragraph("SUBJECT MEANS", styles["subtitle"]))
         mean_rows = [[
             Paragraph("Subject", styles["table_head"]),
@@ -2009,8 +2011,105 @@ def class_marksheets_pdf(
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("ALIGN", (0, 1), (0, -1), "LEFT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ]))
         story.append(mean_table)
+
+        # Overall grade distribution: grades across columns, counts directly below.
+        grade_order = ["A", "B", "C", "D", "E"]
+        grade_counts = {}
+        for item in computed:
+            grade = str(item.get("grade") or "").strip()
+            if grade and grade != "—":
+                grade_counts[grade] = grade_counts.get(grade, 0) + 1
+        ordered_grades = [g for g in grade_order if g in grade_counts]
+        ordered_grades += sorted(g for g in grade_counts if g not in grade_order)
+
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("OVERALL GRADE DISTRIBUTION", styles["subtitle"]))
+        if ordered_grades:
+            overall_rows = [
+                [Paragraph(escape(g), styles["table_head"]) for g in ordered_grades],
+                [Paragraph(str(grade_counts[g]), styles["table"]) for g in ordered_grades],
+            ]
+            overall_table = Table(
+                overall_rows,
+                colWidths=[max(22 * mm, min(34 * mm, 150 * mm / len(ordered_grades)))] * len(ordered_grades),
+                hAlign="CENTER",
+            )
+            overall_table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.white),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]))
+            story.append(overall_table)
+
+        # Per-subject grade distribution: one compact row per subject.
+        subject_grade_counts = {}
+        for subject in subjects:
+            sid_subject = int(subject["id"])
+            counts = {}
+            for item in computed:
+                value = item["values"].get(sid_subject)
+                if value is None:
+                    continue
+                grade = str(value[1] or "").strip()
+                if grade and grade != "—":
+                    counts[grade] = counts.get(grade, 0) + 1
+            subject_grade_counts[sid_subject] = counts
+
+        all_subject_grades = set()
+        for counts in subject_grade_counts.values():
+            all_subject_grades.update(counts.keys())
+        subject_grades = [g for g in grade_order if g in all_subject_grades]
+        subject_grades += sorted(g for g in all_subject_grades if g not in grade_order)
+
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("PER-SUBJECT GRADE DISTRIBUTION", styles["subtitle"]))
+        if subject_grades:
+            distribution_rows = [[
+                Paragraph("Subject", styles["table_head"])
+            ] + [
+                Paragraph(escape(g), styles["table_head"]) for g in subject_grades
+            ]]
+            for subject in subjects:
+                sid_subject = int(subject["id"])
+                counts = subject_grade_counts[sid_subject]
+                distribution_rows.append([
+                    Paragraph(escape(_subject_marksheet_label(subject)), styles["table"])
+                ] + [
+                    Paragraph(str(counts.get(g, 0)), styles["table"])
+                    for g in subject_grades
+                ])
+            dist_col_widths = [45 * mm] + [
+                max(16 * mm, min(24 * mm, 105 * mm / len(subject_grades)))
+                for _ in subject_grades
+            ]
+            distribution_table = Table(
+                distribution_rows,
+                colWidths=dist_col_widths,
+                repeatRows=1,
+                hAlign="CENTER",
+            )
+            distribution_table.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.white),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("ALIGN", (0, 1), (0, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+                ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+            ]))
+            story.append(distribution_table)
 
         filename = "MarkSheet_%s_%s.pdf" % (
             re.sub(r"[^A-Za-z0-9]+", "_", class_title).strip("_") or "Class",
