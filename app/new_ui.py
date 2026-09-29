@@ -4377,9 +4377,11 @@ def users_page(request: Request):
     teachers=cur.execute("SELECT id,name,email FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    _ensure_teacher_allocations_table(cur)
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?",(sid,)).fetchall()
+    allocations=cur.execute("""SELECT teacher_id,class_id,subject_id FROM teacher_allocations WHERE school_id=? ORDER BY teacher_id,class_id,subject_id""",(sid,)).fetchall()
     con.close()
     created_flag=str(request.query_params.get("created","")).strip()=="1"
     created_email=str(request.query_params.get("email","")).strip().lower()
@@ -4401,7 +4403,28 @@ def users_page(request: Request):
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
         rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
+    teacher_alloc_map={}
+    for a in allocations:
+        tid_alloc=int(a["teacher_id"])
+        cid_alloc=int(a["class_id"])
+        sid_alloc=int(a["subject_id"])
+        entry=teacher_alloc_map.setdefault(str(tid_alloc),{"classes":[],"subjects_by_class":{},"has_subject":False})
+        if cid_alloc not in entry["classes"]:
+            entry["classes"].append(cid_alloc)
+        entry["subjects_by_class"].setdefault(str(cid_alloc),[])
+        if sid_alloc not in entry["subjects_by_class"][str(cid_alloc)]:
+            entry["subjects_by_class"][str(cid_alloc)].append(sid_alloc)
+        entry["has_subject"]=True
+    class_teacher_map={str(int(a["teacher_id"])):int(a["class_id"]) for a in assignments}
+    for tid_alloc,cid_alloc in class_teacher_map.items():
+        entry=teacher_alloc_map.setdefault(tid_alloc,{"classes":[],"subjects_by_class":{},"has_subject":False})
+        entry["class_teacher_class"]=cid_alloc
+    for tid_alloc,entry in teacher_alloc_map.items():
+        ct=entry.get("class_teacher_class")
+        has_subject=bool(entry.get("has_subject"))
+        entry["teacher_type"]="both" if ct and has_subject else ("class_teacher" if ct else "subject_teacher")
     teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
+    teacher_allocation_json=json.dumps(teacher_alloc_map)
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 {("<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> " + escape(str(created_account["full_name"] or created_account["email"])) + " is now in the Accounts table.<br><br><b>Username:</b> " + escape(str(request.query_params.get("username",""))) + "<br><b>Temporary Password:</b> " + escape(str(request.query_params.get("password",""))) + "<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))}
@@ -4413,8 +4436,8 @@ def users_page(request: Request):
 <input name='email' id='newTeacherEmail' type='email' required placeholder='Email from teacher record' class='field'>
 <div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
-<select id='classIdsSelect' class='field' multiple size='4' title='Select one or more classes/streams'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select>
-<select id='subjectIdsSelect' class='field' multiple size='4' title='Select one or more subjects'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select>
+<div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
+<div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to the selected classes'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations for the selected class/stream.</div></div>
 <input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'>
 <select name='student_id' class='field'><option value=''>Link student (for student/parent account)</option>{sopts}</select>
 <button class='btn' style='grid-column:1/-1'>Create Account</button></form>
@@ -4424,22 +4447,75 @@ def users_page(request: Request):
 (function(){{
  const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), email=document.getElementById('newTeacherEmail');
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
+ const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
  const teacherData={{{teacher_data_json}}};
+ const allocationData={{{teacher_allocation_json}}};
+
+ function optionValues(select){{
+   return Array.from(select.selectedOptions).map(o=>o.value);
+ }}
+ function setSelected(select, values){{
+   const wanted=new Set((values||[]).map(String));
+   Array.from(select.options).forEach(o=>o.selected=wanted.has(String(o.value)));
+ }}
+ function refreshSubjects(){{
+   const selectedClasses=optionValues(cs);
+   const data=allocationData[teacher.value]||{{}};
+   const allowed=new Set();
+   selectedClasses.forEach(cid=>(data.subjects_by_class&&data.subjects_by_class[String(cid)]||[]).forEach(sid=>allowed.add(String(sid))));
+   Array.from(ss.options).forEach(o=>{{
+     const show=allowed.has(String(o.value));
+     o.hidden=!show;
+     o.disabled=!show;
+     if(!show) o.selected=false;
+   }});
+   sw.style.display=selectedClasses.length?'block':'none';
+   if(selectedClasses.length) {{
+     setSelected(ss,Array.from(allowed));
+   }}
+ }}
  function sync(){{
    const isTeacher=role.value==='teacher';
-   [teacher,type,cs,ss].forEach(x=>x.disabled=!isTeacher);
-   if(isTeacher){{
-     const t=teacherData[teacher.value]||{{}};
-     // Use the teacher-record email when available, but never erase an email
-     // the school admin has manually entered when the teacher record is blank.
-     if(t.email) email.value=t.email;
-     if(!t.email) email.placeholder='Enter email for this teacher';
+   [teacher,type].forEach(x=>x.disabled=!isTeacher);
+   if(!isTeacher){{
+     cw.style.display='none';
+     sw.style.display='none';
+     cc.value='';
+     sc.value='';
+     return;
    }}
-   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-   sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
+   const t=teacherData[teacher.value]||{{}};
+   const allocation=allocationData[teacher.value]||{{}};
+   if(t.email) email.value=t.email;
+   if(!t.email) email.placeholder='Enter email for this teacher';
+
+   const allocatedClasses=(allocation.classes||[]).map(String);
+   const classTeacherClass=allocation.class_teacher_class ? [String(allocation.class_teacher_class)] : [];
+   let classesToSelect=allocatedClasses.length ? allocatedClasses : classTeacherClass;
+   if(classTeacherClass.length && !classesToSelect.includes(classTeacherClass[0])) classesToSelect.push(classTeacherClass[0]);
+
+   setSelected(cs,classesToSelect);
+   cw.style.display=teacher.value?'block':'none';
+
+   const inferredType=allocation.teacher_type||'subject_teacher';
+   type.value=inferredType;
+   cs.disabled=!teacher.value;
+   refreshSubjects();
+   cc.value=optionValues(cs).join(',');
+   sc.value=optionValues(ss).join(',');
  }}
- role.addEventListener('change',sync); teacher.addEventListener('change',sync); cs.addEventListener('change',sync); ss.addEventListener('change',sync); sync();
+ role.addEventListener('change',sync);
+ teacher.addEventListener('change',sync);
+ cs.addEventListener('change',function(){{
+   refreshSubjects();
+   cc.value=optionValues(cs).join(',');
+   sc.value=optionValues(ss).join(',');
+ }});
+ ss.addEventListener('change',function(){{
+   sc.value=optionValues(ss).join(',');
+ }});
+ sync();
  document.getElementById('createUserForm').addEventListener('submit',function(){{sync();}});
 }})();
 </script>
