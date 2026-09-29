@@ -4393,9 +4393,8 @@ def users_page(request: Request):
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='school_admin'>School Admin</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
-<input name='full_name' id='newTeacherName' required placeholder='Full name' class='field' readonly>
 <input name='email' id='newTeacherEmail' type='email' required placeholder='Email from teacher record' class='field'>
-<input name='password' type='password' required minlength='8' placeholder='Password (minimum 8 characters)' class='field'><input name='password_confirm' type='password' required minlength='8' placeholder='Confirm password' class='field'>
+<div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <select id='classIdsSelect' class='field' multiple size='4' title='Select one or more classes/streams'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select>
 <select id='subjectIdsSelect' class='field' multiple size='4' title='Select one or more subjects'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select>
@@ -4406,17 +4405,15 @@ def users_page(request: Request):
 </div>
 <script>
 (function(){{
- const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), name=document.getElementById('newTeacherName'), email=document.getElementById('newTeacherEmail');
+ const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), email=document.getElementById('newTeacherEmail');
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
  const teacherData={{{teacher_data_json}}};
  function sync(){{
    const isTeacher=role.value==='teacher';
    [teacher,type,cs,ss].forEach(x=>x.disabled=!isTeacher);
-   name.readOnly=isTeacher;
    if(isTeacher){{
      const t=teacherData[teacher.value]||{{}};
-     name.value=t.name||'';
      // Use the teacher-record email when available, but never erase an email
      // the school admin has manually entered when the teacher record is blank.
      if(t.email) email.value=t.email;
@@ -4536,17 +4533,12 @@ def users_add_get(request: Request):
     return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
-def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), password:str=Form(""), password_confirm:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
+def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
-    full_name=(full_name or "").strip()
     email=(email or "").strip()
-    password=password or ""
-    password_confirm=password_confirm or ""
-    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
-    if password != password_confirm:return HTMLResponse("Password and confirmation do not match. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     con=_db();cur=con.cursor()
@@ -4572,12 +4564,10 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
                 # The selected Teachers record is authoritative. This also
                 # makes account creation work if browser-side JavaScript did
                 # not populate the readonly name/email fields.
-                full_name=str(teacher_row["name"] or full_name).strip()
+                full_name=str(teacher_row["name"] or "").strip()
                 if teacher_row["email"] and not email_v:
                     email_v=str(teacher_row["email"]).strip().lower()
 
-        if not full_name:
-            return HTMLResponse("Full name is required. Select a teacher from Teachers Records. <a href='/app/users'>Back</a>",400)
         if not email_v:
             return HTMLResponse("A valid email address is required for the account. Please enter an email for the selected teacher.",400)
         # Email addresses are unique within a school account set. A teacher may
@@ -4610,8 +4600,10 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
                 return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
 
         from app.main import hash_password
+        import secrets
+        generated_password=secrets.token_urlsafe(9)
         cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",
-                    (email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
+                    (email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid))
 
         if role=="teacher" and tid:
             _ensure_teacher_allocations_table(cur)
@@ -4637,7 +4629,8 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
         created=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone()
         if not created:
             return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
-        return RedirectResponse("/app/users?created=1",303)
+        from urllib.parse import quote
+        return RedirectResponse(f"/app/users?created=1&login_email={quote(email_v)}&login_password={quote(generated_password)}",303)
     except Exception as exc:
         try:
             con.rollback()
