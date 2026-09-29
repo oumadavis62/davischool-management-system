@@ -780,10 +780,35 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     if not _require_permission(request, sid, "marks.view"):
         return HTMLResponse("You do not have permission to view academic records.", 403)
     con = _db(); cur = con.cursor()
+    role = str(request.session.get("role",""))
+    allocations = []
+    if role == "teacher":
+        teacher_id = int(request.session.get("teacher_id") or 0)
+        if teacher_id:
+            allocations = cur.execute("""SELECT DISTINCT class_id,subject_id
+                FROM teacher_allocations
+                WHERE school_id=? AND teacher_id=?
+                ORDER BY class_id,subject_id""",(sid,teacher_id)).fetchall()
+            class_ids = sorted({int(a["class_id"]) for a in allocations if a["class_id"] is not None})
+            subject_ids = sorted({int(a["subject_id"]) for a in allocations if a["subject_id"] is not None})
+            if class_ids:
+                ph = ",".join("?" for _ in class_ids)
+                classes = cur.execute("SELECT * FROM classes WHERE school_id=? AND id IN ("+ph+") ORDER BY name,stream",[sid]+class_ids).fetchall()
+            else:
+                classes = []
+            if subject_ids:
+                ph = ",".join("?" for _ in subject_ids)
+                subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? AND id IN ("+ph+") ORDER BY name",[sid]+subject_ids).fetchall()
+            else:
+                subjects = []
+        else:
+            classes = []
+            subjects = []
+    else:
+        classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     terms = cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     stat = cur.execute("SELECT COUNT(*) entries,COALESCE(AVG(marks),0) avg_mark FROM marks WHERE school_id=?",(sid,)).fetchone()
     eid = int(exam_id) if exam_id.isdigit() else 0
     cid = int(class_id) if class_id.isdigit() else 0
