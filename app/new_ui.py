@@ -4431,7 +4431,7 @@ def users_page(request: Request):
     modal_username=escape(str((created_account["username"] if created_account else "") or ""))
     modal_password=escape(str((created_account["temporary_password"] if created_account else "") or ""))
     credential_modal = ""
-    if created_flag and created_credentials:
+    if created_flag and created_account:
         credential_modal = (
             "<div id=\"credentialModal\" style=\"display:flex;position:fixed;inset:0;"
             "background:rgba(15,23,42,.65);z-index:99999;align-items:center;"
@@ -4454,7 +4454,7 @@ def users_page(request: Request):
         )
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     created_display_username=escape(str((created_credentials or {}).get("username") or request.query_params.get("username","")))
-    created_display_password=escape(str((created_credentials or {}).get("password") or ""))
+    created_display_password=escape(str((created_credentials or {}).get("password") or (created_account["temporary_password"] if created_account else "") or ""))
     created_display_name=escape(str((created_account["full_name"] if created_account else "") or (created_account["email"] if created_account else "")))
     if created_flag and created_account:
         success_block=f"<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> {created_display_name} is now in the Accounts table.<br><br><b>Username:</b> {created_display_username}<br><b>Temporary Password:</b> {created_display_password}<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>"
