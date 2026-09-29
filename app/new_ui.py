@@ -4435,7 +4435,12 @@ def users_page(request: Request):
     created_display_username=escape(str((created_credentials or {}).get("username") or request.query_params.get("username","")))
     created_display_password=escape(str((created_credentials or {}).get("password") or ""))
     created_display_name=escape(str((created_account["full_name"] if created_account else "") or (created_account["email"] if created_account else "")))
-    success_block=(f"<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> {created_display_name} is now in the Accounts table.<br><br><b>Username:</b> {created_display_username}<br><b>Temporary Password:</b> {created_display_password}<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))
+    if created_flag and created_account:
+        success_block=f"<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> {created_display_name} is now in the Accounts table.<br><br><b>Username:</b> {created_display_username}<br><b>Temporary Password:</b> {created_display_password}<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>"
+    elif created_flag:
+        success_block="<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>"
+    else:
+        success_block=""
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 {success_block}
 {credential_modal}<div class='card section'><h2>Create user account</h2>
