@@ -4521,6 +4521,12 @@ def users_delete(request: Request, uid: int):
     _audit(cur,sid,request,"USER_DELETE",f"Deleted {user['role']} account {user['email']}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
+@router.get("/app/users/add")
+def users_add_get(request: Request):
+    # The account-creation endpoint is POST-only. Redirect accidental GET
+    # requests back to User Management instead of exposing FastAPI's 405 JSON.
+    return RedirectResponse("/app/users",303)
+
 @router.post("/app/users/add")
 def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), password:str=Form(""), password_confirm:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
