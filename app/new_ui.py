@@ -1690,6 +1690,347 @@ function printDocument(){
     return _school_page(request, "Class Marksheets", body)
 
 
+
+@router.get("/app/academics/marksheets/pdf")
+def class_marksheets_pdf(
+    request: Request,
+    exam_id: str = "",
+    exam_ids: str = "",
+    class_id: str = "",
+    term: str = "",
+    year: str = "",
+    stream: str = "",
+    subject_ids: str = "",
+    subject_metrics: str = "",
+    overall_metrics: str = "",
+):
+    """Download the currently selected MarkSheet as a real PDF file."""
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "reports.view"):
+        return HTMLResponse("You do not have permission to download marksheets.", 403)
+
+    con = _db()
+    try:
+        cur = con.cursor()
+        exams = cur.execute(
+            "SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)
+        ).fetchall()
+        classes = cur.execute(
+            "SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
+        ).fetchall()
+        subjects = _marksheet_subject_order(
+            cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
+        )
+
+        selected_exam_ids = _parse_exam_ids(exam_ids, exam_id)
+        if not selected_exam_ids and exams:
+            selected_exam_ids = [int(exams[0]["id"])]
+        if not selected_exam_ids:
+            return HTMLResponse("No examination is available for this MarkSheet.", 400)
+
+        combined_mode = str(class_id).startswith("grade:")
+        combined_grade = str(class_id)[6:] if combined_mode else ""
+
+        def _grade_group_key_pdf(row):
+            name = str(row["name"] or "").strip()
+            stream_value = str(row["stream"] or "").strip()
+            if stream_value:
+                return name
+            match = re.match(r"^(.*?\d)\s*[A-Za-z]$", name)
+            return match.group(1).strip() if match else name
+
+        if combined_mode:
+            selected_class_ids = [
+                int(c["id"]) for c in classes
+                if _grade_group_key_pdf(c).strip().lower() == combined_grade.strip().lower()
+            ]
+        else:
+            cid = int(class_id) if str(class_id).isdigit() else (int(classes[0]["id"]) if classes else 0)
+            selected_class_ids = [cid] if cid else []
+
+        if not selected_class_ids:
+            return HTMLResponse("Please select a class or combined grade before downloading.", 400)
+
+        exam_rows = [
+            e for e in exams if int(e["id"]) in set(selected_exam_ids)
+        ]
+        if not exam_rows:
+            return HTMLResponse("The selected examination could not be found.", 404)
+
+        first_exam = exam_rows[0]
+        if not term:
+            term = str(first_exam["term"] or "")
+        if not year:
+            year = str(first_exam["year"] or "")
+
+        placeholders = ",".join("?" for _ in selected_class_ids)
+        student_sql = (
+            "SELECT * FROM students WHERE school_id=? AND class_id IN (" +
+            placeholders + ")"
+        )
+        student_params = [sid] + selected_class_ids
+        if stream and not combined_mode:
+            student_sql += " AND stream=?"
+            student_params.append(stream)
+        student_sql += " ORDER BY name"
+        students = cur.execute(student_sql, student_params).fetchall()
+
+        selected_ids = []
+        for raw_id in str(subject_ids or "").split(","):
+            try:
+                if raw_id.strip():
+                    selected_ids.append(int(raw_id.strip()))
+            except (TypeError, ValueError):
+                pass
+        if selected_ids:
+            selected_set = set(selected_ids)
+            subjects = [s for s in subjects if int(s["id"]) in selected_set]
+
+        subject_metric_map = {}
+        for part in str(subject_metrics or "").split(","):
+            if ":" not in part:
+                continue
+            raw_id, raw_metrics = part.split(":", 1)
+            try:
+                subject_metric_map[int(raw_id)] = [
+                    m for m in raw_metrics.split(".")
+                    if m in ("mks", "grade", "pts")
+                ]
+            except (TypeError, ValueError):
+                pass
+        for subject in subjects:
+            subject_metric_map.setdefault(int(subject["id"]), ["mks", "grade", "pts"])
+
+        overall_metric_list = [
+            m for m in str(overall_metrics or "").split(",")
+            if m in ("mks", "pts", "avg", "grade", "pos")
+        ]
+        if not overall_metric_list:
+            overall_metric_list = ["mks", "pts", "avg", "grade", "pos"]
+
+        marks = _aggregate_marks_for_students(
+            cur, sid, [int(st["id"]) for st in students],
+            selected_exam_ids, term, year
+        )
+        grading_rules = _load_grading_rules(cur, sid)
+        overall_rules = _load_overall_grading_rules(cur, sid)
+
+        computed = []
+        subject_totals = {int(s["id"]): 0.0 for s in subjects}
+        subject_counts = {int(s["id"]): 0 for s in subjects}
+
+        for student in students:
+            total = 0.0
+            total_points = 0.0
+            count = 0
+            values = {}
+            for subject in subjects:
+                value = marks.get((int(student["id"]), int(subject["id"])))
+                if value is None:
+                    values[int(subject["id"])] = None
+                    continue
+                try:
+                    value = float(value)
+                    grade, points, _ = _subject_grade_details(
+                        cur, sid, int(subject["id"]), value, grading_rules
+                    )
+                except Exception:
+                    value = float(value)
+                    grade, points = _default_grade_points(value)
+                values[int(subject["id"])] = (value, grade, float(points or 0))
+                subject_totals[int(subject["id"])] += value
+                subject_counts[int(subject["id"])] += 1
+                total += value
+                total_points += float(points or 0)
+                count += 1
+            average = (total / count) if count else 0.0
+            overall_grade = _overall_grade(cur, sid, average, overall_rules) if count else "—"
+            computed.append({
+                "student": student,
+                "values": values,
+                "total": total,
+                "points": total_points,
+                "count": count,
+                "average": average,
+                "grade": overall_grade,
+            })
+
+        computed.sort(key=lambda item: (-item["total"], str(item["student"]["name"] or "").casefold()))
+        last_total = None
+        position = 0
+        for index, item in enumerate(computed, 1):
+            if last_total is None or item["total"] != last_total:
+                position = index
+                last_total = item["total"]
+            item["position"] = position
+
+        school_row = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+        if combined_mode:
+            class_title = (combined_grade + " — ALL STREAMS").strip()
+        else:
+            selected_class = next(
+                (c for c in classes if int(c["id"]) == selected_class_ids[0]), None
+            )
+            class_title = str(selected_class["name"] or "") if selected_class else "Class"
+            selected_stream = str(stream or (selected_class["stream"] or "")).strip() if selected_class else str(stream or "")
+            if selected_stream:
+                class_title += " — STREAM: " + selected_stream
+            else:
+                class_title += " — ALL STREAMS"
+
+        exam_title = " + ".join(str(e["name"] or "") for e in exam_rows)
+        styles = _pdf_styles()
+        from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.units import mm
+
+        story = []
+        story.extend(_pdf_school_header(
+            school_row,
+            styles,
+            "STUDENT MARKSHEET",
+            "Class: %s   |   Examination: %s   |   Term: %s   |   Year: %s"
+            % (class_title, exam_title, term or "All", year or "All"),
+        ))
+
+        header = ["ADM NO.", "STUDENT NAME"]
+        for subject in subjects:
+            label = _subject_marksheet_label(subject)
+            for metric in subject_metric_map[int(subject["id"])]:
+                header.append("%s %s" % (label, {"mks": "MKS", "grade": "GRD", "pts": "PTS"}[metric]))
+        for metric in overall_metric_list:
+            header.append("OVERALL " + {"mks": "MKS", "pts": "PTS", "avg": "AVG %", "grade": "GRD", "pos": "POS"}[metric])
+
+        table_rows = [[Paragraph(escape(str(x)), styles["table_head"]) for x in header]]
+        for item in computed:
+            student = item["student"]
+            row = [
+                Paragraph(escape(str(student["admission_no"] or "")), styles["table"]),
+                Paragraph(escape(str(student["name"] or "")), styles["table"]),
+            ]
+            for subject in subjects:
+                value = item["values"].get(int(subject["id"]))
+                for metric in subject_metric_map[int(subject["id"])]:
+                    if value is None:
+                        text_value = "—"
+                    elif metric == "mks":
+                        text_value = "%.1f" % value[0]
+                    elif metric == "grade":
+                        text_value = str(value[1])
+                    else:
+                        text_value = "%.1f" % value[2]
+                    row.append(Paragraph(escape(text_value), styles["table"]))
+            for metric in overall_metric_list:
+                if metric == "mks":
+                    text_value = "%.1f" % item["total"]
+                elif metric == "pts":
+                    text_value = "%.1f" % item["points"]
+                elif metric == "avg":
+                    text_value = "%.1f%%" % item["average"]
+                elif metric == "grade":
+                    text_value = str(item["grade"])
+                else:
+                    text_value = str(item["position"])
+                row.append(Paragraph(escape(text_value), styles["table"]))
+            table_rows.append(row)
+
+        col_count = max(1, len(header))
+        col_widths = [17 * mm, 34 * mm] + [9.5 * mm] * (col_count - 2)
+        if col_count > 15:
+            col_widths = [15 * mm, 29 * mm] + [7.5 * mm] * (col_count - 2)
+
+        table = Table(table_rows, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+        table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.45, colors.black),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.white),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("ALIGN", (1, 1), (1, -1), "LEFT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        story.append(table)
+
+        story.append(Spacer(1, 8 * mm))
+        story.append(Paragraph("SUBJECT MEANS", styles["subtitle"]))
+        mean_rows = [[
+            Paragraph("Subject", styles["table_head"]),
+            Paragraph("Mean", styles["table_head"]),
+            Paragraph("Entries", styles["table_head"]),
+            Paragraph("Position", styles["table_head"]),
+        ]]
+        subject_mean_values = []
+        for subject in subjects:
+            sid_subject = int(subject["id"])
+            count = subject_counts[sid_subject]
+            mean = subject_totals[sid_subject] / count if count else None
+            subject_mean_values.append((subject, mean, count))
+        ranked_subjects = sorted(
+            [x for x in subject_mean_values if x[1] is not None],
+            key=lambda x: (-float(x[1]), str(x[0]["name"]).casefold())
+        )
+        subject_positions = {}
+        last_mean = None
+        last_pos = 0
+        for idx, item in enumerate(ranked_subjects, 1):
+            if last_mean is None or float(item[1]) != float(last_mean):
+                last_pos = idx
+                last_mean = float(item[1])
+            subject_positions[int(item[0]["id"])] = last_pos
+
+        for subject, mean, count in sorted(
+            subject_mean_values,
+            key=lambda x: subject_positions.get(int(x[0]["id"]), 9999)
+        ):
+            mean_rows.append([
+                Paragraph(escape(_subject_marksheet_label(subject)), styles["table"]),
+                Paragraph(("%.2f" % mean) if mean is not None else "—", styles["table"]),
+                Paragraph(str(count), styles["table"]),
+                Paragraph(str(subject_positions.get(int(subject["id"]), "—")), styles["table"]),
+            ])
+        mean_table = Table(
+            mean_rows,
+            colWidths=[70 * mm, 30 * mm, 30 * mm, 30 * mm],
+            repeatRows=1,
+            hAlign="CENTER",
+        )
+        mean_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.white),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("ALIGN", (0, 1), (0, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        story.append(mean_table)
+
+        filename = "MarkSheet_%s_%s.pdf" % (
+            re.sub(r"[^A-Za-z0-9]+", "_", class_title).strip("_") or "Class",
+            re.sub(r"[^A-Za-z0-9]+", "_", exam_title).strip("_") or "Exam",
+        )
+        pdf = _pdf_build(story, landscape(A4), "DaviSchool MarkSheet")
+        return _pdf_response(pdf, filename)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET PDF ROUTE ERROR:", repr(exc), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        return _pdf_route_error(request, "marksheets/pdf", exc)
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
 @router.get("/app/academics/blank-marksheet", response_class=HTMLResponse)
 def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", stream: str = ""):
     sid = _school_session(request)
