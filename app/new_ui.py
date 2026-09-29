@@ -3157,8 +3157,31 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     con=_db();cur=con.cursor()
     try:
         exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-        classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        role=str(request.session.get("role",""))
+        teacher_id=int(request.session.get("teacher_id") or 0) if role=="teacher" else 0
+        if role=="teacher" and teacher_id:
+            # Teachers must see only the classes/subjects actually allocated to
+            # them. Keep the class+subject pairing together so the initial page
+            # can never select a valid class with an unrelated subject.
+            allocations=cur.execute("""SELECT DISTINCT class_id,subject_id
+              FROM teacher_allocations
+              WHERE school_id=? AND teacher_id=?
+              ORDER BY class_id,subject_id""",(sid,teacher_id)).fetchall()
+            class_ids=sorted({int(a["class_id"]) for a in allocations if a["class_id"] is not None})
+            subject_ids=sorted({int(a["subject_id"]) for a in allocations if a["subject_id"] is not None})
+            if class_ids:
+                ph=",".join("?" for _ in class_ids)
+                classes=cur.execute("SELECT * FROM classes WHERE school_id=? AND id IN ("+ph+") ORDER BY name,stream",[sid]+class_ids).fetchall()
+            else:
+                classes=[]
+            if subject_ids:
+                ph=",".join("?" for _ in subject_ids)
+                subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id IN ("+ph+") ORDER BY name",[sid]+subject_ids).fetchall()
+            else:
+                subjects=[]
+        else:
+            classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+            subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     except Exception as exc:
         print("DAVISCHOOL MARKS ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
         try: con.rollback()
@@ -3171,6 +3194,17 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
+    # On the teacher landing page, choose the first allocated class/subject pair
+    # rather than independently choosing the first class and first subject.
+    if role=="teacher" and teacher_id:
+        if allocations:
+            first_pair=allocations[0]
+            if not class_id and not subject_id:
+                cid=int(first_pair["class_id"])
+                subid=int(first_pair["subject_id"])
+            elif not _teacher_class_authorized(cur, request, sid, cid, subid):
+                cid=int(first_pair["class_id"])
+                subid=int(first_pair["subject_id"])
     students=[]
     out_of=100.0
     subject_comments={}
