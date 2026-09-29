@@ -4715,8 +4715,12 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
 
         # Email is optional because the generated username is the login identifier.
         # If the teacher record has an email, it is retained.
+        # Email is not the login identifier. If the teacher's email is already
+        # attached to another account, keep the generated username/password as
+        # the login credentials and leave this new account's email blank rather
+        # than blocking account creation.
         if email_v and cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone():
-            return HTMLResponse("An account already exists for this email address in this school. Use a different email or edit the existing account.",400)
+            email_v=""
 
         class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
         subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
