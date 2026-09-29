@@ -1718,10 +1718,19 @@ function printDocument(){
     # Keep this summary based on the actual selected students; do not treat the
     # tuple as a mapping (which previously caused the grade-selection request
     # to return HTTP 500).
-    overall_entries = sum(1 for item in computed if int(item[3] or 0) > 0)
+    # Class Mean is based on actual student total marks, not an average of
+    # student averages. Only students who sat every subject in the full exam
+    # are eligible; students who missed the exam or missed any subject are
+    # excluded. This also applies when classes/streams are combined.
+    full_exam_students = [
+        item for item in computed
+        if full_exam_subject_count > 0 and int(item.get("count", 0) or 0) == full_exam_subject_count
+    ]
+    overall_entries = sum(1 for item in computed if int(item.get("count", 0) or 0) > 0)
     overall_class_mean = (
-        sum((float(item[1]) / int(item[3])) for item in computed if int(item[3] or 0) > 0)
-        / overall_entries if overall_entries else None
+        sum(float(item.get("total", 0) or 0) for item in full_exam_students)
+        / (len(full_exam_students) * full_exam_subject_count)
+        if full_exam_students else None
     )
     overall_distribution_html = ""
     if distribution_grades:
@@ -1902,6 +1911,11 @@ def class_marksheets_pdf(
             student_params.append(stream)
         student_sql += " ORDER BY name"
         students = cur.execute(student_sql, student_params).fetchall()
+
+        # Preserve the complete exam subject set for Class Mean eligibility.
+        # Display-only subject filtering must not make a partially completed exam
+        # look like a full exam.
+        full_exam_subject_count = len(subjects)
 
         selected_ids = []
         for raw_id in str(subject_ids or "").split(","):
