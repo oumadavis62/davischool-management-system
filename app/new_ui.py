@@ -4472,8 +4472,8 @@ def users_page(request: Request):
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
 <div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
-<div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Select classes/streams for this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Select the class/streams this teacher should teach. Existing assignments are pre-selected when available.</div></div>
-<div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to the selected classes'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations for the selected class/stream.</div></div>
+<div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
+<div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations.</div></div>
 <input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'>
 <select name='student_id' class='field'><option value=''>Link student (for student/parent account)</option>{sopts}</select>
 <button class='btn' style='grid-column:1/-1'>Create Account</button></form>
@@ -4491,28 +4491,27 @@ def users_page(request: Request):
    }}
    cw.style.display='block'; sw.style.display='block';
    try{{
-     if(teacher.value){{
-       const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
-       if(!response.ok) throw new Error('Teacher links request failed');
-       const data=await response.json();
-       if(data.teacher && data.teacher.email) email.value=data.teacher.email;
-       if(data.teacher_type) type.value=data.teacher_type;
-       const wantedClasses=new Set((data.classes||[]).map(String));
-       Array.from(cs.options).forEach(o=>o.selected=wantedClasses.has(String(o.value)));
-       const allowed=new Set();
-       Object.values(data.subjects_by_class||{{}}).forEach(list=>(list||[]).forEach(v=>allowed.add(String(v))));
-       Array.from(ss.options).forEach(o=>{{o.hidden=false;o.disabled=false;o.selected=allowed.has(String(o.value));}});
-     }}else{{
-       email.value='';
+     if(!teacher.value){{
+       email.value=''; cc.value=''; sc.value='';
        Array.from(cs.options).forEach(o=>o.selected=false);
-       Array.from(ss.options).forEach(o=>{{o.hidden=false;o.disabled=false;o.selected=false;}});
+       Array.from(ss.options).forEach(o=>o.selected=false);
+       return;
      }}
+     const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
+     if(!response.ok) throw new Error('Teacher links request failed');
+     const data=await response.json();
+     if(data.teacher && data.teacher.email) email.value=data.teacher.email;
+     if(data.teacher_type) type.value=data.teacher_type;
+     const wantedClasses=new Set((data.classes||[]).map(String));
+     Array.from(cs.options).forEach(o=>o.selected=wantedClasses.has(String(o.value)));
+     const allowed=new Set();
+     Object.values(data.subjects_by_class||{{}}).forEach(list=>(list||[]).forEach(v=>allowed.add(String(v))));
+     Array.from(ss.options).forEach(o=>{{o.hidden=false;o.disabled=false;o.selected=allowed.has(String(o.value));}});
+     cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
+     sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
    }}catch(err){{
-     Array.from(ss.options).forEach(o=>{{o.hidden=false;o.disabled=false;}});
      console.error('Teacher allocation load failed',err);
    }}
-   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-   sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
  }}
  teacher.addEventListener('change',loadTeacherLinks);
  role.addEventListener('change',loadTeacherLinks);
