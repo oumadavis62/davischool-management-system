@@ -4726,22 +4726,50 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         class_ids=list(dict.fromkeys(class_ids)); subject_ids=list(dict.fromkeys(subject_ids))
 
         if role=="teacher":
-            if teacher_type not in ("class_teacher","subject_teacher","both"): teacher_type="subject_teacher"
+            if teacher_type not in ("class_teacher","subject_teacher","both"):
+                teacher_type="subject_teacher"
+
+            # The database is authoritative. If the browser did not submit the
+            # hidden allocation fields, rebuild them from the teacher's existing
+            # allocations/class-teacher assignment instead of rejecting the account.
+            _ensure_teacher_allocations_table(cur)
+            _ensure_class_teacher_assignments_table(cur)
+            existing_allocations=cur.execute(
+                "SELECT class_id,subject_id FROM teacher_allocations WHERE school_id=? AND teacher_id=? ORDER BY class_id,subject_id",
+                (sid,tid)
+            ).fetchall()
+            existing_class_teacher=cur.execute(
+                "SELECT class_id FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? ORDER BY id DESC LIMIT 1",
+                (sid,tid)
+            ).fetchone()
+
+            if not class_ids:
+                class_ids=list(dict.fromkeys(int(x["class_id"]) for x in existing_allocations))
+            if existing_class_teacher and int(existing_class_teacher["class_id"]) not in class_ids:
+                class_ids.append(int(existing_class_teacher["class_id"]))
+            if not subject_ids:
+                subject_ids=list(dict.fromkeys(int(x["subject_id"]) for x in existing_allocations))
+
             # If exactly one class is selected and no subject is selected while
             # the default Subject Teacher option is unchanged, treat it as a
-            # Class Teacher assignment.
-            if teacher_type=="subject_teacher" and len(class_ids)==1 and not subject_ids:
+            # Class Teacher assignment only when that teacher is already assigned
+            # as a class teacher. Otherwise retain Subject Teacher validation.
+            if teacher_type=="subject_teacher" and len(class_ids)==1 and not subject_ids and existing_class_teacher:
                 teacher_type="class_teacher"
+
             if teacher_type in ("class_teacher","both") and len(class_ids)!=1:
                 return HTMLResponse("For a Class Teacher, select exactly one class/stream in the Classes/Streams box.",400)
             if teacher_type in ("subject_teacher","both") and (not class_ids or not subject_ids):
                 return HTMLResponse("For a Subject Teacher, select at least one class/stream and at least one subject.",400)
+
             if class_ids:
                 valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
-            else: valid_classes=[]
+            else:
+                valid_classes=[]
             if subject_ids:
                 valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),subject_ids).fetchall()
-            else: valid_subjects=[]
+            else:
+                valid_subjects=[]
             if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
                 return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
 
