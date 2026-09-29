@@ -4493,8 +4493,8 @@ def users_page(request: Request):
    try{{
      if(!teacher.value){{
        email.value=''; cc.value=''; sc.value='';
-       Array.from(cs.options).forEach(o=>o.selected=false);
-       Array.from(ss.options).forEach(o=>o.selected=false);
+       Array.from(cs.options).forEach(o=>{{o.selected=false;o.hidden=true;o.disabled=true;}});
+       Array.from(ss.options).forEach(o=>{{o.hidden=true;o.disabled=true;o.selected=false;}});
        return;
      }}
      const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
@@ -4503,10 +4503,20 @@ def users_page(request: Request):
      if(data.teacher && data.teacher.email) email.value=data.teacher.email;
      if(data.teacher_type) type.value=data.teacher_type;
      const wantedClasses=new Set((data.classes||[]).map(String));
-     Array.from(cs.options).forEach(o=>o.selected=wantedClasses.has(String(o.value)));
+     Array.from(cs.options).forEach(o=>{{
+       const allowed=wantedClasses.has(String(o.value));
+       o.hidden=!allowed;
+       o.disabled=!allowed;
+       o.selected=allowed;
+     }});
      const allowed=new Set();
      Object.values(data.subjects_by_class||{{}}).forEach(list=>(list||[]).forEach(v=>allowed.add(String(v))));
-     Array.from(ss.options).forEach(o=>{{o.hidden=false;o.disabled=false;o.selected=allowed.has(String(o.value));}});
+     Array.from(ss.options).forEach(o=>{{
+       const isAllowed=allowed.has(String(o.value));
+       o.hidden=!isAllowed;
+       o.disabled=!isAllowed;
+       o.selected=isAllowed;
+     }});
      cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
      sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
    }}catch(err){{
