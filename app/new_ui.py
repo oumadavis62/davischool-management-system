@@ -1722,21 +1722,19 @@ function printDocument(){
     # tuple as a mapping (which previously caused the grade-selection request
     # to return HTTP 500).
     # Class Mean is based on actual student total marks, not an average of
-    # student averages. Only students who sat every subject in the full exam
-    # are eligible; students who missed the exam or missed any subject are
-    # excluded. This also applies when classes/streams are combined.
+    # student averages. Include every student who sat at least one exam
+    # subject; exclude only students with no recorded exam mark at all.
+    # This also applies when classes/streams are combined.
     # computed rows are tuples: (student, total, total_points, count, cells).
-    full_exam_students = [
-        item for item in computed
-        if full_exam_subject_count > 0 and int(item[3] or 0) == full_exam_subject_count
+    mean_eligible_students = [
+        item for item in computed if int(item[3] or 0) > 0
     ]
-    overall_entries = sum(1 for item in computed if int(item[3] or 0) > 0)
-    # Mean of eligible students' TOTAL MARKS. Do not average student
-    # averages and do not include partial/missing exam attempts.
+    overall_entries = len(mean_eligible_students)
+    # Mean of eligible students' TOTAL MARKS. Partial exam attempts are included.
     overall_class_mean = (
-        sum(float(item[1] or 0) for item in full_exam_students)
-        / len(full_exam_students)
-        if full_exam_students else None
+        sum(float(item[1] or 0) for item in mean_eligible_students)
+        / len(mean_eligible_students)
+        if mean_eligible_students else None
     )
     overall_distribution_html = ""
     if distribution_grades:
@@ -2143,16 +2141,16 @@ def class_marksheets_pdf(
         if ordered_grades:
             overall_entries_pdf = sum(1 for item in computed if int(item.get("count", 0) or 0) > 0)
             # PDF Class Mean must use eligible students' actual total marks,
-            # matching the MarkSheet HTML calculation.
-            full_exam_students_pdf = [
+            # matching the MarkSheet HTML calculation. Partial exam attempts count;
+            # only students with no recorded exam mark are excluded.
+            mean_eligible_students_pdf = [
                 item for item in computed
-                if full_exam_subject_count > 0
-                and int(item.get("count", 0) or 0) == full_exam_subject_count
+                if int(item.get("count", 0) or 0) > 0
             ]
             overall_class_mean_pdf = (
-                sum(float(item.get("total", 0) or 0) for item in full_exam_students_pdf)
-                / len(full_exam_students_pdf)
-                if full_exam_students_pdf else None
+                sum(float(item.get("total", 0) or 0) for item in mean_eligible_students_pdf)
+                / len(mean_eligible_students_pdf)
+                if mean_eligible_students_pdf else None
             )
             overall_rows = [
                 [Paragraph(escape(g), styles["table_head"]) for g in ordered_grades]
