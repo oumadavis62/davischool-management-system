@@ -4740,14 +4740,19 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                 if teacher_row["email"] and not email_v:
                     email_v=str(teacher_row["email"]).strip().lower()
 
-        # Email is optional because the generated username is the login identifier.
-        # If the teacher record has an email, it is retained.
-        # Email is not the login identifier. If the teacher's email is already
-        # attached to another account, keep the generated username/password as
-        # the login credentials and leave this new account's email blank rather
-        # than blocking account creation.
-        if email_v and cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone():
-            email_v=""
+        # Teacher login credentials are based on the teacher record:
+        # username = teacher email; password = first name + generated digits.
+        # This keeps teacher credentials predictable for the school admin while
+        # still making the initial password unique.
+        if role=="teacher":
+            if not email_v:
+                return HTMLResponse("The selected teacher must have an email address before a teacher account can be created. Please add the email in Teachers Records and try again. <a href='/app/users'>Back</a>",400)
+            existing_email_account=cur.execute(
+                "SELECT id FROM users WHERE lower(username)=? OR (school_id=? AND lower(email)=?) LIMIT 1",
+                (email_v,sid,email_v)
+            ).fetchone()
+            if existing_email_account:
+                return HTMLResponse("A user account already exists for this teacher email. Please edit the existing account instead of creating another one. <a href='/app/users'>Back</a>",400)
 
         class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
         subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
@@ -4820,19 +4825,24 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
 
         from app.main import hash_password
         import secrets
-        generated_password="DS-"+secrets.token_urlsafe(8)
-        base_username=re.sub(r"[^a-z0-9]+","",full_name.lower()) or "user"
-        username=base_username
-        if username=="user" and tid:
-            username="teacher"
-        username=username[:40]
-        username_suffix=secrets.randbelow(9000)+1000
-        if cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
-            username=f"{username}{username_suffix}"
-        suffix=1
-        while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
-            suffix += 1
-            username=f"{base_username}{suffix}"
+        if role=="teacher":
+            first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
+            generated_password=first_name+"@"+str(secrets.randbelow(9000)+1000)
+            username=email_v
+        else:
+            generated_password="DS-"+secrets.token_urlsafe(8)
+            base_username=re.sub(r"[^a-z0-9]+","",full_name.lower()) or "user"
+            username=base_username
+            if username=="user" and tid:
+                username="teacher"
+            username=username[:40]
+            username_suffix=secrets.randbelow(9000)+1000
+            if cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
+                username=f"{username}{username_suffix}"
+            suffix=1
+            while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
+                suffix += 1
+                username=f"{base_username}{suffix}"
         cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password) VALUES(?,?,?,?,?,?,?,?,?)",
                     (username,email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid,generated_password))
 
