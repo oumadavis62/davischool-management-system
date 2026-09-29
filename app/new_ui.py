@@ -4436,10 +4436,12 @@ def users_page(request: Request):
         entry["teacher_type"]="both" if ct and has_subject else ("class_teacher" if ct else "subject_teacher")
     teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
     teacher_allocation_json=json.dumps(teacher_alloc_map)
-    modal_username=escape(str((created_account["username"] if created_account else "") or ""))
-    modal_password=escape(str((created_account["temporary_password"] if created_account else "") or ""))
+    # Use the one-time session credentials as the primary popup source.
+    # The popup must not depend on re-finding the newly-created account row.
+    modal_username=escape(str((created_credentials or {}).get("username") or (created_account["username"] if created_account else "") or created_username))
+    modal_password=escape(str((created_credentials or {}).get("password") or (created_account["temporary_password"] if created_account else "") or ""))
     credential_modal = ""
-    if created_flag and created_account:
+    if created_flag and modal_username and modal_password:
         credential_modal = (
             "<div id=\"credentialModal\" style=\"display:flex;position:fixed;inset:0;"
             "background:rgba(15,23,42,.65);z-index:99999;align-items:center;"
@@ -4456,9 +4458,10 @@ def users_page(request: Request):
             + modal_password
             + "</div></div><button type=\"button\" id=\"credentialOkay\" class=\"btn\" "
             "style=\"width:100%\">OK</button></div></div>"
-            "<script>(function(){const m=document.getElementById('credentialModal'),"
-            "o=document.getElementById('credentialOkay');if(m&&o){o.onclick=function(){"
-            "m.style.display='none';};}})();</script>"
+            "<script>(function(){function closeCredentialModal(){"
+            "var m=document.getElementById('credentialModal');if(m)m.style.display='none';}"
+            "var o=document.getElementById('credentialOkay');"
+            "if(o)o.addEventListener('click',closeCredentialModal);})();</script>"
         )
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     created_display_username=escape(str((created_credentials or {}).get("username") or request.query_params.get("username","")))
