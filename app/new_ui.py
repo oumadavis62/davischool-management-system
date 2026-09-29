@@ -3438,6 +3438,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             mark_actions = ("<button class='btn' type='submit'>💾 Save Marks</button> "
                             "<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Submit & Lock Marks</button></form>"%(eid,cid,subid)) if students else ""
             draft_action = ""
+    # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
+    form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
+    outside_actions = mark_actions if locked else ""
     rows=""
     for x in students:
         mark=x["marks"]
@@ -3464,7 +3467,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='%s'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
-      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,form_action,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",draft_action,mark_actions)+
+      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,form_action,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",form_actions,outside_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
       "<script>(function(){var cs=document.querySelector('select[name=\\\"class_id\\\"]'),ss=document.querySelector('select[name=\\\"subject_id\\\"]');if(cs&&ss){function f(){var cid=cs.value,first=null;Array.prototype.forEach.call(ss.options,function(o){if(!o.value)return;var rawIds=o.getAttribute('data-class-ids');if(rawIds===null){o.hidden=false;if(!first)first=o.value;return;}var ids=rawIds.split(',');o.hidden=ids.indexOf(cid)<0;if(!o.hidden&&!first)first=o.value;});var cur=ss.options[ss.selectedIndex];if(cur&&cur.hidden&&first)ss.value=first;}cs.addEventListener('change',f);f();}})();var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='—',points='—',comment='';var pct=(mark/out_of)*100;for(var i=0;i<gradingRules.length;i++){if((mark>=gradingRules[i][0]&&mark<=gradingRules[i][1])||(pct>=gradingRules[i][0]&&pct<=gradingRules[i][1])){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
@@ -3680,13 +3683,15 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
-def request_marks_correction_get(request: Request, exam_id:int, class_id:int, subject_id:int):
+def request_marks_correction_get(request: Request, exam_id:int=0, class_id:int=0, subject_id:int=0):
     """Gracefully handle clients that submit the correction action as GET instead of POST."""
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
     if str(request.session.get("role","")) != "teacher":
         return HTMLResponse("Only teachers can submit a correction request.", 403)
+    if not exam_id or not class_id or not subject_id:
+        return RedirectResponse("/app/academics/marks", 303)
     return HTMLResponse(
         "<div style='font-family:Arial,sans-serif;padding:30px'>"
         "<h2>Request Marks Correction</h2>"
