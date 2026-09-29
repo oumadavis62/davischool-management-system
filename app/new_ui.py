@@ -1250,6 +1250,9 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             overall_rules = []
         subjects = cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
         subjects = _marksheet_subject_order(subjects)
+        # Keep the full exam subject count before any display-only subject
+        # filtering. Full-exam eligibility must always use the complete exam.
+        full_exam_subject_count = len(subjects)
         selected_subject_ids = []
         for raw_id in str(subject_ids or "").split(","):
             try:
@@ -1722,13 +1725,14 @@ function printDocument(){
     # student averages. Only students who sat every subject in the full exam
     # are eligible; students who missed the exam or missed any subject are
     # excluded. This also applies when classes/streams are combined.
+    # computed rows are tuples: (student, total, total_points, count, cells).
     full_exam_students = [
         item for item in computed
-        if full_exam_subject_count > 0 and int(item.get("count", 0) or 0) == full_exam_subject_count
+        if full_exam_subject_count > 0 and int(item[3] or 0) == full_exam_subject_count
     ]
-    overall_entries = sum(1 for item in computed if int(item.get("count", 0) or 0) > 0)
+    overall_entries = sum(1 for item in computed if int(item[3] or 0) > 0)
     overall_class_mean = (
-        sum(float(item.get("total", 0) or 0) for item in full_exam_students)
+        sum(float(item[1] or 0) for item in full_exam_students)
         / (len(full_exam_students) * full_exam_subject_count)
         if full_exam_students else None
     )
