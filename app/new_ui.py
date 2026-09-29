@@ -95,6 +95,15 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     if not user:
         return RedirectResponse("/?error=1", status_code=303)
     ok, legacy = verify_password(password, user["password"] or "")
+    # Generated teacher accounts keep the initial password in temporary_password.
+    # Accept that credential as a safe fallback and immediately replace the
+    # stored password with the normal hash, so teacher login works even if the
+    # account was created before the password hash was finalized.
+    if not ok and user["role"] == "teacher":
+        temporary_password = str(user["temporary_password"] or "") if "temporary_password" in user.keys() else ""
+        if temporary_password and password == temporary_password:
+            ok = True
+            legacy = True
     if not ok:
         return RedirectResponse("/?error=1", status_code=303)
     if user["role"] == "school_admin":
