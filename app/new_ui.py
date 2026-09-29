@@ -145,7 +145,7 @@ def _ensure_user_account_columns(cur, con=None):
     cur.execute("SELECT * FROM users LIMIT 0")
     columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
     changed = False
-    for column, definition in (("username", "TEXT"), ("teacher_id", "INTEGER"), ("student_id", "INTEGER")):
+    for column, definition in (("username", "TEXT"), ("teacher_id", "INTEGER"), ("student_id", "INTEGER"), ("temporary_password", "TEXT")):
         if column not in columns:
             cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
             columns.add(column)
@@ -4404,7 +4404,7 @@ def users_page(request: Request):
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
         else:
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
-        rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
+        rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(str(u['temporary_password'] or '—'))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
     teacher_alloc_map={}
     for a in allocations:
@@ -4431,7 +4431,7 @@ def users_page(request: Request):
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 {("<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> " + escape(str(created_account["full_name"] or created_account["email"])) + " is now in the Accounts table.<br><br><b>Username:</b> " + escape(str((created_credentials or {}).get("username") or request.query_params.get("username",""))) + "<br><b>Temporary Password:</b> " + escape(str((created_credentials or {}).get("password") or request.query_params.get("password",""))) + "<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))}
-<div class='card section'><h2>Create user account</h2>
+<div id='credentialModal' style='display:none;position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:99999;align-items:center;justify-content:center;padding:20px'><div style='background:#fff;border-radius:16px;max-width:430px;width:100%;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.25)'><h2 style='margin:0 0 10px'>✅ Account Created</h2><p style='margin:0 0 16px;color:#475569'>The teacher account has been created successfully. Save these login credentials.</p><div style='background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px'><b>Username</b><div style='font-size:20px;font-weight:800;margin:4px 0 12px' id='generatedUsername'></div><b>Password</b><div style='font-size:20px;font-weight:800;margin-top:4px' id='generatedPassword'></div></div><button type='button' id='credentialOkay' class='btn' style='width:100%'>OK</button></div></div><script>(function(){const m=document.getElementById('credentialModal'),o=document.getElementById('credentialOkay');if(m&&o){m.style.display='flex';o.onclick=function(){m.style.display='none';};}})();</script><div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='school_admin'>School Admin</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
@@ -4497,7 +4497,7 @@ def users_page(request: Request):
 }})();
 </script>
 </div>
-<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=6>No users yet.</td></tr>'}</tbody></table></div></div></div>
+<div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Username</th><th>Password</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No users yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"User Management",body)
 
@@ -4727,8 +4727,8 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
             suffix += 1
             username=f"{base_username}{suffix}"
-        cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?,?)",
-                    (username,email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid))
+        cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (username,email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid,generated_password))
 
         if role=="teacher" and tid:
             _ensure_teacher_allocations_table(cur)
