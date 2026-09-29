@@ -4386,6 +4386,9 @@ def users_page(request: Request):
     created_flag=str(request.query_params.get("created","")).strip()=="1"
     created_email=str(request.query_params.get("email","")).strip().lower()
     created_username=str(request.query_params.get("username","")).strip().lower()
+    created_credentials=request.session.pop("created_account_credentials",None) if created_flag else None
+    if created_credentials:
+        created_username=str(created_credentials.get("username") or "").lower()
     created_account=next((u for u in users if created_username and str(u["username"] or "").lower()==created_username), None) if created_username else (next((u for u in users if created_email and str(u["email"] or "").lower()==created_email), None) if created_email else (users[0] if created_flag and users else None))
     class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
@@ -4427,13 +4430,13 @@ def users_page(request: Request):
     teacher_allocation_json=json.dumps(teacher_alloc_map)
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
-{("<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> " + escape(str(created_account["full_name"] or created_account["email"])) + " is now in the Accounts table.<br><br><b>Username:</b> " + escape(str(request.query_params.get("username",""))) + "<br><b>Temporary Password:</b> " + escape(str(request.query_params.get("password",""))) + "<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))}
+{("<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> " + escape(str(created_account["full_name"] or created_account["email"])) + " is now in the Accounts table.<br><br><b>Username:</b> " + escape(str((created_credentials or {}).get("username") or request.query_params.get("username",""))) + "<br><b>Temporary Password:</b> " + escape(str((created_credentials or {}).get("password") or request.query_params.get("password",""))) + "<br><span style='font-size:12px'>Please save these credentials before leaving this page.</span></div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))}
 <div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='school_admin'>School Admin</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
-<input name='email' id='newTeacherEmail' type='email' required placeholder='Email from teacher record' class='field'>
+<input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
 <div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
@@ -4680,11 +4683,9 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                 if teacher_row["email"] and not email_v:
                     email_v=str(teacher_row["email"]).strip().lower()
 
-        if not email_v:
-            return HTMLResponse("A valid email address is required for the account. Please enter an email for the selected teacher.",400)
-        # Email addresses are unique within a school account set. A teacher may
-        # legitimately use the same email address in another school.
-        if cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone():
+        # Email is optional because the generated username is the login identifier.
+        # If the teacher record has an email, it is retained.
+        if email_v and cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone():
             return HTMLResponse("An account already exists for this email address in this school. Use a different email or edit the existing account.",400)
 
         class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
@@ -4750,11 +4751,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
 
         # Verify that the committed account is actually visible to the same
         # school before redirecting to the Accounts table.
-        created=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone()
+        created=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(username)=?",(sid,username.lower())).fetchone()
         if not created:
             return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
-        from urllib.parse import quote
-        return RedirectResponse(f"/app/users?created=1&username={quote(username)}&password={quote(generated_password)}",303)
+        request.session["created_account_credentials"]={"username":username,"password":generated_password}
+        return RedirectResponse("/app/users?created=1",303)
     except Exception as exc:
         try:
             con.rollback()
