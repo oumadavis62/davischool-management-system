@@ -4525,7 +4525,12 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
-    full_name=(full_name or "").strip()\n    email=(email or "").strip()\n    password=password or ""\n    password_confirm=password_confirm or ""\n    if not full_name:return HTMLResponse("Full name is required. <a href='/app/users'>Back</a>",400)\n    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
+    full_name=(full_name or "").strip()
+    email=(email or "").strip()
+    password=password or ""
+    password_confirm=password_confirm or ""
+    if not full_name:return HTMLResponse("Full name is required. <a href='/app/users'>Back</a>",400)
+    if len(password)<8:return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password != password_confirm:return HTMLResponse("Password and confirmation do not match. <a href='/app/users'>Back</a>",400)
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
