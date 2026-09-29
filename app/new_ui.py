@@ -3162,7 +3162,6 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 def _ensure_teacher_mark_drafts_table(cur):
     """Create the private teacher draft store without touching published marks."""
     cur.execute("""CREATE TABLE IF NOT EXISTS teacher_mark_drafts (
-        id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
         teacher_id INTEGER NOT NULL,
         exam_id INTEGER NOT NULL,
