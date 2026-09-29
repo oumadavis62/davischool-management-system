@@ -4351,8 +4351,12 @@ def users_page(request: Request):
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
     con=_db();cur=con.cursor()
+    # Read only this school's accounts. The joins are also school-scoped so
+    # a linked profile from another school can never affect the account row.
     users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
-        FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id LEFT JOIN students s ON s.id=u.student_id
+        FROM users u
+        LEFT JOIN teachers t ON t.id=u.teacher_id AND t.school_id=u.school_id
+        LEFT JOIN students s ON s.id=u.student_id AND s.school_id=u.school_id
         WHERE u.school_id=? ORDER BY u.id DESC""",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name,email FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -4361,6 +4365,9 @@ def users_page(request: Request):
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?",(sid,)).fetchall()
     con.close()
+    created_flag=str(request.query_params.get("created","")).strip()=="1"
+    created_email=str(request.query_params.get("email","")).strip().lower()
+    created_account=next((u for u in users if created_email and str(u["email"] or "").lower()==created_email), None) if created_email else (users[0] if created_flag and users else None)
     class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
     for u in users:
@@ -4380,6 +4387,7 @@ def users_page(request: Request):
     teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
+{("<div class='card section' style='border:1px solid #86efac;background:#f0fdf4;color:#166534'><b>✅ Account created successfully.</b> " + escape(str(created_account["full_name"] or created_account["email"])) + " is now in the Accounts table.</div>" if created_flag and created_account else ("<div class='card section' style='border:1px solid #fecaca;background:#fef2f2;color:#991b1b'><b>Account was saved but could not be found in this school's Accounts list.</b> Please refresh and report this message if it remains.</div>" if created_flag else ""))}
 <div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
