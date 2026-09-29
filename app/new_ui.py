@@ -1609,7 +1609,7 @@ function printDocument(){
     timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit',
     hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
   }).format(new Date())+' EAT';
-  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.marksheet-school{display:none!important}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif;table-layout:auto}.marksheet th,.marksheet td{border:1.25px solid #176B3A;padding:5px 6px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff!important;color:#000!important;font-weight:900}.marksheet thead tr:nth-child(2) th{background:#fff!important;color:#000!important;font-weight:900}.marksheet tbody td{border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet .adm-no-col{width:58px;min-width:58px;max-width:58px}.marksheet .name-col{width:170px;min-width:170px;max-width:170px}.marksheet .stream-col,.marksheet .stream-cell{width:55px;min-width:55px;max-width:55px}.marksheet .mks-col,.marksheet .points-col{width:48px;min-width:48px;max-width:48px}.marksheet .grade-col{width:44px;min-width:44px;max-width:44px}.marksheet .overall-marks-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-points-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-avg-col{width:64px;min-width:64px;max-width:64px}.marksheet .overall-grade-col{width:52px;min-width:52px;max-width:52px}.marksheet .overall-pos-col{width:58px;min-width:58px;max-width:58px}.marksheet .subjecthead{font-size:11px;color:#fff;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:170px;width:170px;max-width:170px}.marksheet td b{font-weight:800}.subject-mean-summary{page-break-before:always;break-before:page;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:245mm;margin:0;padding:18mm 10mm 10mm;background:#fff;box-sizing:border-box}.subject-mean-title{font-size:20px;font-weight:900;text-align:center;text-transform:uppercase;margin:0 0 14px;padding:0 0 8px;width:100%;max-width:820px;border-bottom:2px solid #111}.subject-mean-grid{width:100%;max-width:820px;display:flex;justify-content:center}.subject-summary{border-collapse:collapse;width:100%;max-width:820px;table-layout:fixed;margin:0 auto}.subject-summary th,.subject-summary td{border:1px solid #111;padding:10px 18px;text-align:center;line-height:1.35}.subject-summary th{font-weight:900;background:#fff;color:#000}.subject-summary th:nth-child(1),.subject-summary td:nth-child(1){width:48%;text-align:left;padding-left:18px}.subject-summary th:nth-child(2),.subject-summary td:nth-child(2){width:17%}.subject-summary th:nth-child(3),.subject-summary td:nth-child(3){width:17%}.subject-summary th:nth-child(4),.subject-summary td:nth-child(4){width:18%;padding-right:18px}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
+  var css='*{box-sizing:border-box}body{margin:0;background:#fff;color:#172033;font-family:Arial,sans-serif}.marksheet-card{display:block!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}.no-print{display:none!important}.doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.marksheet-school{display:none!important}.marksheet-meta{font-size:14px;font-weight:800;padding:8px 4px;border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet{border-collapse:collapse;width:max-content;min-width:100%;font-family:Arial,sans-serif;table-layout:auto}.marksheet th,.marksheet td{border:1.25px solid #176B3A;padding:5px 6px;text-align:center;font-size:10px;white-space:nowrap}.marksheet th{background:#fff!important;color:#000!important;font-weight:900}.marksheet thead tr:nth-child(2) th{background:#fff!important;color:#000!important;font-weight:900}.marksheet tbody td{border-top:1px solid #176B3A;border-bottom:1px solid #176B3A}.marksheet .adm-no-col{width:58px;min-width:58px;max-width:58px}.marksheet .name-col{width:170px;min-width:170px;max-width:170px}.marksheet .stream-col,.marksheet .stream-cell{width:55px;min-width:55px;max-width:55px}.marksheet .mks-col,.marksheet .points-col{width:48px;min-width:48px;max-width:48px}.marksheet .grade-col{width:44px;min-width:44px;max-width:44px}.marksheet .overall-marks-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-points-col{width:58px;min-width:58px;max-width:58px}.marksheet .overall-avg-col{width:64px;min-width:64px;max-width:64px}.marksheet .overall-grade-col{width:52px;min-width:52px;max-width:52px}.marksheet .overall-pos-col{width:58px;min-width:58px;max-width:58px}.marksheet .subjecthead{font-size:11px;color:#fff;text-transform:uppercase}.marksheet .name-head,.marksheet .name-cell{text-align:left;min-width:170px;width:170px;max-width:170px}.marksheet td b{font-weight:800}.subject-mean-summary{page-break-before:always;break-before:page;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:245mm;margin:0;padding:18mm 10mm 10mm;background:#fff;box-sizing:border-box}.subject-mean-title{font-size:20px;font-weight:900;text-align:center;text-transform:uppercase;margin:0 0 14px;padding:0 0 8px;width:100%;max-width:820px;border-bottom:2px solid #111}.subject-mean-grid{width:100%;max-width:820px;display:flex;justify-content:center}.subject-analysis-wrap{width:100%;max-width:820px;margin:0 auto}.subject-summary{border-collapse:collapse;width:100%;max-width:820px;table-layout:fixed;margin:0 auto}.subject-summary th,.subject-summary td{border:1px solid #111;padding:4px 8px;text-align:center;line-height:1.2}.subject-summary th{font-weight:900;background:#fff;color:#000}.subject-summary th:nth-child(1),.subject-summary td:nth-child(1){width:48%;text-align:left;padding-left:10px}.subject-summary th:nth-child(2),.subject-summary td:nth-child(2){width:17%}.subject-summary th:nth-child(3),.subject-summary td:nth-child(3){width:17%}.subject-summary th:nth-child(4),.subject-summary td:nth-child(4){width:18%;padding-right:10px}.distribution-block{width:100%;margin-top:5px}.distribution-title{font-size:10px;font-weight:900;text-align:center;text-transform:uppercase;margin:3px 0}.grade-distribution{border-collapse:collapse;width:100%;table-layout:fixed;margin:0 auto}.grade-distribution th,.grade-distribution td{border:1px solid #111;padding:3px 4px;text-align:center;font-size:8.5px;line-height:1.1}.grade-distribution th{font-weight:900;background:#fff;color:#000}.subject-distribution th:first-child,.subject-distribution td:first-child{width:32%;text-align:left;padding-left:7px}.print-footer{position:fixed;left:0;right:0;bottom:0;text-align:center;border-top:2px solid #2E8B57;padding-top:4px;font-size:8px;color:#176B3A;background:#fff}@page{size:A4 landscape;margin:8mm 8mm 12mm}';
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
   var previewBar='<div class="marksheet-preview-bar no-print"><div><b>🖨️ MarkSheet Print Preview</b><span>Review the complete MarkSheet before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print MarkSheet</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.marksheet-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.marksheet-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.marksheet-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.marksheet-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.marksheet-preview-bar{display:none!important}}';
@@ -1624,7 +1624,7 @@ function printDocument(){
             str(item[0]["name"]).casefold(),
         ),
     )
-    subject_mean_html = (
+    subject_mean_table_html = (
         "<table class='subject-summary'><thead><tr><th>Subject</th><th>Mean</th><th>Entries</th><th>Position</th></tr></thead><tbody>" +
         "".join(
             "<tr><td>%s</td><td>%s</td><td>%d</td><td>%s</td></tr>"
@@ -1638,6 +1638,78 @@ function printDocument(){
         ) +
         "</tbody></table>"
     ) if subject_means else "<div class='subject-mean-empty'>No subject marks available.</div>"
+
+    # Compact on-screen/print-preview grade distributions. They deliberately
+    # use horizontal grade columns so the entire analysis fits one landscape page.
+    grade_order = ["A", "B", "C", "D", "E"]
+    overall_grade_counts = {}
+    subject_grade_counts = {int(s["id"]): {} for s in subjects}
+    for student, total, total_points, count, cells in computed:
+        if count:
+            average = total / count
+            try:
+                og = str(_overall_grade(cur, sid, average, overall_rules) or "").strip()
+            except Exception:
+                og = str(_default_grade_points(average)[0] or "").strip()
+            if og and og != "—":
+                overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
+        for subject in subjects:
+            value = marks.get((int(student["id"]), int(subject["id"])))
+            if value is None:
+                continue
+            try:
+                sg, _, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
+            except Exception:
+                sg, _ = _default_grade_points(float(value))
+            sg = str(sg or "").strip()
+            if sg and sg != "—":
+                bucket = subject_grade_counts[int(subject["id"])]
+                bucket[sg] = bucket.get(sg, 0) + 1
+
+    all_grades = set(overall_grade_counts.keys())
+    for counts in subject_grade_counts.values():
+        all_grades.update(counts.keys())
+    distribution_grades = [g for g in grade_order if g in all_grades]
+    distribution_grades += sorted(g for g in all_grades if g not in grade_order)
+
+    overall_distribution_html = ""
+    if distribution_grades:
+        overall_distribution_html = (
+            "<div class='distribution-block'><div class='distribution-title'>OVERALL GRADE DISTRIBUTION</div>"
+            "<table class='grade-distribution overall-distribution'><thead><tr>" +
+            "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
+            "</tr></thead><tbody><tr>" +
+            "".join("<td>%d</td>" % overall_grade_counts.get(g, 0) for g in distribution_grades) +
+            "</tr></tbody></table></div>"
+        )
+
+    subject_distribution_html = ""
+    if distribution_grades and subjects:
+        subject_distribution_html = (
+            "<div class='distribution-block'><div class='distribution-title'>PER-SUBJECT GRADE DISTRIBUTION</div>"
+            "<table class='grade-distribution subject-distribution'><thead><tr><th>Subject</th>" +
+            "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
+            "</tr></thead><tbody>" +
+            "".join(
+                "<tr><td>%s</td>%s</tr>" % (
+                    escape(_subject_marksheet_label(subject)),
+                    "".join(
+                        "<td>%d</td>" % subject_grade_counts[int(subject["id"])].get(g, 0)
+                        for g in distribution_grades
+                    )
+                )
+                for subject in subjects
+            ) +
+            "</tbody></table></div>"
+        )
+
+    subject_mean_html = (
+        "<div class='subject-analysis-wrap'>" +
+        subject_mean_table_html +
+        overall_distribution_html +
+        subject_distribution_html +
+        "</div>"
+    )
     rows_html = rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
     all_rows_html = all_rows or "<tr><td colspan='%d'>No students or marks found.</td></tr>" % colspan
     body = (
