@@ -4389,7 +4389,15 @@ def users_page(request: Request):
     created_credentials=request.session.pop("created_account_credentials",None) if created_flag else None
     if created_credentials:
         created_username=str(created_credentials.get("username") or "").lower()
-    created_account=next((u for u in users if created_username and str(u["username"] or "").lower()==created_username), None) if created_username else (next((u for u in users if created_email and str(u["email"] or "").lower()==created_email), None) if created_email else (users[0] if created_flag and users else None))
+    # The saved account row is the authoritative source for the confirmation
+    # popup. Session credentials are only a fallback for the generated username.
+    created_account=next((u for u in users if created_username and str(u["username"] or "").lower()==created_username), None)
+    if not created_account and created_username:
+        created_account=cur.execute("SELECT u.*,t.name teacher_name,s.name student_name FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id AND t.school_id=u.school_id LEFT JOIN students s ON s.id=u.student_id AND s.school_id=u.school_id WHERE u.school_id=? AND lower(u.username)=?",(sid,created_username)).fetchone()
+    if not created_account and created_email:
+        created_account=next((u for u in users if str(u["email"] or "").lower()==created_email), None)
+    if not created_account and created_flag and users:
+        created_account=users[0]
     class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
     rows=""
     for u in users:
