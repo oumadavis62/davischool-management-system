@@ -4353,7 +4353,8 @@ def users_page(request: Request):
     users=cur.execute("""SELECT u.*,t.name teacher_name,s.name student_name
         FROM users u LEFT JOIN teachers t ON t.id=u.teacher_id LEFT JOIN students s ON s.id=u.student_id
         WHERE u.school_id=? ORDER BY u.id DESC""",(sid,)).fetchall()
-    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,email FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -4377,11 +4378,46 @@ def users_page(request: Request):
     topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
     sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
-<div class='card section'><h2>Create user</h2><form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
-<input name='full_name' required placeholder='Full name' class='field'><input name='email' type='email' required placeholder='Email' class='field'><input name='password' type='password' required minlength='8' placeholder='Password (minimum 8 characters)' class='field'><input name='password_confirm' type='password' required minlength='8' placeholder='Confirm password' class='field'>
-<select name='role' class='field'><option value='school_admin'>School Admin</option><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
-<select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
-<button class='btn'>Create Account</button></form></div>
+<div class='card section'><h2>Create user account</h2>
+<div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
+<form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
+<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='school_admin'>School Admin</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
+<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
+<input name='full_name' id='newTeacherName' required placeholder='Full name' class='field' readonly>
+<input name='email' id='newTeacherEmail' type='email' required placeholder='Email from teacher record' class='field'>
+<input name='password' type='password' required minlength='8' placeholder='Password (minimum 8 characters)' class='field'><input name='password_confirm' type='password' required minlength='8' placeholder='Confirm password' class='field'>
+<select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
+<select id='classIdsSelect' class='field' multiple size='4' title='Select one or more classes/streams'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select>
+<select id='subjectIdsSelect' class='field' multiple size='4' title='Select one or more subjects'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select>
+<input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'>
+<select name='student_id' class='field'><option value=''>Link student (for student/parent account)</option>{sopts}</select>
+<button class='btn' style='grid-column:1/-1'>Create Account</button></form>
+<div class='muted' style='margin-top:10px'>Class Teacher: select exactly one class/stream. Subject Teacher: select all classes/streams and subjects they teach. Both: assign both.</div>
+</div>
+<script>
+(function(){
+ const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), name=document.getElementById('newTeacherName'), email=document.getElementById('newTeacherEmail');
+ const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
+ const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
+ const teacherData=\${JSON.stringify(Object.fromEntries(teachers.map(t=>[String(t["id"]),{name:String(t["name"]||""),email:String(t["email"]||"")}])))}};
+ function sync(){
+   const isTeacher=role.value==='teacher';
+   [teacher,type,cs,ss].forEach(x=>x.disabled=!isTeacher);
+   name.readOnly=isTeacher;
+   if(isTeacher){
+     const t=teacherData[teacher.value]||{};
+     name.value=t.name||'';
+     email.value=t.email||'';
+     if(!email.value) email.placeholder='Enter email (teacher record has no email)';
+   }
+   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
+   sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
+ }
+ role.addEventListener('change',sync); teacher.addEventListener('change',sync); cs.addEventListener('change',sync); ss.addEventListener('change',sync); sync();
+ document.getElementById('createUserForm').addEventListener('submit',function(){sync();});
+})();
+</script>
+</div>
 <div class='card section'><h2>Accounts ({len(users)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked profile / class</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No users yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"User Management",body)
@@ -4482,7 +4518,7 @@ def users_delete(request: Request, uid: int):
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
 @router.post("/app/users/add")
-def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), password_confirm:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
+def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), password:str=Form(...), password_confirm:str=Form(...), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -4497,27 +4533,53 @@ def users_add(request: Request, full_name:str=Form(...), email:str=Form(...), pa
         con.close();return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",400)
     tid=int(teacher_id) if teacher_id.isdigit() else None
     stid=int(student_id) if student_id.isdigit() else None
-    if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
+    if tid and not cur.execute("SELECT id,name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
         con.close();return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
     if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
-        con.close();return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
+        con.close();return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
     if role=="teacher" and not tid:
-        con.close();return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
+        con.close();return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
     if role in ("student","parent") and not stid:
         con.close();return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
     if role not in ("teacher","student","parent") and (tid or stid):
         con.close();return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+    if role=="teacher":
+        teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
+        if teacher_row:
+            full_name=str(teacher_row["name"] or full_name).strip()
+            if not email_v and teacher_row["email"]: email_v=str(teacher_row["email"]).strip().lower()
+    class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
+    subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
+    class_ids=list(dict.fromkeys(class_ids)); subject_ids=list(dict.fromkeys(subject_ids))
+    if role=="teacher":
+        if teacher_type not in ("class_teacher","subject_teacher","both"): teacher_type="subject_teacher"
+        if teacher_type in ("class_teacher","both") and len(class_ids)!=1:
+            con.close();return HTMLResponse("Select exactly one class/stream for a Class Teacher.",400)
+        if teacher_type in ("subject_teacher","both") and (not class_ids or not subject_ids):
+            con.close();return HTMLResponse("Select at least one class/stream and one subject for a Subject Teacher.",400)
+        if class_ids:
+            valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
+        else: valid_classes=[]
+        if subject_ids:
+            valid_subjects=cur.execute("SELECT id FROM subjects WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(subject_ids)),),subject_ids).fetchall()
+        else: valid_subjects=[]
+        if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
+            con.close();return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
     from app.main import hash_password
     cur.execute("INSERT INTO users(email,password,role,full_name,school_id,teacher_id,student_id) VALUES(?,?,?,?,?,?,?)",(email_v,hash_password(password),role,full_name.strip(),sid,tid,stid))
-    if role=="teacher" and tid and class_id.isdigit():
-        cid=int(class_id)
+    if role=="teacher" and tid:
+        _ensure_teacher_allocations_table(cur)
         _ensure_class_teacher_assignments_table(cur)
-        if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone():
-            con.close(); return HTMLResponse("Selected class does not belong to this school. <a href='/app/users'>Back</a>",400)
-        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
-                       VALUES(?,?,?,?)
-                       ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",(sid,cid,tid,now))
+        if teacher_type in ("class_teacher","both"):
+            cid=class_ids[0]
+            now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+                           VALUES(?,?,?,?)
+                           ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",(sid,cid,tid,now))
+        if teacher_type in ("subject_teacher","both"):
+            for cid in class_ids:
+                for subject_id in subject_ids:
+                    cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",(sid,tid,cid,subject_id))
     _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email.strip()}")
     con.commit();con.close();return RedirectResponse("/app/users",303)
 
