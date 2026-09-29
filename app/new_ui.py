@@ -3200,6 +3200,38 @@ def _ensure_teacher_mark_drafts_table(cur):
     cur.execute("""CREATE UNIQUE INDEX IF NOT EXISTS uq_teacher_mark_draft
         ON teacher_mark_drafts(school_id,teacher_id,exam_id,class_id,subject_id,student_id)""")
 
+def _ensure_marks_correction_requests_table(cur):
+    """Create the teacher mark-correction request store additively."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        requested_by TEXT,
+        requested_at TEXT,
+        reason TEXT,
+        status TEXT DEFAULT 'pending',
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        review_note TEXT
+    )""")
+    try:
+        cur.execute("""CREATE INDEX IF NOT EXISTS idx_marks_correction_school
+            ON marks_correction_requests(school_id,status,id)""")
+    except Exception:
+        pass
+
+def _pending_marks_correction(cur, school_id, exam_id, class_id, subject_id, teacher_id):
+    return cur.execute(
+        """SELECT * FROM marks_correction_requests
+           WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?
+             AND teacher_id=? AND status='pending'
+           ORDER BY id DESC LIMIT 1""",
+        (school_id, exam_id, class_id, subject_id, teacher_id)
+    ).fetchone()
+
 @router.get("/app/academics/marks", response_class=HTMLResponse)
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
     sid=_school_session(request)
