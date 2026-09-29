@@ -3422,7 +3422,6 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<button class='btn'>Load Students</button></form>"
-      "<div style='margin-top:10px;padding:10px;background:#f8fafc;border-radius:9px'>"+escape(rule_note)+" "+grading_link+"</div></div>" +
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='%s'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
