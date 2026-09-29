@@ -4572,8 +4572,10 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
             return HTMLResponse("Full name is required. Select a teacher from Teachers Records. <a href='/app/users'>Back</a>",400)
         if not email_v:
             return HTMLResponse("A valid email address is required for the account. Please enter an email for the selected teacher.",400)
-        if cur.execute("SELECT id FROM users WHERE lower(email)=?",(email_v,)).fetchone():
-            return HTMLResponse("An account already exists for this email address. Use a different email or edit the existing account.",400)
+        # Email addresses are unique within a school account set. A teacher may
+        # legitimately use the same email address in another school.
+        if cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone():
+            return HTMLResponse("An account already exists for this email address in this school. Use a different email or edit the existing account.",400)
 
         class_ids=[int(x) for x in str(class_ids_csv or "").split(",") if x.strip().isdigit()]
         subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
@@ -4621,7 +4623,13 @@ def users_add(request: Request, full_name:str=Form(""), email:str=Form(""), pass
 
         _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email_v}")
         con.commit()
-        return RedirectResponse("/app/users",303)
+
+        # Verify that the committed account is actually visible to the same
+        # school before redirecting to the Accounts table.
+        created=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(email)=?",(sid,email_v)).fetchone()
+        if not created:
+            return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
+        return RedirectResponse("/app/users?created=1",303)
     except Exception as exc:
         try:
             con.rollback()
