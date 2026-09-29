@@ -4785,10 +4785,27 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             if teacher_type=="subject_teacher" and len(class_ids)==1 and not subject_ids and existing_class_teacher:
                 teacher_type="class_teacher"
 
+            # Account creation must remain possible even when the allocation
+            # selector submits no values. Existing teacher allocations are used
+            # automatically; missing allocations should not block login creation.
             if teacher_type in ("class_teacher","both") and len(class_ids)!=1:
-                return HTMLResponse("For a Class Teacher, select exactly one class/stream in the Classes/Streams box.",400)
+                if teacher_type=="both" and class_ids:
+                    class_ids=[class_ids[0]]
+                elif teacher_type=="class_teacher" and class_ids:
+                    class_ids=[class_ids[0]]
+                else:
+                    teacher_type="subject_teacher"
             if teacher_type in ("subject_teacher","both") and (not class_ids or not subject_ids):
-                return HTMLResponse("For a Subject Teacher, select at least one class/stream and at least one subject.",400)
+                # Keep the account creation independent of allocation selection.
+                # Allocations can be edited from Teacher Links afterward.
+                if not class_ids and existing_class_teacher:
+                    class_ids=[int(existing_class_teacher["class_id"])]
+                if not class_ids and existing_allocations:
+                    class_ids=[int(existing_allocations[0]["class_id"])]
+                if not subject_ids and existing_allocations:
+                    subject_ids=list(dict.fromkeys(int(x["subject_id"]) for x in existing_allocations))
+                if not class_ids or not subject_ids:
+                    teacher_type="class_teacher" if existing_class_teacher and class_ids else "subject_teacher"
 
             if class_ids:
                 valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN (%s)"%(",".join("?"*len(class_ids)),),class_ids).fetchall()
