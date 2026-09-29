@@ -3159,6 +3159,23 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     con.close()
     return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
 
+def _ensure_teacher_mark_drafts_table(cur):
+    """Create the private teacher draft store without touching published marks."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS teacher_mark_drafts (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        marks TEXT,
+        comment TEXT,
+        updated_at TEXT
+    )""")
+    cur.execute("""CREATE UNIQUE INDEX IF NOT EXISTS uq_teacher_mark_draft
+        ON teacher_mark_drafts(school_id,teacher_id,exam_id,class_id,subject_id,student_id)""")
+
 @router.get("/app/academics/marks", response_class=HTMLResponse)
 def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: str=""):
     sid=_school_session(request)
@@ -3227,9 +3244,18 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # only student data, so a legacy marks schema can never prevent the
         # Marks Entry screen from opening.
         try:
-            students=cur.execute("""SELECT s.id,s.admission_no,s.name,CASE WHEN m.marks IS NULL THEN '' ELSE CAST(m.marks AS TEXT) END marks
-              FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
-              WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+            if role=="teacher":
+                _ensure_teacher_mark_drafts_table(cur)
+                students=cur.execute("""SELECT s.id,s.admission_no,s.name,COALESCE(d.marks,'') marks
+                  FROM students s LEFT JOIN teacher_mark_drafts d
+                    ON d.student_id=s.id AND d.exam_id=? AND d.subject_id=? AND d.class_id=?
+                    AND d.school_id=? AND d.teacher_id=?
+                  WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
+                  (eid,subid,cid,sid,teacher_id,sid,cid)).fetchall()
+            else:
+                students=cur.execute("""SELECT s.id,s.admission_no,s.name,CASE WHEN m.marks IS NULL THEN '' ELSE CAST(m.marks AS TEXT) END marks
+                  FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
+                  WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
@@ -3253,12 +3279,21 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             student_ids = [int(strow["id"]) for strow in students]
             if student_ids:
                 placeholders = ",".join(["?"] * len(student_ids))
-                comment_rows = cur.execute(
-                    "SELECT student_id,comment FROM subject_performance_comments "
-                    "WHERE school_id=? AND exam_id=? AND subject_id=? "
-                    "AND student_id IN (" + placeholders + ")",
-                    [sid, eid, subid] + student_ids
-                ).fetchall()
+                if role=="teacher":
+                    _ensure_teacher_mark_drafts_table(cur)
+                    comment_rows = cur.execute(
+                        "SELECT student_id,comment FROM teacher_mark_drafts "
+                        "WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? "
+                        "AND student_id IN (" + placeholders + ")",
+                        [sid, teacher_id, eid, cid, subid] + student_ids
+                    ).fetchall()
+                else:
+                    comment_rows = cur.execute(
+                        "SELECT student_id,comment FROM subject_performance_comments "
+                        "WHERE school_id=? AND exam_id=? AND subject_id=? "
+                        "AND student_id IN (" + placeholders + ")",
+                        [sid, eid, subid] + student_ids
+                    ).fetchall()
                 subject_comments = {
                     int(row["student_id"]): (row["comment"] or "")
                     for row in comment_rows
@@ -3323,7 +3358,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         else:
             mark_actions = "<form method='post' action='/app/academics/marks/request-correction' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='display:inline-block;width:min(360px,100%%);margin-right:8px'><button class='btn' type='submit'>🔓 Request Correction</button></form>"%(eid,cid,subid)
     else:
-        mark_actions = "<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Submit & Lock Marks</button></form>"%(eid,cid,subid) if students else ""
+        if role=="teacher":
+            mark_actions = ""
+            draft_action = "<button class='btn' type='submit' formaction='/app/academics/marks/save-draft' formmethod='post'>💾 Save Draft</button> <button class='btn' type='submit' formaction='/app/academics/marks/finalize' formmethod='post' onclick=\"return confirm('Submit these marks to the school administrator and lock them? After submission they will become visible to the school administrator and further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>" if students else ""
+        else:
+            mark_actions = "<form method='post' action='/app/academics/marks/finalize' style='display:inline' onsubmit=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\"><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔒 Submit & Lock Marks</button></form>"%(eid,cid,subid) if students else ""
+            draft_action = ""
     rows=""
     for x in students:
         mark=x["marks"]
@@ -3351,11 +3391,61 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<div style='margin-bottom:12px'>%s</div><form method='post' action='/app/academics/marks/save'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
-      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),mark_actions,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>","",mark_actions)+
+      "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",draft_action,mark_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
       "<script>var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='—',points='—',comment='';var pct=(mark/out_of)*100;for(var i=0;i<gradingRules.length;i++){if((mark>=gradingRules[i][0]&&mark<=gradingRules[i][1])||(pct>=gradingRules[i][0]&&pct<=gradingRules[i][1])){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
+
+@router.post("/app/academics/marks/save-draft")
+async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "teacher":
+        return HTMLResponse("Draft saving is available only to teachers.",403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to save marks.",403)
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_teacher_mark_drafts_table(cur)
+        teacher_id=int(request.session.get("teacher_id") or 0)
+        if not teacher_id or not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
+            con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
+        valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+        if not valid:
+            con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+        if _academic_lock(cur,sid,exam_id,class_id,subject_id):
+            con.close(); return HTMLResponse("These marks are already submitted and locked. <a href='/app/academics/marks'>Back</a>",403)
+        form=await request.form()
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+        cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
+        out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+        for st in students:
+            student_id=int(st["id"])
+            raw=form.get(f"mark_{student_id}")
+            comment=str(form.get(f"comment_{student_id}") or "").strip()
+            if raw is None or str(raw).strip()=="":
+                cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?",(sid,teacher_id,exam_id,class_id,subject_id,student_id))
+                continue
+            try:
+                mark=float(raw)
+            except Exception:
+                continue
+            if mark<0 or mark>out_of: continue
+            mark_value=int(mark) if mark.is_integer() else mark
+            cur.execute("""INSERT INTO teacher_mark_drafts
+                (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(school_id,teacher_id,exam_id,class_id,subject_id,student_id)
+                DO UPDATE SET marks=excluded.marks,comment=excluded.comment,updated_at=excluded.updated_at""",
+                (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now))
+        _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+        con.commit()
+    finally:
+        try: con.close()
+        except Exception: pass
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.post("/app/academics/marks/save")
 async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
@@ -3428,6 +3518,12 @@ def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...)
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
         con.close(); return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
+    if str(request.session.get("role",""))=="teacher":
+        _ensure_teacher_mark_drafts_table(cur)
+        teacher_id=int(request.session.get("teacher_id") or 0)
+        cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?",(sid,teacher_id,exam_id,class_id,subject_id,student_id))
+        con.commit(); con.close()
+        return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
     row=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=? ORDER BY id DESC LIMIT 1",(sid,student_id,subject_id,exam_id,class_id)).fetchone()
     if row:
         cur.execute("DELETE FROM marks WHERE id=? AND school_id=?",(row["id"],sid))
@@ -3441,21 +3537,63 @@ def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...)
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.post("/app/academics/marks/finalize")
-def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "marks.edit"):
-        return HTMLResponse("You do not have permission to finalize marks.", 403)
+        return HTMLResponse("You do not have permission to finalize marks.",403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid:
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
-    if not _academic_lock(cur,sid,exam_id,class_id,subject_id):
+    if _academic_lock(cur,sid,exam_id,class_id,subject_id):
+        con.close(); return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+
+    role=str(request.session.get("role",""))
+    if role=="teacher":
+        _ensure_teacher_mark_drafts_table(cur)
+        teacher_id=int(request.session.get("teacher_id") or 0)
+        form=await request.form()
+        # Capture the current screen before publishing.
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
-        _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+        students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+        cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
+        out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+        exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+        for st in students:
+            student_id=int(st["id"])
+            raw=form.get(f"mark_{student_id}")
+            comment=str(form.get(f"comment_{student_id}") or "").strip()
+            if raw is None or str(raw).strip()=="":
+                continue
+            try: mark=float(raw)
+            except Exception: continue
+            if mark<0 or mark>out_of: continue
+            mark_value=int(mark) if mark.is_integer() else mark
+            old=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,student_id,subject_id,exam_id)).fetchone()
+            if old:
+                cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_value,class_id,exam["year"],exam["term"],old["id"],sid))
+            else:
+                cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,exam_id,class_id,mark_value,exam["year"],exam["term"]))
+            _ensure_report_card_fields(cur)
+            if not comment:
+                try:
+                    grading_rules=_load_grading_rules(cur,sid)
+                    _,_,comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
+                except Exception:
+                    comment=""
+            existing_comment=cur.execute("SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,student_id,exam_id,subject_id)).fetchone()
+            if existing_comment:
+                cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
+            else:
+                cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,student_id,exam_id,subject_id,comment,now))
+        cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,teacher_id,exam_id,class_id,subject_id))
+
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
+    _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
