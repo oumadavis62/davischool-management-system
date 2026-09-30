@@ -3547,8 +3547,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         else:
             try:
                 grade,points,default_comment=_subject_grade_details(cur,sid,subid,mark,{subid:grading_rules},out_of)
-                if not subject_comments.get(int(x["id"])) and default_comment:
+                if default_comment:
                     subject_comments[int(x["id"])]=default_comment
+                else:
+                    subject_comments[int(x["id"])]=""
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
@@ -3754,21 +3756,30 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                 cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"],sid))
         else:
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
-        # Subject performance comment is saved with the same student/exam/subject scope.
-        if form.get(f"comment_{st['id']}") is not None:
-            now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-            comment=str(form.get(f"comment_{st['id']}") or "").strip()
-            if not comment:
-                try:
-                    _, _, comment = _subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
-                except Exception as exc:
-                    print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
-                    comment=""
-            existing_comment=cur.execute("SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,st["id"],exam_id,subject_id)).fetchone()
-            if existing_comment:
-                cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
-            else:
-                cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,st["id"],exam_id,subject_id,comment,now))
+        # Performance comments are controlled by the subject grading rules.
+        # Recalculate them on every mark save so changing a student's mark also
+        # replaces any stale comment from the previous grade band.
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            _, _, comment = _subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
+        except Exception as exc:
+            print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
+            comment=""
+        existing_comments=cur.execute(
+            "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
+            (sid,st["id"],exam_id,subject_id)
+        ).fetchall()
+        if existing_comments:
+            for existing_comment in existing_comments:
+                cur.execute(
+                    "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
+                    (comment,now,existing_comment["id"],sid)
+                )
+        else:
+            cur.execute(
+                "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
+                (sid,st["id"],exam_id,subject_id,comment,now)
+            )
     # Saving marks must not be rolled back by an optional audit-trail
     # schema problem. The marks themselves are the primary transaction.
     # Audit logging is optional and must never invalidate the actual marks save.
@@ -3840,17 +3851,27 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
             else:
                 cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,student_id,subject_id,exam_id,class_id,mark_value,exam["year"],exam["term"]))
             _ensure_report_card_fields(cur)
-            if not comment:
-                try:
-                    grading_rules=_load_grading_rules(cur,sid)
-                    _,_,comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
-                except Exception:
-                    comment=""
-            existing_comment=cur.execute("SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",(sid,student_id,exam_id,subject_id)).fetchone()
-            if existing_comment:
-                cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
+            try:
+                grading_rules=_load_grading_rules(cur,sid)
+                _,_,comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
+            except Exception as exc:
+                print("DAVISCHOOL FINALIZE COMMENT FALLBACK:",repr(exc),flush=True)
+                comment=""
+            existing_comments=cur.execute(
+                "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
+                (sid,student_id,exam_id,subject_id)
+            ).fetchall()
+            if existing_comments:
+                for existing_comment in existing_comments:
+                    cur.execute(
+                        "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
+                        (comment,now,existing_comment["id"],sid)
+                    )
             else:
-                cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,student_id,exam_id,subject_id,comment,now))
+                cur.execute(
+                    "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
+                    (sid,student_id,exam_id,subject_id,comment,now)
+                )
         cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,teacher_id,exam_id,class_id,subject_id))
 
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
