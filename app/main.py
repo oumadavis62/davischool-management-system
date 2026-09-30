@@ -121,9 +121,11 @@ class DaviSchoolMultiSessionMiddleware:
             stripped = path[len("/teacher"):] or "/"
             scope["path"] = stripped
             scope["raw_path"] = stripped.encode("utf-8")
-        elif scope_name == "school" and (
-            path == "/school/login" or path == "/school/logout" or path.startswith("/school/account/")
-        ):
+        elif scope_name == "school" and (path == "/school" or path.startswith("/school/")):
+            # School Admin uses the same underlying application routes as the
+            # shared /app UI, but keeps its own session cookie. Strip the portal
+            # prefix before routing so /school/app/... reaches /app/... while
+            # remaining in the School Admin session scope.
             stripped = path[len("/school"):] or "/"
             scope["path"] = stripped
             scope["raw_path"] = stripped.encode("utf-8")
@@ -151,6 +153,8 @@ class DaviSchoolMultiSessionMiddleware:
             if location == "/logout" or location.startswith("/logout?"):
                 return "/school" + location
             if location == "/account" or location.startswith("/account/"):
+                return "/school" + location
+            if location == "/app" or location.startswith("/app/"):
                 return "/school" + location
         return location
 
