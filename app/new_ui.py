@@ -2634,8 +2634,10 @@ def _ensure_academic_locks_table(cur):
     isolated in a savepoint so a PostgreSQL "column already exists" error
     cannot abort the transaction used by marks finalization.
     """
+    # Keep this DDL portable across Render PostgreSQL and local SQLite.
+    # Do not add/alter the existing primary-key column: production databases may
+    # already contain academic_locks with a legacy id definition.
     cur.execute("""CREATE TABLE IF NOT EXISTS academic_locks(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
         exam_id INTEGER NOT NULL,
         class_id INTEGER NOT NULL,
