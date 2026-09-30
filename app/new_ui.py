@@ -3640,7 +3640,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
     finally:
         try: con.close()
         except Exception: pass
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}&saved_at={int(datetime.now(ZoneInfo("Africa/Nairobi")).timestamp())}",303,headers={"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"})"
 
 @router.post("/app/academics/marks/save")
 async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
