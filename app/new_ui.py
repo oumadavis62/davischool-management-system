@@ -3498,7 +3498,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             pending_correction = None
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     grading_link="" if role=="teacher" else "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a>"%subid
-    # Teacher forms default to FINALIZE. Save Draft explicitly overrides the form action,\n    # so Submit & Lock is a normal native form submission with no formaction dependency.\n    form_action = "/app/academics/marks/finalize" if role == "teacher" else "/app/academics/marks/save"
+    # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly\n    # overrides the form action to publish and lock the marks. School Admin keeps\n    # the normal published/main marks workflow unchanged.\n    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
     draft_action = ""
     if locked:
         if role == "school_admin":
@@ -3512,8 +3512,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     else:
         if role=="teacher":
             mark_actions = ""
-            draft_action = ("<button class='btn' type='submit' formaction='/app/academics/marks/save-draft' formmethod='post'>💾 Save Draft</button> "
-                            "<button class='btn' type='submit'>🔒 Submit & Lock Marks</button>") if students else ""
+            draft_action = ("<button class='btn' type='submit'>💾 Save Draft</button> "
+                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize' formmethod='post'>🔒 Submit & Lock Marks</button>") if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
