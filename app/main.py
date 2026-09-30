@@ -169,6 +169,10 @@ class DaviSchoolMultiSessionMiddleware:
         # same time without either login replacing the other. The context key
         # is carried in the URL fragment/query by the portal login flow.
         context_id = connection.query_params.get("session_context", "").strip()
+        if scope_name == "teacher" and not context_id and referer:
+            match = re.search(r"[?&]session_context=([A-Za-z0-9_-]+)", referer)
+            if match:
+                context_id = match.group(1)
         if scope_name == "teacher" and context_id:
             context_id = re.sub(r"[^A-Za-z0-9_-]", "", context_id)[:80]
         else:
@@ -195,7 +199,12 @@ class DaviSchoolMultiSessionMiddleware:
                 headers = MutableHeaders(scope=message)
                 location = headers.get("location")
                 if location:
-                    headers["location"] = self.rewrite_location(location, scope_name)
+                    location = self.rewrite_location(location, scope_name)
+                    if scope_name == "teacher" and context_id and location.startswith("/"):
+                        separator = "&" if "?" in location else "?"
+                        if "session_context=" not in location:
+                            location += separator + "session_context=" + context_id
+                    headers["location"] = location
                 # Keep both role cookies available to every portal route. The
                 # middleware selects the correct one from the portal URL/referrer.
                 cookie_path = "/"
@@ -653,13 +662,28 @@ def home(request: Request):
     scope_name = request.scope.get("davischool_session_scope", "default")
     if scope_name == "teacher":
         form_action = "/teacher/login"
-        portal_note = "Teacher portal — this login stays independent from School Admin."
+        teacher_context = request.scope.get("davischool_session_context", "")
+        if teacher_context:
+            form_action += "?session_context=" + teacher_context
+        portal_note = "Teacher portal — this login stays independent from School Admin and other Teacher accounts."
     elif scope_name == "school":
         form_action = "/school/login"
         portal_note = "School Admin portal — this login stays independent from Teacher."
     else:
         form_action = "/login"
         portal_note = "Sign in to your DaviSchool account"
+    if scope_name == "teacher" and not request.scope.get("davischool_session_context"):
+        return """<html><body><script>
+        (function(){
+          var k="davischool_teacher_tab_context";
+          var ctx=sessionStorage.getItem(k);
+          if(!ctx){
+            ctx=(crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
+            sessionStorage.setItem(k,ctx);
+          }
+          location.replace("/teacher/login?session_context="+encodeURIComponent(ctx));
+        })();
+        </script></body></html>"""
     return f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f0f2f5;display:flex;height:100vh}}.blue-bar{{width:32px;background:#0d8bf2;flex-shrink:0}}.main{{flex:1;display:flex;justify-content:center;align-items:center;padding:20px}}.card{{background:white;width:540px;max-width:100%;padding:48px 48px 40px;border-radius:6px;box-shadow:0 0 0 1px #e2e8f0;text-align:center}}.logo-box{{width:72px;height:72px;background:#0b3d91;color:white;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:32px;margin:0 auto}}.input{{width:100%;padding:14px 16px;border:1px solid #e2e8f0;border-radius:10px;background:#fcfcfc;font-size:14px;outline:none;box-sizing:border-box}}.sign{{background:#0d8bf2;color:white;width:100%;padding:15px;border:none;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;margin-top:10px}}</style></head><body><div class="blue-bar"></div><div class="main"><div class="card"><div class="logo-box">D</div><h1 style="margin:16px 0 0;font-size:40px;font-weight:900;color:#0b3d91">DaviSchool</h1><div style="margin-top:12px;color:#334155;font-size:15px">{portal_note}</div><form method="post" action="{form_action}" style="margin-top:30px;text-align:left"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Username or Email</label><input name="email" class="input" required style="margin-bottom:20px"><label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Password</label><input name="password" type="password" class="input" required style="margin-bottom:18px"><button class="sign">Sign In</button></form></div></div></body></html>"""
 @app.head("/")
 def home_head(): return PlainTextResponse("OK")
