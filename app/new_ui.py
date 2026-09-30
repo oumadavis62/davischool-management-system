@@ -3386,8 +3386,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             if role=="teacher":
                 _ensure_teacher_mark_drafts_table(cur)
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
-                    CASE WHEN d.marks IS NOT NULL THEN CAST(d.marks AS TEXT)
-                         WHEN m.marks IS NOT NULL THEN CAST(m.marks AS TEXT)
+                    CASE WHEN m.marks IS NOT NULL THEN CAST(m.marks AS TEXT)
+                         WHEN d.marks IS NOT NULL THEN CAST(d.marks AS TEXT)
                          ELSE '' END marks
                   FROM students s
                   LEFT JOIN teacher_mark_drafts d
@@ -3608,18 +3608,23 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             student_id=int(st["id"])
             raw=form.get(f"mark_{student_id}")
             comment=str(form.get(f"comment_{student_id}") or "").strip()
+            draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
+            existing_drafts=cur.execute(
+                """SELECT 1 FROM teacher_mark_drafts
+                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                     AND subject_id=? AND student_id=?""",
+                draft_key
+            ).fetchone()
+
             if raw is None or str(raw).strip()=="":
-                # A blank field is an intentional "no mark" entry. Keep a blank
-                # private draft so the published/old mark cannot reappear when
-                # the teacher reloads the page. It is still private until submit.
-                draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
-                existing_blank=cur.execute(
-                    """SELECT 1 FROM teacher_mark_drafts
-                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                         AND subject_id=? AND student_id=?""",
-                    draft_key
-                ).fetchone()
-                if existing_blank:
+                # A blank saved by the teacher is also a blank in the shared
+                # marks record, so the School Admin sees the same state.
+                cur.execute(
+                    """DELETE FROM marks
+                       WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
+                    (sid,student_id,subject_id,exam_id,class_id)
+                )
+                if existing_drafts:
                     cur.execute(
                         """UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?
                            WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
@@ -3633,27 +3638,48 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                            VALUES(?,?,?,?,?,?,?,?,?)""",
                         (sid,teacher_id,exam_id,class_id,subject_id,student_id,'','',now)
                     )
+                try:
+                    cur.execute(
+                        """DELETE FROM subject_performance_comments
+                           WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
+                        (sid,student_id,exam_id,subject_id)
+                    )
+                except Exception:
+                    pass
                 continue
+
             try:
                 mark=float(raw)
             except Exception:
                 continue
-            if mark<0 or mark>out_of: continue
+            if mark<0 or mark>out_of:
+                continue
             mark_value=int(mark) if mark.is_integer() else mark
-            # Update the teacher's existing private draft first. This avoids
-            # relying on database-specific UPSERT behaviour and guarantees that
-            # editing an already-saved draft replaces the old value immediately.
-            draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
-            existing_drafts=cur.execute(
-                """SELECT 1 FROM teacher_mark_drafts
-                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                     AND subject_id=? AND student_id=?""",
-                draft_key
+
+            # Shared published marks record: both School Admin and Teacher
+            # pages read this same value.
+            exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+            old_rows=cur.execute(
+                "SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",
+                (sid,student_id,subject_id,exam_id)
             ).fetchall()
+            if old_rows:
+                for old in old_rows:
+                    cur.execute(
+                        "UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",
+                        (mark_value,class_id,exam["year"],exam["term"],old["id"],sid)
+                    )
+            else:
+                cur.execute(
+                    "INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",
+                    (sid,student_id,subject_id,exam_id,class_id,mark_value,exam["year"],exam["term"])
+                )
+
+            # Keep the teacher draft mirror so the teacher can resume after
+            # logging out, but it is no longer a separate source of truth.
             if existing_drafts:
                 cur.execute(
-                    """UPDATE teacher_mark_drafts
-                       SET marks=?,comment=?,updated_at=?
+                    """UPDATE teacher_mark_drafts SET marks=?,comment=?,updated_at=?
                        WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
                          AND subject_id=? AND student_id=?""",
                     (str(mark_value),comment,now)+draft_key
@@ -3664,6 +3690,30 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                        (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
                        VALUES(?,?,?,?,?,?,?,?,?)""",
                     (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now)
+                )
+
+            # Refresh the shared performance comment from the current grading
+            # rule so both sides show the same comment.
+            try:
+                grading_rules=_load_grading_rules(cur,sid)
+                _,_,shared_comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
+            except Exception:
+                shared_comment=""
+            now_comment=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+            existing_comments=cur.execute(
+                "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
+                (sid,student_id,exam_id,subject_id)
+            ).fetchall()
+            if existing_comments:
+                for ec in existing_comments:
+                    cur.execute(
+                        "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
+                        (shared_comment,now_comment,ec["id"],sid)
+                    )
+            else:
+                cur.execute(
+                    "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
+                    (sid,student_id,exam_id,subject_id,shared_comment,now_comment)
                 )
         # Draft data must be saved even if the optional audit trail has a schema problem.
         # Keep an audit-table/schema failure from aborting the marks transaction.
