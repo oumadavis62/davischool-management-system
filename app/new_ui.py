@@ -3686,8 +3686,22 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                 cur.execute("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",(comment,now,existing_comment["id"],sid))
             else:
                 cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,st["id"],exam_id,subject_id,comment,now))
-    _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
-    con.commit();con.close()
+    # Saving marks must not be rolled back by an optional audit-trail
+    # schema problem. The marks themselves are the primary transaction.
+    try:
+        _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+    except Exception as audit_exc:
+        print("DAVISCHOOL MARKS SAVE AUDIT WARNING:",repr(audit_exc),flush=True)
+    try:
+        con.commit()
+    except Exception as save_exc:
+        try: con.rollback()
+        except Exception: pass
+        print("DAVISCHOOL MARKS SAVE COMMIT ERROR:",repr(save_exc),flush=True)
+        try: con.close()
+        except Exception: pass
+        return HTMLResponse("Save Marks failed: %s" % escape(str(save_exc)),500)
+    con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
