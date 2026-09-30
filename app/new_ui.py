@@ -3447,6 +3447,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     int(row["student_id"]): (row["comment"] or "")
                     for row in comment_rows
                 }
+                # A blank mark means the learner did not have a mark for this
+                # assessment. Never display a stale performance comment from
+                # an earlier mark in that case; the field returns to its
+                # normal empty/default state automatically.
+                for strow in students:
+                    if str(strow["marks"] or "").strip() == "":
+                        subject_comments[int(strow["id"])] = ""
         except Exception as exc:
             print("DAVISCHOOL MARKS COMMENT READ FALLBACK:", repr(exc), flush=True)
             try:
