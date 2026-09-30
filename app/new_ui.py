@@ -399,7 +399,7 @@ def _shell(title, name, role, body, school_id=None):
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#eef5fb;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
 .app{{display:flex;min-height:100vh}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto}}
 .brand{{font-size:20px;font-weight:900;color:white;padding:8px 12px 24px}}.brand small{{display:block;font-size:10px;color:#bfdbfe;margin-top:4px;letter-spacing:1px}}
-.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}
+.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.nav:active,.btn:active,.btnlink:active,.action:active{{transform:translateY(1px)}}.nav-loading,.btn-loading{{opacity:.72;cursor:wait!important;pointer-events:none!important}}.btn-loading::after{{content:'  ⏳';font-size:12px}}button,.btn,.btnlink,.action,.nav{{-webkit-tap-highlight-color:transparent}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:5}}
 .avatar{{width:36px;height:36px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800}}
 .page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
@@ -408,7 +408,7 @@ def _shell(title, name, role, body, school_id=None):
 table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.brand:before{{content:'DS';font-size:18px}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.page{{padding:12px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 12px}}.marks-entry{{overflow:visible;min-width:0}}.marks-table-scroll{{display:block;width:100%;max-width:100%;overflow-x:scroll;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;scrollbar-width:auto;margin:0 -4px;padding:0 4px}}.marks-table{{width:760px;min-width:760px;table-layout:fixed}}.marks-table th,.marks-table td{{padding:10px 8px;font-size:12px}}.marks-table .col-admission{{width:105px}}.marks-table .col-student{{width:170px}}.marks-table .col-mark{{width:105px}}.marks-table .col-grade{{width:80px}}.marks-table .col-points{{width:80px}}.marks-table .col-comment{{width:220px}}.markinput{{width:92px;max-width:92px;min-height:42px;font-size:16px;padding:9px}}.commentinput{{width:210px;max-width:210px;min-width:210px;min-height:42px;font-size:14px;padding:9px}}.marks-table td:nth-child(1),.marks-table td:nth-child(2),.marks-table td:nth-child(4),.marks-table td:nth-child(5){{white-space:normal}}}}
-</style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
+</style><link rel="prefetch" href="/app"><link rel="prefetch" href="/app/students"><link rel="prefetch" href="/app/staff"><link rel="prefetch" href="/app/classes"><link rel="prefetch" href="/app/subjects"><link rel="prefetch" href="/app/exams"><link rel="prefetch" href="/app/academics"><link rel="prefetch" href="/app/report-cards"><link rel="prefetch" href="/app/attendance"><link rel="prefetch" href="/app/timetable"><link rel="prefetch" href="/app/finance"><link rel="prefetch" href="/app/accounting"><link rel="prefetch" href="/app/announcements"><link rel="prefetch" href="/app/users"><link rel="prefetch" href="/app/roles"><link rel="prefetch" href="/app/school-settings"><link rel="prefetch" href="/app/audit"></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
 // Collapse repeated visits to the same school workspace when using the phone Back button.
 // This applies to Students, Staff/Teachers, Teacher Allocations, Academics,
@@ -457,6 +457,33 @@ document.addEventListener('submit',function(event){{
       }})
       .catch(function(){{window.location.href=url.toString();}});
   }}catch(e){{}}
+}},true);
+}})();</script><script>(function(){{
+// Make navigation and actions feel immediate on fast and slow mobile networks.
+// Prefetch is low-priority and only warms same-origin workspace pages; it does
+// not submit forms or change data.
+var prefetched={{}};
+function warm(link){{
+  try{{
+    if(!link || prefetched[link.href])return;
+    var u=new URL(link.href,window.location.href);
+    if(u.origin!==window.location.origin || u.pathname.indexOf('/app')!==0)return;
+    prefetched[link.href]=true;
+    var hint=document.createElement('link'); hint.rel='prefetch'; hint.href=u.href; document.head.appendChild(hint);
+  }}catch(e){{}}
+}}
+document.addEventListener('pointerover',function(e){{var a=e.target.closest&&e.target.closest('a.nav');if(a)warm(a);}},{{passive:true}});
+document.addEventListener('touchstart',function(e){{var a=e.target.closest&&e.target.closest('a.nav');if(a)warm(a);}},{{passive:true}});
+// Give every submitted action instant visual acknowledgement without changing
+// its submitted values or waiting for the server response before showing it.
+document.addEventListener('submit',function(e){{
+  var form=e.target, button=e.submitter;
+  if(!form)return;
+  if(button){{button.classList.add('btn-loading');button.setAttribute('aria-busy','true');}}
+}},true);
+document.addEventListener('click',function(e){{
+  var a=e.target.closest&&e.target.closest('a.nav');
+  if(a && !e.defaultPrevented && a.href){{a.classList.add('nav-loading');a.setAttribute('aria-busy','true');}}
 }},true);
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
