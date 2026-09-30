@@ -3551,7 +3551,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<button class='btn'>Load Students</button></form>"
       "<div class='card section'><div style='margin-bottom:10px;padding:10px;background:%s;border-radius:9px;font-weight:800'>%s</div>"
-      "<div style='margin-bottom:12px'>%s</div><form method='post' action='%s'>"
+      "<div style='margin-bottom:12px'></div><form method='post' action='%s'>"
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
       "%s</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,form_action,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",form_actions,outside_actions)+
