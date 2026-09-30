@@ -3519,10 +3519,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if locked:
         if role == "school_admin":
             mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
-        elif role == "teacher" and pending_correction:
-            mark_actions = "<div class='muted'>🔓 Correction request is awaiting school administrator review.</div>"
         elif role == "teacher":
-            mark_actions = "<form method='post' action='/app/academics/marks/request-correction?exam_id=%s&class_id=%s&subject_id=%s' style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='width:min(360px,100%%)'><button class='btn' type='submit'>🔓 Request Correction</button></form>"%(eid,cid,subid,eid,cid,subid)
+            # Once the School Admin finalizes these marks, the teacher side is
+            # strictly read-only. Correction workflow is intentionally disabled
+            # here and can be restored as a separate feature later.
+            mark_actions = "<div class='muted' style='font-weight:800'>🔒 Marks are FINALIZED and LOCKED. No editing is available on the Teacher side.</div>"
         else:
             mark_actions = ""
     else:
