@@ -3398,8 +3398,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                   WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
                   (eid,subid,cid,sid,teacher_id,eid,subid,sid,sid,cid)).fetchall()
             else:
-                students=cur.execute("""SELECT s.id,s.admission_no,s.name,CASE WHEN m.marks IS NULL THEN '' ELSE CAST(m.marks AS TEXT) END marks
-                  FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
+                students=cur.execute("""SELECT s.id,s.admission_no,s.name,
+                    COALESCE((SELECT CAST(m2.marks AS TEXT)
+                              FROM marks m2
+                              WHERE m2.student_id=s.id AND m2.exam_id=? AND m2.subject_id=? AND m2.school_id=?
+                              ORDER BY m2.id DESC LIMIT 1),'') marks
+                  FROM students s
                   WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
@@ -3601,13 +3605,13 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             # relying on database-specific UPSERT behaviour and guarantees that
             # editing an already-saved draft replaces the old value immediately.
             draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
-            existing_draft=cur.execute(
+            existing_drafts=cur.execute(
                 """SELECT 1 FROM teacher_mark_drafts
                    WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                     AND subject_id=? AND student_id=? LIMIT 1""",
+                     AND subject_id=? AND student_id=?""",
                 draft_key
-            ).fetchone()
-            if existing_draft:
+            ).fetchall()
+            if existing_drafts:
                 cur.execute(
                     """UPDATE teacher_mark_drafts
                        SET marks=?,comment=?,updated_at=?
@@ -3670,9 +3674,12 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
         except Exception: continue
         if mark<0 or mark>out_of: continue
-        old=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,st["id"],subject_id,exam_id)).fetchone()
-        if old:
-            cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"],sid))
+        old_rows=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,st["id"],subject_id,exam_id)).fetchall()
+        if old_rows:
+            # Update all legacy duplicate rows so an older duplicate cannot
+            # make a newly saved mark appear to revert on the next page load.
+            for old in old_rows:
+                cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"],sid))
         else:
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
         # Subject performance comment is saved with the same student/exam/subject scope.
