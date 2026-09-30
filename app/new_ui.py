@@ -2595,6 +2595,12 @@ def _ensure_report_card_fields(cur):
     )""")
 
 def _ensure_academic_locks_table(cur):
+    """Ensure the lock table exists and safely upgrade legacy schemas.
+    
+    Existing production tables are upgraded additively only.  Each ALTER is
+    isolated in a savepoint so a PostgreSQL "column already exists" error
+    cannot abort the transaction used by marks finalization.
+    """
     cur.execute("""CREATE TABLE IF NOT EXISTS academic_locks(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
@@ -2615,9 +2621,25 @@ def _ensure_academic_locks_table(cur):
         ("finalized_at","TEXT"),
     ]:
         try:
+            cur.execute("SAVEPOINT davischool_academic_lock_column")
             cur.execute("ALTER TABLE academic_locks ADD COLUMN %s %s" % (col, definition))
-        except Exception:
-            pass
+            cur.execute("RELEASE SAVEPOINT davischool_academic_lock_column")
+        except Exception as exc:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_academic_lock_column")
+                cur.execute("RELEASE SAVEPOINT davischool_academic_lock_column")
+            except Exception:
+                # If the driver does not support savepoints, leave the
+                # connection usable by rolling back the failed DDL.
+                try:
+                    cur.connection.rollback()
+                except Exception:
+                    pass
+            # An existing column is expected; only unexpected schema errors
+            # are useful in the Render log.
+            msg=str(exc).lower()
+            if "already exists" not in msg and "duplicate column" not in msg:
+                print("DAVISCHOOL ACADEMIC LOCK SCHEMA WARNING:",repr(exc),flush=True)
 
 def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
     _ensure_academic_locks_table(cur)
