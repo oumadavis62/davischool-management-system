@@ -3947,7 +3947,11 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
+    if not sid:
+        print("DAVISCHOOL MARKS FINALIZE SESSION MISSING: path=%s scope=%s role=%s email=%s", request.url.path, request.scope.get("davischool_session_scope"), request.session.get("role"), request.session.get("email"), flush=True)
+        scope_name = str(request.scope.get("davischool_session_scope") or "default")
+        login_path = "/school/login" if scope_name == "school" else ("/teacher/login" if scope_name == "teacher" else "/")
+        return RedirectResponse(login_path,303)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to finalize marks.",403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
