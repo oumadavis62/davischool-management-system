@@ -86,10 +86,10 @@ def davischool_login_page(request: Request):
 
 @router.get("/login")
 def davischool_login_get(request: Request):
-    # A GET can occur after a 303 redirect from an authenticated action when a
-    # session is no longer available. Keep /login from producing a misleading
-    # 405 and return the normal login screen instead.
-    return RedirectResponse("/",303)
+    # Render the login page directly. Redirecting to "/" is unsafe here because
+    # the portal middleware rewrites "/" to /school/login or /teacher/login,
+    # which is routed back to /login and creates an infinite redirect loop.
+    return davischool_login_page(request)
 
 @router.post("/login")
 def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
