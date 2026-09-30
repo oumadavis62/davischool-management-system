@@ -96,10 +96,17 @@ class DaviSchoolMultiSessionMiddleware:
         self.security_flags = "httponly; samesite=" + same_site + ("; secure" if https_only else "")
 
     @staticmethod
-    def scope_for(path):
+    def scope_for(path, referer=""):
         if path == "/teacher" or path.startswith("/teacher/"):
             return "teacher"
         if path == "/school" or path.startswith("/school/"):
+            return "school"
+        # Internal links in the existing UI often point to /app or /account
+        # without the portal prefix. Use the originating portal to keep those
+        # requests on the correct independent session.
+        if "/teacher/" in (referer or ""):
+            return "teacher"
+        if "/school/" in (referer or ""):
             return "school"
         return "default"
 
@@ -152,11 +159,12 @@ class DaviSchoolMultiSessionMiddleware:
             await self.app(scope, receive, send)
             return
         original_path = scope.get("path", "/")
-        scope_name = self.scope_for(original_path)
+        connection = HTTPConnection(scope)
+        referer = connection.headers.get("referer", "")
+        scope_name = self.scope_for(original_path, referer)
         scope["davischool_session_scope"] = scope_name
         cookie_name = self.cookie_name(scope_name)
         self.strip_prefix(scope, scope_name)
-        connection = HTTPConnection(scope)
         initial_empty = True
         if cookie_name in connection.cookies:
             raw = connection.cookies[cookie_name].encode("utf-8")
@@ -175,7 +183,9 @@ class DaviSchoolMultiSessionMiddleware:
                 location = headers.get("location")
                 if location:
                     headers["location"] = self.rewrite_location(location, scope_name)
-                cookie_path = "/teacher" if scope_name == "teacher" else "/school" if scope_name == "school" else "/"
+                # Keep both role cookies available to every portal route. The
+                # middleware selects the correct one from the portal URL/referrer.
+                cookie_path = "/"
                 if scope["session"]:
                     raw = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
                     signed = self.signer.sign(raw).decode("utf-8")
