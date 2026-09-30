@@ -175,8 +175,17 @@ def install_legacy_school_redirect(app):
     async def redirect_legacy_school(request: Request, call_next):
         path = request.url.path
 
-        # Legacy school URLs now go to the new application.
+        # The /school portal is now a real session-isolated namespace for the
+        # new application. Do NOT redirect /school/app/* back to /app: doing
+        # that changes the request from the School Admin session cookie to the
+        # shared/default session cookie and causes POST actions (especially
+        # Submit & Lock Marks) to fall through to the login page.
+        #
+        # /school/login and /school/logout are also handled by the same new
+        # UI after the middleware strips the /school prefix.
         if path == "/school" or path.startswith("/school/"):
+            if path == "/school/login" or path == "/school/logout" or path == "/school/app" or path.startswith("/school/app/"):
+                return await call_next(request)
             return RedirectResponse("/app", status_code=303)
 
         # IMPORTANT: do not handle /verify-school-code here.
