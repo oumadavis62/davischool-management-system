@@ -443,10 +443,13 @@ document.addEventListener('submit',function(event){{
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
-    // Let the browser submit marks actions natively. This is important for
-    // Submit & Lock because its button has a different formaction from the
-    // main form and the portal middleware must preserve the correct session.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks/delete')return;
+    // Let the browser submit marks actions natively. The School Admin and
+    // Teacher portals use /school/app/* and /teacher/app/*, while the shared
+    // router receives /app/*. Normalize the portal prefix first.
+    var marksPath=path;
+    if(marksPath.indexOf('/school/app/')===0)marksPath=marksPath.substring('/school'.length);
+    if(marksPath.indexOf('/teacher/app/')===0)marksPath=marksPath.substring('/teacher'.length);
+    if(marksPath==='/app/academics/marks/save' || marksPath==='/app/academics/marks/save-draft' || marksPath==='/app/academics/marks/finalize' || marksPath==='/app/academics/marks/unfinalize' || marksPath==='/app/academics/marks/delete')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
