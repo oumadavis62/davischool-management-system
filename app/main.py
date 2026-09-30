@@ -676,11 +676,11 @@ def home(request: Request):
         return """<html><body><script>
         (function(){
           var k="davischool_teacher_tab_context";
-          var ctx=sessionStorage.getItem(k);
-          if(!ctx){
-            ctx=(crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
-            sessionStorage.setItem(k,ctx);
-          }
+          // A bare Teacher Login URL always starts a fresh tab-specific
+          // context. This also prevents a newly opened tab from inheriting
+          // the opener's copied sessionStorage value.
+          var ctx=(crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
+          sessionStorage.setItem(k,ctx);
           location.replace("/teacher/login?session_context="+encodeURIComponent(ctx));
         })();
         </script></body></html>"""
