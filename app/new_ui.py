@@ -3712,6 +3712,19 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                    WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
                 (sid,st["id"],subject_id,exam_id,class_id)
             )
+            # A blank mark also means there is no performance comment for this
+            # student/subject/assessment. Otherwise the old comment remains in
+            # subject_performance_comments and is shown again even though the
+            # mark has been cleared.
+            try:
+                _ensure_report_card_fields(cur)
+                cur.execute(
+                    """DELETE FROM subject_performance_comments
+                       WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
+                    (sid,st["id"],exam_id,subject_id)
+                )
+            except Exception as exc:
+                print("DAVISCHOOL BLANK MARK COMMENT CLEAR WARNING:",repr(exc),flush=True)
             continue
         try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
         except Exception: continue
