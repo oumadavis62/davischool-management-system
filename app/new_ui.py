@@ -365,9 +365,6 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/subjects","📚","Subjects","subjects.view"),
             ("/app/exams","🧪","Examinations","exams.view"),
             ("/app/academics","📝","Academics","marks.view"),
-            ("/app/academics/allocations","👩‍🏫","Teacher Allocations","staff.edit"),
-            ("/app/academics/assessments","📋","SBA / CBA","marks.edit"),
-            ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
             ("/app/report-cards","📄","Report Cards","reports.view"),
             ("/app/attendance","✓","Attendance","attendance.view"),
             ("/app/timetable","🗓","Timetable","timetable.view"),
@@ -838,7 +835,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
-    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
+    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/academics/marks-corrections","🔓","Marks Corrections","Review teacher correction requests"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
     action_html="".join("<a class='action' href='%s' onclick='window.location.href=this.href; return false;'><span>%s</span>%s<small>%s</small></a>"%x for x in actions)
     body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Marks Average</div><div class='kpi'>%.1f%%</div></div></div>"%(len(subjects),len(exams),len(classes),float(stat["avg_mark"] or 0))
     body+="<div class='card section'><h2>Academic Selection</h2><form method='get' action='/app/academics' class='academic-select'><select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>"+yopts+"</select><select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>"+topts+"</select><select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>All Exams</option>"+eopts+"</select><select name='class_id' class='field' onchange='this.form.submit()'><option value=''>All Classes</option>"+copts+"</select><select name='subject_id' class='field' onchange='this.form.submit()'><option value=''>All Subjects</option>"+sopts+"</select></form></div><div class='section'><div class='actions'>"+action_html+"</div></div>"
@@ -912,6 +909,42 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
     return {"rows": rows, "details": details, "exam_marks": exam_marks,
             "total": total, "points": points, "count": count,
             "average": average, "overall_grade": overall}
+
+
+def _ensure_assessment_table(cur):
+    """Create the additive SBA/CBA storage table on older installations."""
+    try:
+        # PostgreSQL
+        cur.execute("""CREATE TABLE IF NOT EXISTS assessment_scores(
+            id BIGSERIAL PRIMARY KEY,
+            school_id INTEGER,
+            student_id INTEGER,
+            subject_id INTEGER,
+            term TEXT,
+            year TEXT,
+            component TEXT,
+            score REAL,
+            out_of REAL,
+            created_at TEXT
+        )""")
+    except Exception:
+        try:
+            # SQLite fallback
+            cur.execute("""CREATE TABLE IF NOT EXISTS assessment_scores(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                school_id INTEGER,
+                student_id INTEGER,
+                subject_id INTEGER,
+                term TEXT,
+                year TEXT,
+                component TEXT,
+                score REAL,
+                out_of REAL,
+                created_at TEXT
+            )""")
+        except Exception:
+            # Leave an already-existing compatible table untouched.
+            pass
 
 
 def _ensure_overall_grading_table(cur):
@@ -2531,8 +2564,21 @@ def app_home(request: Request):
             fees=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments WHERE school_id=?",(school_id,)).fetchone()["v"]
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
-<div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>📝</span>Record Marks</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📄</span>Report Cards</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div></div>"""
+<div class='section'><h2>Daily operations</h2><div class='actions'>
+<a class='action' href='/app/students'><span>🎓</span>Students</a>
+<a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a>
+<a class='action' href='/app/attendance'><span>✓</span>Attendance</a>
+<a class='action' href='/app/finance/fees'><span>💰</span>Finance</a>
+<a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a>
+<a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a>
+<a class='action' href='/app/accounting'><span>📚</span>Accounting</a>
+<a class='action' href='/app/users'><span>👤</span>Users</a></div></div>
+<div class='section'><h2>Administration</h2><div class='actions'>
+<a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a>
+<a class='action' href='/app/students/promotion'><span>🎓</span>Promotion / Transfer</a>
+<a class='action' href='/app/roles'><span>🔐</span>Roles</a>
+<a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a>
+<a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div></div>"""
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
@@ -4137,6 +4183,78 @@ def _ensure_teacher_allocations_table(cur):
         subject_id INTEGER NOT NULL,
         UNIQUE(school_id,teacher_id,class_id,subject_id)
     )""")
+
+@router.get("/app/academics/assessments", response_class=HTMLResponse)
+def assessments_page(request: Request, student_id: str = "", subject_id: str = "", term: str = "", year: str = ""):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if not _require_permission(request, sid, "marks.view"):
+        return HTMLResponse("You do not have permission to view assessment records.", 403)
+    con=_db(); cur=con.cursor()
+    _ensure_assessment_table(cur)
+    students=cur.execute("SELECT * FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    stid=int(student_id) if str(student_id).isdigit() else 0
+    subid=int(subject_id) if str(subject_id).isdigit() else 0
+    rows=cur.execute("""SELECT a.*,s.name subject_name,st.name student_name,st.admission_no
+                        FROM assessment_scores a
+                        JOIN subjects s ON s.id=a.subject_id
+                        JOIN students st ON st.id=a.student_id
+                        WHERE a.school_id=?
+                          AND (?=0 OR a.student_id=?)
+                          AND (?=0 OR a.subject_id=?)
+                          AND (?='' OR a.term=?)
+                          AND (?='' OR a.year=?)
+                        ORDER BY a.id DESC LIMIT 500""",
+                     (sid,stid,stid,subid,subid,term,term,year,year)).fetchall()
+    con.commit(); con.close()
+    so="".join(f"<option value='{s['id']}' {'selected' if int(s['id'])==subid else ''}>{escape(str(s['name']))}</option>" for s in subjects)
+    sto="".join(f"<option value='{s['id']}' {'selected' if int(s['id'])==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
+    body=f"""<div class='page'><h1>SBA / CBA</h1>
+<div class='muted'>Record continuous assessment components separately from examination marks.</div>
+<div class='card section'><form method='get' action='/app/academics/assessments' class='academic-select'>
+<select name='student_id' class='field'><option value=''>All Students</option>{sto}</select>
+<select name='subject_id' class='field'><option value=''>All Subjects</option>{so}</select>
+<input name='term' value='{escape(term)}' placeholder='Term 1' class='field'>
+<input name='year' value='{escape(year)}' placeholder='Year' class='field'>
+<button class='btn'>Filter</button></form></div>
+<div class='card section'><h2>Enter Assessment</h2>
+<form method='post' action='/app/academics/assessments/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<select name='student_id' required class='field'>{sto}</select>
+<select name='subject_id' required class='field'>{so}</select>
+<input name='term' required value='{escape(term or "Term 1")}' placeholder='Term 1' class='field'>
+<input name='year' required value='{escape(year or str(datetime.now(ZoneInfo("Africa/Nairobi")).year))}' class='field'>
+<input name='component' required placeholder='CAT 1 / Project / SBA' class='field'>
+<input name='score' required type='number' min='0' step='0.01' placeholder='Score' class='field'>
+<input name='out_of' required type='number' min='0.01' step='0.01' value='100' placeholder='Out of' class='field'>
+<button class='btn'>Save Assessment</button></form></div>
+<div class='card section'><h2>Assessment Records ({len(rows)})</h2>
+<table><thead><tr><th>Student</th><th>Admission No.</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th></tr></thead>
+<tbody>{"".join(f"<tr><td>{escape(str(r['student_name']))}</td><td>{escape(str(r['admission_no'] or ''))}</td><td>{escape(str(r['subject_name']))}</td><td>{escape(str(r['term'] or ''))}</td><td>{escape(str(r['year'] or ''))}</td><td>{escape(str(r['component'] or ''))}</td><td>{float(r['score'] or 0):.2f}</td><td>{float(r['out_of'] or 0):.2f}</td><td>{escape(str(r['created_at'] or ''))}</td></tr>" for r in rows) or "<tr><td colspan='9'>No assessment records yet.</td></tr>"}</tbody></table></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.academic-select{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}}@media(max-width:900px){{.academic-select{{grid-template-columns:1fr 1fr}}}}</style></div>"""
+    return _school_page(request,"SBA / CBA",body)
+
+@router.post("/app/academics/assessments/add")
+def assessments_add(request: Request, student_id:int=Form(...), subject_id:int=Form(...), term:str=Form(...), year:str=Form(...), component:str=Form(...), score:float=Form(...), out_of:float=Form(...)):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to edit assessment records.",403)
+    if not term.strip() or not year.strip() or not component.strip() or out_of<=0 or score<0 or score>out_of:
+        return HTMLResponse("Invalid assessment details. <a href='/app/academics/assessments'>Back</a>",400)
+    con=_db(); cur=con.cursor(); _ensure_assessment_table(cur)
+    student=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    subject=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not student or not subject:
+        con.close()
+        return HTMLResponse("Selected student or subject does not belong to this school. <a href='/app/academics/assessments'>Back</a>",400)
+    cur.execute("INSERT INTO assessment_scores(school_id,student_id,subject_id,term,year,component,score,out_of,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (sid,student_id,subject_id,term.strip(),year.strip(),component.strip(),score,out_of,datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+    _audit(cur,sid,request,"ASSESSMENT_SAVE",f"Saved {component.strip()} for student {student_id}")
+    con.commit(); con.close()
+    return RedirectResponse("/app/academics/assessments",303)
 
 @router.get("/app/academics/allocations", response_class=HTMLResponse)
 def teacher_allocations_page(request: Request):
