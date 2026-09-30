@@ -136,6 +136,8 @@ class DaviSchoolMultiSessionMiddleware:
                 return "/teacher/login" + location[1:]
             if location == "/login" or location.startswith("/login?"):
                 return "/teacher" + location
+            if location == "/teacher/login" or location.startswith("/teacher/login?"):
+                return location
             if location == "/logout" or location.startswith("/logout?"):
                 return "/teacher" + location
             if location == "/account" or location.startswith("/account/"):
@@ -162,7 +164,19 @@ class DaviSchoolMultiSessionMiddleware:
         referer = connection.headers.get("referer", "")
         scope_name = self.scope_for(original_path, referer)
         scope["davischool_session_scope"] = scope_name
+        # Teacher sessions are intentionally isolated per login context. A
+        # browser can therefore keep Teacher A and Teacher B signed in at the
+        # same time without either login replacing the other. The context key
+        # is carried in the URL fragment/query by the portal login flow.
+        context_id = connection.query_params.get("session_context", "").strip()
+        if scope_name == "teacher" and context_id:
+            context_id = re.sub(r"[^A-Za-z0-9_-]", "", context_id)[:80]
+        else:
+            context_id = ""
+        scope["davischool_session_context"] = context_id
         cookie_name = self.cookie_name(scope_name)
+        if scope_name == "teacher" and context_id:
+            cookie_name = "davischool_teacher_" + context_id
         self.strip_prefix(scope, scope_name)
         initial_empty = True
         if cookie_name in connection.cookies:
