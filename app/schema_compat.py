@@ -63,6 +63,11 @@ def _ensure_live_postgres_schema():
             "exam_id": "INTEGER", "class_id": "INTEGER", "marks": "INTEGER",
             "year": "TEXT", "term": "TEXT",
         },
+        "assessment_scores": {
+            "school_id": "INTEGER", "student_id": "INTEGER", "subject_id": "INTEGER",
+            "term": "TEXT", "year": "TEXT", "component": "TEXT",
+            "score": "REAL", "out_of": "REAL", "created_at": "TEXT",
+        },
         "set_marks_config": {
             "school_id": "INTEGER", "subject_id": "INTEGER", "class_name": "TEXT",
             "stream": "TEXT", "year": "TEXT", "term": "TEXT", "exam_id": "INTEGER",
@@ -136,6 +141,18 @@ def _ensure_live_postgres_schema():
                 reviewed_by TEXT,
                 reviewed_at TEXT,
                 review_note TEXT
+            )""");
+            cur.execute("""CREATE TABLE IF NOT EXISTS assessment_scores(
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER,
+                student_id INTEGER,
+                subject_id INTEGER,
+                term TEXT,
+                year TEXT,
+                component TEXT,
+                score REAL,
+                out_of REAL,
+                created_at TEXT
             )""")
             for table, columns in migrations.items():
                 cur.execute(
