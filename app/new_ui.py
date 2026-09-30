@@ -3703,14 +3703,41 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,teacher_id,exam_id,class_id,subject_id))
 
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    # The lock is the actual publication/submit operation. Save it even if the
-    # optional audit trail has a legacy-schema problem.
-    cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
+    # The lock is the actual publication/submit operation. If a legacy database
+    # already has a lock row for this exact selection, normalize that row to
+    # finalized instead of creating a second lock record.
+    existing_lock=cur.execute(
+        "SELECT id FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",
+        (sid,exam_id,class_id,subject_id)
+    ).fetchone()
+    if existing_lock:
+        cur.execute(
+            "UPDATE academic_locks SET status=?,finalized_by=?,finalized_at=? WHERE id=? AND school_id=?",
+            ("finalized",request.session.get("email",""),now,existing_lock["id"],sid)
+        )
+    else:
+        cur.execute(
+            "INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",
+            (sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now)
+        )
+    # Commit the actual lock independently of the optional audit trail.
     try:
         _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
     except Exception as audit_exc:
         print("DAVISCHOOL MARKS FINALIZE AUDIT WARNING:",repr(audit_exc),flush=True)
-    con.commit();con.close()
+    con.commit()
+    # Verify the committed lock before redirecting. This makes a failed/legacy
+    # lock write visible in the Render log instead of silently returning to the
+    # editable marks screen.
+    verified=cur.execute(
+        "SELECT id,status FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='finalized' ORDER BY id DESC LIMIT 1",
+        (sid,exam_id,class_id,subject_id)
+    ).fetchone()
+    if not verified:
+        print("DAVISCHOOL MARKS FINALIZE ERROR: lock was not persisted",flush=True)
+        con.close()
+        return HTMLResponse("Marks could not be locked. Please try Submit & Lock Marks again.",500)
+    con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
