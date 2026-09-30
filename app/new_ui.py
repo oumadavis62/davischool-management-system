@@ -3201,14 +3201,14 @@ def _ensure_teacher_mark_drafts_table(cur):
         ON teacher_mark_drafts(school_id,teacher_id,exam_id,class_id,subject_id,student_id)""")
 
 def _ensure_marks_correction_requests_table(cur):
-    """Create the teacher mark-correction request store additively."""
+    """Create/upgrade the teacher mark-correction request store without deleting existing requests."""
     cur.execute("""CREATE TABLE IF NOT EXISTS marks_correction_requests(
-        id INTEGER PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
         exam_id INTEGER NOT NULL,
         class_id INTEGER NOT NULL,
         subject_id INTEGER NOT NULL,
-        teacher_id INTEGER NOT NULL,
+        teacher_id INTEGER,
         requested_by TEXT,
         requested_at TEXT,
         reason TEXT,
@@ -3217,6 +3217,32 @@ def _ensure_marks_correction_requests_table(cur):
         reviewed_at TEXT,
         review_note TEXT
     )""")
+    # Older production databases may already have this table with a partial
+    # schema. Add missing columns only; never recreate or delete the table.
+    for col, definition in [
+        ("school_id","INTEGER"),
+        ("exam_id","INTEGER"),
+        ("class_id","INTEGER"),
+        ("subject_id","INTEGER"),
+        ("teacher_id","INTEGER"),
+        ("requested_by","TEXT"),
+        ("requested_at","TEXT"),
+        ("reason","TEXT"),
+        ("status","TEXT DEFAULT 'pending'"),
+        ("reviewed_by","TEXT"),
+        ("reviewed_at","TEXT"),
+        ("review_note","TEXT"),
+    ]:
+        try:
+            cur.execute("SAVEPOINT davischool_correction_column")
+            cur.execute("ALTER TABLE marks_correction_requests ADD COLUMN %s %s" % (col, definition))
+            cur.execute("RELEASE SAVEPOINT davischool_correction_column")
+        except Exception:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_correction_column")
+                cur.execute("RELEASE SAVEPOINT davischool_correction_column")
+            except Exception:
+                pass
     try:
         cur.execute("""CREATE INDEX IF NOT EXISTS idx_marks_correction_school
             ON marks_correction_requests(school_id,status,id)""")
@@ -3731,7 +3757,25 @@ def request_marks_correction(request: Request, exam_id:int=Form(...), class_id:i
     if existing:
         con.close();return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO marks_correction_requests(school_id,exam_id,class_id,subject_id,teacher_id,requested_by,requested_at,reason,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,int(teacher_id),request.session.get("email",""),now,reason,"pending"))
+    request_values=(sid,exam_id,class_id,subject_id,int(teacher_id),request.session.get("email",""),now,reason,"pending")
+    # Some older PostgreSQL deployments have this table with an id column but
+    # without a working BIGSERIAL default. Try the normal insert first; if that
+    # legacy schema rejects it, generate the request id from the existing rows
+    # inside a savepoint. Existing requests are never deleted or rewritten.
+    try:
+        cur.execute("SAVEPOINT davischool_correction_insert")
+        cur.execute("INSERT INTO marks_correction_requests(school_id,exam_id,class_id,subject_id,teacher_id,requested_by,requested_at,reason,status) VALUES(?,?,?,?,?,?,?,?,?)",request_values)
+        cur.execute("RELEASE SAVEPOINT davischool_correction_insert")
+    except Exception as insert_exc:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT davischool_correction_insert")
+            cur.execute("RELEASE SAVEPOINT davischool_correction_insert")
+        except Exception:
+            pass
+        print("DAVISCHOOL MARKS CORRECTION INSERT RETRY:",repr(insert_exc),flush=True)
+        next_id=cur.execute("SELECT COALESCE(MAX(id),0)+1 AS next_id FROM marks_correction_requests").fetchone()["next_id"]
+        cur.execute("INSERT INTO marks_correction_requests(id,school_id,exam_id,class_id,subject_id,teacher_id,requested_by,requested_at,reason,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (int(next_id),)+request_values)
     # The correction request itself must never be lost because an optional audit
     # record has a legacy schema problem. Save the request first; audit failure
     # is only a warning and does not block the approval workflow.
