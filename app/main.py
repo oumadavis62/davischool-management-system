@@ -11,6 +11,9 @@ import re
 import traceback
 import threading
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.requests import HTTPConnection
+from itsdangerous import BadSignature, TimestampSigner
 import random
 from datetime import datetime, timedelta
 from app.schema_compat import ensure_schema_compatibility
@@ -84,7 +87,106 @@ async def idle_session_timeout(request: Request, call_next):
     response = await call_next(request)
     return response
 
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+class DaviSchoolMultiSessionMiddleware:
+    """Keep Teacher and School Admin logins in separate browser cookies."""
+    def __init__(self, app, secret_key, max_age=60*60*12, https_only=False, same_site="lax"):
+        self.app = app
+        self.signer = TimestampSigner(str(secret_key))
+        self.max_age = max_age
+        self.security_flags = "httponly; samesite=" + same_site + ("; secure" if https_only else "")
+
+    @staticmethod
+    def scope_for(path):
+        if path == "/teacher" or path.startswith("/teacher/"):
+            return "teacher"
+        if path == "/school" or path.startswith("/school/"):
+            return "school"
+        return "default"
+
+    @staticmethod
+    def cookie_name(scope_name):
+        return {"teacher": "davischool_teacher_session", "school": "davischool_school_session", "default": "session"}[scope_name]
+
+    @staticmethod
+    def strip_prefix(scope, scope_name):
+        path = scope.get("path", "/")
+        if scope_name == "teacher" and (path == "/teacher" or path.startswith("/teacher/")):
+            stripped = path[len("/teacher"):] or "/"
+            scope["path"] = stripped
+            scope["raw_path"] = stripped.encode("utf-8")
+        elif scope_name == "school" and (
+            path == "/school/login" or path == "/school/logout" or path.startswith("/school/account/")
+        ):
+            stripped = path[len("/school"):] or "/"
+            scope["path"] = stripped
+            scope["raw_path"] = stripped.encode("utf-8")
+
+    @staticmethod
+    def rewrite_location(location, scope_name):
+        if not location or not location.startswith("/"):
+            return location
+        if scope_name == "teacher":
+            if location == "/" or location.startswith("/?"):
+                return "/teacher/login" + location[1:]
+            if location == "/login" or location.startswith("/login?"):
+                return "/teacher" + location
+            if location == "/logout" or location.startswith("/logout?"):
+                return "/teacher" + location
+            if location == "/account" or location.startswith("/account/"):
+                return "/teacher" + location
+            if location == "/app" or location.startswith("/app/"):
+                return "/teacher" + location
+        elif scope_name == "school":
+            if location == "/" or location.startswith("/?"):
+                return "/school/login" + location[1:]
+            if location == "/login" or location.startswith("/login?"):
+                return "/school" + location
+            if location == "/logout" or location.startswith("/logout?"):
+                return "/school" + location
+            if location == "/account" or location.startswith("/account/"):
+                return "/school" + location
+        return location
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        original_path = scope.get("path", "/")
+        scope_name = self.scope_for(original_path)
+        scope["davischool_session_scope"] = scope_name
+        cookie_name = self.cookie_name(scope_name)
+        self.strip_prefix(scope, scope_name)
+        connection = HTTPConnection(scope)
+        initial_empty = True
+        if cookie_name in connection.cookies:
+            raw = connection.cookies[cookie_name].encode("utf-8")
+            try:
+                raw = self.signer.unsign(raw, max_age=self.max_age)
+                scope["session"] = json.loads(base64.b64decode(raw))
+                initial_empty = False
+            except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
+                scope["session"] = {}
+        else:
+            scope["session"] = {}
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                location = headers.get("location")
+                if location:
+                    headers["location"] = self.rewrite_location(location, scope_name)
+                cookie_path = "/teacher" if scope_name == "teacher" else "/school" if scope_name == "school" else "/"
+                if scope["session"]:
+                    raw = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
+                    signed = self.signer.sign(raw).decode("utf-8")
+                    headers.append("Set-Cookie", f"{cookie_name}={signed}; path={cookie_path}; Max-Age={self.max_age}; {self.security_flags}")
+                elif not initial_empty:
+                    headers.append("Set-Cookie", f"{cookie_name}=null; path={cookie_path}; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
+            await send(message)
+        await self.app(scope, receive, send_wrapper)
+
+app.add_middleware(DaviSchoolMultiSessionMiddleware, secret_key=SECRET_KEY,
+                   https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
 @app.get("/healthz")
 def healthz():
