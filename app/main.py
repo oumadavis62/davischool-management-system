@@ -97,16 +97,15 @@ class DaviSchoolMultiSessionMiddleware:
 
     @staticmethod
     def scope_for(path, referer=""):
-        if path == "/teacher" or path.startswith("/teacher/"):
-            return "teacher"
-        if path == "/school" or path.startswith("/school/"):
-            return "school"
-        # Internal links in the existing UI often point to /app or /account
-        # without the portal prefix. Use the originating portal to keep those
-        # requests on the correct independent session.
+        # Prefer the originating portal when an existing page links to a
+        # legacy/shared route such as /school/record-marks or /app/...
         if "/teacher/" in (referer or ""):
             return "teacher"
         if "/school/" in (referer or ""):
+            return "school"
+        if path == "/teacher" or path.startswith("/teacher/"):
+            return "teacher"
+        if path == "/school" or path.startswith("/school/"):
             return "school"
         return "default"
 
