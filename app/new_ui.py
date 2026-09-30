@@ -3528,8 +3528,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     else:
         if role=="teacher":
             mark_actions = ""
-            draft_action = ("<button class='btn' type='submit'>💾 Save Draft</button> "
-                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize' formmethod='post'>🔒 Submit & Lock Marks</button>") if students else ""
+            draft_action = "<button class='btn' type='submit'>💾 Save Draft</button>" if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
