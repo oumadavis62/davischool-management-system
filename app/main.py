@@ -99,11 +99,11 @@ class DaviSchoolMultiSessionMiddleware:
     def scope_for(path, referer=""):
         # Prefer the originating portal when an existing page links to a
         # legacy/shared route such as /school/record-marks or /app/...
-        if "/teacher/" in (referer or ""):
+        if "/teacher/" in (referer or "") or "/portal/teacher" in (referer or ""):
             return "teacher"
         if "/school/" in (referer or ""):
             return "school"
-        if path == "/teacher" or path.startswith("/teacher/"):
+        if path == "/teacher" or path.startswith("/teacher/") or path == "/portal/teacher":
             return "teacher"
         if path == "/school" or path.startswith("/school/"):
             return "school"
@@ -751,7 +751,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     request.session["is_impersonating"]=False
     session_scope = request.scope.get("davischool_session_scope", "default")
     if session_scope == "teacher":
-        return RedirectResponse("/teacher/app", status_code=303)
+        return RedirectResponse("/portal/teacher", status_code=303)
     if session_scope == "school":
         return RedirectResponse("/school/dashboard", status_code=303)
     return RedirectResponse("/app", status_code=303)
