@@ -3498,7 +3498,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             pending_correction = None
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
     grading_link="" if role=="teacher" else "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a>"%subid
-    # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly\n    # overrides the form action to publish and lock the marks. School Admin keeps\n    # the normal published/main marks workflow unchanged.\n    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
+    # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
+    # overrides the form action to publish and lock the marks. School Admin keeps
+    # the normal published/main marks workflow unchanged.
+    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
     draft_action = ""
     if locked:
         if role == "school_admin":
@@ -3640,7 +3643,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit marks.", 403)
     form=await request.form()
-    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
+    con=_db();cur=con.cursor()
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close()
         return HTMLResponse("You are not allocated to this class and subject.", 403)
