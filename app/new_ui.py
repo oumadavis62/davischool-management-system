@@ -3516,7 +3516,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                             "<button class='btn' type='submit' formaction='/app/academics/marks/finalize' "
                             "formmethod='post' "
                             "onclick=\"return confirm('Submit these marks to the school administrator and lock them? After submission they will become visible to the school administrator and further edits will require an approved correction request.');\">"
-                            "🔒 Submit & Lock Marks</button>") if students else ""   else:
+                            "🔒 Submit & Lock Marks</button>") if students else ""
+        else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
             mark_actions = ("<button class='btn' type='submit'>💾 Save Marks</button> "
