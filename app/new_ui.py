@@ -3905,7 +3905,13 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         except Exception: pass
         return HTMLResponse("Save Marks failed: %s" % escape(str(save_exc)),500)
     con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    # Keep the post-save redirect inside the same role-specific portal.
+    # The shared /app route is used by both School Admin and Teacher, so an
+    # unscoped redirect can otherwise fall back to the other role's session
+    # cookie when both accounts are signed in in the same browser.
+    session_scope = request.scope.get("davischool_session_scope")
+    redirect_prefix = "/school" if session_scope == "school" else ("/teacher" if session_scope == "teacher" else "")
+    return RedirectResponse(f"{redirect_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
