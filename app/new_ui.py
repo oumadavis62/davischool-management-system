@@ -840,7 +840,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     action_html="".join("<a class='action' href='%s' onclick='window.location.href=this.href; return false;'><span>%s</span>%s<small>%s</small></a>"%x for x in actions)
     body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Marks Average</div><div class='kpi'>%.1f%%</div></div></div>"%(len(subjects),len(exams),len(classes),float(stat["avg_mark"] or 0))
     body+="<div class='card section'><h2>Academic Selection</h2><form method='get' action='/app/academics' class='academic-select'><select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>"+yopts+"</select><select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>"+topts+"</select><select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>All Exams</option>"+eopts+"</select><select name='class_id' class='field' onchange='this.form.submit()'><option value=''>All Classes</option>"+copts+"</select><select name='subject_id' class='field' onchange='this.form.submit()'><option value=''>All Subjects</option>"+sopts+"</select></form></div><div class='section'><div class='actions'>"+action_html+"</div></div>"
-    body+="<div class='card section'><h2>Selected Academic Results</h2><div class='grid' style='margin:0'><div class='card'><div class='label'>Entries</div><div class='kpi'>%d</div></div><div class='card'><div class='label'><b>Average</b></div><div class='kpi'>%.1f%%</div></div><div class='card'><div class='label'>Highest</div><div class='kpi'>%.1f</div></div><div class='card'><div class='label'>Lowest</div><div class='kpi'>%.1f</div></div></div></div></div><style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;cursor:pointer}.academic-select{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.action small{display:block;color:#64748b;margin-top:5px}@media(max-width:900px){.academic-select{grid-template-columns:1fr 1fr}}</style>"%(int(selected["entries"] or 0),float(selected["avg_mark"] or 0),float(selected["high"] or 0),float(selected["low"] or 0))
+    body+="<div class='card section'><h2>Selected Academic Results</h2><div class='grid' style='margin:0'><div class='card'><div class='label'>Entries</div><div class='kpi'>%d</div></div><div class='card'><div class='label'><b>Average</b></div><div class='kpi'>%.1f%%</div></div><div class='card'><div class='label'>Highest</div><div class='kpi'>%.1f</div></div><div class='card'><div class='label'>Lowest</div><div class='kpi'>%.1f</div></div></div></div></div><style>.deletebtn,[data-action='delete-mark'],button[formaction='/app/academics/marks/delete']{display:none!important}.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;cursor:pointer}.academic-select{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.action small{display:block;color:#64748b;margin-top:5px}@media(max-width:900px){.academic-select{grid-template-columns:1fr 1fr}}</style>"%(int(selected["entries"] or 0),float(selected["avg_mark"] or 0),float(selected["high"] or 0),float(selected["low"] or 0))
     return _school_page(request,"Academic Management",body)
 
 
@@ -3550,7 +3550,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'>"
       "<table><thead><tr><th>Admission</th><th>Student</th><th>Mark / %s</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table>%s"
       "</form><div style='margin-top:10px'>%s</div></div></div>"%(( "#fee2e2" if locked else "#f0fdf4"),("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),mark_actions,form_action,eid,cid,subid,out_of,rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",form_actions,outside_actions)+
-      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn,.deletebtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}.deletebtn{background:#b91c1c}</style>"
+      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.markinput{width:100px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}.btn,.editbtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}</style>"
       "<script>(function(){var cs=document.querySelector('select[name=\\\"class_id\\\"]'),ss=document.querySelector('select[name=\\\"subject_id\\\"]');if(cs&&ss){function f(){var cid=cs.value,first=null;Array.prototype.forEach.call(ss.options,function(o){if(!o.value)return;var rawIds=o.getAttribute('data-class-ids');if(rawIds===null){o.hidden=false;if(!first)first=o.value;return;}var ids=rawIds.split(',');o.hidden=ids.indexOf(cid)<0;if(!o.hidden&&!first)first=o.value;});var cur=ss.options[ss.selectedIndex];if(cur&&cur.hidden&&first)ss.value=first;}cs.addEventListener('change',f);f();}})();var gradingRules=%s;document.querySelectorAll('.markinput').forEach(function(el){el.addEventListener('input',function(){var row=el.closest('tr'),mark=parseFloat(el.value),commentCell=row.querySelector('.commentinput');if(isNaN(mark)){row.querySelector('.gradecell').textContent='—';row.querySelector('.pointcell').textContent='—';if(commentCell)commentCell.value='';return;}var grade='—',points='—',comment='';var pct=(mark/out_of)*100;for(var i=0;i<gradingRules.length;i++){if((mark>=gradingRules[i][0]&&mark<=gradingRules[i][1])||(pct>=gradingRules[i][0]&&pct<=gradingRules[i][1])){grade=gradingRules[i][2];points=gradingRules[i][3];comment=gradingRules[i][4]||'';break;}}if(gradingRules.length===0){if(mark>=80){grade='A';points=12}else if(mark>=75){grade='A-';points=11}else if(mark>=70){grade='B+';points=10}else if(mark>=65){grade='B';points=9}else if(mark>=60){grade='B-';points=8}else if(mark>=55){grade='C+';points=7}else if(mark>=50){grade='C';points=6}else if(mark>=45){grade='C-';points=5}else if(mark>=40){grade='D+';points=4}else if(mark>=30){grade='D';points=3}}row.querySelector('.gradecell').textContent=grade;row.querySelector('.pointcell').textContent=points;if(commentCell && !commentCell.dataset.manual)commentCell.value=comment;});});document.querySelectorAll('.commentinput').forEach(function(el){el.addEventListener('input',function(){el.dataset.manual='1';});});</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
@@ -3671,39 +3671,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
-@router.post("/app/academics/marks/delete")
-def marks_delete(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), student_id:int=Form(...)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "marks.edit"):
-        return HTMLResponse("You do not have permission to delete marks.", 403)
-    con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
-    if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
-        con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
-    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone() and cur.execute("SELECT id FROM students WHERE id=? AND school_id=? AND class_id=?",(student_id,sid,class_id)).fetchone()
-    if not valid:
-        con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
-    if _academic_lock(cur,sid,exam_id,class_id,subject_id):
-        con.close(); return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
-    if str(request.session.get("role",""))=="teacher":
-        _ensure_teacher_mark_drafts_table(cur)
-        teacher_id=int(request.session.get("teacher_id") or 0)
-        cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?",(sid,teacher_id,exam_id,class_id,subject_id,student_id))
-        con.commit(); con.close()
-        return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
-    row=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=? ORDER BY id DESC LIMIT 1",(sid,student_id,subject_id,exam_id,class_id)).fetchone()
-    if row:
-        cur.execute("DELETE FROM marks WHERE id=? AND school_id=?",(row["id"],sid))
-        try:
-            _ensure_report_card_fields(cur)
-            cur.execute("DELETE FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",(sid,student_id,exam_id,subject_id))
-        except Exception:
-            pass
-        _audit(cur,sid,request,"MARKS_DELETE",f"Deleted mark for student {student_id}, exam {exam_id}, class {class_id}, subject {subject_id}")
-    con.commit();con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
-
-@router.post("/app/academics/marks/finalize")
+# Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
