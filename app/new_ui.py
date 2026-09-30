@@ -3592,12 +3592,31 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                 continue
             if mark<0 or mark>out_of: continue
             mark_value=int(mark) if mark.is_integer() else mark
-            cur.execute("""INSERT INTO teacher_mark_drafts
-                (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(school_id,teacher_id,exam_id,class_id,subject_id,student_id)
-                DO UPDATE SET marks=excluded.marks,comment=excluded.comment,updated_at=excluded.updated_at""",
-                (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now))
+            # Update the teacher's existing private draft first. This avoids
+            # relying on database-specific UPSERT behaviour and guarantees that
+            # editing an already-saved draft replaces the old value immediately.
+            draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
+            existing_draft=cur.execute(
+                """SELECT rowid FROM teacher_mark_drafts
+                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                     AND subject_id=? AND student_id=? LIMIT 1""",
+                draft_key
+            ).fetchone()
+            if existing_draft:
+                cur.execute(
+                    """UPDATE teacher_mark_drafts
+                       SET marks=?,comment=?,updated_at=?
+                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                         AND subject_id=? AND student_id=?""",
+                    (str(mark_value),comment,now)+draft_key
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO teacher_mark_drafts
+                       (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now)
+                )
         # Draft data must be saved even if the optional audit trail has a schema problem.
         try:
             _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
