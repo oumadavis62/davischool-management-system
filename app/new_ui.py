@@ -3592,7 +3592,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # overrides the form action to publish and lock the marks. School Admin keeps
     # the normal published/main marks workflow unchanged.
     session_scope = request.scope.get("davischool_session_scope", "default")
-    portal_prefix = "/school" if session_scope == "school" else ("/teacher" if session_scope == "teacher" else "")
+    if role == "school_admin":
+        portal_prefix = "/school"
+    elif role == "teacher":
+        portal_prefix = "/teacher"
+    else:
+        portal_prefix = "/school" if session_scope == "school" else ("/teacher" if session_scope == "teacher" else "")
     form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
     draft_action = ""
     if locked:
