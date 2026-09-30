@@ -437,7 +437,9 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 document.addEventListener('submit',function(event){{
   var form=event.target;
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
-  var action=form.getAttribute('action')||window.location.href;
+  var submitter=event.submitter;
+  var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
+  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
   try{{
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin)return;
@@ -446,10 +448,9 @@ document.addEventListener('submit',function(event){{
     if(path==='/app/academics/marks/save' || path==='/app/academics/marks/delete')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
-    var submitter=event.submitter;
     var data=new FormData(form);
     if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
-    fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
       .then(function(response){{
         if(!response.ok){{window.location.href=response.url||url.toString();return;}}
         window.location.replace(response.url||url.toString());
