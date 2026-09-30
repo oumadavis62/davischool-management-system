@@ -3451,7 +3451,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         elif role == "teacher" and pending_correction:
             mark_actions = "<div class='muted'>🔓 Correction request is awaiting school administrator review.</div>"
         elif role == "teacher":
-            mark_actions = "<form method='post' action='/app/academics/marks/request-correction' style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='width:min(360px,100%%)'><button class='btn' type='submit'>🔓 Request Correction</button></form>"
+            mark_actions = "<form method='post' action='/app/academics/marks/request-correction?exam_id=%s&class_id=%s&subject_id=%s' style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input name='reason' required placeholder='Reason for correction' class='field' style='width:min(360px,100%%)'><button class='btn' type='submit'>🔓 Request Correction</button></form>"%(eid,cid,subid,eid,cid,subid)
         else:
             mark_actions = ""
     else:
@@ -3732,7 +3732,18 @@ def request_marks_correction_get(request: Request, exam_id:int=0, class_id:int=0
     )
 
 @router.post("/app/academics/marks/request-correction")
-def request_marks_correction(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), reason:str=Form(...)):
+async def request_marks_correction(request: Request, exam_id:int=Form(0), class_id:int=Form(0), subject_id:int=Form(0), reason:str=Form("")):
+    # Accept the academic IDs from the form body or from the action URL.
+    # Some mobile browsers can omit hidden form controls during submission;
+    # keeping the IDs in both places prevents a 422 from losing the request.
+    try:
+        exam_id = int(exam_id or request.query_params.get("exam_id") or 0)
+        class_id = int(class_id or request.query_params.get("class_id") or 0)
+        subject_id = int(subject_id or request.query_params.get("subject_id") or 0)
+    except (TypeError, ValueError):
+        exam_id, class_id, subject_id = 0, 0, 0
+    if not reason:
+        reason = str(request.query_params.get("reason") or "")
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if str(request.session.get("role","")) != "teacher":
