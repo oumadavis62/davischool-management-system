@@ -3602,7 +3602,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             # editing an already-saved draft replaces the old value immediately.
             draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
             existing_draft=cur.execute(
-                """SELECT rowid FROM teacher_mark_drafts
+                """SELECT 1 FROM teacher_mark_drafts
                    WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
                      AND subject_id=? AND student_id=? LIMIT 1""",
                 draft_key
