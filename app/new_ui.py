@@ -3593,7 +3593,30 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             raw=form.get(f"mark_{student_id}")
             comment=str(form.get(f"comment_{student_id}") or "").strip()
             if raw is None or str(raw).strip()=="":
-                cur.execute("DELETE FROM teacher_mark_drafts WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?",(sid,teacher_id,exam_id,class_id,subject_id,student_id))
+                # A blank field is an intentional "no mark" entry. Keep a blank
+                # private draft so the published/old mark cannot reappear when
+                # the teacher reloads the page. It is still private until submit.
+                draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
+                existing_blank=cur.execute(
+                    """SELECT 1 FROM teacher_mark_drafts
+                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                         AND subject_id=? AND student_id=?""",
+                    draft_key
+                ).fetchone()
+                if existing_blank:
+                    cur.execute(
+                        """UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?
+                           WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                             AND subject_id=? AND student_id=?""",
+                        (now,)+draft_key
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO teacher_mark_drafts
+                           (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?)""",
+                        (sid,teacher_id,exam_id,class_id,subject_id,student_id,'','',now)
+                    )
                 continue
             try:
                 mark=float(raw)
@@ -3682,6 +3705,13 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     for st in students:
         raw=form.get(f"mark_{st['id']}")
         if raw is None or str(raw).strip()=="":
+            # Blank means the mark was intentionally cleared. Remove only the
+            # published row for this exact school/student/exam/subject/class.
+            cur.execute(
+                """DELETE FROM marks
+                   WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
+                (sid,st["id"],subject_id,exam_id,class_id)
+            )
             continue
         try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
         except Exception: continue
