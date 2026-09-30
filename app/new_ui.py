@@ -3627,10 +3627,22 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                     (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now)
                 )
         # Draft data must be saved even if the optional audit trail has a schema problem.
+        # Keep an audit-table/schema failure from aborting the marks transaction.
+        # PostgreSQL marks the whole transaction failed after a statement error,
+        # so merely catching the exception is not enough; roll back to a savepoint.
         try:
-            _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
-        except Exception as audit_exc:
-            print("DAVISCHOOL MARKS DRAFT AUDIT WARNING:",repr(audit_exc),flush=True)
+            cur.execute("SAVEPOINT davischool_marks_draft_audit")
+            try:
+                _audit(cur,sid,request,"MARKS_DRAFT_SAVE",f"Saved private draft marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+                cur.execute("RELEASE SAVEPOINT davischool_marks_draft_audit")
+            except Exception as audit_exc:
+                print("DAVISCHOOL MARKS DRAFT AUDIT WARNING:",repr(audit_exc),flush=True)
+                try: cur.execute("ROLLBACK TO SAVEPOINT davischool_marks_draft_audit")
+                except Exception: pass
+                try: cur.execute("RELEASE SAVEPOINT davischool_marks_draft_audit")
+                except Exception: pass
+        except Exception as audit_sp_exc:
+            print("DAVISCHOOL MARKS DRAFT AUDIT SAVEPOINT WARNING:",repr(audit_sp_exc),flush=True)
         con.commit()
     except Exception as exc:
         try: con.rollback()
@@ -3700,10 +3712,21 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                 cur.execute("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",(sid,st["id"],exam_id,subject_id,comment,now))
     # Saving marks must not be rolled back by an optional audit-trail
     # schema problem. The marks themselves are the primary transaction.
+    # Audit logging is optional and must never invalidate the actual marks save.
+    # A caught PostgreSQL statement error otherwise leaves the transaction aborted.
     try:
-        _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
-    except Exception as audit_exc:
-        print("DAVISCHOOL MARKS SAVE AUDIT WARNING:",repr(audit_exc),flush=True)
+        cur.execute("SAVEPOINT davischool_marks_audit")
+        try:
+            _audit(cur,sid,request,"MARKS_SAVE",f"Saved marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+            cur.execute("RELEASE SAVEPOINT davischool_marks_audit")
+        except Exception as audit_exc:
+            print("DAVISCHOOL MARKS SAVE AUDIT WARNING:",repr(audit_exc),flush=True)
+            try: cur.execute("ROLLBACK TO SAVEPOINT davischool_marks_audit")
+            except Exception: pass
+            try: cur.execute("RELEASE SAVEPOINT davischool_marks_audit")
+            except Exception: pass
+    except Exception as audit_sp_exc:
+        print("DAVISCHOOL MARKS SAVE AUDIT SAVEPOINT WARNING:",repr(audit_sp_exc),flush=True)
     try:
         con.commit()
     except Exception as save_exc:
