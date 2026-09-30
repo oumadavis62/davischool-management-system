@@ -98,15 +98,18 @@ class DaviSchoolMultiSessionMiddleware:
 
     @staticmethod
     def scope_for(path, referer=""):
-        # Prefer the originating portal when an existing page links to a
-        # legacy/shared route such as /school/record-marks or /app/...
-        if "/teacher/" in (referer or ""):
-            return "teacher"
-        if "/school/" in (referer or ""):
-            return "school"
+        # The explicit portal prefix on the current request is authoritative.
+        # A POST such as /school/app/academics/marks/finalize must always use
+        # the School Admin session cookie even if the browser sends an
+        # unexpected/omitted Referer header. Referer is only a fallback for
+        # legacy/shared routes that have no portal prefix.
         if path == "/teacher" or path.startswith("/teacher/"):
             return "teacher"
         if path == "/school" or path.startswith("/school/"):
+            return "school"
+        if "/teacher/" in (referer or ""):
+            return "teacher"
+        if "/school/" in (referer or ""):
             return "school"
         return "default"
 
