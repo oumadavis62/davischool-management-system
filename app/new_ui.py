@@ -84,6 +84,13 @@ def davischool_login_page(request: Request):
     login_action = "/login" + (("?session_context=" + teacher_context) if teacher_context else "")
     return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>body{{margin:0;background:#eef5fb;font-family:Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}}.box{{width:min(430px,92vw);background:white;border:1px solid #d8e3f0;border-top:4px solid #2E8B57;border-radius:18px;padding:32px;box-shadow:0 18px 50px #176B3A20}}.logo{{font-size:25px;font-weight:900;color:#176B3A;margin-bottom:5px}}.sub{{color:#64748b;margin-bottom:25px}}label{{display:block;font-size:13px;font-weight:800;color:#334155;margin:14px 0 7px}}input{{width:100%;box-sizing:border-box;padding:13px;border:1px solid #dbe2ea;border-radius:10px;font-size:15px}}button{{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#176B3A;color:white;font-weight:900;font-size:15px;cursor:pointer}}.err{{background:#fff1f2;border:1px solid #fda4af;color:#9f1239;padding:11px;border-radius:10px;margin-bottom:14px}}</style></head><body><div class='box'><div class='logo'>🏫 DaviSchool Management System</div><div class='sub'>Secure school management platform</div>{error}<form method='post' action='{login_action}'><label>Username / Email</label><input name='email' type='text' autocomplete='username' required placeholder='Enter username or email'><label>Password</label><input name='password' type='password' autocomplete='current-password' required placeholder='Enter password'><button type='submit'>Sign In</button></form></div></body></html>""")
 
+@router.get("/login")
+def davischool_login_get(request: Request):
+    # A GET can occur after a 303 redirect from an authenticated action when a
+    # session is no longer available. Keep /login from producing a misleading
+    # 405 and return the normal login screen instead.
+    return RedirectResponse("/",303)
+
 @router.post("/login")
 def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
     from app.main import verify_password
@@ -4057,7 +4064,13 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         con.close()
         return HTMLResponse("Marks could not be locked. Please try Submit & Lock Marks again.",500)
     con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    # Preserve the portal that performed the finalization. The multi-session
+    # middleware uses /school and /teacher to select the corresponding session
+    # cookie; redirecting to bare /app would fall back to the default session.
+    scope_name = str(request.scope.get("davischool_session_scope") or "")
+    role_name = str(request.session.get("role") or "")
+    portal_prefix = "/school" if scope_name == "school" or role_name == "school_admin" else ("/teacher" if scope_name == "teacher" or role_name == "teacher" else "")
+    return RedirectResponse(f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
 def request_marks_correction_get(request: Request, exam_id:int=0, class_id:int=0, subject_id:int=0):
