@@ -3697,6 +3697,10 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    # Prepare the performance-comment table once per save request, not once per
+    # student. Re-running schema checks inside the student loop makes Save Marks
+    # increasingly slow as the class size grows.
+    _ensure_report_card_fields(cur)
     try:
         grading_rules=_load_grading_rules(cur,sid)
     except Exception as exc:
@@ -3717,7 +3721,6 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             # subject_performance_comments and is shown again even though the
             # mark has been cleared.
             try:
-                _ensure_report_card_fields(cur)
                 cur.execute(
                     """DELETE FROM subject_performance_comments
                        WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
@@ -3739,7 +3742,6 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
         # Subject performance comment is saved with the same student/exam/subject scope.
         if form.get(f"comment_{st['id']}") is not None:
-            _ensure_report_card_fields(cur)
             now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             comment=str(form.get(f"comment_{st['id']}") or "").strip()
             if not comment:
