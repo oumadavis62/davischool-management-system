@@ -3571,7 +3571,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
       "<table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
           bg=("#fee2e2" if locked else "#f0fdf4"),
-          status=("🔒 Marks are FINALIZED and locked." if locked else ("📝 Draft mode — only you can see these marks until you submit and lock them." if role=="teacher" else "🟢 Marks are open for editing.")),
+          status=("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),
           action=form_action,eid=eid,cid=cid,subid=subid,out_of=out_of,
           rows=rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",
           form_actions=form_actions,outside_actions=outside_actions)+
