@@ -2593,6 +2593,39 @@ def _ensure_report_card_fields(cur):
         updated_at TEXT,
         UNIQUE(school_id,student_id,exam_id)
     )""")
+    # Older production databases may already have these tables with only part
+    # of the current schema. Upgrade them additively without destructive changes.
+    for table, columns in (
+        ("subject_performance_comments", [
+            ("school_id","INTEGER"),("student_id","INTEGER"),("exam_id","INTEGER"),
+            ("subject_id","INTEGER"),("comment","TEXT"),("updated_at","TEXT")
+        ]),
+        ("class_teacher_comments", [
+            ("school_id","INTEGER"),("student_id","INTEGER"),("exam_id","INTEGER"),
+            ("comment","TEXT"),("updated_at","TEXT")
+        ]),
+        ("report_card_settings", [
+            ("school_id","INTEGER"),("exam_id","INTEGER"),
+            ("opening_date","TEXT"),("closing_date","TEXT")
+        ]),
+    ):
+        for col, definition in columns:
+            try:
+                cur.execute("SAVEPOINT davischool_report_field_column")
+                cur.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, definition))
+                cur.execute("RELEASE SAVEPOINT davischool_report_field_column")
+            except Exception as exc:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT davischool_report_field_column")
+                    cur.execute("RELEASE SAVEPOINT davischool_report_field_column")
+                except Exception:
+                    try:
+                        cur.connection.rollback()
+                    except Exception:
+                        pass
+                msg=str(exc).lower()
+                if "already exists" not in msg and "duplicate column" not in msg:
+                    print("DAVISCHOOL REPORT FIELD SCHEMA WARNING:",repr(exc),flush=True)
 
 def _ensure_academic_locks_table(cur):
     """Ensure the lock table exists and safely upgrade legacy schemas.
