@@ -3929,13 +3929,13 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     # already has a lock row for this exact selection, normalize that row to
     # finalized instead of creating a second lock record.
     existing_lock=cur.execute(
-        "SELECT id FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",
+        "SELECT status FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? LIMIT 1",
         (sid,exam_id,class_id,subject_id)
     ).fetchone()
     if existing_lock:
         cur.execute(
-            "UPDATE academic_locks SET status=?,finalized_by=?,finalized_at=? WHERE id=? AND school_id=?",
-            ("finalized",request.session.get("email",""),now,existing_lock["id"],sid)
+            "UPDATE academic_locks SET status=?,finalized_by=?,finalized_at=? WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",
+            ("finalized",request.session.get("email",""),now,sid,exam_id,class_id,subject_id)
         )
     else:
         cur.execute(
@@ -3952,7 +3952,7 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     # lock write visible in the Render log instead of silently returning to the
     # editable marks screen.
     verified=cur.execute(
-        "SELECT id,status FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='finalized' ORDER BY id DESC LIMIT 1",
+        "SELECT status FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='finalized' LIMIT 1",
         (sid,exam_id,class_id,subject_id)
     ).fetchone()
     if not verified:
@@ -4087,7 +4087,7 @@ def approve_marks_correction(request: Request, request_id:int=Form(...)):
         con.close();return HTMLResponse("Correction request not found or already reviewed.",404)
     lock=_academic_lock(cur,sid,row["exam_id"],row["class_id"],row["subject_id"])
     if lock:
-        cur.execute("DELETE FROM academic_locks WHERE id=? AND school_id=?",(lock["id"],sid))
+        cur.execute("DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,row["exam_id"],row["class_id"],row["subject_id"]))
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("UPDATE marks_correction_requests SET status='approved',reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND school_id=?",(request.session.get("email",""),now,"Marks reopened for teacher correction.",request_id,sid))
     _audit(cur,sid,request,"MARKS_CORRECTION_APPROVE",f"Approved correction request {request_id}; reopened exam {row['exam_id']}, class {row['class_id']}, subject {row['subject_id']}")
@@ -4121,7 +4121,7 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur)
     row=_academic_lock(cur,sid,exam_id,class_id,subject_id)
     if row:
-        cur.execute("DELETE FROM academic_locks WHERE id=? AND school_id=?",(row["id"],sid))
+        cur.execute("DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,exam_id,class_id,subject_id))
         _audit(cur,sid,request,"MARKS_UNFINALIZE",f"Reopened marks for exam {exam_id}, class {class_id}, subject {subject_id}")
     con.commit();con.close()
     return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
