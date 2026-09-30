@@ -3562,11 +3562,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
     # overrides the form action to publish and lock the marks. School Admin keeps
     # the normal published/main marks workflow unchanged.
-    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
+    session_scope = request.scope.get("davischool_session_scope", "default")
+    portal_prefix = "/school" if session_scope == "school" else ("/teacher" if session_scope == "teacher" else "")
+    form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
     draft_action = ""
     if locked:
         if role == "school_admin":
-            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
+            mark_actions = "<form method='post' NaN style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(portal_prefix,eid,cid,subid)
         elif role == "teacher":
             # Once the School Admin finalizes these marks, the teacher side is
             # strictly read-only. Correction workflow is intentionally disabled
@@ -3582,7 +3584,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
             mark_actions = ("<button class='btn' type='submit'>💾 Save Marks</button> "
-                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
+                            "<button class='btn' type='submit' formaction='%s/app/academics/marks/finalize' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
