@@ -439,18 +439,19 @@ document.addEventListener('submit',function(event){{
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
   var submitter=event.submitter;
   var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
-  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
   try{{
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
-    // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/delete')return;
+    // Let the browser submit marks actions natively. This is important for
+    // Submit & Lock because its button has a different formaction from the
+    // main form and the portal middleware must preserve the correct session.
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks/delete')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
     if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
-    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+    fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
       .then(function(response){{
         if(!response.ok){{window.location.href=response.url||url.toString();return;}}
         window.location.replace(response.url||url.toString());
