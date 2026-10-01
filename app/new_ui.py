@@ -4140,8 +4140,9 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     elif portal_role == "school_admin" or session_role == "school_admin" or scope_name == "school":
         portal_prefix = "/school"
     else:
-        portal_prefix = ""
-    return RedirectResponse(f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+        portal_prefix = "/app"
+    target = "/app/academics/marks?exam_id=%s&class_id=%s&subject_id=%s" % (exam_id, class_id, subject_id) if portal_prefix == "/app" else f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"
+    return RedirectResponse(target,303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
 def request_marks_correction_get(request: Request, exam_id:int=0, class_id:int=0, subject_id:int=0):
