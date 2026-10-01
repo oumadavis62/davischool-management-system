@@ -775,7 +775,15 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     if session_scope == "teacher":
         return RedirectResponse("/teacher/app", status_code=303)
     if session_scope == "school":
-        return RedirectResponse("/school/dashboard", status_code=303)
+        return RedirectResponse("/school/app", status_code=303)
+    # A role is stronger than the URL that happened to open the common login.
+    # Never place a School Admin or Teacher into the shared /app workspace:
+    # that namespace has no tab-level account identity and is the source of
+    # cross-account switching and navigation redirects to login.
+    if role == "school_admin":
+        return RedirectResponse("/school/app", status_code=303)
+    if role == "teacher":
+        return RedirectResponse("/teacher/app", status_code=303)
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
