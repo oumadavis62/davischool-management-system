@@ -216,7 +216,7 @@ class DaviSchoolMultiSessionMiddleware:
                 (b"location", target.encode("utf-8")),
                 (b"content-length", b"0"),
                 (b"set-cookie", f"session=null; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}".encode("utf-8")),
-                (b"set-cookie", f"{cookie_name}={signed2}; path=/{scope_name}; Max-Age={self.max_age}; {self.security_flags}".encode("utf-8")),
+                (b"set-cookie", f"{cookie_name}={signed2}; path=/; Max-Age={self.max_age}; {self.security_flags}".encode("utf-8")),
             ]
             await send({"type":"http.response.start","status":303,"headers":migration_headers})
             await send({"type":"http.response.body","body":b"","more_body":False})
@@ -244,7 +244,7 @@ class DaviSchoolMultiSessionMiddleware:
                 # Shared /app links are rewritten client-side to /teacher/app or
                 # /school/app before navigation/submission, so the browser never
                 # has to choose between the two portal sessions on an ambiguous URL.
-                cookie_path = "/teacher" if scope_name == "teacher" else ("/school" if scope_name == "school" else "/")
+                cookie_path = "/"  # Portal cookies are distinct by name; root path ensures redirects and legacy portal links retain the correct session.
                 if scope["session"]:
                     raw = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
                     signed = self.signer.sign(raw).decode("utf-8")
