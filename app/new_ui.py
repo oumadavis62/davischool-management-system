@@ -3685,8 +3685,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
-        teacher_mark_locked = (role=="teacher" and not locked)
-        mark_disabled = "disabled" if (locked or teacher_mark_locked) else ""
+        teacher_mark_locked = False
+        mark_disabled = "disabled" if locked else ""
         edit_control=""
         rows+="<tr id='student-%s'><td>%s</td><td><b>%s</b></td><td class='markcell'><div class='markbox'><input id='mark-%s' name='mark_%s' value='%s' type='text' inputmode='decimal' pattern='[0-9]+(\\.[0-9])?' data-min='0' data-max='%s' class='markinput' %s>%s</div></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td class='commentcell'><div class='comment-wrap'><input name='comment_%s' value='%s' class='field commentinput' placeholder='Performance comment' disabled></div></td></tr>"%(x["id"],escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],x["id"],escape("" if mark=="" else "%.1f"%float(mark)),out_of,mark_disabled,edit_control,escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))))
     con.close()
