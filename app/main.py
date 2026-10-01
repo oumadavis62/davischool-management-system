@@ -152,6 +152,20 @@ class DaviSchoolMultiSessionMiddleware:
         connection = HTTPConnection(scope)
         referer = connection.headers.get("referer", "")
         scope_name = self.scope_for(original_path, referer)
+
+        # NEVER authenticate an /app workspace request from the shared root
+        # session. A shared /app URL has no tab-level identity, so using the
+        # root cookie here causes the classic "active tab/account" switching
+        # problem. Only /school/... or /teacher/... (or a request explicitly
+        # coming from one of those portal URLs via Referer) may select a
+        # school/teacher workspace session.
+        if scope_name == "default" and (original_path == "/app" or original_path.startswith("/app/")):
+            target = "/"
+            await send({"type":"http.response.start","status":303,
+                        "headers":[(b"location", target.encode("utf-8")),(b"content-length",b"0")]})
+            await send({"type":"http.response.body","body":b"","more_body":False})
+            return
+
         scope["davischool_session_scope"] = scope_name
         cookie_name = self.cookie_name(scope_name)
         self.strip_prefix(scope, scope_name)
