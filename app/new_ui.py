@@ -3519,7 +3519,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
     # overrides the form action to publish and lock the marks. School Admin keeps
     # the normal published/main marks workflow unchanged.
-    form_action = "/app/academics/marks/save-draft" if role == "teacher" else "/app/academics/marks/save"
+    tab_id = str(request.query_params.get("ds_tab") or "").strip()
+    tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
+    form_action = "/app/academics/marks/save-draft" + tab_q if role == "teacher" else "/app/academics/marks/save" + tab_q
     draft_action = ""
     if locked:
         if role == "school_admin":
@@ -3539,7 +3541,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
             mark_actions = ("<button class='btn' type='submit'>💾 Save Marks</button> "
-                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
+                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize{tab_q}' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
@@ -3559,8 +3561,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             except Exception as exc:
                 print("DAVISCHOOL MARKS GRADE FALLBACK:", repr(exc), flush=True)
                 grade,points=_default_grade_points(float(mark))
-        teacher_mark_locked = (role=="teacher" and not locked)
-        mark_disabled = "disabled" if (locked or teacher_mark_locked) else ""
+        # Teacher marks remain editable while the assessment is open.
+        # Only an actual finalized lock disables the mark field.
+        mark_disabled = "disabled" if locked else ""
         edit_control=""
         rows+="<tr id='student-%s'><td>%s</td><td><b>%s</b></td><td class='markcell'><div class='markbox'><input id='mark-%s' name='mark_%s' value='%s' type='text' inputmode='decimal' pattern='[0-9]+(\\.[0-9])?' data-min='0' data-max='%s' class='markinput' %s>%s</div></td><td class='gradecell'>%s</td><td class='pointcell'>%s</td><td class='commentcell'><div class='comment-wrap'><input name='comment_%s' value='%s' class='field commentinput' placeholder='Performance comment' disabled></div></td></tr>"%(x["id"],escape(str(x["admission_no"] or "")),escape(str(x["name"] or "")),x["id"],x["id"],escape("" if mark=="" else "%.1f"%float(mark)),out_of,mark_disabled,edit_control,escape(str(grade)),points if points=="—" else "%.1f"%float(points),x["id"],escape(str(subject_comments.get(int(x["id"]), ""))))
     con.close()
@@ -3862,7 +3865,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         except Exception: pass
         return HTMLResponse("Save Marks failed: %s" % escape(str(save_exc)),500)
     con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}" + (f"&ds_tab={quote(str(request.query_params.get("ds_tab") or ""), safe="")}" if request.query_params.get("ds_tab") else ""),303)
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
