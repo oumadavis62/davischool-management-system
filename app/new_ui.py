@@ -2681,20 +2681,20 @@ def app_home(request: Request):
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card'><div class='label'>Fees received</div><div class='kpi'>KES {fees:,.0f}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'>
-<a class='action' href='/app/students'><span>🎓</span>Students</a>
-<a class='action' href='/app/academics/marks'><span>📝</span>Record Marks</a>
-<a class='action' href='/app/attendance'><span>✓</span>Attendance</a>
-<a class='action' href='/app/finance/fees'><span>💰</span>Finance</a>
-<a class='action' href='/app/report-cards'><span>📄</span>Report Cards</a>
-<a class='action' href='/app/academics/analysis'><span>📊</span>Analysis</a>
-<a class='action' href='/app/accounting'><span>📚</span>Accounting</a>
-<a class='action' href='/app/users'><span>👤</span>Users</a></div></div>
+<a class='action' href='/school/app/students'><span>🎓</span>Students</a>
+<a class='action' href='/school/app/academics/marks'><span>📝</span>Record Marks</a>
+<a class='action' href='/school/app/attendance'><span>✓</span>Attendance</a>
+<a class='action' href='/school/app/finance/fees'><span>💰</span>Finance</a>
+<a class='action' href='/school/app/report-cards'><span>📄</span>Report Cards</a>
+<a class='action' href='/school/app/academics/analysis'><span>📊</span>Analysis</a>
+<a class='action' href='/school/app/accounting'><span>📚</span>Accounting</a>
+<a class='action' href='/school/app/users'><span>👤</span>Users</a></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'>
-<a class='action' href='/app/school-settings'><span>⚙</span>School Settings</a>
-<a class='action' href='/app/students/promotion'><span>🎓</span>Promotion / Transfer</a>
-<a class='action' href='/app/roles'><span>🔐</span>Roles</a>
-<a class='action' href='/app/audit'><span>🛡</span>Audit Trail</a>
-<a class='action' href='/app/portals'><span>🌐</span>Portals</a></div></div></div></div>"""
+<a class='action' href='/school/app/school-settings'><span>⚙</span>School Settings</a>
+<a class='action' href='/school/app/students/promotion'><span>🎓</span>Promotion / Transfer</a>
+<a class='action' href='/school/app/roles'><span>🔐</span>Roles</a>
+<a class='action' href='/school/app/audit'><span>🛡</span>Audit Trail</a>
+<a class='action' href='/school/app/portals'><span>🌐</span>Portals</a></div></div></div></div>"""
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
