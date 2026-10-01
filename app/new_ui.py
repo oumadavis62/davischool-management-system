@@ -3539,11 +3539,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     else:
         if role=="teacher":
             mark_actions = ""
-            draft_action = "<button class='btn' type='submit'>💾 Save Draft</button>" if students else ""
+            draft_action = "<button class='btn' type='submit' formaction='{action}' formmethod='post'>💾 Save Draft</button>" if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
-            mark_actions = ("<button class='btn' type='submit'>💾 Save Marks</button> "
+            mark_actions = ("<button class='btn' type='submit' formaction='{action}' formmethod='post'>💾 Save Marks</button> "
                             "<button class='btn' type='submit' formaction='/app/academics/marks/finalize" + tab_q + "' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
@@ -3578,7 +3578,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<button class='btn'>Load Students</button></form>"
       "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>"
-      "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}' onsubmit=\"this.action=this.getAttribute(\'data-save-action\');\">"
+      "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
       "<div class='marks-table-scroll'><table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table></div>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
           bg=("#fee2e2" if locked else "#f0fdf4"),
