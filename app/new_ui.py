@@ -492,8 +492,7 @@ function warm(link){{
     var hint=document.createElement('link'); hint.rel='prefetch'; hint.href=u.href; document.head.appendChild(hint);
   }}catch(e){{}}
 }}
-document.addEventListener('pointerover',function(e){{var a=e.target.closest&&e.target.closest('a.nav');if(a)warm(a);}},{{passive:true}});
-document.addEventListener('touchstart',function(e){{var a=e.target.closest&&e.target.closest('a.nav');if(a)warm(a);}},{{passive:true}});
+
 // Give every submitted action instant visual acknowledgement without changing
 // its submitted values or waiting for the server response before showing it.
 document.addEventListener('submit',function(e){{
