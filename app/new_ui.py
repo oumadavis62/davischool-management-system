@@ -541,8 +541,22 @@ def session_keepalive(request: Request):
     return JSONResponse({"authenticated": True})
 
 def _school_session(request):
+    # The portal middleware normally restores request.session from the
+    # role-specific cookie. Keep a second, portal-scoped recovery path here so
+    # navigation cannot unexpectedly fall through to the login screen if a
+    # request reaches the shared /app router before that restoration is visible.
+    # The expected role comes from the explicit /school or /teacher portal
+    # prefix, so Teacher and School Admin cookies can never be mixed.
+    portal_scope = str(request.scope.get("davischool_session_scope") or "")
+    expected_role = "teacher" if portal_scope == "teacher" else ("school_admin" if portal_scope == "school" else "")
     role = str(request.session.get("role", ""))
+    if ("email" not in request.session or role not in ("school_admin", "teacher")) and expected_role:
+        recovered = _recover_portal_session(request, expected_role)
+        if recovered:
+            role = str(request.session.get("role", ""))
     if "email" not in request.session or role not in ("school_admin", "teacher"):
+        return None
+    if expected_role and role != expected_role:
         return None
     sid = int(request.session.get("school_id") or 0)
     if not sid:
