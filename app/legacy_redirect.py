@@ -186,7 +186,37 @@ def install_legacy_school_redirect(app):
         if path == "/school" or path.startswith("/school/"):
             if path == "/school/login" or path == "/school/logout" or path == "/school/app" or path.startswith("/school/app/"):
                 return await call_next(request)
-            return RedirectResponse("/app", status_code=303)
+            # Older School Admin pages still exist in browser history and in
+            # cached dashboard HTML. Map every legacy navigation target into
+            # the new isolated /school/app workspace instead of sending the
+            # browser to the shared /app namespace (which has no account
+            # identity and therefore falls through to the login screen).
+            legacy_map = {
+                "/school/dashboard": "/school/app",
+                "/school/students": "/school/app/students",
+                "/school/classes": "/school/app/classes",
+                "/school/teachers": "/school/app/staff",
+                "/school/record-marks": "/school/app/academics/marks",
+                "/school/edit-marks": "/school/app/academics/marks",
+                "/school/marksheets": "/school/app/report-cards",
+                "/school/report-cards": "/school/app/report-cards",
+                "/school/analysis": "/school/app/academics/analysis",
+                "/school/academics": "/school/app/academics",
+                "/school/attendance": "/school/app/attendance",
+                "/school/timetable": "/school/app/timetable",
+                "/school/fees": "/school/app/finance/fees",
+                "/school/sms": "/school/app/announcements",
+                "/school/communication": "/school/app/announcements",
+                "/school/system-settings/user-management": "/school/app/users",
+                "/school/system-settings/roles-permissions": "/school/app/roles",
+                "/school/system-settings/school-profile": "/school/app/school-settings",
+                "/school/system-settings/classes": "/school/app/classes",
+                "/school/system-settings/system-audit": "/school/app/audit",
+            }
+            target = legacy_map.get(path)
+            if target:
+                return RedirectResponse(target, status_code=303)
+            return RedirectResponse("/school/app", status_code=303)
 
         # IMPORTANT: do not handle /verify-school-code here.
         # This middleware runs outside SessionMiddleware, so request.session
