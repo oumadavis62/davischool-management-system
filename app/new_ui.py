@@ -155,11 +155,22 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
         con = _db()
         con.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), user["id"]))
         con.commit(); con.close()
-    return RedirectResponse("/app", status_code=303)
+    portal_scope = str(request.scope.get("davischool_session_scope") or "")
+    if portal_scope == "teacher":
+        return RedirectResponse("/teacher/app", status_code=303)
+    if portal_scope == "school":
+        return RedirectResponse("/school/app", status_code=303)
+    # Shared login has no tab identity. Do not enter the shared /app workspace.
+    return RedirectResponse("/", status_code=303)
 
 @router.get("/logout")
 def davischool_logout(request: Request):
+    portal_scope = str(request.scope.get("davischool_session_scope") or "")
     request.session.clear()
+    if portal_scope == "teacher":
+        return RedirectResponse("/teacher/login", status_code=303)
+    if portal_scope == "school":
+        return RedirectResponse("/school/login", status_code=303)
     return RedirectResponse("/", status_code=303)
 
 def _db():
