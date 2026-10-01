@@ -3609,13 +3609,16 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
     # overrides the form action to publish and lock the marks. School Admin keeps
     # the normal published/main marks workflow unchanged.
+    # Preserve the session scope that authenticated this page. Do not
+    # force School Admin into /school when the active account is using the
+    # shared /app session cookie; doing so makes the POST appear logged out.
     session_scope = request.scope.get("davischool_session_scope", "default")
-    if role == "school_admin":
+    if session_scope == "school":
         portal_prefix = "/school"
-    elif role == "teacher":
+    elif session_scope == "teacher":
         portal_prefix = "/teacher"
     else:
-        portal_prefix = "/school" if session_scope == "school" else ("/teacher" if session_scope == "teacher" else "")
+        portal_prefix = ""
     form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
     draft_action = ""
     if locked:
