@@ -2,6 +2,9 @@ import json
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.requests import HTTPConnection
+from itsdangerous import BadSignature
 import sqlite3
 import os
 import hashlib
