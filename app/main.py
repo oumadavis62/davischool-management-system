@@ -10,7 +10,7 @@ import secrets
 import re
 import traceback
 import threading
-from starlette.middleware.sessions import SessionMiddleware
+from app.tab_session import DaviSchoolTabSessionMiddleware
 import random
 from datetime import datetime, timedelta
 from app.schema_compat import ensure_schema_compatibility
@@ -84,7 +84,7 @@ async def idle_session_timeout(request: Request, call_next):
     response = await call_next(request)
     return response
 
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+app.add_middleware(DaviSchoolTabSessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
 @app.get("/healthz")
 def healthz():
