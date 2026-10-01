@@ -450,7 +450,7 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize')return;
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
@@ -3391,17 +3391,20 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             if role=="teacher":
                 _ensure_teacher_mark_drafts_table(cur)
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
-                    CASE WHEN m.marks IS NOT NULL THEN CAST(m.marks AS TEXT)
-                         WHEN d.marks IS NOT NULL THEN CAST(d.marks AS TEXT)
-                         ELSE '' END marks
+                    COALESCE(
+                      (SELECT CAST(m2.marks AS TEXT) FROM marks m2
+                       WHERE m2.student_id=s.id AND m2.exam_id=? AND m2.subject_id=?
+                         AND m2.school_id=? AND (m2.class_id=? OR m2.class_id IS NULL)
+                       ORDER BY m2.id DESC LIMIT 1),
+                      (SELECT d2.marks FROM teacher_mark_drafts d2
+                       WHERE d2.student_id=s.id AND d2.exam_id=? AND d2.subject_id=?
+                         AND d2.class_id=? AND d2.school_id=? AND d2.teacher_id=?
+                       ORDER BY d2.updated_at DESC LIMIT 1),
+                      ''
+                    ) marks
                   FROM students s
-                  LEFT JOIN teacher_mark_drafts d
-                    ON d.student_id=s.id AND d.exam_id=? AND d.subject_id=? AND d.class_id=?
-                    AND d.school_id=? AND d.teacher_id=?
-                  LEFT JOIN marks m
-                    ON m.student_id=s.id AND m.exam_id=? AND m.subject_id=? AND m.school_id=?
                   WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
-                  (eid,subid,cid,sid,teacher_id,eid,subid,sid,sid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -3865,7 +3868,9 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         except Exception: pass
         return HTMLResponse("Save Marks failed: %s" % escape(str(save_exc)),500)
     con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}" + (f"&ds_tab={quote(str(request.query_params.get("ds_tab") or ""), safe="")}" if request.query_params.get("ds_tab") else ""),303)
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"+tab_suffix,303)
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
@@ -3968,7 +3973,9 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         con.close()
         return HTMLResponse("Marks could not be locked. Please try Submit & Lock Marks again.",500)
     con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"+tab_suffix,303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
 def request_marks_correction_get(request: Request, exam_id:int=0, class_id:int=0, subject_id:int=0):
