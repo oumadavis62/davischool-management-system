@@ -378,6 +378,10 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
     return [table, Spacer(1, 5), Paragraph(escape(title), styles["subtitle"])]
 
 def _shell(title, name, role, body, school_id=None):
+    # Every School Admin navigation target is rendered with the explicit
+    # /school portal prefix. Never rely on client-side rewriting or a shared
+    # /app URL: browser tabs must remain bound to their own portal session.
+    portal_prefix = "/school" if role == "school_admin" else ""
     # Sidebar visibility follows the same permission vocabulary enforced by
     # protected routes. Super Admin remains on platform-level navigation.
     if role == "super_admin":
@@ -389,26 +393,26 @@ def _shell(title, name, role, body, school_id=None):
         ]
     else:
         nav = [
-            ("/app","⌂","Overview",None),
-            ("/app/students","🎓","Students","students.view"),
-            ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
-            ("/app/classes","🏫","Classes","classes.view"),
-            ("/app/subjects","📚","Subjects","subjects.view"),
-            ("/app/exams","🧪","Examinations","exams.view"),
-            ("/app/academics","📝","Academics","marks.view"),
-            ("/app/report-cards","📄","Report Cards","reports.view"),
-            ("/app/attendance","✓","Attendance","attendance.view"),
-            ("/app/timetable","🗓","Timetable","timetable.view"),
-            ("/app/finance","💰","Fees & Finance","fees.view"),
-            ("/app/accounting","📚","Accounting","finance.view"),
-            ("/app/announcements","📢","Announcements","communications.view"),
-            ("/app/users","👤","Users","users.manage"),
-            ("/app/roles","🔐","Roles & Permissions","settings.manage"),
-            ("/app/school-settings","⚙","School Settings","settings.view"),
-            ("/app/audit","🛡","Audit Trail","audit.view"),
+            (f"{portal_prefix}/app","⌂","Overview",None),
+            (f"{portal_prefix}/app/students","🎓","Students","students.view"),
+            (f"{portal_prefix}/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
+            (f"{portal_prefix}/app/classes","🏫","Classes","classes.view"),
+            (f"{portal_prefix}/app/subjects","📚","Subjects","subjects.view"),
+            (f"{portal_prefix}/app/exams","🧪","Examinations","exams.view"),
+            (f"{portal_prefix}/app/academics","📝","Academics","marks.view"),
+            (f"{portal_prefix}/app/report-cards","📄","Report Cards","reports.view"),
+            (f"{portal_prefix}/app/attendance","✓","Attendance","attendance.view"),
+            (f"{portal_prefix}/app/timetable","🗓","Timetable","timetable.view"),
+            (f"{portal_prefix}/app/finance","💰","Fees & Finance","fees.view"),
+            (f"{portal_prefix}/app/accounting","📚","Accounting","finance.view"),
+            (f"{portal_prefix}/app/announcements","📢","Announcements","communications.view"),
+            (f"{portal_prefix}/app/users","👤","Users","users.manage"),
+            (f"{portal_prefix}/app/roles","🔐","Roles & Permissions","settings.manage"),
+            (f"{portal_prefix}/app/school-settings","⚙","School Settings","settings.view"),
+            (f"{portal_prefix}/app/audit","🛡","Audit Trail","audit.view"),
         ]
         if role == "school_admin":
-            nav.insert(7, ("/app/academics/marks-corrections","🔓","Marks Corrections",None))
+            nav.insert(7, (f"{portal_prefix}/app/academics/marks-corrections","🔓","Marks Corrections",None))
         if role != "school_admin" and school_id:
             con = _db()
             try:
@@ -439,7 +443,7 @@ def _shell(title, name, role, body, school_id=None):
 table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.brand:before{{content:'DS';font-size:18px}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.page{{padding:12px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 12px}}.marks-entry{{overflow:visible;min-width:0}}.marks-table-scroll{{display:block;width:100%;max-width:100%;overflow-x:scroll;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;scrollbar-width:auto;margin:0 -4px;padding:0 4px}}.marks-table{{width:760px;min-width:760px;table-layout:fixed}}.marks-table th,.marks-table td{{padding:10px 8px;font-size:12px}}.marks-table .col-admission{{width:105px}}.marks-table .col-student{{width:170px}}.marks-table .col-mark{{width:105px}}.marks-table .col-grade{{width:80px}}.marks-table .col-points{{width:80px}}.marks-table .col-comment{{width:220px}}.markinput{{width:92px;max-width:92px;min-height:42px;font-size:16px;padding:9px}}.commentinput{{width:210px;max-width:210px;min-width:210px;min-height:42px;font-size:14px;padding:9px}}.marks-table td:nth-child(1),.marks-table td:nth-child(2),.marks-table td:nth-child(4),.marks-table td:nth-child(5){{white-space:normal}}}}
-</style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
+</style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='{portal_prefix}/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{var keepalivePath = window.location.pathname.indexOf('/teacher/')===0 ? '/teacher/app/session-keepalive' : (window.location.pathname.indexOf('/school/')===0 ? '/school/app/session-keepalive' : '/app/session-keepalive');
     fetch(keepalivePath,{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
 // Collapse repeated visits to the same school workspace when using the phone Back button.
