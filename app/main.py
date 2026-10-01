@@ -12,6 +12,7 @@ import re
 import traceback
 from datetime import datetime
 from itsdangerous import TimestampSigner
+from app.schema_compat import ensure_schema_compatibility
 
 app = FastAPI()
 # Database schema initialization must finish before requests are accepted.
