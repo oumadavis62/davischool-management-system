@@ -567,9 +567,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             comment=str(form.get(f"comment_{student_id}") or "").strip()
             draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
             existing_drafts=cur.execute(
-                """SELECT 1 FROM teacher_mark_drafts
-                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                     AND subject_id=? AND student_id=?""",
+                "SELECT 1 FROM teacher_mark_drafts\n                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?\n                     AND subject_id=? AND student_id=?",
                 draft_key
             ).fetchone()
 
@@ -577,28 +575,22 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                 # A blank saved by the teacher is also a blank in the shared
                 # marks record, so the School Admin sees the same state.
                 cur.execute(
-                    """DELETE FROM marks
-                       WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
+                    "DELETE FROM marks\n                       WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?",
                     (sid,student_id,subject_id,exam_id,class_id)
                 )
                 if existing_drafts:
                     cur.execute(
-                        """UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?
-                           WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                             AND subject_id=? AND student_id=?""",
+                        "UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?\n                           WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?\n                             AND subject_id=? AND student_id=?",
                         (now,)+draft_key
                     )
                 else:
                     cur.execute(
-                        """INSERT INTO teacher_mark_drafts
-                           (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
-                           VALUES(?,?,?,?,?,?,?,?,?)""",
+                        "INSERT INTO teacher_mark_drafts\n                           (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)\n                           VALUES(?,?,?,?,?,?,?,?,?)",
                         (sid,teacher_id,exam_id,class_id,subject_id,student_id,'','',now)
                     )
                 try:
                     cur.execute(
-                        """DELETE FROM subject_performance_comments
-                           WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
+                        "DELETE FROM subject_performance_comments\n                           WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
                         (sid,student_id,exam_id,subject_id)
                     )
                 except Exception:
@@ -636,16 +628,12 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             # logging out, but it is no longer a separate source of truth.
             if existing_drafts:
                 cur.execute(
-                    """UPDATE teacher_mark_drafts SET marks=?,comment=?,updated_at=?
-                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                         AND subject_id=? AND student_id=?""",
+                    "UPDATE teacher_mark_drafts SET marks=?,comment=?,updated_at=?\n                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?\n                         AND subject_id=? AND student_id=?",
                     (str(mark_value),comment,now)+draft_key
                 )
             else:
                 cur.execute(
-                    """INSERT INTO teacher_mark_drafts
-                       (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    "INSERT INTO teacher_mark_drafts\n                       (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)\n                       VALUES(?,?,?,?,?,?,?,?,?)",
                     (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now)
                 )
 
