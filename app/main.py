@@ -798,9 +798,21 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     # session cookie: the browser must receive the isolated cookie before the
     # redirect to /school/app or /teacher/app, otherwise the redirected request
     # has no authenticated session and immediately returns to /login.
-    target = "/teacher/app" if role == "teacher" else ("/school/app" if role == "school_admin" else "/app")
-    if role in ("teacher", "school_admin"):
+    # The explicit portal URL is authoritative. This prevents a stale or
+    # malformed role value from ever sending a School Admin/Teacher back into
+    # the shared /app workspace.
+    if session_scope == "teacher":
+        target = "/teacher/app"
+        portal_scope = "teacher"
+    elif session_scope == "school":
+        target = "/school/app"
+        portal_scope = "school"
+    else:
+        target = "/teacher/app" if role == "teacher" else ("/school/app" if role == "school_admin" else "/app")
         portal_scope = "teacher" if role == "teacher" else "school"
+    if role in ("teacher", "school_admin") or session_scope in ("teacher", "school"):
+        if session_scope not in ("teacher", "school"):
+            portal_scope = "teacher" if role == "teacher" else "school"
         portal_cookie = "davischool_teacher_session" if portal_scope == "teacher" else "davischool_school_session"
         portal_payload = dict(request.session)
         portal_payload["role"] = role
