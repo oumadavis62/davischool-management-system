@@ -3613,10 +3613,19 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # force School Admin into /school when the active account is using the
     # shared /app session cookie; doing so makes the POST appear logged out.
     session_scope = request.scope.get("davischool_session_scope", "default")
+    # The visible marks page can still be reached through the shared /app
+    # route from older teacher navigation links. In that case the middleware
+    # scope is "default", which would otherwise make the Submit & Lock POST
+    # use the generic session cookie and send the teacher to the login page.
+    # The authenticated role is the authoritative fallback for marks actions.
     if session_scope == "school":
         portal_prefix = "/school"
     elif session_scope == "teacher":
         portal_prefix = "/teacher"
+    elif role == "teacher":
+        portal_prefix = "/teacher"
+    elif role == "school_admin":
+        portal_prefix = "/school"
     else:
         portal_prefix = ""
     form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
