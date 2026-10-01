@@ -532,6 +532,34 @@ def _school_session(request):
         return None
     return sid
 
+def _recover_portal_session(request, expected_role=""):
+    """Recover an existing signed portal session for a marks action."""
+    expected_role = str(expected_role or "").strip()
+    candidates = ["davischool_teacher_session"] if expected_role == "teacher" else (["davischool_school_session"] if expected_role == "school_admin" else ["davischool_teacher_session", "davischool_school_session"])
+    try:
+        from app.main import SECRET_KEY
+        from itsdangerous import TimestampSigner
+        signer = TimestampSigner(str(SECRET_KEY))
+        for cookie_name in candidates:
+            raw = request.cookies.get(cookie_name)
+            if not raw:
+                continue
+            try:
+                raw = signer.unsign(raw.encode("utf-8"), max_age=60*60*12)
+                data = json.loads(base64.b64decode(raw))
+            except Exception:
+                continue
+            role = str(data.get("role") or "")
+            if expected_role and role != expected_role:
+                continue
+            if data.get("email") and role in ("teacher", "school_admin"):
+                request.scope["session"] = data
+                request.scope["davischool_session_scope"] = "teacher" if role == "teacher" else "school"
+                return data
+    except Exception as exc:
+        print("DAVISCHOOL PORTAL SESSION RECOVERY ERROR:", repr(exc), flush=True)
+    return None
+
 def _audit(cur, school_id, request, action, details):
     ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
@@ -3630,6 +3658,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     else:
         portal_prefix = ""
     form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
+    portal_role_field = "<input type='hidden' name='portal_role' value='%s'>" % escape(role) if role in ("teacher", "school_admin") else ""
     draft_action = ""
     if locked:
         if role == "school_admin":
@@ -3687,11 +3716,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<button class='btn'>Load Students</button></form>"
       "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>"
       "<form method='post' action='{action}'>"
-      "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
+      "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>{portal_role_field}"
       "<div class='marks-table-scroll'><table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table></div>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
           bg=("#fee2e2" if locked else "#f0fdf4"),
           status=("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),
-          action=form_action,eid=eid,cid=cid,subid=subid,out_of=out_of,
+          action=form_action,eid=eid,cid=cid,subid=subid,out_of=out_of,portal_role_field=portal_role_field,
           rows=rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",
           form_actions=form_actions,outside_actions=outside_actions)+
       "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;box-sizing:border-box}.marks-table{width:100%%;table-layout:fixed;border-collapse:collapse}.marks-table th,.marks-table td{vertical-align:middle;text-align:left;padding:8px 7px;box-sizing:border-box}.marks-table th{white-space:nowrap}.marks-table .col-admission{width:12%%}.marks-table .col-student{width:22%%}.marks-table .col-mark{width:12%%}.marks-table .col-grade{width:10%%}.marks-table .col-points{width:10%%}.marks-table .col-comment{width:34%%}.marks-table td:nth-child(1),.marks-table td:nth-child(2),.marks-table td:nth-child(4),.marks-table td:nth-child(5){white-space:nowrap}.markbox{position:relative;width:100%%;max-width:110px}.markinput{width:100%%;padding:8px;border:1px solid #dbe2ea;border-radius:8px;box-sizing:border-box}.commentinput{width:100%%;min-width:0;box-sizing:border-box;height:32px;padding:6px 8px;font-size:12px}.btn,.editbtn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}</style>"
@@ -3985,10 +4014,14 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     return RedirectResponse(f"{redirect_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
-async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), portal_role:str=Form("")):
     sid=_school_session(request)
     if not sid:
-        print("DAVISCHOOL MARKS FINALIZE SESSION MISSING: path=%s scope=%s role=%s email=%s", request.url.path, request.scope.get("davischool_session_scope"), request.session.get("role"), request.session.get("email"), flush=True)
+        recovered = _recover_portal_session(request, portal_role)
+        if recovered:
+            sid=_school_session(request)
+    if not sid:
+        print("DAVISCHOOL MARKS FINALIZE SESSION MISSING: path=%s scope=%s role=%s email=%s portal_role=%s", request.url.path, request.scope.get("davischool_session_scope"), request.session.get("role"), request.session.get("email"), portal_role, flush=True)
         scope_name = str(request.scope.get("davischool_session_scope") or "default")
         login_path = "/school/login" if scope_name == "school" else ("/teacher/login" if scope_name == "teacher" else "/")
         return RedirectResponse(login_path,303)
