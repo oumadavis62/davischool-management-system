@@ -532,7 +532,8 @@ document.addEventListener('submit',function(e){{
   if(button){{button.classList.add('btn-loading');button.setAttribute('aria-busy','true');}}
 }},true);
 // Navigation links remain enabled after a click so a failed redirect cannot
-// permanently disable the School Admin sidebar.</script>"%js_rules
+// permanently disable the School Admin sidebar.
+}})();</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
 
