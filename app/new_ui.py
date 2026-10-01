@@ -3642,19 +3642,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # force School Admin into /school when the active account is using the
     # shared /app session cookie; doing so makes the POST appear logged out.
     session_scope = request.scope.get("davischool_session_scope", "default")
-    # The visible marks page can still be reached through the shared /app
-    # route from older teacher navigation links. In that case the middleware
-    # scope is "default", which would otherwise make the Submit & Lock POST
-    # use the generic session cookie and send the teacher to the login page.
-    # The authenticated role is the authoritative fallback for marks actions.
+    # Keep the form in the SAME session scope that served the page. A shared
+    # /app page must post back to /app; forcing /teacher or /school here would
+    # switch cookie scopes and make the next request appear logged out.
     if session_scope == "school":
         portal_prefix = "/school"
     elif session_scope == "teacher":
         portal_prefix = "/teacher"
-    elif role == "teacher":
-        portal_prefix = "/teacher"
-    elif role == "school_admin":
-        portal_prefix = "/school"
     else:
         portal_prefix = ""
     form_action = f"{portal_prefix}/app/academics/marks/save-draft" if role == "teacher" else f"{portal_prefix}/app/academics/marks/save"
@@ -4122,12 +4116,11 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         con.close()
         return HTMLResponse("Marks could not be locked. Please try Submit & Lock Marks again.",500)
     con.close()
-    # Preserve the portal that performed the finalization. The multi-session
-    # middleware uses /school and /teacher to select the corresponding session
-    # cookie; redirecting to bare /app would fall back to the default session.
-    scope_name = str(request.scope.get("davischool_session_scope") or "")
-    role_name = str(request.session.get("role") or "")
-    portal_prefix = "/school" if scope_name == "school" or role_name == "school_admin" else ("/teacher" if scope_name == "teacher" or role_name == "teacher" else "")
+    # Return through the SAME session scope that handled the POST. Do not
+    # infer a different portal from the role: shared /app sessions intentionally
+    # remain on /app and must keep using the default session cookie.
+    scope_name = str(request.scope.get("davischool_session_scope") or "default")
+    portal_prefix = "/school" if scope_name == "school" else ("/teacher" if scope_name == "teacher" else "")
     return RedirectResponse(f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
