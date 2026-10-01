@@ -3661,11 +3661,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # explicit publication. The Submit & Lock button MUST post to the
             # portal-prefixed finalize route so the teacher session cookie is
             # selected by the multi-session middleware.
-            draft_action = "<button class='btn' type='submit'>💾 Save Draft</button>" if students else ""
+            draft_action = "<button class='btn' type='submit' formaction='%s'>💾 Save Draft</button>" % form_action if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
-            mark_actions = "<button class='btn' type='submit'>💾 Save Marks</button>" if students else ""
+            mark_actions = "<button class='btn' type='submit' formaction='%s'>💾 Save Marks</button>" % form_action if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
