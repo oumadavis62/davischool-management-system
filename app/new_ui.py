@@ -99,10 +99,12 @@ def davischool_login_page(request: Request):
 
 @router.get("/login")
 def davischool_login_get(request: Request):
-    # Render the login page directly. Redirecting to "/" is unsafe here because
-    # the portal middleware rewrites "/" to /school/login or /teacher/login,
-    # which is routed back to /login and creates an infinite redirect loop.
-    return davischool_login_page(request)
+    # /login is an internal portal alias. The actual DaviSchool sign-in screen
+    # is the canonical main.py home() page. Rendering a second login template
+    # here created a different-looking "fake" sign-in window whenever a portal
+    # tab lost its session and was redirected to /login.
+    from app.main import home
+    return home(request)
 
 @router.post("/login")
 def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
