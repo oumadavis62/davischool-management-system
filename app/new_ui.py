@@ -78,7 +78,12 @@ def _average_selected_assessments(cur, school_id, student_id, exam_ids, term="",
 @router.get("/", response_class=HTMLResponse)
 def davischool_login_page(request: Request):
     if request.session.get("email"):
-        return RedirectResponse("/app", status_code=303)
+        portal_scope = str(request.scope.get("davischool_session_scope") or "")
+        if portal_scope == "teacher":
+            return RedirectResponse("/teacher/app", status_code=303)
+        if portal_scope == "school":
+            return RedirectResponse("/school/app", status_code=303)
+        return RedirectResponse("/", status_code=303)
     error = "<div class='err'>This school account is suspended. Please contact the DaviSchool administrator.</div>" if request.query_params.get("suspended") else ("<div class='err'>Invalid username or password.</div>" if request.query_params.get("error") else "")
     portal_scope = str(request.scope.get("davischool_session_scope") or "")
     # Always post back through the explicit portal when the login page was
