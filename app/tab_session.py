@@ -138,7 +138,15 @@ class DaviSchoolTabSessionMiddleware:
         form.appendChild(hidden);
       }
       hidden.value = id;
-      form.action = addTab(form.action);
+      // The clicked submit button may have its own formaction. Always attach
+      // this tab identity to the actual submit target; changing only form.action
+      // can otherwise leave Submit & Lock or Save Draft on the wrong session.
+      var submitter = event.submitter;
+      if (submitter && submitter.getAttribute("formaction")) {
+        submitter.setAttribute("formaction", addTab(submitter.getAttribute("formaction")));
+      } else if (form.action) {
+        form.action = addTab(form.action);
+      }
       markInternalNavigation();
     }, true);
 
