@@ -3548,12 +3548,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 pass
             out_of=100.0
         try:
-            _ensure_report_card_fields(cur)
+            # Teacher marks use the private draft table for comments. Do not run
+            # report-card schema migrations on every page load; those DDL checks
+            # were a major source of delay on the Teacher Record Marks tile.
             student_ids = [int(strow["id"]) for strow in students]
             if student_ids:
                 placeholders = ",".join(["?"] * len(student_ids))
                 if role=="teacher":
-                    _ensure_teacher_mark_drafts_table(cur)
                     comment_rows = cur.execute(
                         "SELECT student_id,comment FROM teacher_mark_drafts "
                         "WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? "
@@ -3588,7 +3589,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     grading_rules=[]
     if subid:
         try:
-            _ensure_grading_table(cur)
+            # The grading table is already provisioned by the application setup.
+            # Avoid schema migration checks during every Teacher page request.
             grading_rules=cur.execute("""SELECT * FROM subject_grading_rules
               WHERE school_id=? AND subject_id=? ORDER BY min_mark DESC,max_mark DESC""",(sid,subid)).fetchall()
         except Exception as exc:
@@ -3618,7 +3620,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     locked = False
     if eid and cid and subid:
         try:
-            _ensure_academic_locks_table(cur)
+            # Read the existing lock directly. Avoid running table migration DDL
+            # on every Teacher Record Marks page load.
             locked = bool(_academic_lock(cur,sid,eid,cid,subid))
         except Exception as exc:
             # A legacy lock table must never make existing marks inaccessible.
