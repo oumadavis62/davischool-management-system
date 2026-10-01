@@ -191,7 +191,10 @@ class DaviSchoolTabSessionMiddleware:
                 if tab_id and location:
                     headers["location"] = self._with_tab(location, tab_id)
                 if html_response["value"]:
-                    headers["content-length"] = ""
+                    try:
+                        del headers["content-length"]
+                    except KeyError:
+                        pass
                 await send(message)
                 return
             if message["type"] == "http.response.body" and html_response["value"]:
