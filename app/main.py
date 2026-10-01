@@ -793,19 +793,40 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None
     request.session["is_impersonating"]=False
     session_scope = request.scope.get("davischool_session_scope", "default")
+    # Write the role-specific portal cookie directly on the login response.
+    # Do not rely only on the response middleware to migrate the old shared
+    # session cookie: the browser must receive the isolated cookie before the
+    # redirect to /school/app or /teacher/app, otherwise the redirected request
+    # has no authenticated session and immediately returns to /login.
+    target = "/teacher/app" if role == "teacher" else ("/school/app" if role == "school_admin" else "/app")
+    if role in ("teacher", "school_admin"):
+        portal_scope = "teacher" if role == "teacher" else "school"
+        portal_cookie = "davischool_teacher_session" if portal_scope == "teacher" else "davischool_school_session"
+        portal_payload = dict(request.session)
+        portal_payload["role"] = role
+        portal_payload["email"] = user_email
+        portal_payload["school_id"] = school_id
+        raw_portal = base64.b64encode(json.dumps(portal_payload).encode("utf-8"))
+        signed_portal = TimestampSigner(str(SECRET_KEY)).sign(raw_portal).decode("utf-8")
+        response = RedirectResponse(target, status_code=303)
+        response.headers.append(
+            "Set-Cookie",
+            f"{portal_cookie}={signed_portal}; Path=/; Max-Age={60*60*12}; HttpOnly; SameSite=Lax"
+            + ("; Secure" if SESSION_HTTPS_ONLY else "")
+        )
+        # Remove the old shared session so it can never overwrite the other
+        # account when Teacher and School Admin are open simultaneously.
+        response.headers.append(
+            "Set-Cookie",
+            "session=null; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+            + ("; Secure" if SESSION_HTTPS_ONLY else "")
+        )
+        return response
     if session_scope == "teacher":
         return RedirectResponse("/teacher/app", status_code=303)
     if session_scope == "school":
         return RedirectResponse("/school/app", status_code=303)
-    # A role is stronger than the URL that happened to open the common login.
-    # Never place a School Admin or Teacher into the shared /app workspace:
-    # that namespace has no tab-level account identity and is the source of
-    # cross-account switching and navigation redirects to login.
-    if role == "school_admin":
-        return RedirectResponse("/school/app", status_code=303)
-    if role == "teacher":
-        return RedirectResponse("/teacher/app", status_code=303)
-    return RedirectResponse("/app", status_code=303)
+    return RedirectResponse(target, status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
