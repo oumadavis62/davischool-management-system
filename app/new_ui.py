@@ -450,13 +450,32 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
+function portalizeUrl(url){{
+  try{{
+    var u=new URL(url,window.location.href);
+    if(u.origin!==window.location.origin)return u;
+    var p=u.pathname;
+    var portal=window.location.pathname.indexOf('/teacher/')===0 ? '/teacher' : (window.location.pathname.indexOf('/school/')===0 ? '/school' : '');
+    if(portal && p.indexOf('/app')===0 && p.indexOf(portal+'/')!==0)u.pathname=portal+p;
+    return u;
+  }}catch(e){{return new URL(url,window.location.href);}}
+}}
+document.addEventListener('click',function(event){{
+  var a=event.target.closest&&event.target.closest('a[href]');
+  if(!a || event.defaultPrevented)return;
+  var u=portalizeUrl(a.href);
+  if(u.origin===window.location.origin && u.pathname!==new URL(a.href,window.location.href).pathname){{
+    event.preventDefault();
+    window.location.href=u.toString();
+  }}
+}},true);
 document.addEventListener('submit',function(event){{
   var form=event.target;
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
   var submitter=event.submitter;
   var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
   try{{
-    var url=new URL(action,window.location.href);
+    var url=portalizeUrl(action);
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Let the browser submit marks actions natively. The School Admin and
