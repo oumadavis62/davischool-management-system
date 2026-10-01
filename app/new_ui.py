@@ -167,12 +167,31 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
         con.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), user["id"]))
         con.commit(); con.close()
     portal_scope = str(request.scope.get("davischool_session_scope") or "")
-    if portal_scope == "teacher":
-        return RedirectResponse("/teacher/app", status_code=303)
-    if portal_scope == "school":
-        return RedirectResponse("/school/app", status_code=303)
-    # Shared login has no tab identity. Do not enter the shared /app workspace.
-    return RedirectResponse("/", status_code=303)
+    target = "/teacher/app" if user["role"] == "teacher" else ("/school/app" if user["role"] == "school_admin" else "/")
+    if user["role"] in ("teacher", "school_admin"):
+        from app.main import SECRET_KEY, SESSION_HTTPS_ONLY
+        from itsdangerous import TimestampSigner
+        portal_scope = "teacher" if user["role"] == "teacher" else "school"
+        portal_cookie = "davischool_teacher_session" if portal_scope == "teacher" else "davischool_school_session"
+        portal_payload = dict(request.session)
+        portal_payload["role"] = user["role"]
+        portal_payload["email"] = user["email"]
+        portal_payload["school_id"] = user["school_id"]
+        raw_portal = base64.b64encode(json.dumps(portal_payload).encode("utf-8"))
+        signed_portal = TimestampSigner(str(SECRET_KEY)).sign(raw_portal).decode("utf-8")
+        response = RedirectResponse(target, status_code=303)
+        response.headers.append(
+            "Set-Cookie",
+            f"{portal_cookie}={signed_portal}; Path=/; Max-Age={60*60*12}; HttpOnly; SameSite=Lax"
+            + ("; Secure" if SESSION_HTTPS_ONLY else "")
+        )
+        response.headers.append(
+            "Set-Cookie",
+            "session=null; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+            + ("; Secure" if SESSION_HTTPS_ONLY else "")
+        )
+        return response
+    return RedirectResponse(target, status_code=303)
 
 @router.get("/logout")
 def davischool_logout(request: Request):
