@@ -4128,16 +4128,19 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         con.close()
         return HTMLResponse("Marks could not be locked. Please try Submit & Lock Marks again.",500)
     con.close()
-    # Return through the SAME session scope that handled the POST. Do not
-    # infer a different portal from the role: shared /app sessions intentionally
-    # remain on /app and must keep using the default session cookie.
+    # Always return to the authenticated portal. The Submit & Lock POST can
+    # arrive at /app/... even when the teacher is using the shared /app session.
+    # In that case the middleware scope is "default"; using it would redirect
+    # to "/" and show the login menu even though the lock was successfully saved.
+    # The authenticated session role is therefore the authoritative fallback.
+    session_role = str(request.session.get("role") or "").strip()
     scope_name = str(request.scope.get("davischool_session_scope") or "default")
-    if portal_role == "teacher":
+    if portal_role == "teacher" or session_role == "teacher" or scope_name == "teacher":
         portal_prefix = "/teacher"
-    elif portal_role == "school_admin":
+    elif portal_role == "school_admin" or session_role == "school_admin" or scope_name == "school":
         portal_prefix = "/school"
     else:
-        portal_prefix = "/school" if scope_name == "school" else ("/teacher" if scope_name == "teacher" else "")
+        portal_prefix = ""
     return RedirectResponse(f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
