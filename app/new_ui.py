@@ -534,7 +534,6 @@ document.addEventListener('submit',function(e){{
 // Navigation links remain enabled after a click so a failed redirect cannot
 // permanently disable the School Admin sidebar.
 }})();</script>"""%js_rules
-    )
     return _school_page(request,"Marks Entry",body)
 
 @router.post("/app/academics/marks/save-draft")
