@@ -3670,8 +3670,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # explicit publication. The Submit & Lock button MUST post to the
             # portal-prefixed finalize route so the teacher session cookie is
             # selected by the multi-session middleware.
-            draft_action = ("<button class='btn' type='submit'>💾 Save Draft</button> "
-                            "<button class='btn' type='button' disabled style='opacity:.55;cursor:not-allowed'>🔒 Submit & Lock Marks</button>") if students else ""
+            draft_action = "<button class='btn' type='submit'>💾 Save Draft</button>" if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
