@@ -213,6 +213,80 @@ def _db():
     from app.main import get_db
     return get_db()
 
+def _recover_portal_session(request, expected_role=""):
+    """Recover the signed portal session for the explicitly addressed portal."""
+    expected_role = str(expected_role or "").strip()
+    candidates = (
+        ["davischool_teacher_session"] if expected_role == "teacher"
+        else ["davischool_school_session"] if expected_role == "school_admin"
+        else ["davischool_teacher_session", "davischool_school_session"]
+    )
+    try:
+        from app.main import SECRET_KEY
+        from itsdangerous import TimestampSigner
+        signer = TimestampSigner(str(SECRET_KEY))
+        for cookie_name in candidates:
+            raw = request.cookies.get(cookie_name)
+            if not raw:
+                continue
+            try:
+                unsigned = signer.unsign(raw.encode("utf-8"), max_age=60*60*12)
+                data = json.loads(base64.b64decode(unsigned))
+            except Exception:
+                continue
+            role = str(data.get("role") or "")
+            if expected_role and role != expected_role:
+                continue
+            if data.get("email") and role in ("school_admin", "teacher"):
+                request.scope["session"] = data
+                request.scope["davischool_session_scope"] = "teacher" if role == "teacher" else "school"
+                return data
+    except Exception as exc:
+        print("DAVISCHOOL PORTAL SESSION RECOVERY ERROR:", repr(exc), flush=True)
+    return None
+
+def _school_session(request):
+    """Return the authenticated school id for the current portal only."""
+    portal_scope = str(request.scope.get("davischool_session_scope") or "")
+    expected_role = "teacher" if portal_scope == "teacher" else ("school_admin" if portal_scope == "school" else "")
+    role = str(request.session.get("role", ""))
+    if ("email" not in request.session or role not in ("school_admin", "teacher")) and expected_role:
+        recovered = _recover_portal_session(request, expected_role)
+        if recovered:
+            role = str(request.session.get("role", ""))
+    if "email" not in request.session or role not in ("school_admin", "teacher"):
+        return None
+    if expected_role and role != expected_role:
+        return None
+    try:
+        sid = int(request.session.get("school_id") or 0)
+    except (TypeError, ValueError):
+        sid = 0
+    if not sid:
+        return None
+    con = _db()
+    try:
+        school = con.execute("SELECT status FROM schools WHERE id=?", (sid,)).fetchone()
+    finally:
+        con.close()
+    status = str(school["status"] or "suspended").strip().lower() if school else "suspended"
+    if status not in ("active", "enabled"):
+        request.session.clear()
+        return None
+    return sid
+
+def _school_page(request, title, body):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    return HTMLResponse(_shell(
+        title,
+        request.session.get("name", "DaviSchool"),
+        request.session.get("role", ""),
+        body,
+        sid,
+    ))
+
 def _ensure_user_account_columns(cur, con=None):
     """Ensure generated-account columns exist on both SQLite and PostgreSQL."""
     cur.execute("SELECT * FROM users LIMIT 0")
