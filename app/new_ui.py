@@ -167,11 +167,17 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
         con.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), user["id"]))
         con.commit(); con.close()
     portal_scope = str(request.scope.get("davischool_session_scope") or "")
-    target = "/teacher/app" if user["role"] == "teacher" else ("/school/app" if user["role"] == "school_admin" else "/")
+    # The URL portal is authoritative for isolated logins.
+    if portal_scope == "teacher":
+        target = "/teacher/app"
+    elif portal_scope == "school":
+        target = "/school/app"
+    else:
+        target = "/teacher/app" if user["role"] == "teacher" else ("/school/app" if user["role"] == "school_admin" else "/")
     if user["role"] in ("teacher", "school_admin"):
         from app.main import SECRET_KEY, SESSION_HTTPS_ONLY
         from itsdangerous import TimestampSigner
-        portal_scope = "teacher" if user["role"] == "teacher" else "school"
+        portal_scope = "teacher" if portal_scope == "teacher" else ("school" if portal_scope == "school" else ("teacher" if user["role"] == "teacher" else "school"))
         portal_cookie = "davischool_teacher_session" if portal_scope == "teacher" else "davischool_school_session"
         portal_payload = dict(request.session)
         portal_payload["role"] = user["role"]
