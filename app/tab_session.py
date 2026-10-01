@@ -65,14 +65,36 @@ class DaviSchoolTabSessionMiddleware:
 (function () {
   try {
     var KEY = "davischool_tab_id";
+    var NAV_KEY = "davischool_tab_navigation";
     var id = sessionStorage.getItem(KEY);
-    if (!id) {
+
+    function newTabId() {
       if (window.crypto && crypto.randomUUID) {
-        id = crypto.randomUUID().replace(/-/g, "");
-      } else {
-        id = Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        return crypto.randomUUID().replace(/-/g, "");
       }
+      return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    }
+
+    var navigationType = "navigate";
+    try {
+      var nav = performance.getEntriesByType("navigation")[0];
+      if (nav && nav.type) navigationType = nav.type;
+    } catch (_) {}
+
+    var internalNavigation = sessionStorage.getItem(NAV_KEY) === "1";
+    sessionStorage.removeItem(NAV_KEY);
+
+    // A normal reload/history traversal stays in this tab's existing session.
+    // A fresh navigation with a copied ds_tab must not inherit another tab's
+    // identity. This is important for Chrome/Edge tab duplication, which can
+    // clone sessionStorage when a tab is duplicated.
+    if (!id || (navigationType === "navigate" && !internalNavigation && new URL(window.location.href).searchParams.has("ds_tab"))) {
+      id = newTabId();
       sessionStorage.setItem(KEY, id);
+    }
+
+    function markInternalNavigation() {
+      try { sessionStorage.setItem(NAV_KEY, "1"); } catch (_) {}
     }
 
     function addTab(value) {
@@ -89,6 +111,7 @@ class DaviSchoolTabSessionMiddleware:
     if (!new URL(window.location.href).searchParams.has("ds_tab")) {
       var current = new URL(window.location.href);
       current.searchParams.set("ds_tab", id);
+      markInternalNavigation();
       window.location.replace(current.pathname + current.search + current.hash);
       return;
     }
@@ -101,6 +124,7 @@ class DaviSchoolTabSessionMiddleware:
       if (!href || href[0] === "#" || /^(mailto|tel|javascript):/i.test(href)) return;
       if (/^https?:/i.test(href) && !href.startsWith(window.location.origin)) return;
       link.setAttribute("href", addTab(href));
+      if (link.target !== "_blank") markInternalNavigation();
     }, true);
 
     document.addEventListener("submit", function (event) {
@@ -115,6 +139,7 @@ class DaviSchoolTabSessionMiddleware:
       }
       hidden.value = id;
       form.action = addTab(form.action);
+      markInternalNavigation();
     }, true);
 
     var originalFetch = window.fetch;
