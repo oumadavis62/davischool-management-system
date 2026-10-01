@@ -10,6 +10,9 @@ import base64
 import secrets
 import re
 import traceback
+from datetime import datetime
+
+app = FastAPI()
 # Database schema initialization must finish before requests are accepted.
 # Running migrations in a background thread allows page queries to race with
 # CREATE/ALTER TABLE operations and can deadlock PostgreSQL.
