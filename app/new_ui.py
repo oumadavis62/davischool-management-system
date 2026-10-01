@@ -3578,7 +3578,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<button class='btn'>Load Students</button></form>"
       "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>"
-      "<form method='post' action='{action}'>"
+      "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}' onsubmit="this.action=this.getAttribute('data-save-action');">"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
       "<div class='marks-table-scroll'><table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table></div>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
           bg=("#fee2e2" if locked else "#f0fdf4"),
@@ -3752,7 +3752,9 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
     finally:
         try: con.close()
         except Exception: pass
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}&saved_at={int(datetime.now(ZoneInfo('Africa/Nairobi')).timestamp())}",303,headers={"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"})
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
+    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}&saved_at={int(datetime.now(ZoneInfo('Africa/Nairobi')).timestamp())}"+tab_suffix,303,headers={"Cache-Control":"no-store, no-cache, must-revalidate, max-age=0","Pragma":"no-cache","Expires":"0"})
 
 @router.post("/app/academics/marks/save")
 async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
