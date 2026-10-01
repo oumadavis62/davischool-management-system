@@ -187,17 +187,14 @@ class DaviSchoolMultiSessionMiddleware:
         # authenticated accounts compete for one cookie.
         if migrated_from_default and (original_path == "/app" or original_path.startswith("/app/")):
             target = ("/teacher" if scope_name == "teacher" else "/school") + original_path
-            async def send_migration(message):
-                if message["type"] == "http.response.start":
-                    headers = MutableHeaders(scope=message)
-                    headers["location"] = target
-                    headers["content-length"] = "0"
-                    headers.append("Set-Cookie", f"session=null; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
-                    raw2 = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
-                    signed2 = self.signer.sign(raw2).decode("utf-8")
-                    headers.append("Set-Cookie", f"{cookie_name}={signed2}; path=/{scope_name}; Max-Age={self.max_age}; {self.security_flags}")
-                await send(message)
-            await send({"type":"http.response.start","status":303,"headers":[]})
+            headers = MutableHeaders({})
+            headers["location"] = target
+            headers["content-length"] = "0"
+            headers.append("Set-Cookie", f"session=null; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
+            raw2 = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
+            signed2 = self.signer.sign(raw2).decode("utf-8")
+            headers.append("Set-Cookie", f"{cookie_name}={signed2}; path=/{scope_name}; Max-Age={self.max_age}; {self.security_flags}")
+            await send({"type":"http.response.start","status":303,"headers":list(headers.raw)})
             await send({"type":"http.response.body","body":b"","more_body":False})
             return
 
