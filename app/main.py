@@ -175,7 +175,7 @@ class DaviSchoolMultiSessionMiddleware:
                     headers["location"] = self.rewrite_location(location, scope_name)
                 # Keep both role cookies available to every portal route. The
                 # middleware selects the correct one from the portal URL/referrer.
-                cookie_path = "/"
+                cookie_path = "/teacher" if scope_name == "teacher" else ("/school" if scope_name == "school" else "/")
                 if scope["session"]:
                     raw = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
                     signed = self.signer.sign(raw).decode("utf-8")
