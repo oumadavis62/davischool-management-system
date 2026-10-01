@@ -80,8 +80,16 @@ def davischool_login_page(request: Request):
     if request.session.get("email"):
         return RedirectResponse("/app", status_code=303)
     error = "<div class='err'>This school account is suspended. Please contact the DaviSchool administrator.</div>" if request.query_params.get("suspended") else ("<div class='err'>Invalid username or password.</div>" if request.query_params.get("error") else "")
-    teacher_context = str(request.scope.get("davischool_session_context") or request.query_params.get("session_context") or "")
-    login_action = "/login" + (("?session_context=" + teacher_context) if teacher_context else "")
+    portal_scope = str(request.scope.get("davischool_session_scope") or "")
+    # Always post back through the explicit portal when the login page was
+    # opened from /school or /teacher. This makes the correct role cookie
+    # authoritative even when the browser omits the Referer header.
+    if portal_scope == "school":
+        login_action = "/school/login"
+    elif portal_scope == "teacher":
+        login_action = "/teacher/login"
+    else:
+        login_action = "/login"
     return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>body{{margin:0;background:#eef5fb;font-family:Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}}.box{{width:min(430px,92vw);background:white;border:1px solid #d8e3f0;border-top:4px solid #2E8B57;border-radius:18px;padding:32px;box-shadow:0 18px 50px #176B3A20}}.logo{{font-size:25px;font-weight:900;color:#176B3A;margin-bottom:5px}}.sub{{color:#64748b;margin-bottom:25px}}label{{display:block;font-size:13px;font-weight:800;color:#334155;margin:14px 0 7px}}input{{width:100%;box-sizing:border-box;padding:13px;border:1px solid #dbe2ea;border-radius:10px;font-size:15px}}button{{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#176B3A;color:white;font-weight:900;font-size:15px;cursor:pointer}}.err{{background:#fff1f2;border:1px solid #fda4af;color:#9f1239;padding:11px;border-radius:10px;margin-bottom:14px}}</style></head><body><div class='box'><div class='logo'>🏫 DaviSchool Management System</div><div class='sub'>Secure school management platform</div>{error}<form method='post' action='{login_action}'><label>Username / Email</label><input name='email' type='text' autocomplete='username' required placeholder='Enter username or email'><label>Password</label><input name='password' type='password' autocomplete='current-password' required placeholder='Enter password'><button type='submit'>Sign In</button></form></div></body></html>""")
 
 @router.get("/login")
