@@ -2801,7 +2801,8 @@ def _ensure_academic_locks_table(cur):
                 print("DAVISCHOOL ACADEMIC LOCK SCHEMA WARNING:",repr(exc),flush=True)
 
 def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
-    _ensure_academic_locks_table(cur)
+    # This is a read path. Schema creation/upgrades belong to startup/migrations;
+    # running ALTER TABLE here can deadlock with the background initializer.
     return cur.execute(
         "SELECT * FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? LIMIT 1",
         (school_id, exam_id, class_id, subject_id)
