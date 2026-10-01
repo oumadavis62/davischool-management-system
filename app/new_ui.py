@@ -4009,11 +4009,18 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), portal_role:str=Form("")):
-    sid=_school_session(request)
-    if not sid:
-        recovered = _recover_portal_session(request, portal_role)
-        if recovered:
-            sid=_school_session(request)
+    # The form explicitly identifies the portal that opened the marks page.
+    # Prefer that portal cookie over a stale/default session so Submit & Lock
+    # can never fall through to the generic login page.
+    recovered = _recover_portal_session(request, portal_role) if portal_role in ("teacher", "school_admin") else None
+    if recovered:
+        sid=_school_session(request)
+    else:
+        sid=_school_session(request)
+        if not sid:
+            recovered = _recover_portal_session(request, portal_role)
+            if recovered:
+                sid=_school_session(request)
     if not sid:
         print("DAVISCHOOL MARKS FINALIZE SESSION MISSING: path=%s scope=%s role=%s email=%s portal_role=%s", request.url.path, request.scope.get("davischool_session_scope"), request.session.get("role"), request.session.get("email"), portal_role, flush=True)
         scope_name = str(request.scope.get("davischool_session_scope") or "default")
@@ -4028,7 +4035,12 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
-        con.close(); return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+        con.close()
+        if portal_role == "teacher":
+            return RedirectResponse(f"/teacher/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+        if portal_role == "school_admin":
+            return RedirectResponse(f"/school/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+        return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
     role=str(request.session.get("role",""))
     if role=="teacher":
@@ -4120,7 +4132,12 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     # infer a different portal from the role: shared /app sessions intentionally
     # remain on /app and must keep using the default session cookie.
     scope_name = str(request.scope.get("davischool_session_scope") or "default")
-    portal_prefix = "/school" if scope_name == "school" else ("/teacher" if scope_name == "teacher" else "")
+    if portal_role == "teacher":
+        portal_prefix = "/teacher"
+    elif portal_role == "school_admin":
+        portal_prefix = "/school"
+    else:
+        portal_prefix = "/school" if scope_name == "school" else ("/teacher" if scope_name == "teacher" else "")
     return RedirectResponse(f"{portal_prefix}/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
 @router.get("/app/academics/marks/request-correction", response_class=HTMLResponse)
