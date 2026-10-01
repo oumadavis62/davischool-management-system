@@ -167,12 +167,58 @@ class DaviSchoolMultiSessionMiddleware:
         else:
             scope["session"] = {}
 
+        # Migrate any legacy shared root "session" cookie to the role-specific
+        # portal cookie.  The old shared cookie is the source of account
+        # switching when two portals are open in the same browser: both tabs
+        # address /app, so whichever login last replaced "session" became the
+        # account seen by the other tab.  Never use that shared cookie as the
+        # active authenticated portal session again.
+        migrated_from_default = False
+        if scope_name == "default" and scope["session"].get("role") in ("teacher", "school_admin"):
+            role_scope = "teacher" if scope["session"].get("role") == "teacher" else "school"
+            scope_name = role_scope
+            scope["davischool_session_scope"] = role_scope
+            cookie_name = self.cookie_name(role_scope)
+            migrated_from_default = True
+
+        # If an old deployment left the browser at an unscoped /app URL, move it
+        # to the account's real portal URL before routing the page.  This prevents
+        # the shared /app namespace from ever becoming the place where two
+        # authenticated accounts compete for one cookie.
+        if migrated_from_default and (original_path == "/app" or original_path.startswith("/app/")):
+            target = ("/teacher" if scope_name == "teacher" else "/school") + original_path
+            async def send_migration(message):
+                if message["type"] == "http.response.start":
+                    headers = MutableHeaders(scope=message)
+                    headers["location"] = target
+                    headers["content-length"] = "0"
+                    headers.append("Set-Cookie", f"session=null; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
+                    raw2 = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
+                    signed2 = self.signer.sign(raw2).decode("utf-8")
+                    headers.append("Set-Cookie", f"{cookie_name}={signed2}; path=/{scope_name}; Max-Age={self.max_age}; {self.security_flags}")
+                await send(message)
+            await send({"type":"http.response.start","status":303,"headers":[]})
+            await send({"type":"http.response.body","body":b"","more_body":False})
+            return
+
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 location = headers.get("location")
                 if location:
                     headers["location"] = self.rewrite_location(location, scope_name)
+                # Root login is still allowed as the common entry point, but an
+                # authenticated response must immediately become role-specific.
+                # This is what makes two simultaneous tabs independent even when
+                # both were initially opened from the common login URL.
+                if scope_name == "default" and scope["session"].get("role") in ("teacher", "school_admin"):
+                    scope_name_for_cookie = "teacher" if scope["session"].get("role") == "teacher" else "school"
+                    role_cookie = self.cookie_name(scope_name_for_cookie)
+                    if location:
+                        headers["location"] = self.rewrite_location(location, scope_name_for_cookie)
+                    headers.append("Set-Cookie", f"{role_cookie}={self.signer.sign(base64.b64encode(json.dumps(scope['session']).encode('utf-8'))).decode('utf-8')}; path=/{scope_name_for_cookie}; Max-Age={self.max_age}; {self.security_flags}")
+                    headers.append("Set-Cookie", f"session=null; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
+                    return await send(message)
                 # Keep each portal cookie scoped to its own URL namespace.
                 # Shared /app links are rewritten client-side to /teacher/app or
                 # /school/app before navigation/submission, so the browser never
