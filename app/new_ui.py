@@ -532,7 +532,7 @@ document.addEventListener('submit',function(e){{
   if(button){{button.classList.add('btn-loading');button.setAttribute('aria-busy','true');}}
 }},true);
 // Navigation links remain enabled after a click so a failed redirect cannot
-// permanently disable the School Admin sidebar.;document.querySelectorAll('.marks-entry button,.marks-entry a,.marks-entry form').forEach(function(el){var t=(el.textContent||'').trim().toLowerCase(),h=(el.getAttribute('href')||'')+(el.getAttribute('action')||'')+(el.getAttribute('formaction')||'');if(t.includes('delete')||t.includes('remove')||t.includes('🗑')||h.includes('/marks/delete')){var node=el.closest('form')||el;if(node&&node!==document.body)node.remove();}});</script>"%js_rules
+// permanently disable the School Admin sidebar.</script>"%js_rules
     )
     return _school_page(request,"Marks Entry",body)
 
