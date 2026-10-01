@@ -3509,7 +3509,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # Marks Entry screen from opening.
         try:
             if role=="teacher":
-                _ensure_teacher_mark_drafts_table(cur)
+                # Do not run CREATE TABLE/DDL during a page read. The draft table
+                # is provisioned by database initialization; if a legacy database
+                # lacks it, the query fallback below keeps the page usable.
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     CASE WHEN m.marks IS NOT NULL THEN CAST(m.marks AS TEXT)
                          WHEN d.marks IS NOT NULL THEN CAST(d.marks AS TEXT)
