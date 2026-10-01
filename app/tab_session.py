@@ -186,10 +186,12 @@ class DaviSchoolTabSessionMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 content_type = (headers.get("content-type") or "").lower()
-                html_response["value"] = bool(tab_id and "text/html" in content_type)
+                html_response["value"] = "text/html" in content_type
                 location = headers.get("location")
                 if tab_id and location:
                     headers["location"] = self._with_tab(location, tab_id)
+                if html_response["value"]:
+                    headers.pop("content-length", None)
                 await send(message)
                 return
             if message["type"] == "http.response.body" and html_response["value"]:
