@@ -173,22 +173,15 @@ class DaviSchoolMultiSessionMiddleware:
                 location = headers.get("location")
                 if location:
                     headers["location"] = self.rewrite_location(location, scope_name)
-                # Portal sessions must also be available to the shared /app routes.
-                # The portal scope is selected from the explicit /teacher or /school
-                # URL, or from the same-origin Referer when a shared /app route is
-                # reached by an internal link/fetch. Keep the role cookies at root
-                # path so those shared requests can actually carry the selected cookie.
-                cookie_path = "/"
+                # Keep each portal cookie scoped to its own URL namespace.
+                # Shared /app links are rewritten client-side to /teacher/app or
+                # /school/app before navigation/submission, so the browser never
+                # has to choose between the two portal sessions on an ambiguous URL.
+                cookie_path = "/teacher" if scope_name == "teacher" else ("/school" if scope_name == "school" else "/")
                 if scope["session"]:
                     raw = base64.b64encode(json.dumps(scope["session"]).encode("utf-8"))
                     signed = self.signer.sign(raw).decode("utf-8")
                     headers.append("Set-Cookie", f"{cookie_name}={signed}; path={cookie_path}; Max-Age={self.max_age}; {self.security_flags}")
-                    # Remove the previous path-scoped cookie so an old deployment
-                    # cannot leave duplicate cookies with the same name behind.
-                    if scope_name == "teacher":
-                        headers.append("Set-Cookie", f"{cookie_name}=null; path=/teacher; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
-                    elif scope_name == "school":
-                        headers.append("Set-Cookie", f"{cookie_name}=null; path=/school; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
                 elif not initial_empty:
                     headers.append("Set-Cookie", f"{cookie_name}=null; path={cookie_path}; expires=Thu, 01 Jan 1970 00:00:00 GMT; {self.security_flags}")
             await send(message)
