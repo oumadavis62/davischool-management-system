@@ -162,14 +162,35 @@ class DaviSchoolMultiSessionMiddleware:
         referer = connection.headers.get("referer", "")
         scope_name = self.scope_for(original_path, referer)
 
-        # NEVER authenticate an /app workspace request from the shared root
-        # session. A shared /app URL has no tab-level identity, so using the
-        # root cookie here causes the classic "active tab/account" switching
-        # problem. Only /school/... or /teacher/... (or a request explicitly
-        # coming from one of those portal URLs via Referer) may select a
-        # school/teacher workspace session.
+        # The old shared /app URLs can still exist in an already-open browser
+        # tab after a deployment. Never render the shared workspace there.
+        # If an unscoped /app request has exactly one valid portal cookie,
+        # canonicalize it to that portal instead of sending the user to login.
+        # When both portal cookies exist, require the explicit portal URL; this
+        # preserves true tab isolation rather than guessing which account owns
+        # the tab.
         if scope_name == "default" and (original_path == "/app" or original_path.startswith("/app/")):
-            target = "/"
+            def _portal_cookie_role(name):
+                raw_portal = connection.cookies.get(name)
+                if not raw_portal:
+                    return ""
+                try:
+                    decoded = self.signer.unsign(raw_portal.encode("utf-8"), max_age=self.max_age)
+                    data = json.loads(base64.b64decode(decoded))
+                    role = str(data.get("role") or "")
+                    if data.get("email") and role in ("school_admin", "teacher"):
+                        return role
+                except Exception:
+                    return ""
+                return ""
+            school_role = _portal_cookie_role("davischool_school_session")
+            teacher_role = _portal_cookie_role("davischool_teacher_session")
+            if school_role and not teacher_role:
+                target = "/school" + original_path
+            elif teacher_role and not school_role:
+                target = "/teacher" + original_path
+            else:
+                target = "/"
             await send({"type":"http.response.start","status":303,
                         "headers":[(b"location", target.encode("utf-8")),(b"content-length",b"0")]})
             await send({"type":"http.response.body","body":b"","more_body":False})
