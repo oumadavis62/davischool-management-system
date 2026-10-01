@@ -103,16 +103,25 @@ class DaviSchoolMultiSessionMiddleware:
     @staticmethod
     def strip_prefix(scope, scope_name):
         path = scope.get("path", "/")
-        if scope_name == "teacher" and (path == "/teacher" or path.startswith("/teacher/")):
+        # Only the new portalized /app workspace is a wrapper around the shared
+        # new_ui routes. Legacy /school/* pages are real routes in main.py and
+        # MUST keep their /school prefix. Stripping every /school/* path makes
+        # dashboard links such as /school/students become /students, which then
+        # falls through to the login page.
+        if scope_name == "teacher" and (path == "/teacher/app" or path.startswith("/teacher/app/")):
             stripped = path[len("/teacher"):] or "/"
             scope["path"] = stripped
             scope["raw_path"] = stripped.encode("utf-8")
-        elif scope_name == "school" and (path == "/school" or path.startswith("/school/")):
-            # School Admin uses the same underlying application routes as the
-            # shared /app UI, but keeps its own session cookie. Strip the portal
-            # prefix before routing so /school/app/... reaches /app/... while
-            # remaining in the School Admin session scope.
+        elif scope_name == "school" and (path == "/school/app" or path.startswith("/school/app/")):
             stripped = path[len("/school"):] or "/"
+            scope["path"] = stripped
+            scope["raw_path"] = stripped.encode("utf-8")
+        elif scope_name == "school" and (path == "/school/login" or path.startswith("/school/login?")):
+            stripped = path[len("/school"):] or "/"
+            scope["path"] = stripped
+            scope["raw_path"] = stripped.encode("utf-8")
+        elif scope_name == "teacher" and (path == "/teacher/login" or path.startswith("/teacher/login?")):
+            stripped = path[len("/teacher"):] or "/"
             scope["path"] = stripped
             scope["raw_path"] = stripped.encode("utf-8")
 
