@@ -3552,7 +3552,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                            "onclick=\"if(confirm('Submit and lock these marks? Further edits will require an approved correction request.')){"
                            "var f=document.createElement('form');f.method='post';f.action='/app/academics/marks/finalize" + tab_q + "';"
                            "['exam_id','class_id','subject_id'].forEach(function(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=[%s,%s,%s][v];f.appendChild(i);});"
-                           "document.body.appendChild(f);f.submit();}\">🔒 Submit & Lock Marks</button>")%(eid,cid,subid) if students else ""
+                           "document.body.appendChild(f);try{sessionStorage.setItem('davischool_tab_navigation','1')}catch(_){ }f.submit();}\">🔒 Submit & Lock Marks</button>")%(eid,cid,subid) if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
