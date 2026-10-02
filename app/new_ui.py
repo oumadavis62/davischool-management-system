@@ -4100,29 +4100,84 @@ def marks_correction_requests(request: Request):
     _ensure_marks_correction_requests_table(cur)
     _ensure_academic_locks_table(cur)
 
-    # Show every subject assessment for which marks have actually been saved.
-    # Grouping by exam/class/subject keeps the page compact while preserving
-    # the underlying student marks exactly as stored.
-    saved_rows=cur.execute("""
-        SELECT
-            m.exam_id,m.class_id,m.subject_id,
-            e.name exam_name,c.name class_name,c.stream,
-            sub.name subject_name,
-            COUNT(m.id) mark_count,
-            AVG(m.marks) mark_mean,
-            MAX(m.year) mark_year,MAX(m.term) mark_term
-        FROM marks m
-        LEFT JOIN exams e ON e.id=m.exam_id
-        LEFT JOIN classes c ON c.id=m.class_id
-        LEFT JOIN subjects sub ON sub.id=m.subject_id
-        WHERE m.school_id=?
-          AND m.exam_id IS NOT NULL
-          AND m.class_id IS NOT NULL
-          AND m.subject_id IS NOT NULL
-          AND m.marks IS NOT NULL
-        GROUP BY m.exam_id,m.class_id,m.subject_id,e.name,c.name,c.stream,sub.name
-        ORDER BY COALESCE(e.name,''),COALESCE(c.name,''),COALESCE(c.stream,''),COALESCE(sub.name,'')
-    """,(sid,)).fetchall()
+    # Load filter choices from this school only. No marks are changed by this page.
+    examinations=cur.execute(
+        "SELECT id,name FROM exams WHERE school_id=? ORDER BY name,id",(sid,)
+    ).fetchall()
+    classes=cur.execute(
+        "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream,id",(sid,)
+    ).fetchall()
+    subjects=cur.execute(
+        "SELECT id,name FROM subjects WHERE school_id=? ORDER BY name,id",(sid,)
+    ).fetchall()
+    filter_years=cur.execute(
+        "SELECT DISTINCT year FROM marks WHERE school_id=? AND year IS NOT NULL AND TRIM(CAST(year AS TEXT))<>'' ORDER BY year DESC",(sid,)
+    ).fetchall()
+    filter_terms=cur.execute(
+        "SELECT DISTINCT term FROM marks WHERE school_id=? AND term IS NOT NULL AND TRIM(CAST(term AS TEXT))<>'' ORDER BY term",(sid,)
+    ).fetchall()
+
+    # Nothing is displayed until the administrator selects filters and clicks Load.
+    params=request.query_params
+    load_requested=str(params.get("load","")).strip()=="1"
+    exam_filter=str(params.get("exam_id","")).strip()
+    class_filter=str(params.get("class_id","")).strip()
+    subject_filter=str(params.get("subject_id","")).strip()
+    year_filter=str(params.get("year","")).strip()
+    term_filter=str(params.get("term","")).strip()
+
+    saved_rows=[]
+    if load_requested:
+        where=[
+            "m.school_id=?",
+            "m.exam_id IS NOT NULL",
+            "m.class_id IS NOT NULL",
+            "m.subject_id IS NOT NULL",
+            "m.marks IS NOT NULL"
+        ]
+        query_params=[sid]
+
+        if exam_filter:
+            try:
+                where.append("m.exam_id=?")
+                query_params.append(int(exam_filter))
+            except (TypeError,ValueError):
+                exam_filter=""
+        if class_filter:
+            try:
+                where.append("m.class_id=?")
+                query_params.append(int(class_filter))
+            except (TypeError,ValueError):
+                class_filter=""
+        if subject_filter:
+            try:
+                where.append("m.subject_id=?")
+                query_params.append(int(subject_filter))
+            except (TypeError,ValueError):
+                subject_filter=""
+        if year_filter:
+            where.append("CAST(m.year AS TEXT)=?")
+            query_params.append(year_filter)
+        if term_filter:
+            where.append("CAST(m.term AS TEXT)=?")
+            query_params.append(term_filter)
+
+        saved_rows=cur.execute("""
+            SELECT
+                m.exam_id,m.class_id,m.subject_id,
+                e.name exam_name,c.name class_name,c.stream,
+                sub.name subject_name,
+                COUNT(m.id) mark_count,
+                AVG(m.marks) mark_mean,
+                MAX(m.year) mark_year,MAX(m.term) mark_term
+            FROM marks m
+            LEFT JOIN exams e ON e.id=m.exam_id
+            LEFT JOIN classes c ON c.id=m.class_id
+            LEFT JOIN subjects sub ON sub.id=m.subject_id
+            WHERE %s
+            GROUP BY m.exam_id,m.class_id,m.subject_id,e.name,c.name,c.stream,sub.name
+            ORDER BY COALESCE(e.name,''),COALESCE(c.name,''),COALESCE(c.stream,''),COALESCE(sub.name,'')
+        """ % " AND ".join(where),query_params).fetchall()
 
     request_rows=cur.execute("""
         SELECT r.*,e.name exam_name,c.name class_name,c.stream,sub.name subject_name,t.name teacher_name
@@ -4142,6 +4197,40 @@ def marks_correction_requests(request: Request):
         )
 
     con.close()
+
+    exam_options="".join(
+        "<option value='%s' %s>%s</option>" % (
+            x["id"],"selected" if str(x["id"])==exam_filter else "",
+            escape(str(x["name"] or ""))
+        ) for x in examinations
+    )
+    class_options="".join(
+        "<option value='%s' %s>%s%s</option>" % (
+            x["id"],"selected" if str(x["id"])==class_filter,
+            escape(str(x["name"] or "")),
+            (" — "+escape(str(x["stream"] or ""))) if x["stream"] else ""
+        ) for x in classes
+    )
+    subject_options="".join(
+        "<option value='%s' %s>%s</option>" % (
+            x["id"],"selected" if str(x["id"])==subject_filter,
+            escape(str(x["name"] or ""))
+        ) for x in subjects
+    )
+    year_options="".join(
+        "<option value='%s' %s>%s</option>" % (
+            escape(str(x["year"] or "")),
+            "selected" if str(x["year"] or "")==year_filter else "",
+            escape(str(x["year"] or ""))
+        ) for x in filter_years
+    )
+    term_options="".join(
+        "<option value='%s' %s>%s</option>" % (
+            escape(str(x["term"] or "")),
+            "selected" if str(x["term"] or "")==term_filter else "",
+            escape(str(x["term"] or ""))
+        ) for x in filter_terms
+    )
 
     marks_rows=""
     for r in saved_rows:
@@ -4188,12 +4277,33 @@ def marks_correction_requests(request: Request):
             f"<td>{escape(status.title())}</td><td>{action}</td></tr>"
         )
 
+    filter_summary = ""
+    if load_requested:
+        filter_summary = "<div class='muted' style='margin-top:10px'>Showing %d saved subject assessment(s) matching the selected filters.</div>" % len(saved_rows)
+
     body=f"""<div class='page'><h1>Marks Corrections</h1>
-<div class='muted'>View all saved subject marks and control whether each subject assessment is unlocked or locked/submitted.</div>
+<div class='muted'>Select the examination, class, subject, year and term, then click <b>Load</b> to display the saved subject marks for that selection.</div>
+<div class='card section'>
+<h2>Load Saved & Submitted Subject Marks</h2>
+<form method='get' action='/app/academics/marks-corrections' class='marks-filter-form'>
+<div class='filter-grid'>
+<label>Examination<select name='exam_id' class='field'><option value=''>All Examinations</option>{exam_options}</select></label>
+<label>Class<select name='class_id' class='field'><option value=''>All Classes</option>{class_options}</select></label>
+<label>Subject<select name='subject_id' class='field'><option value=''>All Subjects</option>{subject_options}</select></label>
+<label>Year<select name='year' class='field'><option value=''>All Years</option>{year_options}</select></label>
+<label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label>
+</div>
+<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px'>
+<button class='load-btn' type='submit' name='load' value='1'>🔎 Load</button>
+<a class='clear-btn' href='/app/academics/marks-corrections'>Clear</a>
+</div>
+</form>
+{filter_summary}
+</div>
 <div class='card section'><h2>Saved & Submitted Subject Marks</h2>
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found.</td></tr>"}</tbody></table></div></div>
+<tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
 <div class='card section'><h2>Teacher Correction Requests</h2>
 <div class='muted' style='margin-bottom:10px'>Requests submitted by teachers remain available here for review.</div>
 <div style='overflow-x:auto'>
@@ -4201,10 +4311,19 @@ def marks_correction_requests(request: Request):
 <tbody>{request_rows_html or "<tr><td colspan='8'>No correction requests yet.</td></tr>"}</tbody></table></div></div>
 </div>
 <style>
+.marks-filter-form{{margin-top:8px}}
+.filter-grid{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px}}
+.filter-grid label{{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:800;color:#334155}}
+.field{{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;font-size:14px}}
+.load-btn,.clear-btn{{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:9px;font-weight:900;text-decoration:none;cursor:pointer}}
+.load-btn{{border:0;background:#176B3A;color:#fff}}
+.clear-btn{{border:1px solid #dbe2ea;background:#fff;color:#172033}}
 .btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
 .btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
 .unlock-btn{{background:#b45309}}
 .lock-btn{{background:#176B3A}}
+@media(max-width:900px){{.filter-grid{{grid-template-columns:repeat(2,minmax(150px,1fr))}}}}
+@media(max-width:560px){{.filter-grid{{grid-template-columns:1fr}}}}
 </style>"""
     return _school_page(request,"Marks Corrections",body)
 
