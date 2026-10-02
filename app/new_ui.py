@@ -4245,7 +4245,7 @@ def marks_correction_requests(request: Request):
         locked=str(locked_row["status"] or "").lower()=="finalized" if locked_row else False
         status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
         if locked:
-            action=(f"<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'>"
+            action=(f"<form method='post' action='/app/academics/marks/unfinalize" + correction_tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
         else:
