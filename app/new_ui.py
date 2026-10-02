@@ -5868,7 +5868,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             if len(valid_classes)!=len(class_ids) or len(valid_subjects)!=len(subject_ids):
                 return HTMLResponse("One or more selected classes/subjects do not belong to this school.",400)
 
-        from app.main import hash_password
+        from app.main import hash_password, verify_password
         import secrets
         if role=="teacher":
             first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
