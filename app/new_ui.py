@@ -4213,7 +4213,7 @@ def marks_correction_requests(request: Request):
     )
     subject_options="".join(
         "<option value='%s' %s>%s</option>" % (
-            x["id"],"selected" if str(x["id"])==subject_filter,
+            x["id"],"selected" if str(x["id"])==subject_filter else "",
             escape(str(x["name"] or ""))
         ) for x in subjects
     )
