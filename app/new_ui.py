@@ -6050,7 +6050,7 @@ def classes_page(request: Request):
         for t in teachers
     )
     trs="".join(
-        "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><form method='post' action='/app/classes/class-teacher' style='display:flex;gap:7px;align-items:center;flex-wrap:wrap'>"
+        "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><form method='post' action='/app/classes/class-teacher' onsubmit='this.submit(); return false;' style='display:flex;gap:7px;align-items:center;flex-wrap:wrap'>"
         "<input type='hidden' name='class_id' value='%s'><select name='teacher_id' class='field teacher-select' required><option value=''>Select Class Teacher</option>%s</select>"
         "<button class='btn teacher-btn'>👨‍🏫 Set Class Teacher</button></form></td></tr>" % (
             escape(str(x["name"])),
