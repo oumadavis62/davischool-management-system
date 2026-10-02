@@ -84,11 +84,15 @@ class DaviSchoolTabSessionMiddleware:
     var internalNavigation = sessionStorage.getItem(NAV_KEY) === "1";
     sessionStorage.removeItem(NAV_KEY);
 
-    // A normal reload/history traversal stays in this tab's existing session.
-    // A fresh navigation with a copied ds_tab must not inherit another tab's
-    // identity. This is important for Chrome/Edge tab duplication, which can
-    // clone sessionStorage when a tab is duplicated.
-    if (!id || (navigationType === "navigate" && !internalNavigation && new URL(window.location.href).searchParams.has("ds_tab"))) {
+    // Keep the tab identity stable across server redirects and normal
+    // navigation. Rotating the ID merely because a URL contains ds_tab can
+    // silently create a brand-new empty session after POST/redirect flows
+    // (MarkSheet, Marks Corrections, PDF/print, etc.).
+    //
+    // A duplicated tab may carry the same sessionStorage value, but preserving
+    // the current tab ID is safer than destroying an authenticated session.
+    // The server still keeps each explicitly established ds_tab cookie isolated.
+    if (!id) {
       id = newTabId();
       sessionStorage.setItem(KEY, id);
     }
