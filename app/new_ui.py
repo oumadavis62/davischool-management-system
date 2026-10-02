@@ -5858,6 +5858,15 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         # records and marks are unaffected.
         safe_username=escape(str(username))
         safe_password=escape(str(generated_password))
+        # Preserve the current browser tab's isolated session when the
+        # credentials page returns to User Management. The tab-session
+        # middleware identifies the authenticated session by ds_tab; omitting
+        # it would create a fresh tab session and send the user to login.
+        current_tab=str(request.query_params.get("ds_tab") or "").strip()
+        safe_tab=escape(current_tab, quote=True)
+        users_return_url="/app/users"
+        if safe_tab:
+            users_return_url += "?ds_tab=" + quote(safe_tab)
         credential_page=f"""<!doctype html><html><head>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Account Created - DaviSchool</title>
@@ -5874,7 +5883,7 @@ button{{width:100%;padding:12px;border:0;border-radius:9px;background:#176B3A;co
 <p class='muted'>The teacher account has been created successfully. Save these login credentials.</p>
 <div class='credentials'><b>Username</b><div class='value'>{safe_username}</div>
 <b>Password</b><div class='value' style='margin-bottom:0'>{safe_password}</div></div>
-<button type='button' onclick="window.location.href='/app/users'; return false;">OK</button>
+<button type='button' onclick="window.location.href='{{users_return_url}}'; return false;">OK</button>
 </div></div></body></html>"""
         return HTMLResponse(credential_page, status_code=200)
     except Exception as exc:
