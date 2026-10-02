@@ -4500,8 +4500,17 @@ def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(
     if row:
         cur.execute("DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,exam_id,class_id,subject_id))
         _audit(cur,sid,request,"MARKS_UNFINALIZE",f"Reopened marks for exam {exam_id}, class {class_id}, subject {subject_id}")
-    con.commit();con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    con.commit()
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    return_params = []
+    if return_load:
+        return_params.append("load=1")
+    for pname, pvalue in (("exam_id",return_exam_id),("class_id",return_class_id),("subject_id",return_subject_id),("year",return_year),("term",return_term)):
+        if str(pvalue or "").strip():
+            return_params.append(pname+"="+quote(str(pvalue).strip(),safe=""))
+    if tab_value:
+        return_params.append("ds_tab="+quote(tab_value,safe=""))
+    return RedirectResponse("/app/academics/marks-corrections" + (("?"+"&".join(return_params)) if return_params else ""),303)
 
 def _ensure_teacher_allocations_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS teacher_allocations (
