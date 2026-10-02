@@ -3903,7 +3903,14 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     # Only an already-finalized record should block finalization. Legacy/unlocked
     # lock rows must be normalized to finalized below.
     if existing_lock_row and str(existing_lock_row["status"] or "").lower() == "finalized":
-        con.close(); return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+        con.close(); tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    return_params = []
+    for pname, pvalue in (("exam_id",return_exam_id),("class_id",return_class_id),("subject_id",return_subject_id)):
+        if str(pvalue or "").strip():
+            return_params.append(pname+"="+quote(str(pvalue).strip(),safe=""))
+    if tab_value:
+        return_params.append("ds_tab="+quote(tab_value,safe=""))
+    return RedirectResponse("/app/academics/marks" + (("?"+"&".join(return_params)) if return_params else ""),303)
 
     role=str(request.session.get("role",""))
     if role=="teacher":
@@ -4250,11 +4257,11 @@ def marks_correction_requests(request: Request):
         status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
         if locked:
             action=(f"<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'>"
-                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
+                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'><input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ""))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ""))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ""))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ""))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ""))}'><input type='hidden' name='return_load' value='1'>"
                     f"<button class='unlock-btn' type='submit' onclick='if(confirm(&quot;Unlock these subject marks for editing?&quot;)){{this.form.submit();}} return false;'>🔓 Unlock</button></form>")
         else:
             action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + tab_q + "' style='display:inline'>"
-                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
+                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'><input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ""))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ""))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ""))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ""))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ""))}'><input type='hidden' name='return_load' value='1'>"
                     f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
         marks_rows += (
             f"<tr><td>{escape(str(r['exam_name'] or ''))}</td>"
@@ -4389,7 +4396,7 @@ def reject_marks_correction(request: Request, request_id:int=Form(...)):
     return RedirectResponse("/app/academics/marks-corrections",303)
 
 @router.post("/app/academics/marks-corrections/lock")
-def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), return_exam_id:str=Form(""), return_class_id:str=Form(""), return_subject_id:str=Form(""), return_year:str=Form(""), return_term:str=Form(""), return_load:str=Form("1")):
     """School Admin-only lock action for the Marks Corrections page."""
     sid=_school_session(request)
     if not sid:
@@ -4460,13 +4467,19 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
     tab_value=str(request.query_params.get("ds_tab") or "").strip()
     tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
     con.close()
-    return RedirectResponse(
-        f"/app/academics/marks-corrections?load=1&exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"+tab_suffix,
-        303
-    )
+    return_params = []
+    if return_load:
+        return_params.append("load=1")
+    for pname, pvalue in (("exam_id",return_exam_id),("class_id",return_class_id),("subject_id",return_subject_id),("year",return_year),("term",return_term)):
+        if str(pvalue or "").strip():
+            return_params.append(pname+"="+quote(str(pvalue).strip(),safe=""))
+    if tab_value:
+        return_params.append("ds_tab="+quote(tab_value,safe=""))
+    return_url="/app/academics/marks-corrections" + (("?"+"&".join(return_params)) if return_params else "")
+    return RedirectResponse(return_url,303)
 
 @router.post("/app/academics/marks/unfinalize")
-def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), return_exam_id:str=Form(""), return_class_id:str=Form(""), return_subject_id:str=Form(""), return_year:str=Form(""), return_term:str=Form(""), return_load:str=Form("1")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if str(request.session.get("role","")) != "school_admin":
