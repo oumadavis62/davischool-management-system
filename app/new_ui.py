@@ -4097,8 +4097,17 @@ async def request_marks_correction(request: Request, exam_id:int=Form(0), class_
         _audit(cur,sid,request,"MARKS_CORRECTION_REQUEST",f"Requested mark correction for exam {exam_id}, class {class_id}, subject {subject_id}: {reason}")
     except Exception as audit_exc:
         print("DAVISCHOOL MARKS CORRECTION AUDIT WARNING:",repr(audit_exc),flush=True)
-    con.commit();con.close()
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
+    con.commit()
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    return_params = []
+    if return_load:
+        return_params.append("load=1")
+    for pname, pvalue in (("exam_id",return_exam_id),("class_id",return_class_id),("subject_id",return_subject_id),("year",return_year),("term",return_term)):
+        if str(pvalue or "").strip():
+            return_params.append(pname+"="+quote(str(pvalue).strip(),safe=""))
+    if tab_value:
+        return_params.append("ds_tab="+quote(tab_value,safe=""))
+    return RedirectResponse("/app/academics/marks-corrections" + (("?"+"&".join(return_params)) if return_params else ""),303)
 
 @router.get("/app/academics/marks-corrections", response_class=HTMLResponse)
 def marks_correction_requests(request: Request):
