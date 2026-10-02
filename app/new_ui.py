@@ -1803,10 +1803,15 @@ function printDocument(){
         / len(mean_eligible_students)
         if mean_eligible_students else None
     )
+    # Identify the exact class/stream scope automatically so the overall
+    # distribution label always tells the user which distribution is shown.
+    # class_title already resolves to e.g. "Grade 8 — STREAM: A" or
+    # "Grade 8 — ALL STREAMS", depending on the current MarkSheet filters.
+    overall_distribution_label = "OVERALL GRADE DISTRIBUTION — " + str(class_title)
     overall_distribution_html = ""
     if distribution_grades:
         overall_distribution_html = (
-            "<div class='marksheet-scroll distribution-scroll'><div class='distribution-title'>OVERALL GRADE DISTRIBUTION</div>"
+            "<div class='marksheet-scroll distribution-scroll'><div class='distribution-title'>" + overall_distribution_label + "</div>"
             "<table class='grade-distribution overall-distribution'><thead><tr>" +
             "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
             "<th>Entries</th><th>Class Mean</th></tr></thead><tbody><tr>" +
