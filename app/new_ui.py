@@ -5883,7 +5883,7 @@ button{{width:100%;padding:12px;border:0;border-radius:9px;background:#176B3A;co
 <p class='muted'>The teacher account has been created successfully. Save these login credentials.</p>
 <div class='credentials'><b>Username</b><div class='value'>{safe_username}</div>
 <b>Password</b><div class='value' style='margin-bottom:0'>{safe_password}</div></div>
-<button type='button' onclick="window.location.href='{{users_return_url}}'; return false;">OK</button>
+<button type='button' onclick="window.location.href='{users_return_url}'; return false;">OK</button>
 </div></div></body></html>"""
         return HTMLResponse(credential_page, status_code=200)
     except Exception as exc:
