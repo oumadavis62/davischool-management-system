@@ -3548,12 +3548,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # Keep Submit & Lock in its own form. This avoids relying on the
             # shared marks form's submitter/formaction behavior and guarantees
             # the finalize endpoint receives the academic selection directly.
-            lock_action = ("<form method='post' action='/app/academics/marks/finalize" + tab_q + "' style='display:inline;margin-left:6px'>"
-                           "<input type='hidden' name='exam_id' value='%s'>"
-                           "<input type='hidden' name='class_id' value='%s'>"
-                           "<input type='hidden' name='subject_id' value='%s'>"
-                           "<button class='btn' type='submit' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>"
-                           "</form>")%(eid,cid,subid) if students else ""
+            lock_action = ("<button class='btn' type='button' style='margin-left:6px' "
+                           "onclick=\"if(confirm('Submit and lock these marks? Further edits will require an approved correction request.')){"
+                           "var f=document.createElement('form');f.method='post';f.action='/app/academics/marks/finalize" + tab_q + "';"
+                           "['exam_id','class_id','subject_id'].forEach(function(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=[%s,%s,%s][v];f.appendChild(i);});"
+                           "document.body.appendChild(f);f.submit();}\">🔒 Submit & Lock Marks</button>")%(eid,cid,subid) if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
@@ -3976,9 +3975,18 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         )
     # Commit the actual lock independently of the optional audit trail.
     try:
-        _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
-    except Exception as audit_exc:
-        print("DAVISCHOOL MARKS FINALIZE AUDIT WARNING:",repr(audit_exc),flush=True)
+        cur.execute("SAVEPOINT davischool_finalize_audit")
+        try:
+            _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+            cur.execute("RELEASE SAVEPOINT davischool_finalize_audit")
+        except Exception as audit_exc:
+            print("DAVISCHOOL MARKS FINALIZE AUDIT WARNING:",repr(audit_exc),flush=True)
+            try: cur.execute("ROLLBACK TO SAVEPOINT davischool_finalize_audit")
+            except Exception: pass
+            try: cur.execute("RELEASE SAVEPOINT davischool_finalize_audit")
+            except Exception: pass
+    except Exception as audit_sp_exc:
+        print("DAVISCHOOL MARKS FINALIZE AUDIT SAVEPOINT WARNING:",repr(audit_sp_exc),flush=True)
     con.commit()
     # Verify the committed lock before redirecting. This makes a failed/legacy
     # lock write visible in the Render log instead of silently returning to the
