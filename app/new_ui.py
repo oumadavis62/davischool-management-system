@@ -4422,21 +4422,17 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
             return HTMLResponse("No saved marks were found for this examination, class and subject.",400)
 
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        existing=cur.execute(
-            "SELECT 1 FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? LIMIT 1",
+        # Normalize any legacy/duplicate lock rows for this exact subject,
+        # then write one authoritative finalized row. This prevents an older
+        # unlocked row from being selected by the status lookup.
+        cur.execute(
+            "DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",
             (sid,exam_id,class_id,subject_id)
-        ).fetchone()
-
-        if existing:
-            cur.execute(
-                "UPDATE academic_locks SET status='finalized',finalized_by=?,finalized_at=? WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",
-                (request.session.get("email",""),now,sid,exam_id,class_id,subject_id)
-            )
-        else:
-            cur.execute(
-                "INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",
-                (sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now)
-            )
+        )
+        cur.execute(
+            "INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",
+            (sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now)
+        )
 
         try:
             _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks from Marks Corrections for exam {exam_id}, class {class_id}, subject {subject_id}")
