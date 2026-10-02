@@ -4588,8 +4588,8 @@ def teacher_allocations_page(request: Request):
 <select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
 <button class='btn'>Save Allocation</button></form></div>
-<div class='card section'><h2>Current Allocations ({len(rows)})</h2><table><thead><tr><th>Teacher</th><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div>
-<style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}</style></div>"""
+<div class='card section'><h2>Current Allocations ({len(rows)})</h2><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Teacher</th><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div></div>
+<style>.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.teacher-allocation-table{{width:max-content;min-width:760px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}</style></div>"""
     return _school_page(request,"Teacher Allocations",body)
 
 @router.post("/app/academics/allocations/add")
