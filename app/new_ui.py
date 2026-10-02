@@ -3899,7 +3899,10 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
-    if _academic_lock(cur,sid,exam_id,class_id,subject_id):
+    existing_lock_row = _academic_lock(cur,sid,exam_id,class_id,subject_id)
+    # Only an already-finalized record should block finalization. Legacy/unlocked
+    # lock rows must be normalized to finalized below.
+    if existing_lock_row and str(existing_lock_row["status"] or "").lower() == "finalized":
         con.close(); return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}",303)
 
     role=str(request.session.get("role",""))
