@@ -4782,7 +4782,7 @@ def report_card_settings(request: Request, exam_id:int=0, saved:int=0):
         return HTMLResponse("You do not have permission to manage report card dates.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     exams=cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    selected=cur.execute("SELECT * FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,exam_id)).fetchone() if exam_id else None
+    selected=cur.execute("SELECT * FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id)).fetchone() if exam_id else None
     con.close()
     options="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==exam_id else ''}>{escape(str(e['name']))}</option>" for e in exams)
     notice="<div style='margin:10px 0;padding:10px;border-radius:8px;background:#ecfdf5;color:#166534;font-weight:700'>Report card dates saved successfully.</div>" if saved else ""
@@ -4799,7 +4799,7 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
         con.close();return HTMLResponse("Invalid examination.",400)
     if opening_date and closing_date and closing_date<opening_date:
         con.close();return HTMLResponse("Closing date cannot be before opening date.",400)
-    existing=cur.execute("SELECT id FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,exam_id)).fetchone()
+    existing=cur.execute("SELECT id FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id)).fetchone()
     if existing:
         cur.execute("UPDATE report_card_settings SET opening_date=?,closing_date=? WHERE id=? AND school_id=?",(opening_date,closing_date,existing["id"],sid))
     else:
