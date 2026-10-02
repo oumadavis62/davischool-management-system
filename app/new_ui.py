@@ -6238,18 +6238,18 @@ def roles_page(request: Request):
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? AND COALESCE(status,'active')='active' ORDER BY name",(sid,)).fetchall()
-    assignments=cur.execute("""SELECT a.class_id,a.teacher_id,c.name class_name,c.stream,t.name teacher_name
+    assignments=cur.execute("""SELECT a.id,a.class_id,a.teacher_id,c.name class_name,c.stream,t.name teacher_name
         FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id JOIN teachers t ON t.id=a.teacher_id
         WHERE a.school_id=? ORDER BY c.name,c.stream""",(sid,)).fetchall()
     con.close()
     tr=_simple_rows(rows,["role","permission","enabled"])
     class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
     teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
-    assignment_rows="".join("<tr><td>%s%s</td><td>%s</td></tr>"%(escape(str(a["class_name"])),(" · "+escape(str(a["stream"] or ""))) if a["stream"] else "",escape(str(a["teacher_name"]))) for a in assignments)
+    assignment_rows="".join("<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a><form method='post' action='/app/roles/class-teacher-assignment/delete/%s' style='display:inline' onsubmit="return confirm('Delete this class teacher assignment? This will only remove the assignment, not the teacher record.')"><button class='btn danger' type='submit'>Delete</button></form></td></tr>"%(escape(str(a["class_name"])),(" · "+escape(str(a["stream"] or ""))) if a["stream"] else "",escape(str(a["teacher_name"])),a["id"],a["id"]) for a in assignments)
     body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
 <div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class. Report cards automatically use this assignment for the class teacher name and signature line.</div>
 <form method='post' action='/app/roles/class-teacher-assignment' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select><select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select><button class='btn'>Save Assignment</button></form>
-<table style='margin-top:14px'><thead><tr><th>Class</th><th>Class Teacher</th></tr></thead><tbody>{assignment_rows or "<tr><td colspan='2'>No class teacher assignments yet.</td></tr>"}</tbody></table></div>
+<table style='margin-top:14px'><thead><tr><th>Class</th><th>Class Teacher</th><th>Actions</th></tr></thead><tbody>{assignment_rows or "<tr><td colspan='3'>No class teacher assignments yet.</td></tr>"}</tbody></table></div>
 <div class='card section'><h2>Grant permission</h2><form method='post' action='/app/roles/add' style='display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px'><select name='role' class='field'><option>school_admin</option><option>teacher</option><option>parent</option><option>student</option><option>accountant</option><option>registrar</option></select><select name='permission' required class='field'><option value=''>Select permission</option><option>students.view</option><option>students.create</option><option>students.edit</option><option>classes.view</option><option>classes.create</option><option>subjects.view</option><option>subjects.create</option><option>exams.view</option><option>exams.create</option><option>marks.view</option><option>marks.edit</option><option>attendance.view</option><option>attendance.edit</option><option>timetable.view</option><option>timetable.edit</option><option>fees.view</option><option>fees.edit</option><option>finance.view</option><option>finance.edit</option><option>reports.view</option><option>reports.edit</option><option>staff.view</option><option>staff.create</option><option>staff.edit</option><option>communications.view</option><option>communications.edit</option><option>settings.view</option><option>settings.edit</option><option>audit.view</option><option>users.manage</option><option>settings.manage</option></select><select name='enabled' class='field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
 <div class='card section'><h2>Configured permissions ({len(rows)})</h2><table><thead><tr><th>Role</th><th>Permission</th><th>Enabled</th></tr></thead><tbody>{tr or '<tr><td colspan=3>No custom permissions yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Roles & Permissions",body)
@@ -6272,6 +6272,71 @@ def save_class_teacher_assignment(request: Request, class_id:int=Form(...), teac
     _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned class teacher for class %s"%class_id)
     con.commit();con.close()
     return RedirectResponse("/app/roles",303)
+
+@router.get("/app/roles/class-teacher-assignment/edit/{assignment_id}", response_class=HTMLResponse)
+def edit_class_teacher_assignment_page(request: Request, assignment_id: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
+    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
+    assignment=cur.execute("""SELECT id,class_id,teacher_id FROM class_teacher_assignments
+                              WHERE id=? AND school_id=?""",(assignment_id,sid)).fetchone()
+    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? AND COALESCE(status,'active')='active' ORDER BY name",(sid,)).fetchall()
+    con.close()
+    if not assignment:
+        return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
+    class_opts="".join("<option value='%s' %s>%s%s</option>"%(c["id"],"selected" if int(c["id"])==int(assignment["class_id"]) else "",escape(str(c["name"] or "")),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
+    teacher_opts="".join("<option value='%s' %s>%s — %s</option>"%(t["id"],"selected" if int(t["id"])==int(assignment["teacher_id"]) else "",escape(str(t["name"] or "")),escape(str(t["role"] or ""))) for t in teachers)
+    body=f"""<div class='page'><h1>Edit Class Teacher Assignment</h1><div class='muted'>Change the class or teacher for this assignment.</div>
+<div class='card section'><form method='post' action='/app/roles/class-teacher-assignment/edit/{assignment_id}' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
+<select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select>
+<select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select>
+<button class='btn'>Save Changes</button><a class='btn secondary' href='/app/roles'>Cancel</a></form></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{display:inline-block;padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}}.edit{{background:#176B3A;margin-right:5px}}.danger{{background:#b91c1c}}</style></div>"""
+    return _school_page(request,"Edit Class Teacher Assignment",body)
+
+
+@router.post("/app/roles/class-teacher-assignment/edit/{assignment_id}")
+def edit_class_teacher_assignment(request: Request, assignment_id: int, class_id:int=Form(...), teacher_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
+    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
+    assignment=cur.execute("SELECT id FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
+    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND COALESCE(status,'active')='active'",(teacher_id,sid)).fetchone()
+    duplicate=cur.execute("SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? AND id<>?",(sid,class_id,assignment_id)).fetchone()
+    if not assignment:
+        con.close();return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
+    if not valid_class or not valid_teacher:
+        con.close();return HTMLResponse("Invalid class or teacher selection. <a href='/app/roles'>Back</a>",400)
+    if duplicate:
+        con.close();return HTMLResponse("That class already has a class teacher assignment. <a href='/app/roles'>Back</a>",400)
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE class_teacher_assignments SET class_id=?,teacher_id=?,assigned_at=? WHERE id=? AND school_id=?",(class_id,teacher_id,now,assignment_id,sid))
+    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT_EDIT","Edited class teacher assignment %s"%assignment_id)
+    con.commit();con.close()
+    return RedirectResponse("/app/roles",303)
+
+
+@router.post("/app/roles/class-teacher-assignment/delete/{assignment_id}")
+def delete_class_teacher_assignment(request: Request, assignment_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
+    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
+    assignment=cur.execute("SELECT id FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
+    if not assignment:
+        con.close();return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
+    cur.execute("DELETE FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid))
+    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT_DELETE","Deleted class teacher assignment %s"%assignment_id)
+    con.commit();con.close()
+    return RedirectResponse("/app/roles",303)
+
 
 @router.post("/app/roles/add")
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
