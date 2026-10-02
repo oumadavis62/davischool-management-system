@@ -3529,7 +3529,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     lock_action = ""
     if locked:
         if role == "school_admin":
-            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + correction_tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
+            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
         elif role == "teacher":
             # Once the School Admin finalizes these marks, the teacher side is
             # strictly read-only. Correction workflow is intentionally disabled
@@ -4240,7 +4240,7 @@ def marks_correction_requests(request: Request):
     # Without ds_tab, the tab-aware session middleware can fall back to the wrong
     # session cookie and the action can appear to do nothing or return to login.
     correction_tab_id = str(request.query_params.get("ds_tab") or "").strip()
-    correction_tab_q = ("?ds_tab=" + quote(correction_tab_id, safe="")) if correction_tab_id else ""
+    tab_q = ("?ds_tab=" + quote(correction_tab_id, safe="")) if correction_tab_id else ""
 
     marks_rows=""
     for r in saved_rows:
@@ -4249,11 +4249,11 @@ def marks_correction_requests(request: Request):
         locked=str(locked_row["status"] or "").lower()=="finalized" if locked_row else False
         status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
         if locked:
-            action=(f"<form method='post' action='/app/academics/marks/unfinalize" + correction_tab_q + "' style='display:inline'>"
+            action=(f"<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
         else:
-            action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + correction_tab_q + "' style='display:inline'>"
+            action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
         marks_rows += (
