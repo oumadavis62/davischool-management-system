@@ -3545,18 +3545,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
             mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button>") if students else ""
-            # Keep Submit & Lock in its own form. This avoids relying on the
-            # shared marks form's submitter/formaction behavior and guarantees
-            # the finalize endpoint receives the academic selection directly.
-            lock_action = ("<button class='btn' type='button' style='margin-left:6px' "
-                           "onclick=\"if(confirm('Submit and lock these marks? Further edits will require an approved correction request.')){"
-                           "var f=document.createElement('form');f.method='post';f.action='/app/academics/marks/finalize" + tab_q + "';"
-                           "['exam_id','class_id','subject_id'].forEach(function(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=[%s,%s,%s][v];f.appendChild(i);});"
-                           "document.body.appendChild(f);try{sessionStorage.setItem('davischool_tab_navigation','1')}catch(_){ }f.submit();}\">🔒 Submit & Lock Marks</button>")%(eid,cid,subid) if students else ""
+            # Submit & Lock has been removed from the School Admin Record Marks UI.
+            # Keep the underlying finalize route untouched so existing data/state is preserved.
+            lock_action = ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
-    outside_actions = mark_actions if locked else lock_action
+    outside_actions = mark_actions if locked else ""
     rows=""
     for x in students:
         mark=x["marks"]
