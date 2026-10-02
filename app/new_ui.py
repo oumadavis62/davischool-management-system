@@ -6248,15 +6248,11 @@ def roles_page(request: Request):
     assignment_rows=[]
     for a in assignments:
         assignment_rows.append(
-            "<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a>"
-            "<form method='post' action='/app/roles/class-teacher-assignment/delete/%s' style='display:inline' "
-            "onsubmit='return confirm(&quot;Delete this class teacher assignment? This will only remove the assignment, not the teacher record.&quot;)'>"
-            "<button class='btn danger' type='submit'>Delete</button></form></td></tr>"
+            "<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a></td></tr>"
             % (
                 escape(str(a["class_name"])),
                 (" · " + escape(str(a["stream"] or ""))) if a["stream"] else "",
                 escape(str(a["teacher_name"])),
-                a["id"],
                 a["id"],
             )
         )
