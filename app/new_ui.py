@@ -4799,12 +4799,30 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
         con.close();return HTMLResponse("Invalid examination.",400)
     if opening_date and closing_date and closing_date<opening_date:
         con.close();return HTMLResponse("Closing date cannot be before opening date.",400)
-    existing=cur.execute("SELECT id FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id)).fetchone()
-    if existing:
-        cur.execute("UPDATE report_card_settings SET opening_date=?,closing_date=? WHERE id=? AND school_id=?",(opening_date,closing_date,existing["id"],sid))
+    # Save the exact values submitted for this examination. Update every
+    # matching legacy row so older duplicate settings cannot override the
+    # newly entered dates when the page is reopened.
+    matches=cur.execute("SELECT id FROM report_card_settings WHERE school_id=? AND exam_id=?",(sid,exam_id)).fetchall()
+    if matches:
+        for row in matches:
+            cur.execute(
+                "UPDATE report_card_settings SET opening_date=?,closing_date=? WHERE id=? AND school_id=?",
+                (opening_date,closing_date,row["id"],sid)
+            )
     else:
-        cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?)",(sid,exam_id,opening_date,closing_date))
-    con.commit();con.close()
+        cur.execute(
+            "INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?)",
+            (sid,exam_id,opening_date,closing_date)
+        )
+    con.commit()
+    # Verify the values were actually persisted before redirecting.
+    saved_row=cur.execute(
+        "SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",
+        (sid,exam_id)
+    ).fetchone()
+    con.close()
+    if not saved_row or str(saved_row["opening_date"] or "") != opening_date or str(saved_row["closing_date"] or "") != closing_date:
+        return HTMLResponse("The report card dates could not be saved. Please try again. <a href='/app/report-card-settings'>Back</a>",500)
     return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}&saved=1",303)
 @router.get("/app/report-cards/class-preview", response_class=HTMLResponse)
 def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str=""):
