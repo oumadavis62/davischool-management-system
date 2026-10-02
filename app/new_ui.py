@@ -1687,7 +1687,11 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     stream_colgroup_html = "<col class='stream-col'>" if combined_mode else ""
     colspan = (3 if combined_mode else 2) + sum(len(subject_metric_map.get(int(s["id"]), ["mks", "grade", "pts"])) for s in subjects) + len(overall_metric_list)
     selected_class_param = quote(str(class_id), safe='') if class_id else quote(str(cid), safe='')
-    pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}&subject_metrics={quote(subject_metrics or '', safe='')}&overall_metrics={quote(','.join(overall_metric_list), safe='')}'>⬇️ Download PDF</a>"
+    marksheet_tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", marksheet_tab_id):
+        marksheet_tab_id = ""
+    marksheet_tab_q = ("&ds_tab=" + quote(marksheet_tab_id, safe="")) if marksheet_tab_id else ""
+    pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}&subject_metrics={quote(subject_metrics or '', safe='')}&overall_metrics={quote(','.join(overall_metric_list), safe='')}{marksheet_tab_q}'>⬇️ Download PDF</a>"
     marksheet_page_query = (
         f"exam_id={quote(str(eid), safe='')}"
         f"&class_id={selected_class_param}"
@@ -1845,7 +1849,7 @@ function printDocument(){
     body = (
         "<div class='page'><h1>Class Marksheets</h1>"
         "<div class='muted'>A print-ready marksheet. Select one or more assessments; when multiple assessments are selected, each subject shows their average.</div>"
-        "<div class='card section no-print'><form method='get' action='/app/academics/marksheets' class='marksheet-select'>"
+        "<div class='card section no-print'><form method='get' action='/app/academics/marksheets' class='marksheet-select'><input type='hidden' name='ds_tab' value='" + escape(marksheet_tab_id) + "'>"
         "<select name='class_id' class='field' onchange='this.form.submit()'><option value=''>Select Class</option>" + copts + "</select>"
         "<select name='stream' class='field' onchange='this.form.submit()'><option value=''>All Streams</option>" + stropts + "</select>"
         "<select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>" + topts + "</select>"
