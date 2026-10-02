@@ -6113,11 +6113,20 @@ def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int
         (sid,class_id)
     ).fetchone()
     if existing_assignment:
+        # Keep exactly one assignment row for each class.  Older versions could
+        # leave duplicate rows behind, which made the page/report-card lookup
+        # read an older teacher even after a replacement was saved.
+        assignment_id = int(existing_assignment["id"])
         cur.execute(
             """UPDATE class_teacher_assignments
                SET teacher_id=?,assigned_at=?
-               WHERE school_id=? AND class_id=?""",
-            (teacher_id,now,sid,class_id)
+               WHERE id=? AND school_id=?""",
+            (teacher_id,now,assignment_id,sid)
+        )
+        cur.execute(
+            """DELETE FROM class_teacher_assignments
+               WHERE school_id=? AND class_id=? AND id<>?""",
+            (sid,class_id,assignment_id)
         )
     else:
         cur.execute(
