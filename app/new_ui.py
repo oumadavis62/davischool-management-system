@@ -3528,7 +3528,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
     # overrides the form action to publish and lock the marks. School Admin keeps
     # the normal published/main marks workflow unchanged.
-    tab_id = str(request.query_params.get("ds_tab") or "").strip()
+    # Always derive the active tab from the middleware as a fallback. After
+    # returning from Marks Corrections, a form submission must never fall back
+    # to the legacy generic session cookie.
+    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
+        tab_id = ""
     tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
     form_action = "/app/academics/marks/save-draft" + tab_q if role == "teacher" else "/app/academics/marks/save" + tab_q
     draft_action = ""
@@ -3582,7 +3587,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     con.close()
     body=(
       "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
-      "<div class='card section'><form method='get' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
+      "<div class='card section'><form method='get' action='/app/academics/marks" + tab_q + "' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
       "<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select>"
       "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
