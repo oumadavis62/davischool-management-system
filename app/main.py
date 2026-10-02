@@ -540,9 +540,10 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         try:
             cur.execute("SELECT * FROM users LIMIT 0")
             columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
-            for column in ("username", "teacher_id", "student_id", "temporary_password"):
+            definitions = {"username":"TEXT","teacher_id":"INTEGER","student_id":"INTEGER","temporary_password":"TEXT"}
+            for column, definition in definitions.items():
                 if column not in columns:
-                    cur.execute("ALTER TABLE users ADD COLUMN %s TEXT" % column)
+                    cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
             con.commit()
         except Exception as schema_exc:
             print("DAVISCHOOL LOGIN SCHEMA WARNING:", repr(schema_exc), flush=True)
