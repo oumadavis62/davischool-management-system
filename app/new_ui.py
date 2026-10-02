@@ -3529,7 +3529,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     lock_action = ""
     if locked:
         if role == "school_admin":
-            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
+            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + correction_tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
         elif role == "teacher":
             # Once the School Admin finalizes these marks, the teacher side is
             # strictly read-only. Correction workflow is intentionally disabled
@@ -4232,6 +4232,12 @@ def marks_correction_requests(request: Request):
         ) for x in filter_terms
     )
 
+    # Preserve the browser tab's isolated session when Lock/Unlock is submitted.
+    # Without ds_tab, the tab-aware session middleware can fall back to the wrong
+    # session cookie and the action can appear to do nothing or return to login.
+    correction_tab_id = str(request.query_params.get("ds_tab") or "").strip()
+    correction_tab_q = ("?ds_tab=" + quote(correction_tab_id, safe="")) if correction_tab_id else ""
+
     marks_rows=""
     for r in saved_rows:
         key=(int(r["exam_id"]),int(r["class_id"]),int(r["subject_id"]))
@@ -4243,7 +4249,7 @@ def marks_correction_requests(request: Request):
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
         else:
-            action=(f"<form method='post' action='/app/academics/marks/finalize' style='display:inline'>"
+            action=(f"<form method='post' action='/app/academics/marks/finalize" + correction_tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='lock-btn' type='submit' onclick='return confirm(&quot;Lock and submit these subject marks?&quot;);'>🔒 Lock</button></form>")
         marks_rows += (
