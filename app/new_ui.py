@@ -5833,7 +5833,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                         cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
                                     (sid,tid,cid,subject_id))
 
-        _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email_v}")
+        try:
+            _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email_v}")
+        except Exception as audit_exc:
+            # Audit logging must never prevent a valid account from being saved.
+            print("DAVISCHOOL USER CREATE AUDIT WARNING:",repr(audit_exc),flush=True)
         con.commit()
 
         # Verify that the committed account is actually visible to the same
