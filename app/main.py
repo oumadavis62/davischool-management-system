@@ -537,6 +537,14 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         cur = con.cursor()
         login_id = email.strip()
         u = cur.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (login_id,)).fetchone()
+        # School-created accounts have a dedicated username column. Check it
+        # before the legacy email/name fallbacks so the generated username
+        # shown to the School Admin is a valid login identifier.
+        if not u:
+            try:
+                u = cur.execute("SELECT * FROM users WHERE lower(trim(COALESCE(username,''))) = lower(trim(?)) ORDER BY id DESC LIMIT 1", (login_id,)).fetchone()
+            except Exception:
+                u = None
         # The sign-in form is labelled "Username or Email". School-created
         # accounts historically stored only an email, so also accept the
         # account full name and linked teacher profile name as identifiers.
