@@ -112,11 +112,16 @@ class DaviSchoolTabSessionMiddleware:
       }
     }
 
-    if (!new URL(window.location.href).searchParams.has("ds_tab")) {
-      var current = new URL(window.location.href);
-      current.searchParams.set("ds_tab", id);
+    var currentUrl = new URL(window.location.href);
+    var urlTabId = currentUrl.searchParams.get("ds_tab") || "";
+    // The URL and sessionStorage must always refer to the same tab session.
+    // This is especially important after a redirect or when a page was opened
+    // in a new tab: a stale ds_tab in the URL must never cause this tab to use
+    // another tab's authenticated cookie.
+    if (urlTabId !== id) {
+      currentUrl.searchParams.set("ds_tab", id);
       markInternalNavigation();
-      window.location.replace(current.pathname + current.search + current.hash);
+      window.location.replace(currentUrl.pathname + currentUrl.search + currentUrl.hash);
       return;
     }
 
