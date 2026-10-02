@@ -6025,9 +6025,21 @@ def classes_page(request: Request):
     _ensure_class_teacher_assignments_table(cur)
     rows=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     teachers=cur.execute("SELECT id,name,role,status FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    assignments=cur.execute("""SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?""",(sid,)).fetchall()
+    assignments=cur.execute(
+        """SELECT a.class_id,a.teacher_id
+           FROM class_teacher_assignments a
+           WHERE a.school_id=?
+           ORDER BY a.id DESC""",
+        (sid,)
+    ).fetchall()
     con.close()
-    assigned_by_class={int(a["class_id"]):int(a["teacher_id"]) for a in assignments}
+    # Deterministically use the newest assignment for each class so an older
+    # duplicate can never make the page show the wrong current teacher.
+    assigned_by_class={}
+    for a in assignments:
+        cid=int(a["class_id"])
+        if cid not in assigned_by_class:
+            assigned_by_class[cid]=int(a["teacher_id"])
     teacher_options=lambda selected_id: "".join(
         "<option value='%s' %s>%s%s</option>" % (
             t["id"],
@@ -6108,33 +6120,31 @@ def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int
     # the assignment table without the composite UNIQUE constraint.  Updating
     # an existing assignment first keeps the button functional on both the
     # legacy and current schemas without altering any existing class records.
-    existing_assignment=cur.execute(
-        "SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? ORDER BY id LIMIT 1",
+    # Replace the class assignment atomically at the application level.
+    # This deliberately removes any stale/duplicate rows first, then writes
+    # exactly one row for the selected teacher.  It works even when a legacy
+    # production database has a different UNIQUE constraint definition.
+    cur.execute(
+        "DELETE FROM class_teacher_assignments WHERE school_id=? AND class_id=?",
         (sid,class_id)
+    )
+    cur.execute(
+        """INSERT INTO class_teacher_assignments
+           (school_id,class_id,teacher_id,assigned_at)
+           VALUES(?,?,?,?)""",
+        (sid,class_id,teacher_id,now)
+    )
+    saved_assignment=cur.execute(
+        """SELECT a.teacher_id,t.name FROM class_teacher_assignments a
+           JOIN teachers t ON t.id=a.teacher_id AND t.school_id=?
+           WHERE a.school_id=? AND a.class_id=?
+           ORDER BY a.id DESC LIMIT 1""",
+        (sid,sid,class_id)
     ).fetchone()
-    if existing_assignment:
-        # Keep exactly one assignment row for each class.  Older versions could
-        # leave duplicate rows behind, which made the page/report-card lookup
-        # read an older teacher even after a replacement was saved.
-        assignment_id = int(existing_assignment["id"])
-        cur.execute(
-            """UPDATE class_teacher_assignments
-               SET teacher_id=?,assigned_at=?
-               WHERE id=? AND school_id=?""",
-            (teacher_id,now,assignment_id,sid)
-        )
-        cur.execute(
-            """DELETE FROM class_teacher_assignments
-               WHERE school_id=? AND class_id=? AND id<>?""",
-            (sid,class_id,assignment_id)
-        )
-    else:
-        cur.execute(
-            """INSERT INTO class_teacher_assignments
-               (school_id,class_id,teacher_id,assigned_at)
-               VALUES(?,?,?,?)""",
-            (sid,class_id,teacher_id,now)
-        )
+    if not saved_assignment or int(saved_assignment["teacher_id"]) != int(teacher_id):
+        con.rollback()
+        con.close()
+        return HTMLResponse("The class teacher assignment could not be saved. Please try again. <a href='/app/classes'>Back</a>",500)
     _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned %s as class teacher for class %s"%(str(valid_teacher["name"] or ""),class_id))
     con.commit()
     con.close()
