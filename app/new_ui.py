@@ -6245,7 +6245,22 @@ def roles_page(request: Request):
     tr=_simple_rows(rows,["role","permission","enabled"])
     class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
     teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
-    assignment_rows="".join('<tr><td>%s%s</td><td>%s</td><td><a class="btn edit" href="/app/roles/class-teacher-assignment/edit/%s">Edit</a><form method="post" action="/app/roles/class-teacher-assignment/delete/%s" style="display:inline" onsubmit='return confirm("Delete this class teacher assignment? This will only remove the assignment, not the teacher record.")'><button class="btn danger" type="submit">Delete</button></form></td></tr>'%(escape(str(a["class_name"])),(" · "+escape(str(a["stream"] or ""))) if a["stream"] else "",escape(str(a["teacher_name"])),a["id"],a["id"]) for a in assignments)
+    assignment_rows=[]
+    for a in assignments:
+        assignment_rows.append(
+            "<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a>"
+            "<form method='post' action='/app/roles/class-teacher-assignment/delete/%s' style='display:inline' "
+            "onsubmit='return confirm(&quot;Delete this class teacher assignment? This will only remove the assignment, not the teacher record.&quot;)'>"
+            "<button class='btn danger' type='submit'>Delete</button></form></td></tr>"
+            % (
+                escape(str(a["class_name"])),
+                (" · " + escape(str(a["stream"] or ""))) if a["stream"] else "",
+                escape(str(a["teacher_name"])),
+                a["id"],
+                a["id"],
+            )
+        )
+    assignment_rows="".join(assignment_rows)
     body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
 <div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class. Report cards automatically use this assignment for the class teacher name and signature line.</div>
 <form method='post' action='/app/roles/class-teacher-assignment' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select><select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select><button class='btn'>Save Assignment</button></form>
