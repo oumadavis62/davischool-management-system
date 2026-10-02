@@ -170,7 +170,7 @@ def _pdf_response(pdf_bytes, filename):
 
 def _pdf_build(story, pagesize, title):
     from io import BytesIO
-    from reportlab.platypus import SimpleDocTemplate
+    from reportlab.platypus import SimpleDocTemplate, PageBreak
     from reportlab.lib.units import mm
     buffer = BytesIO()
     generated_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S EAT")
