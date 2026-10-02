@@ -142,6 +142,30 @@ class DaviSchoolTabSessionMiddleware:
       markInternalNavigation();
     }, true);
 
+    // Keep an open authenticated tab alive independently of clicks on its
+    // dashboard tiles. The server idle timer is based on the tab session, so
+    // a page that remains open must periodically refresh that session even
+    // when the user is reading the page and has not navigated for a while.
+    // This does not share sessions between tabs; each tab keeps its own
+    // ds_tab cookie/session.
+    var keepAliveTimer = null;
+    function keepTabSessionAlive() {
+      try {
+        var u = new URL("/app/session-keepalive", window.location.origin);
+        u.searchParams.set("ds_tab", id);
+        fetch(u.pathname + u.search, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: {"X-DaviSchool-Keepalive": "1"}
+        }).catch(function () {});
+      } catch (_) {}
+    }
+    // Refresh well before the 15-minute inactivity window so a still-open
+    // dashboard/tile never becomes a stale session merely because it was not
+    // clicked during that period.
+    keepAliveTimer = window.setInterval(keepTabSessionAlive, 4 * 60 * 1000);
+
     var originalFetch = window.fetch;
     if (originalFetch) {
       window.fetch = function (input, init) {
