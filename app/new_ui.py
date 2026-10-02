@@ -5845,8 +5845,31 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         created=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(username)=?",(sid,username.lower())).fetchone()
         if not created:
             return HTMLResponse("The account could not be verified after saving. No account was added. <a href='/app/users'>Back</a>",500)
-        request.session["created_account_credentials"]={"username":username,"password":generated_password}
-        return RedirectResponse(f"/app/users?created=1&username={quote(username)}",303)
+        # Show the generated credentials directly from the successful POST response.
+        # This avoids depending on the session/redirect cycle for the one-time popup.
+        # The account has already been committed and verified above, so existing
+        # records and marks are unaffected.
+        safe_username=escape(str(username))
+        safe_password=escape(str(generated_password))
+        credential_page=f"""<!doctype html><html><head>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Account Created - DaviSchool</title>
+<style>
+body{{margin:0;background:#eef2f7;font-family:Arial,sans-serif;min-height:100vh}}
+.overlay{{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(15,23,42,.65)}}
+.modal{{background:#fff;border-radius:16px;max-width:430px;width:100%;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.25);box-sizing:border-box}}
+h2{{margin:0 0 10px;color:#172033}}.muted{{color:#475569;margin:0 0 16px}}
+.credentials{{background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:16px}}
+.value{{font-size:20px;font-weight:800;margin:4px 0 12px;word-break:break-word}}
+button{{width:100%;padding:12px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;font-size:15px;cursor:pointer}}
+</style></head><body><div class='overlay'><div class='modal'>
+<h2>✅ Account Created</h2>
+<p class='muted'>The teacher account has been created successfully. Save these login credentials.</p>
+<div class='credentials'><b>Username</b><div class='value'>{safe_username}</div>
+<b>Password</b><div class='value' style='margin-bottom:0'>{safe_password}</div></div>
+<button type='button' onclick="window.location.href='/app/users'">OK — Open Accounts</button>
+</div></div></body></html>"""
+        return HTMLResponse(credential_page, status_code=200)
     except Exception as exc:
         try:
             con.rollback()
