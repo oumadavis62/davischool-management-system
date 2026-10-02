@@ -4206,7 +4206,7 @@ def marks_correction_requests(request: Request):
     )
     class_options="".join(
         "<option value='%s' %s>%s%s</option>" % (
-            x["id"],"selected" if str(x["id"])==class_filter,
+            x["id"],"selected" if str(x["id"])==class_filter else "",
             escape(str(x["name"] or "")),
             (" — "+escape(str(x["stream"] or ""))) if x["stream"] else ""
         ) for x in classes
