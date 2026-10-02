@@ -6266,11 +6266,30 @@ def save_class_teacher_assignment(request: Request, class_id:int=Form(...), teac
     if not valid_class or not valid_teacher:
         con.close();return HTMLResponse("Invalid class or teacher selection. <a href='/app/roles'>Back</a>",400)
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at) VALUES(?,?,?,?)
-                   ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
-                (sid,class_id,teacher_id,now))
-    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned class teacher for class %s"%class_id)
-    con.commit();con.close()
+    # Update an existing assignment for this class, otherwise create one.
+    # This avoids relying on database-specific UPSERT syntax and works with
+    # both the existing SQLite database and the PostgreSQL deployment.
+    existing=cur.execute(
+        "SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? LIMIT 1",
+        (sid,class_id)
+    ).fetchone()
+    if existing:
+        cur.execute(
+            "UPDATE class_teacher_assignments SET teacher_id=?,assigned_at=? WHERE id=? AND school_id=?",
+            (teacher_id,now,existing["id"],sid)
+        )
+        action="CLASS_TEACHER_ASSIGNMENT_EDIT"
+        detail="Updated class teacher assignment for class %s"%class_id
+    else:
+        cur.execute(
+            "INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at) VALUES(?,?,?,?)",
+            (sid,class_id,teacher_id,now)
+        )
+        action="CLASS_TEACHER_ASSIGNMENT"
+        detail="Assigned class teacher for class %s"%class_id
+    _audit(cur,sid,request,action,detail)
+    con.commit()
+    con.close()
     return RedirectResponse("/app/roles",303)
 
 @router.get("/app/roles/class-teacher-assignment/edit/{assignment_id}", response_class=HTMLResponse)
