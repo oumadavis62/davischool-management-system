@@ -3526,6 +3526,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
     form_action = "/app/academics/marks/save-draft" + tab_q if role == "teacher" else "/app/academics/marks/save" + tab_q
     draft_action = ""
+    lock_action = ""
     if locked:
         if role == "school_admin":
             mark_actions = "<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
@@ -3543,12 +3544,20 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
-            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button> "
-                            "<button class='btn' type='submit' formaction='/app/academics/marks/finalize" + tab_q + "' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>") if students else ""
+            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button>") if students else ""
+            # Keep Submit & Lock in its own form. This avoids relying on the
+            # shared marks form's submitter/formaction behavior and guarantees
+            # the finalize endpoint receives the academic selection directly.
+            lock_action = ("<form method='post' action='/app/academics/marks/finalize" + tab_q + "' style='display:inline;margin-left:6px'>"
+                           "<input type='hidden' name='exam_id' value='%s'>"
+                           "<input type='hidden' name='class_id' value='%s'>"
+                           "<input type='hidden' name='subject_id' value='%s'>"
+                           "<button class='btn' type='submit' onclick=\"return confirm('Submit and lock these marks? Further edits will require an approved correction request.');\">🔒 Submit & Lock Marks</button>"
+                           "</form>")%(eid,cid,subid) if students else ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
     form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
-    outside_actions = mark_actions if locked else ""
+    outside_actions = mark_actions if locked else lock_action
     rows=""
     for x in students:
         mark=x["marks"]
