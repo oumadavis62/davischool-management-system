@@ -5872,7 +5872,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         import secrets
         if role=="teacher":
             first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
-            generated_password=first_name+"@"+str(secrets.randbelow(9000)+1000)
+            generated_password=first_name+"@"+str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
             username=email_v
         else:
             generated_password="DS-"+secrets.token_urlsafe(8)
