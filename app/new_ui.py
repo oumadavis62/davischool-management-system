@@ -3595,7 +3595,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select>"
       "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
-      "<button class='btn' type='button' onclick="var f=this.form; var u=new URL('/app/academics/marks',window.location.origin); u.searchParams.set('exam_id',f.elements.exam_id.value); u.searchParams.set('class_id',f.elements.class_id.value); u.searchParams.set('subject_id',f.elements.subject_id.value); u.searchParams.set('ds_tab',sessionStorage.getItem('davischool_tab_id')||''); window.location.href=u.pathname+u.search;">Load Students</button></form>"
+      "<button class='btn' type='button' onclick='var f=this.form; var u=new URL(\"/app/academics/marks\",window.location.origin); u.searchParams.set(\"exam_id\",f.elements.exam_id.value); u.searchParams.set(\"class_id\",f.elements.class_id.value); u.searchParams.set(\"subject_id\",f.elements.subject_id.value); u.searchParams.set(\"ds_tab\",sessionStorage.getItem(\"davischool_tab_id\")||\"\"); window.location.href=u.pathname+u.search;'>Load Students</button></form>"
       "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>"
       "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
