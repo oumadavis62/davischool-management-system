@@ -4253,7 +4253,7 @@ def marks_correction_requests(request: Request):
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
         else:
-            action=(f"<form method='post' action='/app/academics/marks/finalize" + correction_tab_q + "' style='display:inline'>"
+            action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + correction_tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
                     f"<button class='lock-btn' type='submit' onclick='return confirm(&quot;Lock and submit these subject marks?&quot;);'>🔒 Lock</button></form>")
         marks_rows += (
@@ -4387,6 +4387,87 @@ def reject_marks_correction(request: Request, request_id:int=Form(...)):
     _audit(cur,sid,request,"MARKS_CORRECTION_REJECT",f"Rejected correction request {request_id}")
     con.commit();con.close()
     return RedirectResponse("/app/academics/marks-corrections",303)
+
+@router.post("/app/academics/marks-corrections/lock")
+def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
+    """School Admin-only lock action for the Marks Corrections page."""
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",303)
+    if str(request.session.get("role","")) != "school_admin":
+        return HTMLResponse("Only the school administrator can lock marks from the Marks Corrections page.",403)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to lock marks.",403)
+
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_academic_locks_table(cur)
+
+        valid = (
+            cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+            and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+            and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+        )
+        if not valid:
+            con.close()
+            return HTMLResponse("Invalid academic selection.",400)
+
+        # Do not create a lock for a subject with no saved marks.
+        has_marks=cur.execute(
+            "SELECT 1 FROM marks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND marks IS NOT NULL LIMIT 1",
+            (sid,exam_id,class_id,subject_id)
+        ).fetchone()
+        if not has_marks:
+            con.close()
+            return HTMLResponse("No saved marks were found for this examination, class and subject.",400)
+
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        existing=cur.execute(
+            "SELECT 1 FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? LIMIT 1",
+            (sid,exam_id,class_id,subject_id)
+        ).fetchone()
+
+        if existing:
+            cur.execute(
+                "UPDATE academic_locks SET status='finalized',finalized_by=?,finalized_at=? WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",
+                (request.session.get("email",""),now,sid,exam_id,class_id,subject_id)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",
+                (sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now)
+            )
+
+        try:
+            _audit(cur,sid,request,"MARKS_FINALIZE",f"Finalized marks from Marks Corrections for exam {exam_id}, class {class_id}, subject {subject_id}")
+        except Exception as audit_exc:
+            print("DAVISCHOOL CORRECTIONS LOCK AUDIT WARNING:",repr(audit_exc),flush=True)
+
+        con.commit()
+
+        verified=cur.execute(
+            "SELECT 1 FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='finalized' LIMIT 1",
+            (sid,exam_id,class_id,subject_id)
+        ).fetchone()
+        if not verified:
+            con.close()
+            return HTMLResponse("Marks could not be locked.",500)
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print("DAVISCHOOL CORRECTIONS LOCK ERROR:",repr(exc),flush=True)
+        con.close()
+        return HTMLResponse("Marks could not be locked. Please try again.",500)
+
+    tab_value=str(request.query_params.get("ds_tab") or "").strip()
+    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
+    con.close()
+    return RedirectResponse(
+        f"/app/academics/marks-corrections?load=1&exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"+tab_suffix,
+        303
+    )
 
 @router.post("/app/academics/marks/unfinalize")
 def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
