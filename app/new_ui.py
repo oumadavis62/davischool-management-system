@@ -4095,23 +4095,118 @@ def marks_correction_requests(request: Request):
     if not sid:return RedirectResponse("/",303)
     if str(request.session.get("role","")) != "school_admin":
         return HTMLResponse("Only the school administrator can review mark correction requests.",403)
-    con=_db();cur=con.cursor();_ensure_marks_correction_requests_table(cur)
-    rows=cur.execute("""SELECT r.*,e.name exam_name,c.name class_name,c.stream,sub.name subject_name,t.name teacher_name
+
+    con=_db();cur=con.cursor()
+    _ensure_marks_correction_requests_table(cur)
+    _ensure_academic_locks_table(cur)
+
+    # Show every subject assessment for which marks have actually been saved.
+    # Grouping by exam/class/subject keeps the page compact while preserving
+    # the underlying student marks exactly as stored.
+    saved_rows=cur.execute("""
+        SELECT
+            m.exam_id,m.class_id,m.subject_id,
+            e.name exam_name,c.name class_name,c.stream,
+            sub.name subject_name,
+            COUNT(m.id) mark_count,
+            AVG(m.marks) mark_mean,
+            MAX(m.year) mark_year,MAX(m.term) mark_term
+        FROM marks m
+        LEFT JOIN exams e ON e.id=m.exam_id
+        LEFT JOIN classes c ON c.id=m.class_id
+        LEFT JOIN subjects sub ON sub.id=m.subject_id
+        WHERE m.school_id=?
+          AND m.exam_id IS NOT NULL
+          AND m.class_id IS NOT NULL
+          AND m.subject_id IS NOT NULL
+          AND m.marks IS NOT NULL
+        GROUP BY m.exam_id,m.class_id,m.subject_id,e.name,c.name,c.stream,sub.name
+        ORDER BY COALESCE(e.name,''),COALESCE(c.name,''),COALESCE(c.stream,''),COALESCE(sub.name,'')
+    """,(sid,)).fetchall()
+
+    request_rows=cur.execute("""
+        SELECT r.*,e.name exam_name,c.name class_name,c.stream,sub.name subject_name,t.name teacher_name
         FROM marks_correction_requests r
-        LEFT JOIN exams e ON e.id=r.exam_id LEFT JOIN classes c ON c.id=r.class_id
-        LEFT JOIN subjects sub ON sub.id=r.subject_id LEFT JOIN teachers t ON t.id=r.teacher_id
-        WHERE r.school_id=? ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.id DESC""",(sid,)).fetchall()
+        LEFT JOIN exams e ON e.id=r.exam_id
+        LEFT JOIN classes c ON c.id=r.class_id
+        LEFT JOIN subjects sub ON sub.id=r.subject_id
+        LEFT JOIN teachers t ON t.id=r.teacher_id
+        WHERE r.school_id=?
+        ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.id DESC
+    """,(sid,)).fetchall()
+
+    lock_map={}
+    for row in saved_rows:
+        lock_map[(int(row["exam_id"]),int(row["class_id"]),int(row["subject_id"]))] = _academic_lock(
+            cur,sid,int(row["exam_id"]),int(row["class_id"]),int(row["subject_id"])
+        )
+
     con.close()
-    body_rows=""
-    for r in rows:
+
+    marks_rows=""
+    for r in saved_rows:
+        key=(int(r["exam_id"]),int(r["class_id"]),int(r["subject_id"]))
+        locked_row=lock_map.get(key)
+        locked=str(locked_row["status"] or "").lower()=="finalized" if locked_row else False
+        status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
+        if locked:
+            action=(f"<form method='post' action='/app/academics/marks/unfinalize' style='display:inline'>"
+                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
+                    f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
+        else:
+            action=(f"<form method='post' action='/app/academics/marks/finalize' style='display:inline'>"
+                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
+                    f"<button class='lock-btn' type='submit' onclick='return confirm(&quot;Lock and submit these subject marks?&quot;);'>🔒 Lock</button></form>")
+        marks_rows += (
+            f"<tr><td>{escape(str(r['exam_name'] or ''))}</td>"
+            f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
+            f"<td><b>{escape(str(r['subject_name'] or ''))}</b></td>"
+            f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
+            f"<td>{int(r['mark_count'] or 0)}</td>"
+            f"<td>{'—' if r['mark_mean'] is None else ('%.1f' % float(r['mark_mean']))}</td>"
+            f"<td>{status_html}</td><td>{action}</td></tr>"
+        )
+
+    request_rows_html=""
+    for r in request_rows:
         status=str(r["status"] or "").lower()
         action=""
         if status=="pending":
-            action=(f"<form method='post' action='/app/academics/marks-corrections/approve' style='display:inline'><input type='hidden' name='request_id' value='{r['id']}'><button class='btn' type='submit' onclick=\"return confirm('Approve this correction request and reopen the marks?');\">🔓 Approve / Reopen</button></form> "
-                    f"<form method='post' action='/app/academics/marks-corrections/reject' style='display:inline'><input type='hidden' name='request_id' value='{r['id']}'><button class='btnlink' type='submit' onclick=\"return confirm('Reject this correction request?');\">Reject</button></form>")
-        body_rows += f"<tr><td>{escape(str(r['requested_at'] or ''))}</td><td>{escape(str(r['teacher_name'] or r['requested_by'] or ''))}</td><td>{escape(str(r['exam_name'] or ''))}</td><td>{escape(str(r['class_name'] or ''))} {escape(str(r['stream'] or ''))}</td><td>{escape(str(r['subject_name'] or ''))}</td><td>{escape(str(r['reason'] or ''))}</td><td>{escape(status.title())}</td><td>{action}</td></tr>"
-    body=f"""<div class='page'><h1>Marks Correction Requests</h1><div class='muted'>Review teacher requests to reopen finalized marks. Approving a request unlocks only the selected examination, class and subject.</div><div class='card section'><table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>{body_rows or '<tr><td colspan=8>No correction requests yet.</td></tr>'}</tbody></table></div></div><style>.btn,.btnlink{{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;text-decoration:none}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}</style>"""
-    return _school_page(request,"Marks Correction Requests",body)
+            action=(f"<form method='post' action='/app/academics/marks-corrections/approve' style='display:inline'>"
+                    f"<input type='hidden' name='request_id' value='{r['id']}'>"
+                    f"<button class='btn' type='submit' onclick='return confirm(&quot;Approve this correction request and reopen the marks?&quot;);'>🔓 Approve / Reopen</button></form> "
+                    f"<form method='post' action='/app/academics/marks-corrections/reject' style='display:inline'>"
+                    f"<input type='hidden' name='request_id' value='{r['id']}'>"
+                    f"<button class='btnlink' type='submit' onclick='return confirm(&quot;Reject this correction request?&quot;);'>Reject</button></form>")
+        request_rows_html += (
+            f"<tr><td>{escape(str(r['requested_at'] or ''))}</td>"
+            f"<td>{escape(str(r['teacher_name'] or r['requested_by'] or ''))}</td>"
+            f"<td>{escape(str(r['exam_name'] or ''))}</td>"
+            f"<td>{escape(str(r['class_name'] or ''))} {escape(str(r['stream'] or ''))}</td>"
+            f"<td>{escape(str(r['subject_name'] or ''))}</td>"
+            f"<td>{escape(str(r['reason'] or ''))}</td>"
+            f"<td>{escape(status.title())}</td><td>{action}</td></tr>"
+        )
+
+    body=f"""<div class='page'><h1>Marks Corrections</h1>
+<div class='muted'>View all saved subject marks and control whether each subject assessment is unlocked or locked/submitted.</div>
+<div class='card section'><h2>Saved & Submitted Subject Marks</h2>
+<div style='overflow-x:auto'>
+<table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found.</td></tr>"}</tbody></table></div></div>
+<div class='card section'><h2>Teacher Correction Requests</h2>
+<div class='muted' style='margin-bottom:10px'>Requests submitted by teachers remain available here for review.</div>
+<div style='overflow-x:auto'>
+<table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{request_rows_html or "<tr><td colspan='8'>No correction requests yet.</td></tr>"}</tbody></table></div></div>
+</div>
+<style>
+.btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
+.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
+.unlock-btn{{background:#b45309}}
+.lock-btn{{background:#176B3A}}
+</style>"""
+    return _school_page(request,"Marks Corrections",body)
 
 @router.post("/app/academics/marks-corrections/approve")
 def approve_marks_correction(request: Request, request_id:int=Form(...)):
