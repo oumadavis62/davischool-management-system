@@ -3878,9 +3878,10 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         except Exception: pass
         return HTMLResponse("Save Marks failed: %s" % escape(str(save_exc)),500)
     con.close()
-    tab_value=str(request.query_params.get("ds_tab") or "").strip()
-    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
-    return RedirectResponse(f"/app/academics/marks?exam_id={exam_id}&class_id={class_id}&subject_id={subject_id}"+tab_suffix,303)
+    # Render the locked marks page directly in this authenticated request.
+    # This avoids a second protected request/redirect, which can otherwise
+    # lose the tab-specific session cookie and send the admin to login.
+    return marks_page(request, exam_id=str(exam_id), class_id=str(class_id), subject_id=str(subject_id))
 
 # Marks deletion is intentionally disabled. Published and teacher draft marks must not be deletable from the Record Marks workflow.\n\n@router.post("/app/academics/marks/finalize")
 async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...)):
