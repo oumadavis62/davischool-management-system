@@ -4782,6 +4782,8 @@ def report_card_settings(request: Request, exam_id:int=0, saved:int=0):
         return HTMLResponse("You do not have permission to manage report card dates.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     exams=cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+    if not exam_id and exams:
+        exam_id=int(exams[0]["id"])
     selected=cur.execute("SELECT * FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id)).fetchone() if exam_id else None
     con.close()
     options="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==exam_id else ''}>{escape(str(e['name']))}</option>" for e in exams)
@@ -6148,6 +6150,7 @@ def exams_page(request: Request):
     body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><div class='examination-filter-scroll' tabindex='0'><form id='create-exam-form' method='post' action='/app/exams/add' class='examination-filter-form' ><input name='name' required placeholder='Exam name' class='field'><select name='exam_type' class='field'><option value=''>Select exam type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><select name='year' class='field'>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select><button type='submit' class='btn create-exam-btn'>Create Exam</button></form></div></div><div class='card section'><div class='marksheet-scroll examination-table-scroll' tabindex='0'><table class='examination-table'><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div></div></div><style>.examination-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.examination-filter-form{{display:grid;grid-template-columns:260px 220px 220px 150px auto;gap:10px;width:max-content;min-width:100%}}.examination-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.examination-table{{width:max-content;min-width:760px}}.create-exam-btn{{min-width:140px;position:sticky;right:0;z-index:10;pointer-events:auto;cursor:pointer;display:inline-block;white-space:nowrap;background:#176B3A!important;color:#fff!important}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
     return _school_page(request,"Examinations",body)
 
+@router.post("/app/exams")
 @router.post("/app/exams/add")
 def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:str=Form(""),year:str=Form("")):
     sid=_school_session(request)
