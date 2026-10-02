@@ -4251,7 +4251,7 @@ def marks_correction_requests(request: Request):
         if locked:
             action=(f"<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
-                    f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
+                    f"<button class='unlock-btn' type='submit' onclick='if(confirm(&quot;Unlock these subject marks for editing?&quot;)){{this.form.submit();}} return false;'>🔓 Unlock</button></form>")
         else:
             action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
