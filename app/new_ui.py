@@ -5888,8 +5888,15 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             while cur.execute("SELECT id FROM users WHERE lower(username)=?",(username.lower(),)).fetchone():
                 suffix += 1
                 username=f"{base_username}{suffix}"
+        # Build and verify the credential hash before inserting the account.
+        # This guarantees that the credential displayed to the School Admin is
+        # exactly the credential the login verifier can validate.
+        password_hash=hash_password(generated_password)
+        password_ok,_=verify_password(generated_password,password_hash)
+        if not password_ok:
+            return HTMLResponse("The generated password could not be validated. No account was added. Please try again.",500)
         cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (username,email_v,hash_password(generated_password),role,full_name.strip(),sid,tid,stid,generated_password))
+                    (username,email_v,password_hash,role,full_name.strip(),sid,tid,stid,generated_password))
 
         if role=="teacher" and tid:
             _ensure_teacher_allocations_table(cur)
