@@ -535,16 +535,31 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     con = get_db()
     try:
         cur = con.cursor()
+        # Keep the login schema in sync with the School Users account schema.
+        # This is additive only; it never changes existing academic records.
+        try:
+            cur.execute("SELECT * FROM users LIMIT 0")
+            columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+            for column in ("username", "teacher_id", "student_id", "temporary_password"):
+                if column not in columns:
+                    cur.execute("ALTER TABLE users ADD COLUMN %s TEXT" % column)
+            con.commit()
+        except Exception as schema_exc:
+            print("DAVISCHOOL LOGIN SCHEMA WARNING:", repr(schema_exc), flush=True)
+
         login_id = email.strip()
-        u = cur.execute("SELECT * FROM users WHERE lower(email)=lower(?) LIMIT 1", (login_id,)).fetchone()
-        # School-created accounts have a dedicated username column. Check it
-        # before the legacy email/name fallbacks so the generated username
-        # shown to the School Admin is a valid login identifier.
+        # Prefer the exact generated username first. This prevents an older
+        # account sharing the same email from being selected before the account
+        # whose credentials are currently being used.
+        u = cur.execute(
+            "SELECT * FROM users WHERE lower(trim(COALESCE(username,'')))=lower(trim(?)) ORDER BY id DESC LIMIT 1",
+            (login_id,)
+        ).fetchone()
         if not u:
-            try:
-                u = cur.execute("SELECT * FROM users WHERE lower(trim(COALESCE(username,''))) = lower(trim(?)) ORDER BY id DESC LIMIT 1", (login_id,)).fetchone()
-            except Exception:
-                u = None
+            u = cur.execute(
+                "SELECT * FROM users WHERE lower(trim(COALESCE(email,'')))=lower(trim(?)) ORDER BY id DESC LIMIT 1",
+                (login_id,)
+            ).fetchone()
         # The sign-in form is labelled "Username or Email". School-created
         # accounts historically stored only an email, so also accept the
         # account full name and linked teacher profile name as identifiers.
@@ -575,23 +590,28 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                 pass
         if not u:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
-        valid, _ = verify_password(password, u["password"])
-        # Generated school accounts also retain their one-time temporary
-        # password. If an account was created during a password-migration
-        # window and its hash does not validate, accept the exact temporary
-        # credential and immediately normalize the stored password hash.
+        valid, legacy_password = verify_password(password, u["password"])
+        # Every School Users account stores the exact generated credential in
+        # temporary_password. If the stored hash was created incorrectly or
+        # belongs to an older account-migration format, accept only that exact
+        # generated credential and immediately replace the stored value with a
+        # fresh PBKDF2 hash. This does not alter marks or any academic record.
         if not valid:
             try:
                 temporary_password = str(u["temporary_password"] or "") if "temporary_password" in u.keys() else ""
             except Exception:
                 temporary_password = ""
-            if temporary_password and hmac.compare_digest(password, temporary_password):
-                try:
-                    cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), u["id"]))
-                    con.commit()
-                    valid = True
-                except Exception:
-                    valid = False
+            if temporary_password:
+                submitted_temporary = str(password or "")
+                if hmac.compare_digest(submitted_temporary, temporary_password) or hmac.compare_digest(submitted_temporary.strip(), temporary_password):
+                    try:
+                        cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(temporary_password), u["id"]))
+                        con.commit()
+                        valid = True
+                        legacy_password = True
+                    except Exception as repair_exc:
+                        print("DAVISCHOOL LOGIN PASSWORD REPAIR WARNING:", repr(repair_exc), flush=True)
+                        valid = False
         if not valid:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         user_id=u["id"]; user_email=u["email"]; role=u["role"]; full_name=u["full_name"]; school_id=u["school_id"] or 0
