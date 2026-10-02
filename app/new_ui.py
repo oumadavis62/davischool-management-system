@@ -5442,7 +5442,13 @@ def users_page(request: Request):
     # All database reads for this page are complete; close only after the
     # created-account lookup has finished.
     con.close()
-    # Use the most recently saved Class Teacher assignment for the account table.\n    # The assignment table is class-scoped (UNIQUE school_id + class_id), so a teacher\n    # can technically have more than one row in legacy data.  The previous dictionary\n    # comprehension depended on database row order and could therefore display an\n    # unrelated/older class.  assignments is explicitly newest-first, and setdefault\n    # keeps the newest class as the authoritative linked class for each teacher.\n    class_by_teacher={}\n    for a in assignments:\n        class_by_teacher.setdefault(int(a["teacher_id"]), int(a["class_id"]))
+    # Use the most recently saved Class Teacher assignment for the account table.
+    # The assignment table is class-scoped (UNIQUE school_id + class_id), so a teacher
+    # can technically have more than one row in legacy data. The assignments query
+    # is explicitly newest-first, and setdefault keeps the newest class authoritative.
+    class_by_teacher={}
+    for a in assignments:
+        class_by_teacher.setdefault(int(a["teacher_id"]), int(a["class_id"]))
     rows=""
     for u in users:
         role_name=str(u["role"] or "")
