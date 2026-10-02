@@ -5418,7 +5418,7 @@ def users_page(request: Request):
     _ensure_teacher_allocations_table(cur)
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=?",(sid,)).fetchall()
+    assignments=cur.execute("SELECT class_id,teacher_id FROM class_teacher_assignments WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
     allocations=cur.execute("""SELECT teacher_id,class_id,subject_id FROM teacher_allocations WHERE school_id=? ORDER BY teacher_id,class_id,subject_id""",(sid,)).fetchall()
     # Resolve the just-created account BEFORE closing the database connection.
     # Previously the fallback query below used a cursor after con.close(), which
@@ -5442,7 +5442,7 @@ def users_page(request: Request):
     # All database reads for this page are complete; close only after the
     # created-account lookup has finished.
     con.close()
-    class_by_teacher={int(a["teacher_id"]):int(a["class_id"]) for a in assignments}
+    # Use the most recently saved Class Teacher assignment for the account table.\n    # The assignment table is class-scoped (UNIQUE school_id + class_id), so a teacher\n    # can technically have more than one row in legacy data.  The previous dictionary\n    # comprehension depended on database row order and could therefore display an\n    # unrelated/older class.  assignments is explicitly newest-first, and setdefault\n    # keeps the newest class as the authoritative linked class for each teacher.\n    class_by_teacher={}\n    for a in assignments:\n        class_by_teacher.setdefault(int(a["teacher_id"]), int(a["class_id"]))
     rows=""
     for u in users:
         role_name=str(u["role"] or "")
