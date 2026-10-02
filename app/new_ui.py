@@ -4255,7 +4255,7 @@ def marks_correction_requests(request: Request):
         else:
             action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + correction_tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
-                    f"<button class='lock-btn' type='submit' onclick='return confirm(&quot;Lock and submit these subject marks?&quot;);'>🔒 Lock</button></form>")
+                    f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
         marks_rows += (
             f"<tr><td>{escape(str(r['exam_name'] or ''))}</td>"
             f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
