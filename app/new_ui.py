@@ -5673,6 +5673,13 @@ def users_add_get(request: Request):
     # requests back to User Management instead of exposing FastAPI's 405 JSON.
     return RedirectResponse("/app/users",303)
 
+@router.post("/app/users")
+def users_add_legacy(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
+    # Compatibility for browsers or cached scripts that submit the User Management
+    # account form to /app/users instead of its dedicated /app/users/add action.
+    # Keep this path strictly delegated so there is only one account-creation flow.
+    return users_add(request, email, role, teacher_id, class_id, class_ids_csv, subject_ids_csv, teacher_type, student_id)
+
 @router.post("/app/users/add")
 def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
