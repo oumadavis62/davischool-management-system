@@ -3541,7 +3541,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         if role=="teacher":
             mark_actions = ""
             draft_action = "<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Draft</button>" if students else ""
-            lock_action = ""
+            lock_action = "<button class='btn' type='submit' formaction='/app/academics/marks/finalize" + tab_q + "' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Teachers will not be able to edit them after locking.');\">🔒 Submit & Lock Marks</button>" if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
@@ -4245,14 +4245,7 @@ def marks_correction_requests(request: Request):
         locked_row=lock_map.get(key)
         locked=str(locked_row["status"] or "").lower()=="finalized" if locked_row else False
         status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
-        if locked:
-            action=(f"<form method='post' action='/app/academics/marks/unfinalize" + correction_tab_q + "' style='display:inline'>"
-                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
-                    f"<button class='unlock-btn' type='submit' onclick='return confirm(&quot;Unlock these subject marks for editing?&quot;);'>🔓 Unlock</button></form>")
-        else:
-            action=(f"<form method='post' action='/app/academics/marks/finalize" + correction_tab_q + "' style='display:inline'>"
-                    f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'>"
-                    f"<button class='lock-btn' type='submit' onclick='return confirm(&quot;Lock and submit these subject marks?&quot;);'>🔒 Lock</button></form>")
+        action=""
         marks_rows += (
             f"<tr><td>{escape(str(r['exam_name'] or ''))}</td>"
             f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
@@ -4260,7 +4253,7 @@ def marks_correction_requests(request: Request):
             f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
             f"<td>{int(r['mark_count'] or 0)}</td>"
             f"<td>{'—' if r['mark_mean'] is None else ('%.1f' % float(r['mark_mean']))}</td>"
-            f"<td>{status_html}</td><td>{action}</td></tr>"
+            f"<td>{status_html}</td></tr>"
         )
 
     request_rows_html=""
@@ -4309,8 +4302,8 @@ def marks_correction_requests(request: Request):
 </div>
 <div class='card section'><h2>Saved & Submitted Subject Marks</h2>
 <div style='overflow-x:auto'>
-<table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
+<table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th></tr></thead>
+<tbody>{marks_rows or "<tr><td colspan='8'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
 <div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear' onsubmit='return confirm("Clear all teacher correction requests for this school? This will not change any marks or saved subject records.");'><button class='btnlink' type='submit' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
 <div class='muted' style='margin:10px 0'>Requests submitted by teachers remain available here for review.</div>
 <div style='overflow-x:auto'>
