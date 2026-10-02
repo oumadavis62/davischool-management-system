@@ -576,6 +576,22 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         if not u:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         valid, _ = verify_password(password, u["password"])
+        # Generated school accounts also retain their one-time temporary
+        # password. If an account was created during a password-migration
+        # window and its hash does not validate, accept the exact temporary
+        # credential and immediately normalize the stored password hash.
+        if not valid:
+            try:
+                temporary_password = str(u["temporary_password"] or "") if "temporary_password" in u.keys() else ""
+            except Exception:
+                temporary_password = ""
+            if temporary_password and hmac.compare_digest(password, temporary_password):
+                try:
+                    cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), u["id"]))
+                    con.commit()
+                    valid = True
+                except Exception:
+                    valid = False
         if not valid:
             return HTMLResponse("❌ Invalid username or password. <a href='/'>Back</a>", status_code=401)
         user_id=u["id"]; user_email=u["email"]; role=u["role"]; full_name=u["full_name"]; school_id=u["school_id"] or 0
