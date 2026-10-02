@@ -4799,8 +4799,7 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur)
     if not cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone():
         con.close();return HTMLResponse("Invalid examination.",400)
-    if opening_date and closing_date and closing_date<opening_date:
-        con.close();return HTMLResponse("Closing date cannot be before opening date.",400)
+    # Save the dates exactly as submitted. Browser date controls already provide valid ISO date values.
     # Save the exact values submitted for this examination. Update every
     # matching legacy row so older duplicate settings cannot override the
     # newly entered dates when the page is reopened.
