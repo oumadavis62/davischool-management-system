@@ -4786,7 +4786,7 @@ def report_card_settings(request: Request, exam_id:int=0, saved:int=0):
     con.close()
     options="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==exam_id else ''}>{escape(str(e['name']))}</option>" for e in exams)
     notice="<div style='margin:10px 0;padding:10px;border-radius:8px;background:#ecfdf5;color:#166534;font-weight:700'>Report card dates saved successfully.</div>" if saved else ""
-    return _school_page(request,"Report Card Settings",f"""<div class='card section'><h2>Report Card Dates</h2><p class='muted'>Set the opening and closing dates for each examination/reporting period.</p>{notice}<form method='post' action='/app/report-card-settings'><select name='exam_id' class='field' required>{options}</select><label>Date of Opening</label><input type='date' name='opening_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["opening_date"] if selected else ""))}'><label>Date of Closing</label><input type='date' name='closing_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["closing_date"] if selected else ""))}'><button type='submit' class='btn'>Save Dates</button></form></div>""")
+    return _school_page(request,"Report Card Settings",f"""<div class='card section'><h2>Report Card Dates</h2><p class='muted'>Set the opening and closing dates for each examination/reporting period.</p>{notice}<form method='post' action='/app/report-card-settings'><select name='exam_id' class='field report-exam-field' required>{options}</select><label>Date of Opening</label><input type='date' name='opening_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["opening_date"] if selected else ""))}'><label>Date of Closing</label><input type='date' name='closing_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["closing_date"] if selected else ""))}'><button type='submit' class='btn report-save-btn'>Save Dates</button></form><style>.report-exam-field{width:100%;min-height:58px;font-size:18px;padding:14px 16px;box-sizing:border-box}.report-date-field{min-height:58px!important;font-size:18px!important}.report-save-btn{margin-top:12px;min-height:52px;padding:13px 22px;font-size:16px;cursor:pointer}</style></div>""")
 
 @router.post("/app/report-card-settings")
 def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_date:str=Form(""), closing_date:str=Form("")):
@@ -4799,7 +4799,11 @@ def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_d
         con.close();return HTMLResponse("Invalid examination.",400)
     if opening_date and closing_date and closing_date<opening_date:
         con.close();return HTMLResponse("Closing date cannot be before opening date.",400)
-    cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?) ON CONFLICT(school_id,exam_id) DO UPDATE SET opening_date=excluded.opening_date,closing_date=excluded.closing_date",(sid,exam_id,opening_date,closing_date))
+    existing=cur.execute("SELECT id FROM report_card_settings WHERE school_id=? AND exam_id=? LIMIT 1",(sid,exam_id)).fetchone()
+    if existing:
+        cur.execute("UPDATE report_card_settings SET opening_date=?,closing_date=? WHERE id=? AND school_id=?",(opening_date,closing_date,existing["id"],sid))
+    else:
+        cur.execute("INSERT INTO report_card_settings(school_id,exam_id,opening_date,closing_date) VALUES(?,?,?,?)",(sid,exam_id,opening_date,closing_date))
     con.commit();con.close()
     return RedirectResponse(f"/app/report-card-settings?exam_id={exam_id}&saved=1",303)
 @router.get("/app/report-cards/class-preview", response_class=HTMLResponse)
