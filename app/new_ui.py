@@ -4334,7 +4334,7 @@ def marks_correction_requests(request: Request):
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
 <tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
-<div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear' style='display:inline' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or ""))}'><button class='btnlink' type='submit' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
+<div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear?ds_tab={quote(str(request.query_params.get("ds_tab") or ""),safe="")}' style='display:inline' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or ""))}'><button class='btnlink' type='submit' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
 <div class='muted' style='margin:10px 0'>Requests submitted by teachers remain available here for review.</div>
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
@@ -4378,20 +4378,40 @@ def approve_marks_correction(request: Request, request_id:int=Form(...)):
 
 @router.post("/app/academics/marks-corrections/clear")
 def clear_marks_correction_requests(request: Request, ds_tab: str = Form("")):
-    """Clear teacher correction requests without losing the active isolated tab."""
+    """Clear teacher correction requests and return to the same isolated admin tab."""
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if str(request.session.get("role","")) != "school_admin":
         return HTMLResponse("Only the school administrator can clear correction requests.",403)
-    con=_db();cur=con.cursor();_ensure_marks_correction_requests_table(cur)
-    count_row=cur.execute("SELECT COUNT(*) AS n FROM marks_correction_requests WHERE school_id=?",(sid,)).fetchone()
-    cleared=int(count_row["n"] or 0) if count_row else 0
-    if cleared:
-        cur.execute("DELETE FROM marks_correction_requests WHERE school_id=?",(sid,))
-        _audit(cur,sid,request,"MARKS_CORRECTION_CLEAR",f"Cleared {cleared} teacher correction request(s)")
+
+    # Prefer the tab id submitted by the form, but fall back to the query
+    # parameter injected by the tab-session middleware. This prevents a clear
+    # action from falling back to the generic login session.
+    tab_value=str(ds_tab or request.query_params.get("ds_tab") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_value):
+        tab_value=""
+
+    con=_db();cur=con.cursor()
+    _ensure_marks_correction_requests_table(cur)
+    try:
+        count_row=cur.execute(
+            "SELECT COUNT(*) AS n FROM marks_correction_requests WHERE school_id=?",
+            (sid,),
+        ).fetchone()
+        cleared=int(count_row["n"] or 0) if count_row else 0
+        if cleared:
+            cur.execute(
+                "DELETE FROM marks_correction_requests WHERE school_id=?",
+                (sid,),
+            )
+            _audit(
+                cur,sid,request,"MARKS_CORRECTION_CLEAR",
+                f"Cleared {cleared} teacher correction request(s)",
+            )
         con.commit()
-    con.close()
-    tab_value=str(ds_tab or "").strip()
+    finally:
+        con.close()
+
     tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
     return RedirectResponse("/app/academics/marks-corrections"+tab_suffix,303)
 
