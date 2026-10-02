@@ -3541,6 +3541,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         if role=="teacher":
             mark_actions = ""
             draft_action = "<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Draft</button>" if students else ""
+            # Submit & Lock uses the same marks form so the current marks are posted
+            # to the finalize endpoint together with the lock operation.
+            lock_action = "<button class='btn' type='submit' formaction='/app/academics/marks/finalize" + tab_q + "' formmethod='post' onclick=\"return confirm('Submit and lock these marks? Teachers will not be able to edit them after locking.');\">🔒 Submit & Lock Marks</button>" if students else ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
@@ -3550,7 +3553,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             lock_action = ""
             draft_action = ""
     # Keep correction/reopen forms outside the main marks form. Nested HTML forms are invalid and can cause the browser to submit the wrong action.
-    form_actions = draft_action if role == "teacher" else (mark_actions if not locked else "")
+    form_actions = ((draft_action + lock_action) if role == "teacher" else (mark_actions if not locked else ""))
     outside_actions = mark_actions if locked else ""
     rows=""
     for x in students:
