@@ -6104,12 +6104,31 @@ def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int
         con.close()
         return HTMLResponse("Invalid class or teacher selection. <a href='/app/classes'>Back</a>",400)
     now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("""INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
-                   VALUES(?,?,?,?)
-                   ON CONFLICT(school_id,class_id) DO UPDATE SET teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
-                (sid,class_id,teacher_id,now))
+    # Do not rely on ON CONFLICT here: older production databases may have
+    # the assignment table without the composite UNIQUE constraint.  Updating
+    # an existing assignment first keeps the button functional on both the
+    # legacy and current schemas without altering any existing class records.
+    existing_assignment=cur.execute(
+        "SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? ORDER BY id LIMIT 1",
+        (sid,class_id)
+    ).fetchone()
+    if existing_assignment:
+        cur.execute(
+            """UPDATE class_teacher_assignments
+               SET teacher_id=?,assigned_at=?
+               WHERE school_id=? AND class_id=?""",
+            (teacher_id,now,sid,class_id)
+        )
+    else:
+        cur.execute(
+            """INSERT INTO class_teacher_assignments
+               (school_id,class_id,teacher_id,assigned_at)
+               VALUES(?,?,?,?)""",
+            (sid,class_id,teacher_id,now)
+        )
     _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT","Assigned %s as class teacher for class %s"%(str(valid_teacher["name"] or ""),class_id))
-    con.commit();con.close()
+    con.commit()
+    con.close()
     return RedirectResponse("/app/classes",303)
 
 @router.get("/app/subjects", response_class=HTMLResponse)
