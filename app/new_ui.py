@@ -1917,7 +1917,9 @@ def class_marksheets_pdf(
     overall_metrics: str = "",
 ):
     """Download the currently selected MarkSheet as a real PDF file."""
-    # Keep this import local to the route so MarkSheet PDF generation cannot depend on module-level imports.\n    from reportlab.platypus import PageBreak\n    sid = _school_session(request)
+    # Keep this import local to the route so MarkSheet PDF generation cannot depend on module-level imports.
+    from reportlab.platypus import PageBreak
+    sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
     if not _require_permission(request, sid, "reports.view"):
