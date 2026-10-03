@@ -4717,9 +4717,9 @@ def assessments_page(request: Request, student_id: str = "", subject_id: str = "
 <input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'>
 <button class='btn' type='submit'>Save Assessment</button></form></div>
 <div class='card section'><h2>Assessment records</h2>
-<table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th><th>Actions</th></tr></thead>
-<tbody>{tr or '<tr><td colspan=9>No assessment records yet.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn,.btnlink{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;display:inline-block;cursor:pointer}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}.btndanger{{padding:8px 12px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#b91c1c;font-weight:800;cursor:pointer}}</style>"""
+<div class='marksheet-scroll assessment-records-scroll' tabindex='0'><table class='assessment-records-table'><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th><th>Actions</th></tr></thead>
+<tbody>{tr or '<tr><td colspan=9>No assessment records yet.</td></tr>'}</tbody></table></div></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn,.btnlink{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;display:inline-block;cursor:pointer}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}.assessment-records-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px;scrollbar-gutter:stable}}.assessment-records-scroll:focus{{outline:2px solid #94a3b8;outline-offset:2px}}.assessment-records-table{{width:max-content;min-width:1100px}}.assessment-records-table th,.assessment-records-table td{{white-space:nowrap}}.btndanger{{padding:8px 12px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#b91c1c;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "SBA / CBA", body)
 
 
