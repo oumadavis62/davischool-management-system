@@ -4911,6 +4911,7 @@ def assessments_add(
     except Exception as audit_exc:
         print("DAVISCHOOL ASSESSMENT AUDIT WARNING: %r" % (audit_exc,), flush=True)
 
+    current_ds_tab_q = ("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"), safe="")) if request.query_params.get("ds_tab") else ""
     return RedirectResponse("/app/academics/assessments" + current_ds_tab_q, 303)
 
 
