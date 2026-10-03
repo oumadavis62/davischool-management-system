@@ -4582,7 +4582,8 @@ def teacher_allocations_page(request: Request):
     tops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in teachers)
     cops="".join("<option value='%s'>%s%s</option>"%(x["id"],escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
     sops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in subjects)
-    trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"]) for x in rows)
+    current_ds_tab_q=("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""
+    trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit' formaction='/app/academics/allocations/delete/%s%s' formmethod='post'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"],current_ds_tab_q,x["id"],current_ds_tab_q) for x in rows)
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
 <div class='card section'><div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add' class='teacher-allocation-filter-form'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
@@ -4672,7 +4673,7 @@ def teacher_allocations_delete(request: Request,allocation_id:int):
         print("DAVISCHOOL TEACHER ALLOCATION DELETE FAILED:",repr(exc),flush=True)
         return HTMLResponse("Unable to delete this teacher allocation. <a href='/app/academics/allocations'>Back</a>",500)
     con.close()
-    return RedirectResponse("/app/academics/allocations",303)
+    return RedirectResponse("/app/academics/allocations" + (("?ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""),303)
 
 @router.get("/app/academics/analysis", response_class=HTMLResponse)
 def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str=""):
