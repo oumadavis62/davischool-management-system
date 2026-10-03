@@ -4706,7 +4706,7 @@ def assessments_page(request: Request, student_id: str = "", subject_id: str = "
     )
     body = f"""<div class='page'><h1>SBA / CBA</h1>
 <div class='muted'>Record continuous assessment components separately from examination marks.</div>
-<div class='card section'><form method='post' action='/app/academics/assessments/add" + current_ds_tab_q + "' data-native-post='1' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<div class='card section'><form method='post' action='/app/academics/assessments/add' data-native-post='1' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
 <select name='student_id' required class='field'><option value=''>Select student</option>{sto}</select>
 <select name='subject_id' required class='field'><option value=''>Select subject</option>{so}</select>
 <select name='term' required class='field'><option value=''>Select term</option>{''.join(f"<option>{escape(t)}</option>" for t in TERM_OPTIONS)}</select>
