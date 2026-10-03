@@ -2950,7 +2950,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         + sopts +
         "</select><button class='btn'>Load Subject</button></form></div>"
         "<div class='card section'><h2>Add grading rule</h2>"
-        "<form method='post' action='/app/academics/grading/add" + current_ds_tab_q + "' "
+        "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
         "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
@@ -2958,7 +2958,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
         "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
-        "<button type='submit' formaction='/app/academics/grading/add" + current_ds_tab_q + "' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
+        "<button type='submit' formaction='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
         "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
@@ -2978,7 +2978,7 @@ def grading_setup(request: Request, subject_id: str = ""):
     return _school_page(request, "Subject Grading & Points", body)
 
 @router.post("/app/academics/grading/add")
-def grading_add(request: Request, subject_id: int = Form(...), min_mark: float = Form(...),
+def grading_add(request: Request, subject_id: int = Form(0), min_mark: float = Form(...),
                 max_mark: float = Form(...), grade: str = Form(...), points: float = Form(...), performance_comment: str = Form(...)):
     sid = _school_session(request)
     if not sid:
@@ -2996,9 +2996,33 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
     con = _db()
     cur = con.cursor()
     _ensure_grading_table(cur)
-    if not cur.execute(
+    valid_subject = cur.execute(
         "SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, sid)
-    ).fetchone():
+    ).fetchone()
+    # The grading screen is sometimes opened inside an isolated workspace tab.
+    # Keep the selected subject in the POST URL as a second source of truth so
+    # a stale/blank hidden field cannot turn a valid selected subject into ID 0.
+    if not valid_subject:
+        try:
+            query_subject_id = int(str(request.query_params.get("subject_id") or "0"))
+        except Exception:
+            query_subject_id = 0
+        referer = str(request.headers.get("referer") or "")
+        match = re.search(r"[?&]subject_id=(\\d+)", referer)
+        try:
+            referer_subject_id = int(match.group(1)) if match else 0
+        except Exception:
+            referer_subject_id = 0
+        for candidate in (query_subject_id, referer_subject_id):
+            if candidate:
+                candidate_row = cur.execute(
+                    "SELECT id FROM subjects WHERE id=? AND school_id=?", (candidate, sid)
+                ).fetchone()
+                if candidate_row:
+                    subject_id = candidate
+                    valid_subject = candidate_row
+                    break
+    if not valid_subject:
         con.close()
         return HTMLResponse("Invalid subject. <a href='/app/academics/grading'>Back</a>", 400)
     overlap=cur.execute(
