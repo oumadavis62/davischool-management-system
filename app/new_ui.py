@@ -497,8 +497,27 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       backGuard=true;
       window.setTimeout(function(){{backGuard=false;}},100);
     }});
-  }}catch(e){{}}
-}})();
+  }}catch(e){{}}}})();
+// MarkSheet filter changes are page-state changes, not separate navigation targets.
+// Replace the current MarkSheet filter view so Back returns to the original page
+// instead of stepping through every class/stream/term/year/exam filter selection.
+document.addEventListener('submit',function(event){
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='get')return;
+  if(!form.classList || !form.classList.contains('marksheet-select'))return;
+  if(form.hasAttribute('data-native-get'))return;
+  event.preventDefault();
+  try{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin){form.submit();return;}
+    var data=new FormData(form);
+    var params=new URLSearchParams();
+    data.forEach(function(value,key){params.append(key,value);});
+    url.search=params.toString();
+    window.location.replace(url.toString());
+  }catch(e){form.submit();}
+},true);
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
@@ -997,8 +1016,7 @@ def _ensure_overall_grading_table(cur):
         principal_comment TEXT
     )""")
     for col, definition in [("class_teacher_comment","TEXT"),("principal_comment","TEXT")]:
-        try:
-            cur.execute("SAVEPOINT davischool_overall_comment_column")
+        try:            cur.execute("SAVEPOINT davischool_overall_comment_column")
             cur.execute("ALTER TABLE overall_grading_rules ADD COLUMN %s %s" % (col, definition))
             cur.execute("RELEASE SAVEPOINT davischool_overall_comment_column")
         except Exception:
@@ -1497,8 +1515,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         # marks from the other streams in the same grade.
         student_ids_for_marks = [int(st["id"]) for st in students]
         student_marks_placeholders = ",".join("?" for _ in student_ids_for_marks)
-        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND student_id IN (" + student_marks_placeholders + ")"
-        mark_params = [sid, eid] + student_ids_for_marks
+        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND student_id IN (" + student_marks_placeholders + ")"        mark_params = [sid, eid] + student_ids_for_marks
         if term:
             mark_query += " AND term=?"
             mark_params.append(term)
@@ -1997,7 +2014,6 @@ def class_marksheets_pdf(
         subjects = _marksheet_subject_order(
             cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
         )
-
         selected_exam_ids = _parse_exam_ids(exam_ids, exam_id)
         if not selected_exam_ids and exams:
             selected_exam_ids = [int(exams[0]["id"])]
@@ -2497,8 +2513,7 @@ def school_settings_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "settings.view"):
-        return HTMLResponse("You do not have permission to view school settings.", 403)
-    con=_db();cur=con.cursor()
+        return HTMLResponse("You do not have permission to view school settings.", 403)    con=_db();cur=con.cursor()
     school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     con.close()
     if not school:return RedirectResponse("/app")
@@ -2997,8 +3012,7 @@ def grading_setup(request: Request, subject_id: str = ""):
     rule_rows = "".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"
         "<td style='white-space:nowrap'><a class='btnlink' href='/app/academics/grading/edit/%s?subject_id=%s'>✏️ Edit</a> "
-        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' data-native-post='1' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
-        % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
+        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' data-native-post='1' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"        % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
            float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid, r["id"], subid)
         for r in rules
     )
@@ -3497,8 +3511,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id IN ("+ph+") ORDER BY name",[sid]+subject_ids).fetchall()
             else:
                 subjects=[]
-        else:
-            classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        else:            classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
             subjects=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     except Exception as exc:
         print("DAVISCHOOL MARKS ACADEMIC LOOKUP FAILED:", repr(exc), flush=True)
@@ -3997,8 +4010,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             cur.execute(
                 "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
                 (sid,st["id"],exam_id,subject_id,comment,now)
-            )
-    # Saving marks must not be rolled back by an optional audit-trail
+            )    # Saving marks must not be rolled back by an optional audit-trail
     # schema problem. The marks themselves are the primary transaction.
     # Audit logging is optional and must never invalidate the actual marks save.
     # A caught PostgreSQL statement error otherwise leaves the transaction aborted.
@@ -4497,8 +4509,7 @@ def marks_correction_requests(request: Request):
 .clear-btn{{border:1px solid #dbe2ea;background:#fff;color:#172033}}
 .btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
 .btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
-.unlock-btn{{background:#b45309}}
-.lock-btn{{background:#176B3A}}
+.unlock-btn{{background:#b45309}}.lock-btn{{background:#176B3A}}
 @media(max-width:900px){{.filter-grid{{grid-template-columns:repeat(2,minmax(150px,1fr))}}}}
 @media(max-width:560px){{.filter-grid{{grid-template-columns:1fr}}}}
 </style>"""
@@ -4997,8 +5008,7 @@ def teacher_allocations_page(request: Request):
     current_ds_tab_q=("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""
     trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit' formaction='/app/academics/allocations/delete/%s%s' formmethod='post'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"],current_ds_tab_q,x["id"],current_ds_tab_q) for x in rows)
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
-<div class='card section'><div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'>
-<select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
+<div class='card section'><div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'><select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
 <select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
 <button class='btn' type='submit' formaction='/app/academics/allocations/add{current_ds_tab_q}' formmethod='post'>Save Allocation</button></form></div></div>
@@ -5497,8 +5507,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         con.close()
 
 @router.get("/app/report-cards/class-preview", response_class=HTMLResponse)
-def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str=""):
-    sid=_school_session(request)
+def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str=""):    sid=_school_session(request)
     if not sid:
         return RedirectResponse("/", status_code=303)
     if not _require_permission(request, sid, "reports.view"):
@@ -5997,8 +6006,7 @@ def student_promotion_page(request: Request, class_id: str = ""):
 <tbody>{rows or "<tr><td colspan='4'>Select a class to load its students.</td></tr>"}</tbody></table>
 {"<button class='btn' style='margin-top:12px'>Save Class Changes</button>" if students else ""}
 </form></div>
-<div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school.</div>
-</div>
+<div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school.</div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
 
@@ -6497,8 +6505,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         # still making the initial password unique.
         if role=="teacher":
             if not email_v:
-                return HTMLResponse("The selected teacher must have an email address before a teacher account can be created. Please add the email in Teachers Records and try again. <a href='/app/users'>Back</a>",400)
-            existing_email_account=cur.execute(
+                return HTMLResponse("The selected teacher must have an email address before a teacher account can be created. Please add the email in Teachers Records and try again. <a href='/app/users'>Back</a>",400)            existing_email_account=cur.execute(
                 "SELECT id FROM users WHERE lower(username)=? OR (school_id=? AND lower(email)=?) LIMIT 1",
                 (email_v,sid,email_v)
             ).fetchone()
@@ -6997,8 +7004,7 @@ def subjects_delete(request: Request, subject_id: int):
 
     return RedirectResponse("/app/subjects",303)
 
-@router.get("/app/exams", response_class=HTMLResponse)
-def exams_page(request: Request):
+@router.get("/app/exams", response_class=HTMLResponse)def exams_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "exams.view"):
