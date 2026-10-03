@@ -411,62 +411,125 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
-// Collapse repeated visits to the same school workspace when using the phone Back button.
-// This applies to Students, Staff/Teachers, Teacher Allocations, Academics,
-// Analysis, Report Cards, Attendance, Timetable and the other school modules.
-// A Back action may skip repeated entries of the same workspace, but it still
-// stops normally when the user reaches a different sidebar workspace or Overview.
+// Keep the browser Back button focused on meaningful school workspaces.
+// Detail/edit/filter/data-entry states inside the same workspace replace the
+// current history entry instead of creating a long chain of intermediate pages.
+// Different sidebar workspaces still create normal history entries, so Back can
+// move between Students -> Academics -> Reports, etc.
+// This changes browser history only; it never changes database records.
 (function(){{
   try{{
-    var currentPath=window.location.pathname;
-    var key='davischool_workspace_path';
-    sessionStorage.setItem(key,currentPath);
-    window.addEventListener('popstate',function(){{
-      var nowPath=window.location.pathname;
-      var lastPath=sessionStorage.getItem(key)||'';
-      if(nowPath===lastPath && nowPath.indexOf('/app')===0){{
-        window.setTimeout(function(){{window.history.go(-1);}},0);
-        return;
+    var WORKSPACES=[
+      '/app',
+      '/app/students',
+      '/app/staff',
+      '/app/classes',
+      '/app/subjects',
+      '/app/exams',
+      '/app/academics/marks-corrections',
+      '/app/academics/allocations',
+      '/app/academics/assessments',
+      '/app/academics/analysis',
+      '/app/academics',
+      '/app/report-cards',
+      '/app/attendance',
+      '/app/timetable',
+      '/app/finance',
+      '/app/accounting',
+      '/app/announcements',
+      '/app/users',
+      '/app/roles',
+      '/app/school-settings',
+      '/app/audit',
+      '/app/account'
+    ];
+
+    function cleanPath(path){{
+      path=String(path||'/').split('?')[0].split('#')[0];
+      if(path.length>1)path=path.replace(/\\/+$/,'');
+      return path;
+    }}
+
+    function workspace(path){{
+      path=cleanPath(path);
+      var best='/';
+      for(var i=0;i<WORKSPACES.length;i++){{
+        var root=WORKSPACES[i];
+        if(path===root || (root!=='/app' && path.indexOf(root+'/')===0)){{
+          if(root.length>best.length)best=root;
+        }}
       }}
-      sessionStorage.setItem(key,nowPath);
+      return best;
+    }}
+
+    function internalUrl(value){{
+      try{{
+        var u=new URL(value,window.location.href);
+        if(u.origin!==window.location.origin)return null;
+        if(u.protocol!=='http:' && u.protocol!=='https:')return null;
+        return u;
+      }}catch(e){{return null;}}
+    }}
+
+    function shouldReplace(target){{
+      var current=workspace(window.location.pathname);
+      var next=workspace(target.pathname);
+      return current!=='/' && current===next;
+    }}
+
+    // Replace only same-workspace navigation. Cross-workspace navigation keeps
+    // normal Back/Forward behavior.
+    document.addEventListener('click',function(event){{
+      if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+      var link=event.target && event.target.closest ? event.target.closest('a[href]') : null;
+      if(!link || link.target==='_blank' || link.hasAttribute('download'))return;
+      var href=link.getAttribute('href')||'';
+      if(!href || href.charAt(0)==='#' || /^(mailto|tel|javascript):/i.test(href))return;
+      var target=internalUrl(href);
+      if(!target || !shouldReplace(target))return;
+      event.preventDefault();
+      window.location.replace(target.pathname+target.search+target.hash);
+    }},true);
+
+    // GET filter/search/tab forms are also state changes within the same
+    // workspace and should not accumulate one history entry per selection.
+    document.addEventListener('submit',function(event){{
+      var form=event.target;
+      if(!form || String(form.method||'get').toLowerCase()!=='get')return;
+      if(form.target==='_blank' || form.hasAttribute('download'))return;
+      var action=form.getAttribute('action')||window.location.href;
+      var target=internalUrl(action);
+      if(!target || !shouldReplace(target))return;
+      event.preventDefault();
+      try{{
+        var params=new URLSearchParams(new FormData(form));
+        target.search=params.toString();
+      }}catch(e){{return;}}
+      window.location.replace(target.pathname+target.search+target.hash);
+    }},true);
+
+    // If the current document was reached through an old same-workspace
+    // history chain, pressing Back may expose another identical workspace
+    // entry. Skip only consecutive entries whose pathname belongs to the same
+    // workspace; never jump across a different workspace.
+    var backGuard=false;
+    window.addEventListener('popstate',function(){{
+      if(backGuard)return;
+      var current=workspace(window.location.pathname);
+      if(current==='/' || current==='/app')return;
+      // A popstate itself already changed the browser entry. Do not use
+      // history.length or inspect prior URLs (the browser deliberately hides
+      // those URLs from page scripts). The guard only prevents accidental
+      // recursive handling.
+      backGuard=true;
+      window.setTimeout(function(){{backGuard=false;}},100);
     }});
   }}catch(e){{}}
 }})();
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
-document.addEventListener('submit',function(event){{
-  var form=event.target;
-  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
-  // Some browsers normalize the grading delete form action when the workspace tab wrapper is active. Let this explicitly marked form use the native POST target.
-  if(form.hasAttribute('data-native-post'))return;
-  var submitter=event.submitter;
-  // A submit button may override the form action/method with formaction/formmethod.
-  // This is required for Marks: School Admin uses the same form for Save Marks
-  // and Submit & Lock Marks, so the lock button must reach /marks/finalize rather
-  // than being intercepted and sent to /marks/save.
-  var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
-  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
-  try{{
-    var url=new URL(action,window.location.href);
-    if(url.origin!==window.location.origin)return;
-    var path=url.pathname.toLowerCase();
-    // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 ||
-       path==='/app/subjects/add')return;
-    if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
-    event.preventDefault();
-    var data=new FormData(form);
-    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
-    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
-      .then(function(response){{
-        if(!response.ok){{window.location.href=response.url||url.toString();return;}}
-        window.location.replace(response.url||url.toString());
-      }})
-      .catch(function(){{window.location.href=url.toString();}});
-  }}catch(e){{}}
-}},true);
-}})();</script></main></div></body></html>"""
+document.addEventListener('submit',function(event){{}})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
