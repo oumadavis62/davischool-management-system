@@ -450,7 +450,7 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 ||
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 ||
        path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
@@ -6282,8 +6282,8 @@ def exams_page(request: Request):
     if not _require_permission(request, sid, "exams.view"):
         return HTMLResponse("You do not have permission to view examinations.", 403)
     con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
-    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['exam_type'] or ''))}</td><td>{escape(str(x['term'] or ''))}</td><td>{escape(str(x['year'] or ''))}</td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><div class='examination-filter-scroll' tabindex='0'><form id='create-exam-form' method='post' action='/app/exams/add' class='examination-filter-form' ><input name='name' required placeholder='Exam name' class='field'><select name='exam_type' class='field'><option value=''>Select exam type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><select name='year' class='field'>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select><button type='submit' class='btn create-exam-btn'>Create Exam</button></form></div></div><div class='card section'><div class='marksheet-scroll examination-table-scroll' tabindex='0'><table class='examination-table'><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No examinations.</td></tr>'}</tbody></table></div></div></div><style>.examination-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.examination-filter-form{{display:grid;grid-template-columns:260px 220px 220px 150px auto;gap:10px;width:max-content;min-width:100%}}.examination-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.examination-table{{width:max-content;min-width:760px}}.create-exam-btn{{min-width:140px;position:sticky;right:0;z-index:10;pointer-events:auto;cursor:pointer;display:inline-block;white-space:nowrap;background:#176B3A!important;color:#fff!important}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['exam_type'] or ''))}</td><td>{escape(str(x['term'] or ''))}</td><td>{escape(str(x['year'] or ''))}</td><td><a class='btn edit' href='/app/exams/edit/{x['id']}'>Edit</a> <form method='post' action='/app/exams/delete/{x['id']}' style='display:inline' onsubmit='return confirm(&quot;Delete this examination? This action cannot be undone.&quot;);'><button type='submit' formaction='/app/exams/delete/{x['id']}' formmethod='post' class='btn danger'>Delete</button></form></td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><div class='examination-filter-scroll' tabindex='0'><form id='create-exam-form' method='post' action='/app/exams/add' class='examination-filter-form' ><input name='name' required placeholder='Exam name' class='field'><select name='exam_type' class='field'><option value=''>Select exam type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><select name='year' class='field'>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select><button type='submit' class='btn create-exam-btn'>Create Exam</button></form></div></div><div class='card section'><div class='marksheet-scroll examination-table-scroll' tabindex='0'><table class='examination-table'><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th><th>Actions</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No examinations.</td></tr>'}</tbody></table></div></div></div><style>.examination-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.examination-filter-form{{display:grid;grid-template-columns:260px 220px 220px 150px auto;gap:10px;width:max-content;min-width:100%}}.examination-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}}.examination-table{{width:max-content;min-width:900px}}.create-exam-btn{{min-width:140px;position:sticky;right:0;z-index:10;pointer-events:auto;cursor:pointer;display:inline-block;white-space:nowrap;background:#176B3A!important;color:#fff!important}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.edit{{background:#176B3A;margin-right:5px}}.danger{{background:#b91c1c}}</style>"""
     return _school_page(request,"Examinations",body)
 
 @router.post("/app/exams")
@@ -6300,6 +6300,74 @@ def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:st
         con.close();return HTMLResponse("That examination already exists for this term and year. <a href='/app/exams'>Back</a>",400)
     cur.execute("INSERT INTO exams(school_id,name,term,year,exam_type) VALUES(?,?,?,?,?)",(sid,name_v,term_v,year_v,type_v))
     _audit(cur,sid,request,"EXAM_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/exams",303)
+
+@router.get("/app/exams/edit/{exam_id}", response_class=HTMLResponse)
+def exams_edit_page(request: Request, exam_id: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "exams.create"):
+        return HTMLResponse("You do not have permission to edit examinations.",403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name,exam_type,term,year FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    con.close()
+    if not row:return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
+    year_opts="".join("<option value='%s' %s>%s</option>"%(escape(y,quote=True),"selected" if str(row["year"] or "")==y else "",y) for y in YEAR_OPTIONS)
+    body=f"""<div class='page'><h1>Edit Examination</h1><div class='card section'><form method='post' action='/app/exams/edit/{exam_id}' style='display:grid;grid-template-columns:260px 220px 220px 150px auto auto;gap:10px'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Exam name'><select name='exam_type' class='field'><option value=''>Select exam type</option><option {'selected' if row["exam_type"]=="CAT" else ''}>CAT</option><option {'selected' if row["exam_type"]=="Mid-Term" else ''}>Mid-Term</option><option {'selected' if row["exam_type"]=="End-Term" else ''}>End-Term</option><option {'selected' if row["exam_type"]=="Mock" else ''}>Mock</option><option {'selected' if row["exam_type"]=="Final" else ''}>Final</option><option {'selected' if row["exam_type"]=="SBA/CBA" else ''}>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option {'selected' if row["term"]=="Term 1" else ''}>Term 1</option><option {'selected' if row["term"]=="Term 2" else ''}>Term 2</option><option {'selected' if row["term"]=="Term 3" else ''}>Term 3</option></select><select name='year' class='field'>{year_opts}</select><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/exams'>Cancel</a></form></div><style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}}</style></div>"""
+    return _school_page(request,"Edit Examination",body)
+
+@router.post("/app/exams/edit/{exam_id}")
+def exams_edit(request: Request, exam_id:int, name:str=Form(...), exam_type:str=Form(""), term:str=Form(""), year:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "exams.create"):
+        return HTMLResponse("You do not have permission to edit examinations.",403)
+    name_v=name.strip(); type_v=exam_type.strip(); term_v=term.strip(); year_v=year.strip()
+    if not name_v:return HTMLResponse("Examination name is required. <a href='/app/exams'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    duplicate=cur.execute("SELECT id FROM exams WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(term,''))=lower(?) AND lower(COALESCE(year,''))=lower(?) AND id<>?",(sid,name_v,term_v,year_v,exam_id)).fetchone()
+    if not row:
+        con.close();return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
+    if duplicate:
+        con.close();return HTMLResponse("That examination already exists for this term and year. <a href='/app/exams'>Back</a>",400)
+    cur.execute("UPDATE exams SET name=?,exam_type=?,term=?,year=? WHERE id=? AND school_id=?",(name_v,type_v,term_v,year_v,exam_id,sid))
+    _audit(cur,sid,request,"EXAM_EDIT",name_v)
+    con.commit();con.close()
+    return RedirectResponse("/app/exams",303)
+
+@router.post("/app/exams/delete/{exam_id}")
+def exams_delete(request: Request, exam_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "exams.create"):
+        return HTMLResponse("You do not have permission to delete examinations.",403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+    if not row:
+        con.close();return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
+    exam_name=str(row["name"] or exam_id)
+    try:
+        cur.execute("DELETE FROM exams WHERE id=? AND school_id=?",(exam_id,sid))
+        con.commit()
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        con.close()
+        return HTMLResponse("Unable to delete this examination.<br><br><b>Technical detail:</b> " + escape(str(exc)),409)
+    con.close()
+    try:
+        audit_con=_db(); audit_cur=audit_con.cursor()
+        try:
+            _audit(audit_cur,sid,request,"EXAM_DELETE",exam_name)
+            audit_con.commit()
+        except Exception:
+            try: audit_con.rollback()
+            except Exception: pass
+        finally:
+            audit_con.close()
+    except Exception:
+        pass
+    return RedirectResponse("/app/exams",303)
 
 @router.get("/app/finance/fees", response_class=HTMLResponse)
 def fees_page(request: Request):
