@@ -28,11 +28,139 @@ DB_INIT_READY = False
 DB_INIT_ERROR = None
 DB_INIT_THREAD = None
 
+def _repair_recreated_subject_references():
+    """Safely reconnect records when a subject was deleted and recreated with the same name.
+
+    This only repairs an orphan subject_id when the audit trail proves that the
+    same subject name was deleted and subsequently recreated, and there is
+    exactly one orphan subject id and one current subject with that name.
+    Existing marks/records are not recreated or altered beyond their subject_id.
+    """
+    con = get_db()
+    cur = con.cursor()
+    try:
+        tables = (
+            "marks",
+            "teacher_allocations",
+            "subject_grading_rules",
+            "subject_performance_comments",
+            "academic_locks",
+            "set_marks_config",
+            "teacher_mark_drafts",
+            "marks_correction_requests",
+            "assessment_scores",
+            "assessments",
+            "timetable",
+            "timetable_lessons",
+        )
+
+        # Find schools/names for which the audit trail records a deletion followed
+        # by a creation of the same subject name.
+        audit_rows = cur.execute(
+            """SELECT school_id, details, MAX(timestamp) AS deleted_at
+               FROM system_audit
+               WHERE action='SUBJECT_DELETE' AND trim(COALESCE(details,''))<>''
+               GROUP BY school_id, details"""
+        ).fetchall()
+
+        for audit in audit_rows:
+            school_id = int(audit["school_id"] or 0)
+            subject_name = str(audit["details"] or "").strip()
+            deleted_at = str(audit["deleted_at"] or "")
+            if not school_id or not subject_name:
+                continue
+
+            recreated = cur.execute(
+                """SELECT id FROM subjects
+                   WHERE school_id=? AND lower(trim(name))=lower(trim(?))
+                   ORDER BY id DESC LIMIT 2""",
+                (school_id, subject_name),
+            ).fetchall()
+            if len(recreated) != 1:
+                continue
+            target_id = int(recreated[0]["id"])
+
+            created_after = cur.execute(
+                """SELECT 1 FROM system_audit
+                   WHERE school_id=? AND action='SUBJECT_CREATE'
+                     AND lower(trim(details))=lower(trim(?))
+                     AND timestamp>=?
+                   LIMIT 1""",
+                (school_id, subject_name, deleted_at),
+            ).fetchone()
+            if not created_after:
+                continue
+
+            orphan_ids = set()
+            for table in tables:
+                try:
+                    cur.execute("SAVEPOINT davischool_subject_orphan_scan")
+                    rows = cur.execute(
+                        "SELECT DISTINCT subject_id FROM %s "
+                        "WHERE school_id=? AND subject_id IS NOT NULL "
+                        "AND NOT EXISTS (SELECT 1 FROM subjects s WHERE s.id=%s.subject_id AND s.school_id=%s.school_id)"
+                        % (table, table, table),
+                        (school_id,),
+                    ).fetchall()
+                    cur.execute("RELEASE SAVEPOINT davischool_subject_orphan_scan")
+                    orphan_ids.update(
+                        int(row["subject_id"]) for row in rows
+                        if row["subject_id"] is not None
+                    )
+                except Exception:
+                    try:
+                        cur.execute("ROLLBACK TO SAVEPOINT davischool_subject_orphan_scan")
+                        cur.execute("RELEASE SAVEPOINT davischool_subject_orphan_scan")
+                    except Exception:
+                        pass
+
+            # Do not guess if more than one orphan subject could be involved.
+            if len(orphan_ids) != 1:
+                continue
+
+            old_id = next(iter(orphan_ids))
+            if old_id == target_id:
+                continue
+
+            for table in tables:
+                try:
+                    cur.execute("SAVEPOINT davischool_subject_repair")
+                    cur.execute(
+                        "UPDATE %s SET subject_id=? WHERE school_id=? AND subject_id=?"
+                        % table,
+                        (target_id, school_id, old_id),
+                    )
+                    cur.execute("RELEASE SAVEPOINT davischool_subject_repair")
+                except Exception:
+                    try:
+                        cur.execute("ROLLBACK TO SAVEPOINT davischool_subject_repair")
+                        cur.execute("RELEASE SAVEPOINT davischool_subject_repair")
+                    except Exception:
+                        pass
+
+            print(
+                "DAVISCHOOL SUBJECT REFERENCE REPAIR: school=%s old_subject_id=%s new_subject_id=%s name=%r"
+                % (school_id, old_id, target_id, subject_name),
+                flush=True,
+            )
+
+        con.commit()
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print("DAVISCHOOL SUBJECT REFERENCE REPAIR WARNING:", repr(exc), flush=True)
+    finally:
+        con.close()
+
+
 def _initialize_database_background():
     global DB_INIT_READY, DB_INIT_ERROR
     try:
         init_db()
         init_extended_db()
+        _repair_recreated_subject_references()
         DB_INIT_READY = True
         print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
     except Exception as exc:
