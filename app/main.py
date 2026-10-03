@@ -255,6 +255,28 @@ async def same_origin_guard(request: Request, call_next):
     return await call_next(request)
 
 @app.middleware("http")
+async def students_page_swipe_scroll(request: Request, call_next):
+    """Keep the Students page vertically swipe-scrollable on touch devices.
+
+    This is intentionally limited to /app/students so it does not alter
+    scrolling behavior of other application pages.
+    """
+    response = await call_next(request)
+    if request.url.path == "/app/students" and response.headers.get("content-type", "").lower().startswith("text/html"):
+        try:
+            body = response.body
+            if body:
+                css = b"<style>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-y}.app,.main,.page{min-height:auto}</style>"
+                marker = b"</head>"
+                if marker in body:
+                    body = body.replace(marker, css + marker, 1)
+                    response.body = body
+                    response.headers["content-length"] = str(len(body))
+        except Exception as exc:
+            print("DAVISCHOOL STUDENTS SWIPE SCROLL INJECTION WARNING:", repr(exc), flush=True)
+    return response
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
