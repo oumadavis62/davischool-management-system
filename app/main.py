@@ -2878,6 +2878,69 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 
 
 
+# Explicit /app student POST handlers kept in app/main.py.
+@app.post("/app/students/add")
+def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+    role = str(request.session.get("role", ""))
+    if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/", 303)
+    if not _role_permission(request, school["id"], "students.create"): return HTMLResponse("You do not have permission to create students.", 403)
+    admission, student_name = admission_no.strip(), name.strip()
+    if not admission or not student_name: return HTMLResponse("Admission number and full name are required.", 400)
+    con = get_db()
+    try:
+        cur = con.cursor()
+        if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
+            return HTMLResponse("Admission number already exists. <a href='/app/students'>Back to Students</a>", 400)
+        cid = int(class_id) if class_id.strip().isdigit() else None
+        stream = ""
+        if cid is not None:
+            row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?", (cid, school["id"])).fetchone()
+            if not row: return HTMLResponse("Invalid class selected.", 400)
+            stream = str(row["stream"] or "").strip()
+        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, "active"))
+        con.commit()
+    except Exception as exc:
+        con.rollback(); print(f"DAVISCHOOL APP STUDENT CREATE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
+    finally: con.close()
+    return RedirectResponse("/app/students", 303)
+
+@app.post("/app/students/edit/{student_id}")
+def main_app_student_edit(request: Request, student_id: int, admission_no: str = Form(...), name: str = Form(...), assessment_no: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), status: str = Form("active")):
+    role = str(request.session.get("role", ""))
+    if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
+    school = get_school_obj(request)
+    if not school: return RedirectResponse("/", 303)
+    if not _role_permission(request, school["id"], "students.edit"): return HTMLResponse("You do not have permission to edit students.", 403)
+    admission, student_name = admission_no.strip(), name.strip()
+    if not admission or not student_name: return HTMLResponse("Admission number and full name are required.", 400)
+    new_status = status.strip().lower()
+    if new_status not in {"active","inactive","graduated","transferred"}: new_status = "active"
+    con = get_db()
+    try:
+        cur = con.cursor()
+        st = cur.execute("SELECT * FROM students WHERE id=? AND school_id=?", (student_id, school["id"])).fetchone()
+        if not st: return HTMLResponse("Student not found.", 404)
+        if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) AND id<>?", (school["id"], admission, student_id)).fetchone():
+            return HTMLResponse("Admission number already exists.", 400)
+        cid = int(class_id) if class_id.strip().isdigit() else None
+        stream = ""
+        if cid is not None:
+            row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?", (cid, school["id"])).fetchone()
+            if not row: return HTMLResponse("Invalid class selected.", 400)
+            stream = str(row["stream"] or "").strip()
+        cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",
+                    (admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, new_status, student_id, school["id"]))
+        con.commit()
+    except Exception as exc:
+        con.rollback(); print(f"DAVISCHOOL APP STUDENT UPDATE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
+    finally: con.close()
+    return RedirectResponse("/app/students", 303)
+
 # DaviSchool unified application UI
 from app.new_ui import router as new_ui_router
 app.include_router(new_ui_router)
