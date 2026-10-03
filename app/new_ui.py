@@ -4581,7 +4581,7 @@ def teacher_allocations_page(request: Request):
     tops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in teachers)
     cops="".join("<option value='%s'>%s%s</option>"%(x["id"],escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
     sops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in subjects)
-    trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s' style='display:inline' onsubmit=\"return confirm('Delete this teacher allocation?')\"><button class='btn danger' type='submit'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"]) for x in rows)
+    trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <button class='btn danger' type='button' onclick=\"return teacherAllocationDelete(this, '/app/academics/allocations/delete/%s')\">Delete</button></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"]) for x in rows)
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
 <div class='card section'><div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add' class='teacher-allocation-filter-form'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
@@ -4589,8 +4589,27 @@ def teacher_allocations_page(request: Request):
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
 <button class='btn'>Save Allocation</button></form></div></div>
 <div class='card section'><h2>Current Allocations ({len(rows)})</h2><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Teacher</th><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div></div>
-<style>.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;max-height:60vh;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;padding-bottom:10px}}.teacher-allocation-scroll::-webkit-scrollbar{{width:10px;height:10px}}.teacher-allocation-scroll::-webkit-scrollbar-thumb{{border-radius:8px;background:#9ca3af}}.teacher-allocation-filter-scroll::-webkit-scrollbar{{height:10px}}.teacher-allocation-table{{width:max-content;min-width:900px}}.teacher-allocation-filter-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}</style></div>"""
-    return _school_page(request,"Teacher Allocations",body)
+<style>.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;max-height:60vh;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;padding-bottom:10px}}.teacher-allocation-scroll::-webkit-scrollbar{{width:10px;height:10px}}.teacher-allocation-scroll::-webkit-scrollbar-thumb{{border-radius:8px;background:#9ca3af}}.teacher-allocation-filter-scroll::-webkit-scrollbar{{height:10px}}.teacher-allocation-table{{width:max-content;min-width:900px}}.teacher-allocation-filter-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}</style><script>
+function teacherAllocationDelete(button,url){
+    if(!confirm('Delete this teacher allocation?')) return false;
+    button.disabled=true;
+    button.textContent='Deleting...';
+    fetch(url,{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'follow',headers:{'X-DaviSchool-Delete':'1'}})
+      .then(function(response){
+        if(!response.ok){
+          return response.text().then(function(){throw new Error('Delete request failed ('+response.status+')');});
+        }
+        window.location.replace('/app/academics/allocations');
+      })
+      .catch(function(error){
+        button.disabled=false;
+        button.textContent='Delete';
+        alert('Unable to delete this teacher allocation. Please try again.');
+        console.error(error);
+      });
+    return false;
+}
+</script></div>\"\"\"\n    return _school_page(request,\"Teacher Allocations\",body)
 
 @router.post("/app/academics/allocations/add")
 def teacher_allocations_add(request: Request,teacher_id:int=Form(...),class_id:int=Form(...),subject_id:int=Form(...)):
