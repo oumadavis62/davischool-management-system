@@ -6083,7 +6083,7 @@ def classes_page(request: Request):
 <div class='card section'><div class='classes-filter-scroll' tabindex='0'><form method='post' action='/app/classes/add' class='classes-filter-form'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><select name='level' class='field'><option value=''>Select level</option><option>Pre-Primary</option><option>Lower Primary</option><option>Upper Primary</option><option>Junior Secondary</option><option>Senior Secondary</option><option>College</option><option>Other</option></select><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div></div>
 <div class='card section'><h2>👨‍🏫 Class Teachers</h2><div class='muted'>Select a teacher for each class or stream. The selected teacher is automatically used as the Class Teacher on that class's report cards, including the name and signature line.</div>
 <div class='marksheet-scroll classes-table-scroll' tabindex='0'><table class='classes-table'><thead><tr><th>Name</th><th>Level</th><th>Stream</th><th>Current Class Teacher</th><th>Set Class Teacher</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No classes.</td></tr>'}</tbody></table></div></div></div>
-<style>.classes-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.classes-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.classes-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.classes-table{{width:max-content;min-width:900px}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;cursor:pointer}}.teacher-select{{min-width:220px}}.teacher-btn{{white-space:nowrap}}</style>"""
+<style>.classes-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.classes-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.classes-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.classes-table{{width:max-content;min-width:900px}}.subject-actions{{white-space:nowrap}}.edit{{background:#176B3A!important;color:#fff!important;text-decoration:none;display:inline-block;margin-right:6px}}.danger{{background:#b91c1c!important;color:#fff!important;cursor:pointer}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;cursor:pointer}}.teacher-select{{min-width:220px}}.teacher-btn{{white-space:nowrap}}</style>"""
     return _school_page(request,"Classes",body)
 
 @router.post("/app/classes/add")
@@ -6174,8 +6174,8 @@ def subjects_page(request: Request):
     if not _require_permission(request, sid, "subjects.view"):
         return HTMLResponse("You do not have permission to view subjects.", 403)
     con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall();con.close()
-    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Subjects</h1><div class='card section'><div class='subjects-filter-scroll' tabindex='0'><form method='post' action='/app/subjects/add' class='subjects-filter-form'><input name='name' required placeholder='Subject name' class='field'><input name='code' placeholder='Code' class='field'><input name='initial' placeholder='Initial' class='field'><button class='btn'>Add Subject</button></form></div></div><div class='card section'><div class='marksheet-scroll subjects-table-scroll' tabindex='0'><table class='subjects-table'><thead><tr><th>Subject</th><th>Code</th><th>Initial</th></tr></thead><tbody>{trs or '<tr><td colspan=3>No subjects.</td></tr>'}</tbody></table></div></div></div><style>.subjects-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.subjects-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.subjects-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.subjects-table{{width:max-content;min-width:600px}}.subjects-table th:first-child,.subjects-table td:first-child{{width:208px;min-width:208px;max-width:208px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
+    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td><td class='subject-actions'><a class='btn edit' href='/app/subjects/edit/{x['id']}'>Edit</a><form method='post' action='/app/subjects/delete/{x['id']}' style='display:inline' onsubmit="return confirm('Delete this subject? This action cannot be undone.');"><button type='submit' class='btn danger'>Delete</button></form></td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Subjects</h1><div class='card section'><div class='subjects-filter-scroll' tabindex='0'><form method='post' action='/app/subjects/add' class='subjects-filter-form'><input name='name' required placeholder='Subject name' class='field'><input name='code' placeholder='Code' class='field'><input name='initial' placeholder='Initial' class='field'><button class='btn'>Add Subject</button></form></div></div><div class='card section'><div class='marksheet-scroll subjects-table-scroll' tabindex='0'><table class='subjects-table'><thead><tr><th>Subject</th><th>Code</th><th>Initial</th><th>Actions</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No subjects.</td></tr>'}</tbody></table></div></div></div><style>.subjects-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.subjects-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.subjects-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.subjects-table{{width:max-content;min-width:700px}}.subjects-table th:first-child,.subjects-table td:first-child{{width:250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
     return _school_page(request,"Subjects",body)
 
 @router.post("/app/subjects/add")
@@ -6193,6 +6193,58 @@ def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:s
         con.close();return HTMLResponse("That subject code already exists in this school. <a href='/app/subjects'>Back</a>",400)
     cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name_v,code_v,initial_v))
     _audit(cur,sid,request,"SUBJECT_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/subjects",303)
+@router.get("/app/subjects/edit/{subject_id}", response_class=HTMLResponse)
+def subjects_edit_page(request: Request, subject_id: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _require_permission(request, sid, "subjects.create"):
+        return HTMLResponse("You do not have permission to edit subjects.", 403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name,code,initial FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    con.close()
+    if not row:
+        return HTMLResponse("Subject not found. <a href='/app/subjects'>Back</a>",404)
+    body=f"""<div class='page'><h1>Edit Subject</h1><div class='card section'><form method='post' action='/app/subjects/edit/{subject_id}' style='display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:10px'><input name='name' required class='field' value='{escape(str(row["name"] or ""), quote=True)}' placeholder='Subject name'><input name='code' class='field' value='{escape(str(row["code"] or ""), quote=True)}' placeholder='Code'><input name='initial' class='field' value='{escape(str(row["initial"] or ""), quote=True)}' placeholder='Initial'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/subjects'>Cancel</a></form></div><style>.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}} </style></div>"""
+    return _school_page(request,"Edit Subject",body)
+
+@router.post("/app/subjects/edit/{subject_id}")
+def subjects_edit(request: Request, subject_id: int, name: str=Form(...), code: str=Form(""), initial: str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "subjects.create"):
+        return HTMLResponse("You do not have permission to edit subjects.",403)
+    name_v=name.strip(); code_v=code.strip(); initial_v=initial.strip()
+    if not name_v:return HTMLResponse("Subject name is required. <a href='/app/subjects'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    duplicate_name=cur.execute("SELECT id FROM subjects WHERE school_id=? AND lower(name)=lower(?) AND id<>?",(sid,name_v,subject_id)).fetchone()
+    duplicate_code=cur.execute("SELECT id FROM subjects WHERE school_id=? AND lower(code)=lower(?) AND id<>?",(sid,code_v,subject_id)).fetchone() if code_v else None
+    if not row:
+        con.close();return HTMLResponse("Subject not found. <a href='/app/subjects'>Back</a>",404)
+    if duplicate_name:
+        con.close();return HTMLResponse("That subject already exists in this school. <a href='/app/subjects'>Back</a>",400)
+    if duplicate_code:
+        con.close();return HTMLResponse("That subject code already exists in this school. <a href='/app/subjects'>Back</a>",400)
+    cur.execute("UPDATE subjects SET name=?,code=?,initial=? WHERE id=? AND school_id=?",(name_v,code_v,initial_v,subject_id,sid))
+    _audit(cur,sid,request,"SUBJECT_EDIT",name_v)
+    con.commit();con.close()
+    return RedirectResponse("/app/subjects",303)
+
+@router.post("/app/subjects/delete/{subject_id}")
+def subjects_delete(request: Request, subject_id: int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "subjects.create"):
+        return HTMLResponse("You do not have permission to delete subjects.",403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+    if not row:
+        con.close();return HTMLResponse("Subject not found. <a href='/app/subjects'>Back</a>",404)
+    cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?",(subject_id,sid))
+    _audit(cur,sid,request,"SUBJECT_DELETE",str(row["name"] or subject_id))
+    con.commit();con.close()
+    return RedirectResponse("/app/subjects",303)
+
 @router.get("/app/exams", response_class=HTMLResponse)
 def exams_page(request: Request):
     sid=_school_session(request)
