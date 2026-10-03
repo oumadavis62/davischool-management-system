@@ -529,7 +529,31 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
-document.addEventListener('submit',function(event){{}})();</script></main></div></body></html>"""
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  if(form.hasAttribute('data-native-post'))return;
+  var submitter=event.submitter;
+  var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
+  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
+  try{{
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin)return;
+    var path=url.pathname.toLowerCase();
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add')return;
+    if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
+    event.preventDefault();
+    var data=new FormData(form);
+    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
+    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+      .then(function(response){{
+        if(!response.ok){{window.location.href=response.url||url.toString();return;}}
+        window.location.replace(response.url||url.toString());
+      }})
+      .catch(function(){{window.location.href=url.toString();}});
+  }}catch(e){{}}
+}},true);
+}})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
     """Refresh an active authenticated session when the user is interacting with the workspace."""
