@@ -4640,12 +4640,11 @@ def teacher_allocations_edit_page(request: Request, allocation_id:int):
     cops="".join("<option value='%s' %s>%s%s</option>"%(x["id"],"selected" if int(x["id"])==int(allocation["class_id"]) else "",escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
     sops="".join("<option value='%s' %s>%s</option>"%(x["id"],"selected" if int(x["id"])==int(allocation["subject_id"]) else "",escape(str(x["name"] or ""))) for x in subjects)
     body=f"""<div class='page'><h1>Edit Teacher Allocation</h1><div class='muted'>Update the teacher, class/stream or subject assigned to this allocation.</div>
-<div class='card section'><div class='teacher-allocation-edit-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/edit/{allocation_id}' class='teacher-allocation-edit-filter-form'>
+<div class='card section'><div tabindex='0' style='width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px'><form method='post' action='/app/academics/allocations/edit/{allocation_id}' style='display:grid;grid-template-columns:260px 260px 260px auto auto;gap:10px;width:max-content;min-width:100%'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
 <select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
-<button class='btn'>Save Changes</button><a class='btn secondary' href='/app/academics/allocations'>Cancel</a></form></div>
-<style>.teacher-allocation-edit-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-edit-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-edit-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{display:inline-block;padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}</style></div>"""
+<button class='btn'>Save Changes</button><a class='btn secondary' href='/app/academics/allocations'>Cancel</a></form></div></div>"""
     return _school_page(request,"Edit Teacher Allocation",body)
 
 @router.post("/app/academics/allocations/edit/{allocation_id}")
