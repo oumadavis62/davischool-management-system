@@ -4837,6 +4837,7 @@ def assessments_delete(request: Request, assessment_id: int = Form(...)):
 
 
 @router.post("/app/academics/assessments/add")
+@router.post("/app/academics/assessments")
 def assessments_add(
     request: Request,
     student_id: int = Form(...),
