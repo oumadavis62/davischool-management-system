@@ -3151,7 +3151,8 @@ def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
     con = _db()
     cur = con.cursor()
     try:
-        _ensure_grading_table(cur)
+        # The grading table is prepared by the main grading page. Do not run
+        # schema migration/ALTER work while opening an edit form.
         row = cur.execute(
             "SELECT * FROM subject_grading_rules WHERE id=? AND school_id=?",
             (rule_id, sid)
