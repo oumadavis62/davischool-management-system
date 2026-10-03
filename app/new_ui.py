@@ -497,8 +497,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       backGuard=true;
       window.setTimeout(function(){{backGuard=false;}},100);
     }});
-  }}catch(e){{}}}})();
-// MarkSheet filter changes are page-state changes, not separate navigation targets.
+  }}catch(e){{}}}})();// MarkSheet filter changes are page-state changes, not separate navigation targets.
 // Replace the current MarkSheet filter view so Back returns to the original page
 // instead of stepping through every class/stream/term/year/exam filter selection.
 document.addEventListener('submit',function(event){
@@ -997,8 +996,7 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
         exam_marks[subject_id] = {exam_id: by_exam[exam_id] for exam_id in ids if exam_id in by_exam}
         total += average
         points += float(pt or 0)
-    count = len(details)
-    average = total / count if count else 0.0
+    count = len(details)    average = total / count if count else 0.0
     overall = _overall_grade(cur, school_id, average, overall_rules) if count else "—"
     return {"rows": rows, "details": details, "exam_marks": exam_marks,
             "total": total, "points": points, "count": count,
@@ -1497,8 +1495,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         students = cur.execute(student_query, student_params).fetchall() if cid else []
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET STUDENT QUERY FAILED:", repr(exc), flush=True)
-        try:
-            con.rollback()
+        try:            con.rollback()
         except Exception:
             pass
         try:
@@ -1936,7 +1933,6 @@ function printDocument(){
         "<div class='muted'>A print-ready marksheet. Select one or more assessments; when multiple assessments are selected, each subject shows their average.</div>"
         "<div class='card section no-print'><form method='get' action='/app/academics/marksheets?ds_tab=" + quote(marksheet_tab_id, safe='') + "' class='marksheet-select'><input type='hidden' name='ds_tab' value='" + escape(marksheet_tab_id) + "'>"
         "<select name='class_id' class='field' onchange='this.form.submit()'><option value=''>Select Class</option>" + copts + "</select>"
-        "<select name='stream' class='field' onchange='this.form.submit()'><option value=''>All Streams</option>" + stropts + "</select>"
         "<select name='term' class='field' onchange='this.form.submit()'><option value=''>All Terms</option>" + topts + "</select>"
         "<select name='year' class='field' onchange='this.form.submit()'><option value=''>All Years</option>" + yopts + "</select>"
         "<select name='exam_id' class='field' onchange='this.form.submit()'><option value=''>Select Exam</option>" + eopts + "</select>"
@@ -1997,8 +1993,7 @@ def class_marksheets_pdf(
     # Keep this import local to the route so MarkSheet PDF generation cannot depend on module-level imports.
     from reportlab.platypus import PageBreak
     sid = _school_session(request)
-    if not sid:
-        return RedirectResponse("/", 303)
+    if not sid:        return RedirectResponse("/", 303)
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to download marksheets.", 403)
 
@@ -2497,8 +2492,7 @@ def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", str
 def finance_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    if not (_require_permission(request, sid, "fees.view") or _require_permission(request, sid, "finance.view")):
-        return HTMLResponse("You do not have permission to view fees or finance.", 403)
+    if not (_require_permission(request, sid, "fees.view") or _require_permission(request, sid, "finance.view")):        return HTMLResponse("You do not have permission to view fees or finance.", 403)
     con=_db();cur=con.cursor()
     fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
     exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
@@ -2998,7 +2992,6 @@ def grading_setup(request: Request, subject_id: str = ""):
             con.close()
         except Exception:
             pass
-
     current_ds_tab=str(request.query_params.get("ds_tab") or "").strip()
     current_ds_tab_q=("?" + "ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else ""
 
@@ -3497,8 +3490,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # can never select a valid class with an unrelated subject.
             allocations=cur.execute("""SELECT DISTINCT class_id,subject_id
               FROM teacher_allocations
-              WHERE school_id=? AND teacher_id=?
-              ORDER BY class_id,subject_id""",(sid,teacher_id)).fetchall()
+              WHERE school_id=? AND teacher_id=?              ORDER BY class_id,subject_id""",(sid,teacher_id)).fetchall()
             class_ids=sorted({int(a["class_id"]) for a in allocations if a["class_id"] is not None})
             subject_ids=sorted({int(a["subject_id"]) for a in allocations if a["subject_id"] is not None})
             if class_ids:
@@ -3997,8 +3989,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
             comment=""
         existing_comments=cur.execute(
-            "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
-            (sid,st["id"],exam_id,subject_id)
+            "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",            (sid,st["id"],exam_id,subject_id)
         ).fetchall()
         if existing_comments:
             for existing_comment in existing_comments:
@@ -4497,8 +4488,7 @@ def marks_correction_requests(request: Request):
 <div class='muted' style='margin:10px 0'>Requests submitted by teachers remain available here for review.</div>
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{request_rows_html or "<tr><td colspan='8'>No correction requests yet.</td></tr>"}</tbody></table></div></div>
-</div>
+<tbody>{request_rows_html or "<tr><td colspan='8'>No correction requests yet.</td></tr>"}</tbody></table></div></div></div>
 <style>
 .marks-filter-form{{margin-top:8px}}
 .filter-grid{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px}}
@@ -4997,8 +4987,7 @@ def teacher_allocations_page(request: Request):
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    rows=cur.execute("""SELECT a.id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name
-                        FROM teacher_allocations a JOIN teachers t ON t.id=a.teacher_id
+    rows=cur.execute("""SELECT a.id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name                        FROM teacher_allocations a JOIN teachers t ON t.id=a.teacher_id
                         JOIN classes c ON c.id=a.class_id JOIN subjects s ON s.id=a.subject_id
                         WHERE a.school_id=? ORDER BY t.name,c.name,s.name""",(sid,)).fetchall()
     con.close()
@@ -5497,8 +5486,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             story.append(Paragraph(
                 f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
                 styles["normal"]))
-            if index < len(students)-1:
-                story.append(PageBreak())
+            if index < len(students)-1:                story.append(PageBreak())
         from reportlab.lib.pagesizes import A4
         return _pdf_response(_pdf_build(story, A4, "Class Report Cards"), f"class_report_cards_{cls['name']}.pdf")
     except Exception as exc:
@@ -5997,8 +5985,7 @@ def student_promotion_page(request: Request, class_id: str = ""):
     )
     body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
 <div class='muted'>Move learners between classes while preserving their existing marks, attendance and financial records. Every change is recorded in the student class history.</div>
-<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
-<select name='class_id' class='field'><option value=''>Select current class</option>{copts}</select>
+<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'><select name='class_id' class='field'><option value=''>Select current class</option>{copts}</select>
 <button class='btn'>Load Students</button></form></div>
 <div class='card section'><form method='post' action='/app/students/promotion'>
 <input type='hidden' name='from_class_id' value='{cid}'>
@@ -6498,7 +6485,6 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                 full_name=str(teacher_row["name"] or "").strip()
                 if teacher_row["email"] and not email_v:
                     email_v=str(teacher_row["email"]).strip().lower()
-
         # Teacher login credentials are based on the teacher record:
         # username = teacher email; password = first name + generated digits.
         # This keeps teacher credentials predictable for the school admin while
@@ -6998,414 +6984,3 @@ def subjects_delete(request: Request, subject_id: int):
             try: audit_con.rollback()
             except Exception: pass
         finally:
-            audit_con.close()
-    except Exception:
-        pass
-
-    return RedirectResponse("/app/subjects",303)
-
-@router.get("/app/exams", response_class=HTMLResponse)def exams_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "exams.view"):
-        return HTMLResponse("You do not have permission to view examinations.", 403)
-    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
-    trs="".join(f"<tr><td>{escape(str(x['name']))}</td><td>{escape(str(x['exam_type'] or ''))}</td><td>{escape(str(x['term'] or ''))}</td><td>{escape(str(x['year'] or ''))}</td><td><a class='btn edit' href='/app/exams/edit/{x['id']}'>Edit</a> <form method='post' action='/app/exams/delete/{x['id']}' style='display:inline' onsubmit='if(!confirm(&quot;Delete this examination? This action cannot be undone.&quot;)) return false; this.submit(); return false;'><button type='submit' formaction='/app/exams/delete/{x['id']}' formmethod='post' class='btn danger'>Delete</button></form></td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Examinations</h1><div class='card section'><div class='examination-filter-scroll' tabindex='0'><form id='create-exam-form' method='post' action='/app/exams/add' class='examination-filter-form' ><input name='name' required placeholder='Exam name' class='field'><select name='exam_type' class='field'><option value=''>Select exam type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select><select name='year' class='field'>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select><button type='submit' class='btn create-exam-btn'>Create Exam</button></form></div></div><div class='card section'><div class='marksheet-scroll examination-table-scroll' tabindex='0'><table class='examination-table'><thead><tr><th>Name</th><th>Type</th><th>Term</th><th>Year</th><th>Actions</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No examinations.</td></tr>'}</tbody></table></div></div></div><style>.examination-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.examination-filter-form{{display:grid;grid-template-columns:260px 220px 220px 150px auto;gap:10px;width:max-content;min-width:100%}}.examination-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}}.examination-table{{width:max-content;min-width:900px}}.create-exam-btn{{min-width:140px;position:sticky;right:0;z-index:10;pointer-events:auto;cursor:pointer;display:inline-block;white-space:nowrap;background:#176B3A!important;color:#fff!important}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer}}.edit{{background:#176B3A;margin-right:5px}}.danger{{background:#b91c1c}}</style>"""
-    return _school_page(request,"Examinations",body)
-
-@router.post("/app/exams")
-@router.post("/app/exams/add")
-def exams_add(request: Request,name:str=Form(...),exam_type:str=Form(""),term:str=Form(""),year:str=Form("")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "exams.create"):
-        return HTMLResponse("You do not have permission to create examinations.", 403)
-    name_v=name.strip(); type_v=exam_type.strip(); term_v=term.strip(); year_v=year.strip()
-    if not name_v:return HTMLResponse("Examination name is required. <a href='/app/exams'>Back</a>",400)
-    con=_db();cur=con.cursor()
-    if cur.execute("SELECT id FROM exams WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(term,''))=lower(?) AND lower(COALESCE(year,''))=lower(?)",(sid,name_v,term_v,year_v)).fetchone():
-        con.close();return HTMLResponse("That examination already exists for this term and year. <a href='/app/exams'>Back</a>",400)
-    cur.execute("INSERT INTO exams(school_id,name,term,year,exam_type) VALUES(?,?,?,?,?)",(sid,name_v,term_v,year_v,type_v))
-    _audit(cur,sid,request,"EXAM_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/exams",303)
-
-@router.get("/app/exams/edit/{exam_id}", response_class=HTMLResponse)
-def exams_edit_page(request: Request, exam_id: int):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "exams.create"):
-        return HTMLResponse("You do not have permission to edit examinations.",403)
-    con=_db();cur=con.cursor()
-    row=cur.execute("SELECT id,name,exam_type,term,year FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
-    con.close()
-    if not row:return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
-    year_opts="".join("<option value='%s' %s>%s</option>"%(escape(y,quote=True),"selected" if str(row["year"] or "")==y else "",y) for y in YEAR_OPTIONS)
-    body=f"""<div class='page'><h1>Edit Examination</h1><div class='card section'><div class='marksheet-scroll exam-edit-scroll' tabindex='0'><form method='post' action='/app/exams/edit/{exam_id}' class='exam-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Exam name'><select name='exam_type' class='field'><option value=''>Select exam type</option><option {'selected' if row["exam_type"]=="CAT" else ''}>CAT</option><option {'selected' if row["exam_type"]=="Mid-Term" else ''}>Mid-Term</option><option {'selected' if row["exam_type"]=="End-Term" else ''}>End-Term</option><option {'selected' if row["exam_type"]=="Mock" else ''}>Mock</option><option {'selected' if row["exam_type"]=="Final" else ''}>Final</option><option {'selected' if row["exam_type"]=="SBA/CBA" else ''}>SBA/CBA</option></select><select name='term' class='field'><option value=''>Select term</option><option {'selected' if row["term"]=="Term 1" else ''}>Term 1</option><option {'selected' if row["term"]=="Term 2" else ''}>Term 2</option><option {'selected' if row["term"]=="Term 3" else ''}>Term 3</option></select><select name='year' class='field'>{year_opts}</select><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/exams'>Cancel</a></form></div></div><style>.exam-edit-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px;box-sizing:border-box;scrollbar-gutter:stable}}.exam-edit-scroll:focus{{outline:2px solid #94a3b8;outline-offset:2px}}.exam-edit-form{{display:grid;grid-template-columns:260px 220px 220px 150px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}</style></div>"""
-    return _school_page(request,"Edit Examination",body)
-
-@router.post("/app/exams/edit/{exam_id}")
-def exams_edit(request: Request, exam_id:int, name:str=Form(...), exam_type:str=Form(""), term:str=Form(""), year:str=Form("")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "exams.create"):
-        return HTMLResponse("You do not have permission to edit examinations.",403)
-    name_v=name.strip(); type_v=exam_type.strip(); term_v=term.strip(); year_v=year.strip()
-    if not name_v:return HTMLResponse("Examination name is required. <a href='/app/exams'>Back</a>",400)
-    con=_db();cur=con.cursor()
-    row=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
-    duplicate=cur.execute("SELECT id FROM exams WHERE school_id=? AND lower(name)=lower(?) AND lower(COALESCE(term,''))=lower(?) AND lower(COALESCE(year,''))=lower(?) AND id<>?",(sid,name_v,term_v,year_v,exam_id)).fetchone()
-    if not row:
-        con.close();return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
-    if duplicate:
-        con.close();return HTMLResponse("That examination already exists for this term and year. <a href='/app/exams'>Back</a>",400)
-    cur.execute("UPDATE exams SET name=?,exam_type=?,term=?,year=? WHERE id=? AND school_id=?",(name_v,type_v,term_v,year_v,exam_id,sid))
-    _audit(cur,sid,request,"EXAM_EDIT",name_v)
-    con.commit();con.close()
-    return RedirectResponse("/app/exams",303)
-
-@router.post("/app/exams/delete/{exam_id}")
-def exams_delete(request: Request, exam_id:int):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "exams.create"):
-        return HTMLResponse("You do not have permission to delete examinations.",403)
-    con=_db();cur=con.cursor()
-    row=cur.execute("SELECT id,name FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
-    if not row:
-        con.close();return HTMLResponse("Examination not found. <a href='/app/exams'>Back</a>",404)
-    exam_name=str(row["name"] or exam_id)
-    try:
-        cur.execute("DELETE FROM exams WHERE id=? AND school_id=?",(exam_id,sid))
-        con.commit()
-    except Exception as exc:
-        try: con.rollback()
-        except Exception: pass
-        con.close()
-        return HTMLResponse("Unable to delete this examination.<br><br><b>Technical detail:</b> " + escape(str(exc)),409)
-    con.close()
-    try:
-        audit_con=_db(); audit_cur=audit_con.cursor()
-        try:
-            _audit(audit_cur,sid,request,"EXAM_DELETE",exam_name)
-            audit_con.commit()
-        except Exception:
-            try: audit_con.rollback()
-            except Exception: pass
-        finally:
-            audit_con.close()
-    except Exception:
-        pass
-    return RedirectResponse("/app/exams",303)
-
-@router.get("/app/finance/fees", response_class=HTMLResponse)
-def fees_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "fees.view"):
-        return HTMLResponse("You do not have permission to view fees.", 403)
-    con=_db();cur=con.cursor()
-    students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    fees=cur.execute("""SELECT f.*,s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
-        WHERE f.school_id=? ORDER BY f.id DESC LIMIT 100""",(sid,)).fetchall()
-    con.close()
-    sopts="".join(f"<option value='{s['id']}'>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
-    trs="".join(f"<tr><td>{escape(str(x['student_name']))}</td><td>{x['amount']}</td><td>{x['paid'] or 0}</td><td>{x['status'] or 'Pending'}</td><td>{escape(str(x['description'] or ''))}</td></tr>" for x in fees)
-    body=f"""<div class='page'><h1>Fees & Student Charges</h1><div class='card section'><h2>Charge a student</h2><form method='post' action='/app/finance/fees/add' class='formgrid'><select name='student_id' class='field' required>{sopts}</select><input name='amount' type='number' step='0.01' min='0' required placeholder='Amount' class='field'><select name='description' required class='field'><option value=''>Select charge type</option><option>Tuition Fees</option><option>Activity Fees</option><option>Examination Fees</option><option>Transport</option><option>Boarding</option><option>Lunch / Meals</option><option>Uniform</option><option>Books</option><option>Other</option></select><input name='due_date' type='date' class='field'><button class='btn'>Post Charge</button></form></div><div class='card section'><h2>Receive fee payment</h2><form method='post' action='/app/finance/payments' class='formgrid'><select name='student_id' class='field' required>{sopts}</select><input name='amount' type='number' step='0.01' min='0.01' required placeholder='Amount' class='field'><select name='method' class='field'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option><option>Card</option><option>Other</option></select><input name='reference' placeholder='Receipt / reference' class='field'><button class='btn'>Record Payment</button></form></div><div class='card section'><table><thead><tr><th>Student</th><th>Charged</th><th>Paid</th><th>Status</th><th>Description</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No fee charges.</td></tr>'}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1.5fr 1fr 1.5fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style>"""
-    return _school_page(request,"Fees",body)
-
-@router.post("/app/finance/fees/add")
-def fees_add(request: Request,student_id:int=Form(...),amount:float=Form(...),description:str=Form(...),due_date:str=Form("")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "fees.edit"):
-        return HTMLResponse("You do not have permission to post fee charges.", 403)
-    if amount <= 0:
-        return HTMLResponse("Fee amount must be greater than zero. <a href='/app/finance/fees'>Back</a>",400)
-    if not description.strip():
-        return HTMLResponse("Fee description is required. <a href='/app/finance/fees'>Back</a>",400)
-    con=_db();cur=con.cursor()
-    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
-        con.close();return HTMLResponse("Student not found in this school. <a href='/app/finance/fees'>Back</a>",404)
-    cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,0,description.strip(),due_date or None,"Pending"))
-    _audit(cur,sid,request,"FEE_CHARGE",f"Charged {amount} to student {student_id}")
-    con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
-
-@router.post("/app/finance/payments")
-def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...),reference:str=Form(""),method:str=Form("Cash")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "fees.edit"):
-        return HTMLResponse("You do not have permission to record fee payments.", 403)
-    if amount <= 0:return HTMLResponse("Payment amount must be greater than zero. <a href='/app/finance/fees'>Back</a>",400)
-    con=_db();cur=con.cursor()
-    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
-        con.close();return HTMLResponse("Student not found in this school. <a href='/app/finance/fees'>Back</a>",404)
-    charges=cur.execute("SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND COALESCE(amount,0)>COALESCE(paid,0) ORDER BY id",(sid,student_id)).fetchall()
-    outstanding=sum(max(0,float(f["amount"] or 0)-float(f["paid"] or 0)) for f in charges)
-    if outstanding <= 0:
-        con.close();return HTMLResponse("This student has no outstanding fee balance. <a href='/app/finance/fees'>Back</a>",400)
-    if amount > outstanding:
-        con.close();return HTMLResponse(f"Payment exceeds outstanding balance ({outstanding:.2f}). <a href='/app/finance/fees'>Back</a>",400)
-    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
-    cur.execute("INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)",(sid,student_id,amount,reference.strip(),method.strip() or "Cash",now,str(request.session.get("email",""))))
-    remaining=amount
-    for f in charges:
-        if remaining<=0:break
-        applied=min(remaining,float(f["amount"])-float(f["paid"] or 0)); newpaid=float(f["paid"] or 0)+applied; remaining-=applied
-        cur.execute("UPDATE fees SET paid=?,status=? WHERE id=? AND school_id=?",(newpaid,"Paid" if newpaid>=float(f["amount"]) else "Partial",f["id"],sid))
-    cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",(sid,now,reference.strip(),"School fee receipt",0,amount,"Fees"))
-    _audit(cur,sid,request,"FEE_PAYMENT",f"Received {amount} from student {student_id}")
-    con.commit();con.close();return RedirectResponse("/app/finance/fees",303)
-
-# Additional native DaviSchool workspaces
-def _simple_rows(rows, cols):
-    return "".join("<tr>"+"".join(f"<td>{escape(str(row[c] if row[c] is not None else ''))}</td>" for c in cols)+"</tr>" for row in rows)
-
-# The timetable workspace is implemented in the isolated aSc-style manager module.
-# Keeping it in its own router prevents timetable changes from touching the other
-# DaviSchool school-side modules.
-from app.timetable_manager import router as timetable_manager_router
-router.include_router(timetable_manager_router)
-
-@router.get("/app/announcements", response_class=HTMLResponse)
-def announcements_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "communications.view"):
-        return HTMLResponse("You do not have permission to view announcements.", 403)
-    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
-    tr=_simple_rows(rows,["title","message","audience","created_at"])
-    body=f"""<div class='page'><h1>Announcements</h1><div class='muted'>Publish school notices and internal communications.</div>
-<div class='card section'><h2>New announcement</h2><form method='post' action='/app/announcements/add' style='display:grid;gap:10px'><input name='title' required placeholder='Title' class='field'><select name='audience' class='field'><option>All</option><option>Students</option><option>Parents</option><option>Teachers</option><option>Staff</option></select><textarea name='message' required placeholder='Message' class='field' rows='5'></textarea><button class='btn'>Publish Announcement</button></form></div>
-<div class='card section'><h2>Published announcements ({len(rows)})</h2><table><thead><tr><th>Title</th><th>Message</th><th>Audience</th><th>Created</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No announcements yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Announcements",body)
-
-@router.post("/app/announcements/add")
-def announcements_add(request: Request,title:str=Form(...),message:str=Form(...),audience:str=Form("All")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "communications.edit"):
-        return HTMLResponse("You do not have permission to publish announcements.", 403)
-    con=_db();cur=con.cursor();now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO announcements(school_id,title,message,audience,created_at) VALUES(?,?,?,?,?)",(sid,title.strip(),message.strip(),audience,now))
-    _audit(cur,sid,request,"ANNOUNCEMENT_CREATE",title.strip());con.commit();con.close();return RedirectResponse("/app/announcements",303)
-
-@router.get("/app/roles", response_class=HTMLResponse)
-def roles_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
-    con=_db();cur=con.cursor()
-    rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall()
-    _ensure_class_teacher_assignments_table(cur)
-    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? AND COALESCE(status,'active')='active' ORDER BY name",(sid,)).fetchall()
-    assignments=cur.execute("""SELECT a.id,a.class_id,a.teacher_id,c.name class_name,c.stream,t.name teacher_name
-        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id JOIN teachers t ON t.id=a.teacher_id
-        WHERE a.school_id=? ORDER BY c.name,c.stream""",(sid,)).fetchall()
-    con.close()
-    tr=_simple_rows(rows,["role","permission","enabled"])
-    class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
-    teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
-    assignment_rows=[]
-    for a in assignments:
-        assignment_rows.append(
-            "<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a></td></tr>"
-            % (
-                escape(str(a["class_name"])),
-                (" · " + escape(str(a["stream"] or ""))) if a["stream"] else "",
-                escape(str(a["teacher_name"])),
-                a["id"],
-            )
-        )
-    assignment_rows="".join(assignment_rows)
-    body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
-<div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class. Report cards automatically use this assignment for the class teacher name and signature line.</div>
-<form method='post' action='/app/roles/class-teacher-assignment' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select><select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select><button class='btn'>Save Assignment</button></form>
-<table style='margin-top:14px'><thead><tr><th>Class</th><th>Class Teacher</th><th>Actions</th></tr></thead><tbody>{assignment_rows or "<tr><td colspan='3'>No class teacher assignments yet.</td></tr>"}</tbody></table></div>
-<div class='card section'><h2>Grant permission</h2><form method='post' action='/app/roles/add' style='display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px'><select name='role' class='field'><option>school_admin</option><option>teacher</option><option>parent</option><option>student</option><option>accountant</option><option>registrar</option></select><select name='permission' required class='field'><option value=''>Select permission</option><option>students.view</option><option>students.create</option><option>students.edit</option><option>classes.view</option><option>classes.create</option><option>subjects.view</option><option>subjects.create</option><option>exams.view</option><option>exams.create</option><option>marks.view</option><option>marks.edit</option><option>attendance.view</option><option>attendance.edit</option><option>timetable.view</option><option>timetable.edit</option><option>fees.view</option><option>fees.edit</option><option>finance.view</option><option>finance.edit</option><option>reports.view</option><option>reports.edit</option><option>staff.view</option><option>staff.create</option><option>staff.edit</option><option>communications.view</option><option>communications.edit</option><option>settings.view</option><option>settings.edit</option><option>audit.view</option><option>users.manage</option><option>settings.manage</option></select><select name='enabled' class='field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
-<div class='card section'><h2>Configured permissions ({len(rows)})</h2><table><thead><tr><th>Role</th><th>Permission</th><th>Enabled</th></tr></thead><tbody>{tr or '<tr><td colspan=3>No custom permissions yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Roles & Permissions",body)
-
-@router.post("/app/roles/class-teacher-assignment")
-def save_class_teacher_assignment(request: Request, class_id:int=Form(...), teacher_id:int=Form(...)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
-    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
-    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
-    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND COALESCE(status,'active')='active'",(teacher_id,sid)).fetchone()
-    if not valid_class or not valid_teacher:
-        con.close();return HTMLResponse("Invalid class or teacher selection. <a href='/app/roles'>Back</a>",400)
-    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    # Update an existing assignment for this class, otherwise create one.
-    # This avoids relying on database-specific UPSERT syntax and works with
-    # both the existing SQLite database and the PostgreSQL deployment.
-    existing=cur.execute(
-        "SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? LIMIT 1",
-        (sid,class_id)
-    ).fetchone()
-    if existing:
-        cur.execute(
-            "UPDATE class_teacher_assignments SET teacher_id=?,assigned_at=? WHERE id=? AND school_id=?",
-            (teacher_id,now,existing["id"],sid)
-        )
-        action="CLASS_TEACHER_ASSIGNMENT_EDIT"
-        detail="Updated class teacher assignment for class %s"%class_id
-    else:
-        cur.execute(
-            "INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at) VALUES(?,?,?,?)",
-            (sid,class_id,teacher_id,now)
-        )
-        action="CLASS_TEACHER_ASSIGNMENT"
-        detail="Assigned class teacher for class %s"%class_id
-    _audit(cur,sid,request,action,detail)
-    con.commit()
-    con.close()
-    return RedirectResponse("/app/roles",303)
-
-@router.get("/app/roles/class-teacher-assignment/edit/{assignment_id}", response_class=HTMLResponse)
-def edit_class_teacher_assignment_page(request: Request, assignment_id: int):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
-    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
-    assignment=cur.execute("""SELECT id,class_id,teacher_id FROM class_teacher_assignments
-                              WHERE id=? AND school_id=?""",(assignment_id,sid)).fetchone()
-    classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? AND COALESCE(status,'active')='active' ORDER BY name",(sid,)).fetchall()
-    con.close()
-    if not assignment:
-        return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
-    class_opts="".join("<option value='%s' %s>%s%s</option>"%(c["id"],"selected" if int(c["id"])==int(assignment["class_id"]) else "",escape(str(c["name"] or "")),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
-    teacher_opts="".join("<option value='%s' %s>%s — %s</option>"%(t["id"],"selected" if int(t["id"])==int(assignment["teacher_id"]) else "",escape(str(t["name"] or "")),escape(str(t["role"] or ""))) for t in teachers)
-    body=f"""<div class='page'><h1>Edit Class Teacher Assignment</h1><div class='muted'>Change the class or teacher for this assignment.</div>
-<div class='card section'><form method='post' action='/app/roles/class-teacher-assignment/edit/{assignment_id}' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
-<select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select>
-<select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select>
-<button class='btn'>Save Changes</button><a class='btn secondary' href='/app/roles'>Cancel</a></form></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{display:inline-block;padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}}.secondary{{background:#64748b}}.edit{{background:#176B3A;margin-right:5px}}.danger{{background:#b91c1c}}</style></div>"""
-    return _school_page(request,"Edit Class Teacher Assignment",body)
-
-
-@router.post("/app/roles/class-teacher-assignment/edit/{assignment_id}")
-def edit_class_teacher_assignment(request: Request, assignment_id: int, class_id:int=Form(...), teacher_id:int=Form(...)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
-    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
-    assignment=cur.execute("SELECT id FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
-    valid_class=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
-    valid_teacher=cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=? AND COALESCE(status,'active')='active'",(teacher_id,sid)).fetchone()
-    duplicate=cur.execute("SELECT id FROM class_teacher_assignments WHERE school_id=? AND class_id=? AND id<>?",(sid,class_id,assignment_id)).fetchone()
-    if not assignment:
-        con.close();return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
-    if not valid_class or not valid_teacher:
-        con.close();return HTMLResponse("Invalid class or teacher selection. <a href='/app/roles'>Back</a>",400)
-    if duplicate:
-        con.close();return HTMLResponse("That class already has a class teacher assignment. <a href='/app/roles'>Back</a>",400)
-    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("UPDATE class_teacher_assignments SET class_id=?,teacher_id=?,assigned_at=? WHERE id=? AND school_id=?",(class_id,teacher_id,now,assignment_id,sid))
-    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT_EDIT","Edited class teacher assignment %s"%assignment_id)
-    con.commit();con.close()
-    return RedirectResponse("/app/roles",303)
-
-
-@router.post("/app/roles/class-teacher-assignment/delete/{assignment_id}")
-def delete_class_teacher_assignment(request: Request, assignment_id:int):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage class teacher assignments.",403)
-    con=_db();cur=con.cursor();_ensure_class_teacher_assignments_table(cur)
-    assignment=cur.execute("SELECT id FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
-    if not assignment:
-        con.close();return HTMLResponse("Class teacher assignment not found. <a href='/app/roles'>Back</a>",404)
-    cur.execute("DELETE FROM class_teacher_assignments WHERE id=? AND school_id=?",(assignment_id,sid))
-    _audit(cur,sid,request,"CLASS_TEACHER_ASSIGNMENT_DELETE","Deleted class teacher assignment %s"%assignment_id)
-    con.commit();con.close()
-    return RedirectResponse("/app/roles",303)
-
-
-@router.post("/app/roles/add")
-def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
-    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage"}
-    role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
-    if role_v not in allowed_roles or perm_v not in allowed_permissions:
-        return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
-    con=_db();cur=con.cursor()
-    existing=cur.execute("SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(sid,role_v,perm_v)).fetchone()
-    if existing:
-        cur.execute("UPDATE roles_permissions SET enabled=? WHERE id=? AND school_id=?",(enabled_v,existing["id"],sid))
-    else:
-        cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(sid,role_v,perm_v,enabled_v))
-    _audit(cur,sid,request,"PERMISSION_CHANGE",f"{role_v}: {perm_v}={enabled_v}");con.commit();con.close();return RedirectResponse("/app/roles",303)
-
-@router.get("/app/audit", response_class=HTMLResponse)
-def audit_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "audit.view"):
-        return HTMLResponse("You do not have permission to view the audit trail.", 403)
-    con=_db();cur=con.cursor()
-    rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall()
-    con.close()
-    tr=_simple_rows(rows,["timestamp","user_email","action","details"])
-    body=f"""<div class='page'><h1>Audit Trail</h1>
-<div class='muted'>Security and activity history for this school.</div>
-<div class='card section'>
-<div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
-<h2 style='margin:0'>Recent activity ({len(rows)})</h2>
-<form method='post' action='/app/audit/clear' onsubmit="return confirm('Clear all audit trail records for this school? This action cannot be undone.');">
-<button class='btn' type='submit' style='background:#b91c1c!important;border-color:#b91c1c!important'>🗑️ Clear</button>
-</form></div>
-<table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table>
-</div></div>"""
-    return _school_page(request,"Audit Trail",body)
-
-@router.post("/app/audit/clear")
-def audit_clear(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request, sid, "audit.view"):
-        return HTMLResponse("You do not have permission to clear the audit trail.",403)
-    con=_db();cur=con.cursor()
-    cur.execute("DELETE FROM system_audit WHERE school_id=?",(sid,))
-    con.commit();con.close()
-    return RedirectResponse("/app/audit",303)
-
-@router.get("/app/accounting", response_class=HTMLResponse)
-def accounting_page(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "finance.view"):
-        return HTMLResponse("You do not have permission to view accounting.", 403)
-    con=_db();cur=con.cursor()
-    expenses=cur.execute("SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
-    vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
-    lpos=cur.execute("SELECT * FROM lpos WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
-    cash=cur.execute("SELECT COALESCE(SUM(credit),0) credit,COALESCE(SUM(debit),0) debit FROM cashbook WHERE school_id=?",(sid,)).fetchone()
-    con.close()
-    exp_total=sum(float(x["amount"] or 0) for x in expenses)
-    body=f"""<div class='page'><h1>Accounting</h1><div class='muted'>School accounting workspace: expenses, vouchers, LPOs and cashbook.</div>
-<div class='grid'><div class='card'><div class='label'>Expenses listed</div><div class='kpi'>{exp_total:,.2f}</div></div><div class='card'><div class='label'>Cash credits</div><div class='kpi'>{float(cash['credit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Cash debits</div><div class='kpi'>{float(cash['debit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Open LPOs</div><div class='kpi'>{len(lpos)}</div></div></div>
-<div class='card section'><h2>Record expense</h2><form method='post' action='/app/accounting/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><select name='category' required class='field'><option value=''>Select expense category</option><option>Salaries</option><option>Utilities</option><option>Stationery</option><option>Repairs & Maintenance</option><option>Transport</option><option>Food & Catering</option><option>Learning Materials</option><option>Rent</option><option>Other</option></select><input name='description' required placeholder='Description' class='field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='field'><input name='paid_to' placeholder='Paid to' class='field'><input name='voucher_no' placeholder='Voucher no.' class='field'><input name='date' type='date' class='field'><button class='btn'>Save Expense</button></form></div>
-<div class='card section'><h2>Expenses</h2><table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th><th>Voucher</th><th>Date</th></tr></thead><tbody>{_simple_rows(expenses,['category','description','amount','paid_to','voucher_no','date']) or '<tr><td colspan=6>No expenses yet.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>Payment Vouchers ({len(vouchers)})</h2><table><thead><tr><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(vouchers,['voucher_no','payee','description','amount','date','status']) or '<tr><td colspan=6>No vouchers yet.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>LPOs ({len(lpos)})</h2><table><thead><tr><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(lpos,['lpo_no','supplier','description','amount','date','status']) or '<tr><td colspan=6>No LPOs yet.</td></tr>'}</tbody></table></div>
-</div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Accounting",body)
-
-@router.post("/app/accounting/expense")
-def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
