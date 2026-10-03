@@ -4633,6 +4633,143 @@ def _ensure_teacher_allocations_table(cur):
         UNIQUE(school_id,teacher_id,class_id,subject_id)
     )""")
 
+def _ensure_assessment_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS assessment_scores(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER,
+        subject_id INTEGER, term TEXT, year TEXT, component TEXT,
+        score REAL, out_of REAL, created_at TEXT)""")
+
+
+@router.get("/app/academics/assessments", response_class=HTMLResponse)
+def assessments_page(request: Request, student_id: str = "", subject_id: str = "", term: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage SBA / CBA assessments.", 403)
+
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_assessment_table(cur)
+        students = cur.execute(
+            "SELECT * FROM students WHERE school_id=? ORDER BY name", (sid,)
+        ).fetchall()
+        subjects = cur.execute(
+            "SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)
+        ).fetchall()
+        stid = int(student_id) if str(student_id).isdigit() else 0
+        subid = int(subject_id) if str(subject_id).isdigit() else 0
+        rows = cur.execute(
+            """SELECT a.*,s.name subject_name
+               FROM assessment_scores a
+               JOIN subjects s ON s.id=a.subject_id
+               WHERE a.school_id=?
+                 AND (?=0 OR a.student_id=?)
+                 AND (?=0 OR a.subject_id=?)
+                 AND (?='' OR a.term=?)
+               ORDER BY a.id DESC LIMIT 300""",
+            (sid, stid, stid, subid, subid, term, term),
+        ).fetchall()
+        con.commit()
+    finally:
+        con.close()
+
+    so = "".join(
+        f"<option value='{s['id']}' {'selected' if int(s['id']) == subid else ''}>{escape(str(s['name']))}</option>"
+        for s in subjects
+    )
+    sto = "".join(
+        f"<option value='{s['id']}' {'selected' if int(s['id']) == stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>"
+        for s in students
+    )
+    tr = _simple_rows(
+        rows,
+        ["student_id", "subject_name", "term", "year", "component", "score", "out_of", "created_at"],
+    )
+    body = f"""<div class='page'><h1>SBA / CBA</h1>
+<div class='muted'>Record continuous assessment components separately from examination marks.</div>
+<div class='card section'><form method='post' action='/app/academics/assessments/add' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<select name='student_id' required class='field'><option value=''>Select student</option>{sto}</select>
+<select name='subject_id' required class='field'><option value=''>Select subject</option>{so}</select>
+<select name='term' required class='field'><option value=''>Select term</option>{''.join(f"<option>{escape(t)}</option>" for t in TERM_OPTIONS)}</select>
+<input name='year' required value='{datetime.now(ZoneInfo("Africa/Nairobi")).year}' class='field'>
+<input name='component' required placeholder='CAT 1 / Project / SBA' class='field'>
+<input name='score' required type='number' min='0' step='0.01' placeholder='Score' class='field'>
+<input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'>
+<button class='btn'>Save Assessment</button></form></div>
+<div class='card section'><h2>Assessment records</h2>
+<table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th></tr></thead>
+<tbody>{tr or '<tr><td colspan=8>No assessment records yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    return _school_page(request, "SBA / CBA", body)
+
+
+@router.post("/app/academics/assessments/add")
+def assessments_add(
+    request: Request,
+    student_id: int = Form(...),
+    subject_id: int = Form(...),
+    term: str = Form(...),
+    year: str = Form(...),
+    component: str = Form(...),
+    score: float = Form(...),
+    out_of: float = Form(...),
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage SBA / CBA assessments.", 403)
+
+    term_v = term.strip()
+    year_v = year.strip()
+    component_v = component.strip()
+    if out_of <= 0 or score < 0 or score > out_of or not term_v or not year_v or not component_v:
+        return HTMLResponse("Invalid assessment details or score. <a href='/app/academics/assessments'>Back</a>", 400)
+
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_assessment_table(cur)
+        valid_student = cur.execute(
+            "SELECT id FROM students WHERE id=? AND school_id=?", (student_id, sid)
+        ).fetchone()
+        valid_subject = cur.execute(
+            "SELECT id FROM subjects WHERE id=? AND school_id=?", (subject_id, sid)
+        ).fetchone()
+        if not valid_student or not valid_subject:
+            return HTMLResponse("Invalid student or subject. <a href='/app/academics/assessments'>Back</a>", 400)
+
+        duplicate = cur.execute(
+            """SELECT id FROM assessment_scores
+               WHERE school_id=? AND student_id=? AND subject_id=? AND term=? AND year=?
+                 AND lower(component)=lower(?) LIMIT 1""",
+            (sid, student_id, subject_id, term_v, year_v, component_v),
+        ).fetchone()
+        if duplicate:
+            return HTMLResponse(
+                "This assessment component already exists for the selected student, subject, term and year. "
+                "<a href='/app/academics/assessments'>Back</a>",
+                400,
+            )
+
+        cur.execute(
+            """INSERT INTO assessment_scores
+               (school_id,student_id,subject_id,term,year,component,score,out_of,created_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                sid, student_id, subject_id, term_v, year_v, component_v, score, out_of,
+                datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        _audit(cur, sid, request, "ASSESSMENT_SAVE", f"Saved {component_v} for student {student_id}")
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/academics/assessments", 303)
+
+
 @router.get("/app/academics/allocations", response_class=HTMLResponse)
 def teacher_allocations_page(request: Request):
     sid=_school_session(request)
