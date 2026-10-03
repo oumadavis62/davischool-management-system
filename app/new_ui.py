@@ -2917,6 +2917,9 @@ def grading_setup(request: Request, subject_id: str = ""):
         except Exception:
             pass
 
+    current_ds_tab=str(request.query_params.get("ds_tab") or "").strip()
+    current_ds_tab_q=("?" + "ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else ""
+
     sopts = "".join(
         "<option value='%s' %s>%s</option>" % (
             s["id"],
@@ -2947,7 +2950,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         + sopts +
         "</select><button class='btn'>Load Subject</button></form></div>"
         "<div class='card section'><h2>Add grading rule</h2>"
-        "<form method='post' action='/app/academics/grading/add' "
+        "<form method='post' action='/app/academics/grading/add" + current_ds_tab_q + "' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
         "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
@@ -2955,7 +2958,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
         "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
-        "<button type='submit' formaction='/app/academics/grading/add' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
+        "<button type='submit' formaction='/app/academics/grading/add" + current_ds_tab_q + "' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
         "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
@@ -3018,7 +3021,7 @@ def grading_add(request: Request, subject_id: int = Form(...), min_mark: float =
            (grade.strip(), min_mark, max_mark, grade.strip(), points))
     con.commit()
     con.close()
-    return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
+    return RedirectResponse("/app/academics/grading?subject_id=%s%s" % (subject_id, ("&ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""), 303)
 
 @router.post("/app/academics/grading/copy")
 async def grading_copy(request: Request):
