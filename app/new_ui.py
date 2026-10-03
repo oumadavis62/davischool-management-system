@@ -499,40 +499,46 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     }});
   }}catch(e){{}}
 }})();
-// MarkSheet display filtering has two history phases.
-    // The FIRST filter creates one history entry, preserving the original
-    // MarkSheet display as the Back destination. Further filter changes replace
-    // that filtered entry, so Back never replays intermediate selections.
-    document.addEventListener('submit',function(event){{
-      var form=event.target;
-      if(!form || String(form.method||'get').toLowerCase()!=='get')return;
-      if(!form.classList || !form.classList.contains('marksheet-select'))return;
-      if(form.hasAttribute('data-native-get'))return;
-      event.preventDefault();
-      try{{
-        var action=form.getAttribute('action') || window.location.href;
-        var url=new URL(action,window.location.href);
-        if(url.origin!==window.location.origin){{form.submit();return;}}
-        var data=new FormData(form);
-        var params=new URLSearchParams();
-        data.forEach(function(value,key){{params.append(key,value);}});
-        url.search=params.toString();
-        var key='davischool-marksheet-filter-started';
-        var started=false;
-        try{{started=sessionStorage.getItem(key)==='1';}}catch(e){{}}
-        if(!started){{
-          try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
-          window.location.href=url.toString();
-        }}else{{
-          window.location.replace(url.toString());
-        }}
-      }}catch(e){{form.submit();}}
-    }},true);
-    window.addEventListener('popstate',function(){{
-      try{{
-        if(window.location.pathname==='/app/academics/marksheets')sessionStorage.removeItem('davischool-marksheet-filter-started');
-      }}catch(e){{}}
-    }});
+// GET filter/search forms use a two-stage history rule across the system.
+// The first filter/search action creates ONE history entry so the original
+// unfiltered page remains the Back destination. Further filter/search changes
+// replace that filtered entry, preventing a chain of intermediate displays.
+// Ordinary links to records/pages are intentionally left as normal navigation.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='get')return;
+  if(form.hasAttribute('data-native-get'))return;
+  if(form.hasAttribute('data-no-history-filter'))return;
+  try{{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin){{form.submit();return;}}
+    if(url.pathname.indexOf('/app')!==0){{form.submit();return;}}
+    var data=new FormData(form);
+    var params=new URLSearchParams();
+    data.forEach(function(value,key){{params.append(key,value);}});
+    url.search=params.toString();
+    var pathKey='davischool-filter-started:'+window.location.pathname;
+    var started=false;
+    try{{started=sessionStorage.getItem(pathKey)==='1';}}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(pathKey,'1');}}catch(e){{}}
+      window.location.href=url.toString();
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{form.submit();}}
+}},true);
+
+// When the user returns with Back, the next filter cycle must start from the
+// unfiltered page again. Clear filter-history markers for the current page.
+window.addEventListener('popstate',function(){{
+  try{{
+    sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-marksheet-filter-started');
+  }}catch(e){{}}
+}});
 // MarkSheet pagination changes the displayed page within the same workspace.
 // Replace that navigation entry so Back does not replay every MarkSheet page
 // visited while browsing the student list.
