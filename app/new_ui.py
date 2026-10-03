@@ -450,7 +450,7 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 ||
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 ||
        path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
@@ -2955,7 +2955,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
         "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
-        "<button class='btn'>Save Grade & Points</button></form></div>"
+        "<button type='submit' formaction='/app/academics/grading/add' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
         "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
