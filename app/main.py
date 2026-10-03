@@ -2878,6 +2878,49 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 
 
 
+# Compatibility POST route for the live Students form. Some deployed UI versions
+# submit directly to /app/students; keep this handler in main.py so that route
+# remains functional even when an older new_ui.py is cached/deployed.
+@app.post("/app/students")
+def main_app_students_post(request: Request, admission_no: str = Form(...), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+    role = str(request.session.get("role", ""))
+    if not request.session.get("email") or role not in {"school_admin", "teacher"}:
+        return RedirectResponse("/", 303)
+    school = get_school_obj(request)
+    if not school:
+        return RedirectResponse("/", 303)
+    if not _role_permission(request, school["id"], "students.create"):
+        return HTMLResponse("You do not have permission to create students.", 403)
+    admission = admission_no.strip()
+    student_name = (name or student_name).strip()
+    if not admission or not student_name:
+        return HTMLResponse("Admission number and full name are required.", 400)
+    con = get_db()
+    try:
+        cur = con.cursor()
+        if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
+            return HTMLResponse("Admission number already exists. <a href='/app/students'>Back to Students</a>", 400)
+        cid = int(class_id) if class_id.strip().isdigit() else None
+        stream = ""
+        if cid is not None:
+            row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?", (cid, school["id"])).fetchone()
+            if not row:
+                return HTMLResponse("Invalid class selected.", 400)
+            stream = str(row["stream"] or "").strip()
+        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, "active"))
+        con.commit()
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print(f"DAVISCHOOL APP STUDENT DIRECT CREATE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/students", 303)
+
 # Explicit /app student POST handlers kept in app/main.py.
 @app.post("/app/students/add")
 def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
