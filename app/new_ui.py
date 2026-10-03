@@ -519,6 +519,17 @@ document.addEventListener('submit',function(event){{
     window.location.replace(url.toString());
   }}catch(e){{form.submit();}}
 }},true);
+// MarkSheet pagination changes the displayed page within the same workspace.
+// Replace that navigation entry so Back does not replay every MarkSheet page
+// visited while browsing the student list.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a.marksheet-page-nav') : null;
+  if(!link || event.defaultPrevented)return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin===window.location.origin){{event.preventDefault();window.location.replace(url.toString());}}
+  }}catch(e){{}}
+}},true);
 // Keep routine school data-entry saves from filling the phone/browser Back stack.
 // A successful POST is followed by a normal page load, but replace that entry
 // so repeated saves on the same workspace do not require dozens of Back presses.
@@ -1791,9 +1802,9 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     next_disabled = "opacity:.45;pointer-events:none" if page >= total_pages else ""
     marksheet_pagination = (
         "<div class='marksheet-pagination no-print'>"
-        f"<a class='btnlink' style='{prev_disabled}' href='/app/academics/marksheets?page={prev_page}&{marksheet_page_query}{marksheet_tab_q}'>← Previous</a>"
+        f"<a class='btnlink marksheet-page-nav' style='{prev_disabled}' href='/app/academics/marksheets?page={prev_page}&{marksheet_page_query}{marksheet_tab_q}'>← Previous</a>"
         f"<span class='marksheet-page-info'>Page {page} of {total_pages} · {total_students} students</span>"
-        f"<a class='btnlink' style='{next_disabled}' href='/app/academics/marksheets?page={next_page}&{marksheet_page_query}{marksheet_tab_q}'>Next →</a>"
+        f"<a class='btnlink marksheet-page-nav' style='{next_disabled}' href='/app/academics/marksheets?page={next_page}&{marksheet_page_query}{marksheet_tab_q}'>Next →</a>"
         "</div>"
     )
 
