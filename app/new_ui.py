@@ -438,6 +438,8 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 document.addEventListener('submit',function(event){{
   var form=event.target;
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  // Some browsers normalize the grading delete form action when the workspace tab wrapper is active. Let this explicitly marked form use the native POST target.
+  if(form.hasAttribute('data-native-post'))return;
   var submitter=event.submitter;
   // A submit button may override the form action/method with formaction/formmethod.
   // This is required for Marks: School Admin uses the same form for Save Marks
@@ -2932,7 +2934,7 @@ def grading_setup(request: Request, subject_id: str = ""):
     rule_rows = "".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"
         "<td style='white-space:nowrap'><a class='btnlink' href='/app/academics/grading/edit/%s?subject_id=%s'>✏️ Edit</a> "
-        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
+        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' data-native-post='1' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
         % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
            float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid, r["id"], subid)
         for r in rules
