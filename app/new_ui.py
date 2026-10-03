@@ -2952,7 +2952,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<div class='card section'><h2>Add grading rule</h2>"
         "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
-        "<label style='grid-column:1/-1;font-weight:700'>Subject<select name='subject_id' required class='field'>" + "<option value=''>Select subject</option>" + sopts + "</select></label>"
+        "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
         "<input name='max_mark' required type='number' min='0' max='100' step='0.01' placeholder='Maximum mark' class='field'>"
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
