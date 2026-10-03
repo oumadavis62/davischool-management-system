@@ -151,6 +151,80 @@ class DaviSchoolTabSessionMiddleware:
       markInternalNavigation();
     }, true);
 
+
+    // DaviSchool browser-history policy:
+    // First filter/search preserves the original page in Back history.
+    // Further filter/search changes replace the current filtered entry.
+    // Back starts a fresh filtering cycle. ds_tab is ignored as a filter.
+    (function () {
+      var HISTORY_KEY = "davischool_filter_history:" + (window.location.pathname || "/");
+      function appPage(path) {
+        return path === "/app" || path.indexOf("/app/") === 0 ||
+               path === "/school" || path.indexOf("/school/") === 0;
+      }
+      function realQuery(url) {
+        var yes = false;
+        url.searchParams.forEach(function (_, key) { if (key !== "ds_tab") yes = true; });
+        return yes;
+      }
+      function started() {
+        try { return sessionStorage.getItem(HISTORY_KEY) === "1"; } catch (_) { return false; }
+      }
+      function reset() {
+        try { sessionStorage.removeItem(HISTORY_KEY); } catch (_) {}
+      }
+      function filteredNavigate(url) {
+        if (url.origin !== window.location.origin ||
+            url.pathname !== window.location.pathname ||
+            !appPage(url.pathname) || !realQuery(url)) return false;
+        var destination = url.pathname + url.search + url.hash;
+        if (started()) {
+          window.location.replace(destination);
+        } else {
+          try { sessionStorage.setItem(HISTORY_KEY, "1"); } catch (_) {}
+          window.location.href = destination;
+        }
+        return true;
+      }
+
+      document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form || String(form.method || "get").toLowerCase() !== "get") return;
+        if (form.hasAttribute("data-native-get") || form.hasAttribute("data-no-history-filter")) return;
+        try {
+          var action = form.getAttribute("action") || window.location.href;
+          var url = new URL(action, window.location.href);
+          if (url.origin !== window.location.origin ||
+              url.pathname !== window.location.pathname || !appPage(url.pathname)) return;
+          var data = new FormData(form);
+          var params = new URLSearchParams();
+          var hasFilter = false;
+          data.forEach(function (value, key) {
+            params.append(key, value);
+            if (key !== "ds_tab") hasFilter = true;
+          });
+          if (!hasFilter) return;
+          url.search = params.toString();
+          if (filteredNavigate(url)) event.preventDefault();
+        } catch (_) {}
+      }, true);
+
+      document.addEventListener("click", function (event) {
+        var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+        if (!link || event.defaultPrevented) return;
+        if (link.hasAttribute("data-native-get") || link.hasAttribute("data-no-history-filter")) return;
+        if (link.target === "_blank" || link.hasAttribute("download")) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        try {
+          var url = new URL(link.href, window.location.href);
+          if (filteredNavigate(url)) event.preventDefault();
+        } catch (_) {}
+      }, true);
+
+      window.addEventListener("popstate", reset);
+      window.addEventListener("pageshow", function (event) { if (event.persisted) reset(); });
+    })();
+
     // Keep an open authenticated tab alive independently of clicks on its
     // dashboard tiles. The server idle timer is based on the tab session, so
     // a page that remains open must periodically refresh that session even
