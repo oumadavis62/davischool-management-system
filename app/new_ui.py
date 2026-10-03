@@ -6240,16 +6240,31 @@ def subjects_delete(request: Request, subject_id: int):
     row=cur.execute("SELECT id,name FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not row:
         con.close();return HTMLResponse("Subject not found. <a href='/app/subjects'>Back</a>",404)
+    subject_name=str(row["name"] or subject_id)
     try:
         cur.execute("DELETE FROM subjects WHERE id=? AND school_id=?",(subject_id,sid))
-        _audit(cur,sid,request,"SUBJECT_DELETE",str(row["name"] or subject_id))
         con.commit()
     except Exception as exc:
         try: con.rollback()
         except Exception: pass
         con.close()
-        return HTMLResponse("Unable to delete this subject because it is still referenced by other school records. Please remove those references first.<br><br><b>Technical detail:</b> " + escape(str(exc)), 409)
+        return HTMLResponse("Unable to delete this subject.<br><br><b>Technical detail:</b> " + escape(str(exc)), 409)
     con.close()
+
+    # Audit logging must never be allowed to undo a successful subject deletion.
+    try:
+        audit_con=_db(); audit_cur=audit_con.cursor()
+        try:
+            _audit(audit_cur,sid,request,"SUBJECT_DELETE",subject_name)
+            audit_con.commit()
+        except Exception:
+            try: audit_con.rollback()
+            except Exception: pass
+        finally:
+            audit_con.close()
+    except Exception:
+        pass
+
     return RedirectResponse("/app/subjects",303)
 
 @router.get("/app/exams", response_class=HTMLResponse)
