@@ -221,6 +221,7 @@ class DaviSchoolTabSessionMiddleware:
         } catch (_) {}
       }, true);
 
+      if (!realQuery(new URL(window.location.href))) reset();
       window.addEventListener("popstate", reset);
       window.addEventListener("pageshow", function (event) { if (event.persisted) reset(); });
     })();
