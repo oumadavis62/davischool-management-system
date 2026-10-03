@@ -4714,7 +4714,7 @@ def assessments_page(request: Request, student_id: str = "", subject_id: str = "
 <input name='component' required placeholder='CAT 1 / Project / SBA' class='field'>
 <input name='score' required type='number' min='0' step='0.01' placeholder='Score' class='field'>
 <input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'>
-<button class='btn'>Save Assessment</button></form></div>
+<button class='btn' type='submit'>Save Assessment</button></form></div>
 <div class='card section'><h2>Assessment records</h2>
 <table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th><th>Actions</th></tr></thead>
 <tbody>{tr or '<tr><td colspan=9>No assessment records yet.</td></tr>'}</tbody></table></div></div>
@@ -4894,10 +4894,22 @@ def assessments_add(
                 datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
-        _audit(cur, sid, request, "ASSESSMENT_SAVE", f"Saved {component_v} for student {student_id}")
+        # Commit the assessment itself before writing the optional audit entry.
+        # This prevents an audit-table problem from rolling back a valid assessment save.
         con.commit()
     finally:
         con.close()
+
+    try:
+        audit_con = _db()
+        try:
+            _audit(audit_con.cursor(), sid, request, "ASSESSMENT_SAVE", f"Saved {component_v} for student {student_id}")
+            audit_con.commit()
+        finally:
+            audit_con.close()
+    except Exception as audit_exc:
+        print("DAVISCHOOL ASSESSMENT AUDIT WARNING: %r" % (audit_exc,), flush=True)
+
     return RedirectResponse("/app/academics/assessments", 303)
 
 
