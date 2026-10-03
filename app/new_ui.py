@@ -2892,6 +2892,8 @@ def grading_setup(request: Request, subject_id: str = ""):
             "SELECT id FROM subjects WHERE id=? AND school_id=?", (subid, sid)
         ).fetchone():
             subid = 0
+        if subid:
+            request.session["grading_subject_id"] = subid
         try:
             rules = cur.execute(
             """SELECT * FROM subject_grading_rules
@@ -2950,7 +2952,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         + sopts +
         "</select><button class='btn'>Load Subject</button></form></div>"
         "<div class='card section'><h2>Add grading rule</h2>"
-        "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' onsubmit='this.submit(); return false;' "
+        "<form method='post' action='/app/academics/grading/add' onsubmit='this.submit(); return false;' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
         "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
@@ -2958,7 +2960,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
         "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
-        "<button type='submit' formaction='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
+        "<button type='submit' formaction='/app/academics/grading/add' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
         "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
@@ -3013,7 +3015,12 @@ def grading_add(request: Request, subject_id: int = Form(0), min_mark: float = F
             referer_subject_id = int(match.group(1)) if match else 0
         except Exception:
             referer_subject_id = 0
-        for candidate in (query_subject_id, referer_subject_id):
+        session_subject_id = 0
+        try:
+            session_subject_id = int(request.session.get("grading_subject_id") or 0)
+        except Exception:
+            session_subject_id = 0
+        for candidate in (query_subject_id, referer_subject_id, session_subject_id):
             if candidate:
                 candidate_row = cur.execute(
                     "SELECT id FROM subjects WHERE id=? AND school_id=?", (candidate, sid)
