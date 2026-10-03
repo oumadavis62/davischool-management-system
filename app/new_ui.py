@@ -477,37 +477,10 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       return current!=='/' && current===next;
     }}
 
-    // Replace only same-workspace navigation. Cross-workspace navigation keeps
-    // normal Back/Forward behavior.
-    document.addEventListener('click',function(event){{
-      if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
-      var link=event.target && event.target.closest ? event.target.closest('a[href]') : null;
-      if(!link || link.target==='_blank' || link.hasAttribute('download'))return;
-      var href=link.getAttribute('href')||'';
-      if(!href || href.charAt(0)==='#' || /^(mailto|tel|javascript):/i.test(href))return;
-      var target=internalUrl(href);
-      if(!target || !shouldReplace(target))return;
-      event.preventDefault();
-      window.location.replace(target.pathname+target.search+target.hash);
-    }},true);
-
-    // GET filter/search/tab forms are also state changes within the same
-    // workspace and should not accumulate one history entry per selection.
-    document.addEventListener('submit',function(event){{
-      var form=event.target;
-      if(!form || String(form.method||'get').toLowerCase()!=='get')return;
-      if(form.target==='_blank' || form.hasAttribute('download'))return;
-      var action=form.getAttribute('action')||window.location.href;
-      var target=internalUrl(action);
-      if(!target || !shouldReplace(target))return;
-      event.preventDefault();
-      try{{
-        var params=new URLSearchParams(new FormData(form));
-        target.search=params.toString();
-      }}catch(e){{return;}}
-      window.location.replace(target.pathname+target.search+target.hash);
-    }},true);
-
+    // Normal links and GET filter/search forms intentionally keep a history entry.
+    // This preserves the original page display when the user presses Back after
+    // viewing, filtering, editing, or entering a record. Routine POST saves are
+    // handled below with replace() so repeated saves do not create long chains.
     // If the current document was reached through an old same-workspace
     // history chain, pressing Back may expose another identical workspace
     // entry. Skip only consecutive entries whose pathname belongs to the same
