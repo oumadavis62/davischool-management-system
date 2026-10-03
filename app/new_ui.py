@@ -519,8 +519,14 @@ document.addEventListener('submit',function(event){{
     data.forEach(function(value,key){{params.append(key,value);}});
     url.search=params.toString();
     var pathKey='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasRealCurrentQuery=true;}});
     var started=false;
-    try{{started=sessionStorage.getItem(pathKey)==='1';}}catch(e){{}}
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(pathKey);
+      started=sessionStorage.getItem(pathKey)==='1';
+    }}catch(e){{}}
     event.preventDefault();
     if(!started){{
       try{{sessionStorage.setItem(pathKey,'1');}}catch(e){{}}
