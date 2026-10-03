@@ -2944,7 +2944,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<div class='page'><h1>Subject Grading & Points</h1>"
         "<div class='muted'>Set the grade band and points for each subject. "
         "These rules are applied automatically when marks are entered and when class marksheets are generated.</div>"
-        "<div class='card section'><form method='get' action='/app/academics/grading' "
+        "<div class='card section'><form method='get' action='/app/academics/grading" + current_ds_tab_q + ""
         "style='display:grid;grid-template-columns:1fr auto;gap:10px'>"
         "<select name='subject_id' class='field' required><option value=''>Select subject</option>"
         + sopts +
@@ -2952,7 +2952,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<div class='card section'><h2>Add grading rule</h2>"
         "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
-        "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
+        "<label style='grid-column:1/-1;font-weight:700'>Subject<select name='subject_id' required class='field'>" + "<option value=''>Select subject</option>" + sopts + "</select></label>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
         "<input name='max_mark' required type='number' min='0' max='100' step='0.01' placeholder='Maximum mark' class='field'>"
         "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
