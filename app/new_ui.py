@@ -3179,7 +3179,7 @@ def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
         "<input name='grade' required value='%s' placeholder='Grade e.g. A' class='field'>"
         "<input name='points' required type='number' min='0' step='0.01' value='%s' placeholder='Points' class='field'>"
         "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='3' placeholder='Performance comment for this grade band' class='field'>%s</textarea></div>"
-        "<div style='grid-column:1/-1'><button class='btn' type='submit' formaction='/app/academics/grading/edit/%s' formmethod='post'>💾 Save Changes</button> "
+        "<div style='grid-column:1/-1'><button class='btn' type='submit'>💾 Save Changes</button> "
         "<a class='btnlink' href='/app/academics/grading?subject_id=%s'>Cancel</a></div>"
         "</form></div></div>"
         "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style></div>"
