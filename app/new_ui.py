@@ -4557,7 +4557,7 @@ def marks_correction_requests(request: Request):
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
 <tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
-<div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear?ds_tab={quote(str(request.query_params.get("ds_tab") or ""),safe="")}' data-native-post='1' style='display:inline' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or ""))}'><button class='btnlink' type='submit' formaction='/app/academics/marks-corrections/clear?ds_tab={quote(str(request.query_params.get("ds_tab") or ""),safe="")}' formmethod='post' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
+<div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear' data-native-post='1' data-no-history-filter='1' style='display:inline' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><button class='btnlink' type='submit' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
 <div class='muted' style='margin:10px 0'>Requests submitted by teachers remain available here for review.</div>
 <div style='overflow-x:auto'>
 <table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
@@ -4639,8 +4639,10 @@ def clear_marks_correction_requests(request: Request, ds_tab: str = Form("")):
     finally:
         con.close()
 
-    tab_suffix=("&ds_tab="+quote(tab_value,safe="")) if tab_value else ""
-    return RedirectResponse("/app/academics/marks-corrections"+tab_suffix,303)
+    # Return to the canonical Marks Corrections route. Do not append the
+    # isolated-tab identifier here: the clear action is a destructive POST and
+    # the authenticated school session must remain the sole source of identity.
+    return RedirectResponse("/app/academics/marks-corrections",303)
 
 @router.post("/app/academics/marks-corrections/reject")
 def reject_marks_correction(request: Request, request_id:int=Form(...)):
