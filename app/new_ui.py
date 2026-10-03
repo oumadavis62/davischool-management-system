@@ -4685,9 +4685,24 @@ def assessments_page(request: Request, student_id: str = "", subject_id: str = "
         f"<option value='{s['id']}' {'selected' if int(s['id']) == stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>"
         for s in students
     )
-    tr = _simple_rows(
-        rows,
-        ["student_id", "subject_name", "term", "year", "component", "score", "out_of", "created_at"],
+    tr = "".join(
+        f"<tr>"
+        f"<td>{escape(str(r['student_id']))}</td>"
+        f"<td>{escape(str(r['subject_name']))}</td>"
+        f"<td>{escape(str(r['term']))}</td>"
+        f"<td>{escape(str(r['year']))}</td>"
+        f"<td>{escape(str(r['component']))}</td>"
+        f"<td>{escape(str(r['score']))}</td>"
+        f"<td>{escape(str(r['out_of']))}</td>"
+        f"<td>{escape(str(r['created_at'] or ''))}</td>"
+        f"<td style='white-space:nowrap'>"
+        f"<a class='btnlink' href='/app/academics/assessments/edit?assessment_id={int(r['id'])}'>Edit</a> "
+        f"<form method='post' action='/app/academics/assessments/delete' style='display:inline' "
+        f"onsubmit=\"return confirm('Delete this assessment record? This cannot be undone.');\">"
+        f"<input type='hidden' name='assessment_id' value='{int(r['id'])}'>"
+        f"<button class='btndanger' type='submit'>Delete</button></form>"
+        f"</td></tr>"
+        for r in rows
     )
     body = f"""<div class='page'><h1>SBA / CBA</h1>
 <div class='muted'>Record continuous assessment components separately from examination marks.</div>
@@ -4701,10 +4716,124 @@ def assessments_page(request: Request, student_id: str = "", subject_id: str = "
 <input name='out_of' required type='number' min='1' step='0.01' value='100' placeholder='Out of' class='field'>
 <button class='btn'>Save Assessment</button></form></div>
 <div class='card section'><h2>Assessment records</h2>
-<table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th></tr></thead>
-<tbody>{tr or '<tr><td colspan=8>No assessment records yet.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+<table><thead><tr><th>Student ID</th><th>Subject</th><th>Term</th><th>Year</th><th>Component</th><th>Score</th><th>Out Of</th><th>Created</th><th>Actions</th></tr></thead>
+<tbody>{tr or '<tr><td colspan=9>No assessment records yet.</td></tr>'}</tbody></table></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn,.btnlink{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;display:inline-block;cursor:pointer}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}.btndanger{{padding:8px 12px;border:1px solid #fecaca;border-radius:8px;background:#fff;color:#b91c1c;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "SBA / CBA", body)
+
+
+@router.get("/app/academics/assessments/edit", response_class=HTMLResponse)
+def assessments_edit_page(request: Request, assessment_id: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage SBA / CBA assessments.", 403)
+    if not str(assessment_id).isdigit():
+        return HTMLResponse("Invalid assessment record. <a href='/app/academics/assessments'>Back</a>", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_assessment_table(cur)
+        row = cur.execute(
+            """SELECT a.*, s.name subject_name, st.name student_name, st.admission_no
+               FROM assessment_scores a
+               JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+               JOIN students st ON st.id=a.student_id AND st.school_id=a.school_id
+               WHERE a.id=? AND a.school_id=?""",
+            (int(assessment_id), sid),
+        ).fetchone()
+    finally:
+        con.close()
+    if not row:
+        return HTMLResponse("Assessment record not found. <a href='/app/academics/assessments'>Back</a>", 404)
+    body = f"""<div class='page'><h1>Edit SBA / CBA Assessment</h1>
+<div class='card section'><div class='muted' style='margin-bottom:12px'>Student: <b>{escape(str(row['student_name']))}</b> ({escape(str(row['admission_no'] or ''))}) &nbsp;|&nbsp; Subject: <b>{escape(str(row['subject_name']))}</b></div>
+<form method='post' action='/app/academics/assessments/edit' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'>
+<input type='hidden' name='assessment_id' value='{int(row['id'])}'>
+<input name='term' required value='{escape(str(row['term'] or ''))}' class='field'>
+<input name='year' required value='{escape(str(row['year'] or ''))}' class='field'>
+<input name='component' required value='{escape(str(row['component'] or ''))}' class='field'>
+<input name='score' required type='number' min='0' step='0.01' value='{float(row['score'] or 0):g}' class='field'>
+<input name='out_of' required type='number' min='1' step='0.01' value='{float(row['out_of'] or 0):g}' class='field'>
+<div style='grid-column:1/-1'><button class='btn' type='submit'>Save Changes</button> <a class='btnlink' href='/app/academics/assessments'>Cancel</a></div>
+</form></div></div>
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn,.btnlink{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;display:inline-block;cursor:pointer}}.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}</style>"""
+    return _school_page(request, "Edit SBA / CBA Assessment", body)
+
+
+@router.post("/app/academics/assessments/edit")
+def assessments_edit(
+    request: Request,
+    assessment_id: int = Form(...),
+    term: str = Form(...),
+    year: str = Form(...),
+    component: str = Form(...),
+    score: float = Form(...),
+    out_of: float = Form(...),
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage SBA / CBA assessments.", 403)
+    term_v, year_v, component_v = term.strip(), year.strip(), component.strip()
+    if not term_v or not year_v or not component_v or out_of <= 0 or score < 0 or score > out_of:
+        return HTMLResponse("Invalid assessment details or score. <a href='/app/academics/assessments'>Back</a>", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_assessment_table(cur)
+        row = cur.execute(
+            "SELECT id,student_id,subject_id FROM assessment_scores WHERE id=? AND school_id=?",
+            (assessment_id, sid),
+        ).fetchone()
+        if not row:
+            return HTMLResponse("Assessment record not found. <a href='/app/academics/assessments'>Back</a>", 404)
+        duplicate = cur.execute(
+            """SELECT id FROM assessment_scores
+               WHERE school_id=? AND student_id=? AND subject_id=? AND term=? AND year=?
+                 AND lower(component)=lower(?) AND id<>? LIMIT 1""",
+            (sid, row["student_id"], row["subject_id"], term_v, year_v, component_v, assessment_id),
+        ).fetchone()
+        if duplicate:
+            return HTMLResponse("This assessment component already exists for the selected student, subject, term and year. <a href='/app/academics/assessments'>Back</a>", 400)
+        cur.execute(
+            """UPDATE assessment_scores
+               SET term=?, year=?, component=?, score=?, out_of=?
+               WHERE id=? AND school_id=?""",
+            (term_v, year_v, component_v, score, out_of, assessment_id, sid),
+        )
+        _audit(cur, sid, request, "ASSESSMENT_EDIT", f"Edited assessment {assessment_id}")
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/academics/assessments", 303)
+
+
+@router.post("/app/academics/assessments/delete")
+def assessments_delete(request: Request, assessment_id: int = Form(...)):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "marks.edit"):
+        return HTMLResponse("You do not have permission to manage SBA / CBA assessments.", 403)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_assessment_table(cur)
+        row = cur.execute(
+            "SELECT id,component,student_id FROM assessment_scores WHERE id=? AND school_id=?",
+            (assessment_id, sid),
+        ).fetchone()
+        if not row:
+            return HTMLResponse("Assessment record not found. <a href='/app/academics/assessments'>Back</a>", 404)
+        cur.execute("DELETE FROM assessment_scores WHERE id=? AND school_id=?", (assessment_id, sid))
+        _audit(cur, sid, request, "ASSESSMENT_DELETE", f"Deleted assessment {assessment_id} ({row['component']})")
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/academics/assessments", 303)
 
 
 @router.post("/app/academics/assessments/add")
