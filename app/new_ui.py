@@ -450,7 +450,8 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0)return;
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 ||
+       path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
@@ -6194,7 +6195,7 @@ def subjects_add(request: Request,name:str=Form(...),code:str=Form(""),initial:s
     if code_v and cur.execute("SELECT id FROM subjects WHERE school_id=? AND lower(code)=lower(?)",(sid,code_v)).fetchone():
         con.close();return HTMLResponse("That subject code already exists in this school. <a href='/app/subjects'>Back</a>",400)
     cur.execute("INSERT INTO subjects(school_id,name,code,initial) VALUES(?,?,?,?)",(sid,name_v,code_v,initial_v))
-    _audit(cur,sid,request,"SUBJECT_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/subjects",303)
+    _audit(cur,sid,request,"SUBJECT_CREATE",name_v);con.commit();con.close();return RedirectResponse("/app/subjects" + (("?ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""),303)
 @router.get("/app/subjects/edit/{subject_id}", response_class=HTMLResponse)
 def subjects_edit_page(request: Request, subject_id: int):
     sid=_school_session(request)
