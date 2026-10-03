@@ -558,8 +558,14 @@ document.addEventListener('click',function(event){{
     if(url.origin!==window.location.origin || url.pathname!==window.location.pathname || !url.search)return;
     if(url.pathname.indexOf('/app')!==0)return;
     var key='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,keyName){{if(keyName!=='ds_tab')hasRealCurrentQuery=true;}});
     var started=false;
-    try{{started=sessionStorage.getItem(key)==='1';}}catch(e){{}}
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(key);
+      started=sessionStorage.getItem(key)==='1';
+    }}catch(e){{}}
     event.preventDefault();
     if(!started){{
       try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
