@@ -2950,7 +2950,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         + sopts +
         "</select><button class='btn'>Load Subject</button></form></div>"
         "<div class='card section'><h2>Add grading rule</h2>"
-        "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' "
+        "<form method='post' action='/app/academics/grading/add?subject_id=" + str(subid) + (("&ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else "") + "' onsubmit='this.submit(); return false;' "
         "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
         "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
         "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
