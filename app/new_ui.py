@@ -450,7 +450,7 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
     // Preserve normal browser navigation for downloads/print/PDF actions.
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 ||
+    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 ||
        path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
@@ -6072,23 +6072,30 @@ def classes_page(request: Request):
         )
         for t in teachers
     )
+    current_ds_tab=str(request.query_params.get("ds_tab") or "").strip()
+    current_ds_tab_q=("?" + "ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else ""
     trs="".join(
         "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><form method='post' action='/app/classes/class-teacher' onsubmit='this.submit(); return false;' style='display:flex;gap:7px;align-items:center;flex-wrap:wrap'>"
         "<input type='hidden' name='class_id' value='%s'><select name='teacher_id' class='field teacher-select' required><option value=''>Select Class Teacher</option>%s</select>"
-        "<button class='btn teacher-btn'>👨‍🏫 Set Class Teacher</button></form></td></tr>" % (
+        "<button class='btn teacher-btn'>👨‍🏫 Set Class Teacher</button></form></td><td class='class-actions'><a class='btn edit' href='/app/classes/edit/%s%s'>Edit</a> "
+        "<form method='post' action='/app/classes/delete/%s%s' style='display:inline' onsubmit='if(!confirm(&quot;Delete this class/stream? This action cannot be undone.&quot;)) return false; this.submit(); return false;'>"
+        "<button type='submit' formaction='/app/classes/delete/%s%s' formmethod='post' class='btn danger'>Delete</button></form></td></tr>" % (
             escape(str(x["name"])),
             escape(str(x["level"] or "")),
             escape(str(x["stream"] or "")),
             escape(str(next((t["name"] for t in teachers if int(t["id"])==assigned_by_class.get(int(x["id"]),-1)), "Not Assigned"))),
             x["id"],
-            teacher_options(assigned_by_class.get(int(x["id"])))
+            teacher_options(assigned_by_class.get(int(x["id"]))),
+            x["id"], current_ds_tab_q,
+            x["id"], current_ds_tab_q,
+            x["id"], current_ds_tab_q
         )
         for x in rows
     )
     body=f"""<div class='page'><h1>Classes & Streams</h1>
 <div class='card section'><div class='classes-filter-scroll' tabindex='0'><form method='post' action='/app/classes/add' class='classes-filter-form'><input name='name' required placeholder='Class name e.g. Grade 6' class='field'><select name='level' class='field'><option value=''>Select level</option><option>Pre-Primary</option><option>Lower Primary</option><option>Upper Primary</option><option>Junior Secondary</option><option>Senior Secondary</option><option>College</option><option>Other</option></select><input name='stream' placeholder='Stream' class='field'><button class='btn'>Add Class</button></form></div></div>
 <div class='card section'><h2>👨‍🏫 Class Teachers</h2><div class='muted'>Select a teacher for each class or stream. The selected teacher is automatically used as the Class Teacher on that class's report cards, including the name and signature line.</div>
-<div class='marksheet-scroll classes-table-scroll' tabindex='0'><table class='classes-table'><thead><tr><th>Name</th><th>Level</th><th>Stream</th><th>Current Class Teacher</th><th>Set Class Teacher</th></tr></thead><tbody>{trs or '<tr><td colspan=5>No classes.</td></tr>'}</tbody></table></div></div></div>
+<div class='marksheet-scroll classes-table-scroll' tabindex='0'><table class='classes-table'><thead><tr><th>Name</th><th>Level</th><th>Stream</th><th>Current Class Teacher</th><th>Set Class Teacher</th><th>Actions</th></tr></thead><tbody>{trs or '<tr><td colspan=6>No classes.</td></tr>'}</tbody></table></div></div></div>
 <style>.classes-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.classes-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.classes-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.classes-table{{width:max-content;min-width:900px}}.subject-actions{{white-space:nowrap}}.edit{{background:#176B3A!important;color:#fff!important;text-decoration:none;display:inline-block;margin-right:6px}}.danger{{background:#b91c1c!important;color:#fff!important;cursor:pointer}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;cursor:pointer}}.teacher-select{{min-width:220px}}.teacher-btn{{white-space:nowrap}}</style>"""
     return _school_page(request,"Classes",body)
 
@@ -6124,6 +6131,73 @@ def classes_add(request: Request, name: str = Form(...), level: str = Form(""), 
     finally:
         con.close()
     return RedirectResponse("/app/classes", 303)
+
+@router.get("/app/classes/edit/{class_id}", response_class=HTMLResponse)
+def classes_edit_page(request: Request, class_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request, sid, "classes.create"):
+        return HTMLResponse("You do not have permission to edit classes.",403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name,level,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    con.close()
+    if not row:return HTMLResponse("Class/stream not found. <a href='/app/classes'>Back</a>",404)
+    body=f"""<div class='page'><h1>Edit Class / Stream</h1><div class='card section'><div class='marksheet-scroll class-edit-scroll' tabindex='0'><form method='post' action='/app/classes/edit/{class_id}' class='class-edit-form'><input name='name' required class='field' value='{escape(str(row["name"] or ""),quote=True)}' placeholder='Class name'><select name='level' class='field'><option value=''>Select level</option>{''.join("<option selected" if str(row["level"] or "")==v else "<option" for v in ["Pre-Primary","Lower Primary","Upper Primary","Junior Secondary","Senior Secondary","College","Other"])}></select><input name='stream' class='field' value='{escape(str(row["stream"] or ""),quote=True)}' placeholder='Stream'><button class='btn'>Save Changes</button><a class='btn secondary' href='/app/classes'>Cancel</a></form></div></div><style>.class-edit-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.class-edit-form{{display:grid;grid-template-columns:260px 220px 180px auto auto;gap:10px;width:max-content;min-width:100%}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.secondary{{background:#64748b}}</style></div>"""
+    return _school_page(request,"Edit Class / Stream",body)
+
+@router.post("/app/classes/edit/{class_id}")
+def classes_edit(request: Request,class_id:int,name:str=Form(...),level:str=Form(""),stream:str=Form("")):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"classes.create"):
+        return HTMLResponse("You do not have permission to edit classes.",403)
+    name_v=name.strip(); level_v=level.strip(); stream_v=stream.strip()
+    if not name_v:return HTMLResponse("Class name is required. <a href='/app/classes'>Back</a>",400)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    if not row: con.close(); return HTMLResponse("Class/stream not found. <a href='/app/classes'>Back</a>",404)
+    dup=cur.execute("SELECT id FROM classes WHERE school_id=? AND id<>? AND lower(name)=lower(?) AND lower(COALESCE(stream,''))=lower(?)",(sid,class_id,name_v,stream_v)).fetchone()
+    if dup: con.close(); return HTMLResponse("That class/stream already exists in this school. <a href='/app/classes'>Back</a>",400)
+    try:
+        cur.execute("UPDATE classes SET name=?,level=?,stream=? WHERE id=? AND school_id=?",(name_v,level_v,stream_v,class_id,sid))
+        _audit(cur,sid,request,"CLASS_EDIT","Edited class %s"%(class_id,))
+        con.commit()
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        con.close()
+        return HTMLResponse("Unable to update this class.<br><br><b>Technical detail:</b> "+escape(str(exc)),409)
+    con.close()
+    return RedirectResponse("/app/classes",303)
+
+@router.post("/app/classes/delete/{class_id}")
+def classes_delete(request: Request,class_id:int):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"classes.create"):
+        return HTMLResponse("You do not have permission to delete classes.",403)
+    con=_db();cur=con.cursor()
+    row=cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    if not row: con.close(); return HTMLResponse("Class/stream not found. <a href='/app/classes'>Back</a>",404)
+    try:
+        cur.execute("DELETE FROM classes WHERE id=? AND school_id=?",(class_id,sid))
+        con.commit()
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        con.close()
+        return HTMLResponse("Unable to delete this class/stream.<br><br><b>Technical detail:</b> "+escape(str(exc)),409)
+    con.close()
+    try:
+        audit_con=_db(); audit_cur=audit_con.cursor()
+        try:
+            _audit(audit_cur,sid,request,"CLASS_DELETE","Deleted class %s"%(class_id,)); audit_con.commit()
+        except Exception:
+            try: audit_con.rollback()
+            except Exception: pass
+        finally: audit_con.close()
+    except Exception: pass
+    return RedirectResponse("/app/classes",303)
 
 @router.post("/app/classes/class-teacher")
 def classes_class_teacher(request: Request,class_id:int=Form(...),teacher_id:int=Form(...)):
