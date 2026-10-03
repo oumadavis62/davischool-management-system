@@ -539,6 +539,31 @@ window.addEventListener('popstate',function(){{
     sessionStorage.removeItem('davischool-marksheet-filter-started');
   }}catch(e){{}}
 }});
+// Query-string links on the same page are treated as filter/display changes.
+// The first such link preserves the unfiltered page; subsequent changes replace
+// the current filtered display instead of creating additional Back entries.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a') : null;
+  if(!link || event.defaultPrevented)return;
+  if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
+  if(link.target==='_blank' || link.hasAttribute('download'))return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin!==window.location.origin || url.pathname!==window.location.pathname || !url.search)return;
+    if(url.pathname.indexOf('/app')!==0)return;
+    var key='davischool-filter-started:'+window.location.pathname;
+    var started=false;
+    try{{started=sessionStorage.getItem(key)==='1';}}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
+      window.location.href=url.toString();
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{}}
+}},true);
+
 // MarkSheet pagination changes the displayed page within the same workspace.
 // Replace that navigation entry so Back does not replay every MarkSheet page
 // visited while browsing the student list.
