@@ -3279,20 +3279,52 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
+
     con = _db()
     cur = con.cursor()
-    _ensure_grading_table(cur)
-    row = cur.execute(
-        "SELECT * FROM subject_grading_rules WHERE id=? AND school_id=?",
-        (rule_id, sid)
-    ).fetchone()
-    if row:
-        cur.execute("DELETE FROM subject_grading_rules WHERE id=? AND school_id=?", (rule_id, sid))
+    try:
+        # Do not run schema migration/ALTER statements here. The grading page
+        # already prepares this table; delete must operate directly on the
+        # existing production table so a migration issue cannot block deletion.
+        row = cur.execute(
+            "SELECT id FROM subject_grading_rules WHERE id=? AND school_id=?",
+            (rule_id, sid)
+        ).fetchone()
+        if not row:
+            con.rollback()
+            return HTMLResponse(
+                "The selected grading rule was not found for this school. "
+                "<a href='/app/academics/grading?subject_id=%s'>Back to Subject Grading</a>" % subject_id,
+                404
+            )
+        cur.execute(
+            "DELETE FROM subject_grading_rules WHERE id=? AND school_id=?",
+            (rule_id, sid)
+        )
         _audit(cur, sid, request, "GRADING_RULE_DELETE",
                "Deleted grading rule %s" % rule_id)
-    con.commit()
-    con.close()
-    return RedirectResponse("/app/academics/grading?subject_id=%s" % subject_id, 303)
+        con.commit()
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print("DAVISCHOOL GRADING DELETE ERROR:", repr(exc), flush=True)
+        return HTMLResponse(
+            "Unable to delete the grading rule. Technical detail: %s "
+            "<br><a href='/app/academics/grading?subject_id=%s'>Back to Subject Grading</a>"
+            % (escape(str(exc))[:500], subject_id),
+            500
+        )
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+    return RedirectResponse(
+        "/app/academics/grading?subject_id=%s" % subject_id,
+        303
+    )
 
 def _ensure_teacher_mark_drafts_table(cur):
     """Create the private teacher draft store without touching published marks."""
