@@ -3192,6 +3192,7 @@ def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
         escape(str(row["grade"] or "")),
         escape(str(row["points"] or 0)),
         escape(str(row["performance_comment"] or "")),
+        rule_id,
         sid_for_form
     )
     return _school_page(request, "Edit Grading Rule", body)
