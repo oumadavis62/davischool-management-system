@@ -2343,6 +2343,7 @@ def class_marksheets_pdf(
 
 @router.get("/app/academics/blank-marksheet", response_class=HTMLResponse)
 def blank_marksheet(request: Request, exam_id: str = "", class_id: str = "", stream: str = ""):
+    tab_id = request.query_params.get("ds_tab", "")
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
