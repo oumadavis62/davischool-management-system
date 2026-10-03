@@ -4654,13 +4654,16 @@ def teacher_allocations_edit(request: Request, allocation_id:int, teacher_id:int
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.edit"):return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
-    if not cur.execute("SELECT id FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid)).fetchone():
+    allocation=cur.execute("SELECT id,teacher_id,class_id,subject_id FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid)).fetchone()
+    if not allocation:
         con.close();return HTMLResponse("Teacher allocation not found. <a href='/app/academics/allocations'>Back</a>",404)
     if not (cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()):
         con.close();return HTMLResponse("Invalid selection. <a href='/app/academics/allocations'>Back</a>",400)
-    duplicate=cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? AND id<>?",(sid,teacher_id,class_id,subject_id,allocation_id)).fetchone()
-    if duplicate:
-        con.close();return HTMLResponse("That teacher allocation already exists. <a href='/app/academics/allocations'>Back</a>",400)
+    unchanged=(int(allocation["teacher_id"])==int(teacher_id) and int(allocation["class_id"])==int(class_id) and int(allocation["subject_id"])==int(subject_id))
+    if not unchanged:
+        duplicate=cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? AND id<>?",(sid,teacher_id,class_id,subject_id,allocation_id)).fetchone()
+        if duplicate:
+            con.close();return HTMLResponse("That teacher allocation already exists. <a href='/app/academics/allocations'>Back</a>",400)
     cur.execute("UPDATE teacher_allocations SET teacher_id=?,class_id=?,subject_id=? WHERE id=? AND school_id=?",(teacher_id,class_id,subject_id,allocation_id,sid))
     _audit(cur,sid,request,"TEACHER_ALLOCATION_EDIT","Edited teacher allocation %s"%(allocation_id,))
     con.commit();con.close()
