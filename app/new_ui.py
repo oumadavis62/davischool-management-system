@@ -3005,10 +3005,27 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 <script>
 function toggleOverviewHealth(card){{
   if(!card)return;
-  const open=card.classList.toggle('expanded');
+  const open=!card.classList.contains('expanded');
+  card.classList.toggle('expanded',open);
   card.setAttribute('aria-expanded',open?'true':'false');
   document.body.style.overflow=open?'hidden':'';
+  try{{
+    if(open){{
+      var state=(history.state&&typeof history.state==='object')?history.state:{{}};
+      history.pushState(Object.assign({{}},state,{{daviHealthExpanded:true}}),'',window.location.href);
+    }}else if(history.state&&history.state.daviHealthExpanded){{
+      history.back();
+    }}
+  }}catch(e){{}}
 }}
+window.addEventListener('popstate',function(event){{
+  var card=document.querySelector('.overview-health-card.expanded');
+  if(card&&!(event.state&&event.state.daviHealthExpanded)){{
+    card.classList.remove('expanded');
+    card.setAttribute('aria-expanded','false');
+    document.body.style.overflow='';
+  }}
+}});
 </script>"""
 
 @router.get("/app", response_class=HTMLResponse)
