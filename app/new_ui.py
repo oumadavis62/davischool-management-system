@@ -6558,7 +6558,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.
     if role=="school_admin":
         return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)
-    con=_db();cursorsor=con.cursor()
+    con=_db();cur=con.cursor()
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
