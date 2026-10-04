@@ -863,8 +863,8 @@ def staff_page(request: Request):
 <select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select>
 <input name='department' placeholder='Department / responsibility' class='field'><button class='btn'>Save Staff</button></form></div>
 <div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><h2>Staff register ({len(staff)})</h2><a class='action' href='/app/academics/allocations'>Teacher Allocation</a></div>
-<table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
+<div class='staff-table-scroll'><table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div></div>
+<style>.staff-table-scroll{{width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;scrollbar-width:thin}}.staff-table-scroll table{{min-width:900px}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
     return _school_page(request,"Staff & Teachers",body)
 
 @router.post("/app/staff/add")
