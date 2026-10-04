@@ -3155,21 +3155,39 @@ def app_home(request: Request):
             ]
             tile_html=""
             for title,icon,value,detail in hover_tiles:
-                href=" href='/app/academics/marks'" if title=="Record Marks" else ""
-                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} onclick='toggleTeacherTile(event,this)' aria-pressed='false' style='text-decoration:none;color:inherit'>
+                tile_href="/app/academics/marks" if title=="Record Marks" else ""
+                tile_html+=f"""<div class='teacher-hover-tile' title='{escape(detail)}' data-href='{escape(tile_href)}' role='button' tabindex='0' onclick='toggleTeacherTile(event,this)' onkeydown='if(event.key==="Enter"||event.key===" "){{event.preventDefault();toggleTeacherTile(event,this)}}' aria-pressed='false'>
 <div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
-<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
+<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></div>"""
 
+            # Marks need attention only while one or more allocated subject/class
+            # combinations are still open for editing. Once a subject is locked/finalized,
+            # its missing marks are considered finalized as part of that submission.
+            open_mark_subjects=0
+            if teacher_class_ids and teacher_subject_ids and latest_exam_id:
+                class_ph=",".join("?" for _ in teacher_class_ids)
+                subject_ph=",".join("?" for _ in teacher_subject_ids)
+                allocation_pairs=cur.execute(
+                    f"""SELECT DISTINCT class_id,subject_id FROM teacher_allocations
+                        WHERE school_id=? AND teacher_id=?
+                        AND class_id IN ({class_ph}) AND subject_id IN ({subject_ph})""",
+                    [school_id,teacher_id]+teacher_class_ids+teacher_subject_ids
+                ).fetchall()
+                for pair in allocation_pairs:
+                    lock_row=_academic_lock(cur,school_id,latest_exam_id,int(pair["class_id"]),int(pair["subject_id"]))
+                    if not lock_row or str(lock_row["status"] or "").lower()!="finalized":
+                        open_mark_subjects+=1
+            marks_ready=(open_mark_subjects==0)
             teacher_attention=[]
             if class_count==0: teacher_attention.append("No class allocation is assigned to this teacher.")
             if subject_count==0: teacher_attention.append("No subject allocation is assigned to this teacher.")
-            if expected_marks and entered_marks<expected_marks: teacher_attention.append(f"{expected_marks-entered_marks} marks are still outstanding for {latest_exam_name}.")
+            if not marks_ready: teacher_attention.append(f"{open_mark_subjects} allocated subject{'s' if open_mark_subjects!=1 else ''} still have marks editing open.")
             if pending_corrections: teacher_attention.append(f"{pending_corrections} mark correction request{'s' if pending_corrections!=1 else ''} are pending.")
             teacher_health_items=[
                 ("Account", True, "Teacher account is active."),
                 ("Class allocations", class_count>0, f"{class_count} allocated class{'es' if class_count!=1 else ''}."),
                 ("Subject allocations", subject_count>0, f"{subject_count} allocated subject{'s' if subject_count!=1 else ''}."),
-                ("Marks workspace", (expected_marks==0 or entered_marks>=expected_marks), f"{entered_marks} of {expected_marks} marks entered for {latest_exam_name}."),
+                ("Marks workspace", marks_ready, f"{'All allocated subjects are locked/finalized for '+latest_exam_name if marks_ready else str(open_mark_subjects)+' allocated subject/class combinations remain open for editing.'}"),
                 ("Attendance", True, f"{attendance_present} present and {attendance_absent} absent today."),
                 ("Correction requests", pending_corrections==0, f"{pending_corrections} pending request{'s' if pending_corrections!=1 else ''}.")
             ]
@@ -3196,16 +3214,18 @@ def app_home(request: Request):
 </style>
 <script>
 function toggleTeacherTile(event, tile){{
+    if(!tile)return;
+    if(event)event.preventDefault();
     const isActive=tile.classList.contains('active');
     if(!isActive){{
-        event.preventDefault();
         tile.classList.add('active');
         tile.setAttribute('aria-pressed','true');
-    }}else{{
-        tile.classList.remove('active');
-        tile.setAttribute('aria-pressed','false');
-        if(!tile.getAttribute('href')) event.preventDefault();
+        return;
     }}
+    tile.classList.remove('active');
+    tile.setAttribute('aria-pressed','false');
+    const href=tile.getAttribute('data-href');
+    if(href)window.location.href=href;
 }}
 </script></div>"""
         else:
