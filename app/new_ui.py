@@ -6716,7 +6716,7 @@ def users_page(request: Request):
  const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
  async function loadTeacherLinks(){{
-   if(role.value!=='teacher'){{
+   if(role.value!=='teacher' && role.value!=='registrar'){{
      cw.style.display='none'; sw.style.display='none'; cc.value=''; sc.value=''; return;
    }}
    cw.style.display='block'; sw.style.display='block';
@@ -6757,7 +6757,7 @@ def users_page(request: Request):
  role.addEventListener('change',loadTeacherLinks);
  cs.addEventListener('change',function(){{
    cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-   if(role.value==='teacher' && teacher.value) loadTeacherLinks();
+   if((role.value==='teacher' || role.value==='registrar') && teacher.value) loadTeacherLinks();
  }});
  ss.addEventListener('change',function(){{sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');}});
  document.getElementById('createUserForm').addEventListener('submit',function(){{
@@ -6955,14 +6955,14 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
         if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
             return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
-        if role=="teacher" and not tid:
+        if role in ("teacher","registrar") and not tid:
             return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
         if role in ("student","parent") and not stid:
             return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-        if role not in ("teacher","student","parent") and (tid or stid):
+        if role not in ("teacher","registrar","student","parent") and (tid or stid):
             return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
 
-        if role=="teacher":
+        if role in ("teacher","registrar"):
             teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
             if teacher_row:
                 # The selected Teachers record is authoritative. This also
@@ -6976,7 +6976,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         # username = teacher email; password = first name + generated digits.
         # This keeps teacher credentials predictable for the school admin while
         # still making the initial password unique.
-        if role=="teacher":
+        if role in ("teacher","registrar"):
             if not email_v:
                 return HTMLResponse("The selected teacher must have an email address before a teacher account can be created. Please add the email in Teachers Records and try again. <a href='/app/users'>Back</a>",400)
             existing_email_account=cur.execute(
@@ -6990,7 +6990,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         subject_ids=[int(x) for x in str(subject_ids_csv or "").split(",") if x.strip().isdigit()]
         class_ids=list(dict.fromkeys(class_ids)); subject_ids=list(dict.fromkeys(subject_ids))
 
-        if role=="teacher":
+        if role in ("teacher","registrar"):
             if teacher_type not in ("class_teacher","subject_teacher","both"):
                 teacher_type="subject_teacher"
 
@@ -7057,7 +7057,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
 
         from app.main import hash_password, verify_password
         import secrets
-        if role=="teacher":
+        if role in ("teacher","registrar"):
             first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
             generated_password=first_name+"@"+str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
             username=email_v
@@ -7085,7 +7085,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password,created_by_role,created_by_email) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                     (username,email_v,password_hash,role,full_name.strip(),sid,tid,stid,generated_password,request.session.get("role",""),request.session.get("email","")))
 
-        if role=="teacher" and tid:
+        if role in ("teacher","registrar") and tid:
             _ensure_teacher_allocations_table(cur)
             _ensure_class_teacher_assignments_table(cur)
             if teacher_type in ("class_teacher","both"):
