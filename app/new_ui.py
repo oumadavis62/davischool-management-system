@@ -6321,7 +6321,7 @@ def users_page(request: Request):
 {credential_modal}<div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
-<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='school_admin'>School Admin</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
+<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
 <div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
@@ -6555,7 +6555,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     email=(email or "").strip()
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
-    con=_db();cur=con.cursor()
+    # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.\n    if role=="school_admin":\n        return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)\n    con=_db();cur=con.cursor()
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
