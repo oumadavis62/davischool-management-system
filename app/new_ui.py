@@ -6868,8 +6868,11 @@ def users_delete(request: Request, uid: int):
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT id,role,email,full_name FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin":
         con.close(); return HTMLResponse("School Admin accounts can only be deleted by the Super Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
+        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be removed by the School Admin. <a href='/app/users'>Back</a>",403)
     if int(uid)==int(request.session.get("user_id") or 0):
         con.close(); return HTMLResponse("You cannot delete your own active account. <a href='/app/users'>Back</a>",400)
     cur.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,sid))
