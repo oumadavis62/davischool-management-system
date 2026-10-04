@@ -2944,14 +2944,113 @@ def app_home(request: Request):
         school=cur.execute("SELECT * FROM schools WHERE id=?",(school_id,)).fetchone()
         school_name=school["name"] if school else "School"
         if role=="teacher":
+            teacher_id=int(request.session.get("teacher_id") or 0)
+            # Read only the teacher's existing allocations/records. No schema changes
+            # are made here, keeping the overview safe for existing databases.
+            allocation_rows=cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,
+                c.name class_name,c.stream,
+                sub.name subject_name
+                FROM teacher_allocations a
+                LEFT JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+                LEFT JOIN subjects sub ON sub.id=a.subject_id AND sub.school_id=a.school_id
+                WHERE a.school_id=? AND a.teacher_id=?
+                ORDER BY c.name,c.stream,sub.name""",(school_id,teacher_id)).fetchall()
+            teacher_class_ids=sorted({int(a["class_id"]) for a in allocation_rows if a["class_id"] is not None})
+            teacher_subject_ids=sorted({int(a["subject_id"]) for a in allocation_rows if a["subject_id"] is not None})
+            class_count=len(teacher_class_ids)
+            subject_count=len(teacher_subject_ids)
+            if teacher_class_ids:
+                class_ph=",".join("?" for _ in teacher_class_ids)
+                teacher_student_count=int(cur.execute(
+                    f"SELECT COUNT(*) c FROM students WHERE school_id=? AND class_id IN ({class_ph})",
+                    [school_id]+teacher_class_ids
+                ).fetchone()["c"] or 0)
+            else:
+                teacher_student_count=0
+
+            latest_exam=cur.execute("SELECT id,name FROM exams WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
+            latest_exam_name=str(latest_exam["name"] or "Latest exam") if latest_exam else "No exam yet"
+            latest_exam_id=int(latest_exam["id"]) if latest_exam else 0
+            expected_marks=0
+            entered_marks=0
+            if teacher_class_ids and teacher_subject_ids and latest_exam_id:
+                class_ph=",".join("?" for _ in teacher_class_ids)
+                subject_ph=",".join("?" for _ in teacher_subject_ids)
+                expected_marks=int(cur.execute(
+                    f"""SELECT COUNT(*) c FROM students s
+                        JOIN teacher_allocations a ON a.school_id=s.school_id AND a.class_id=s.class_id
+                        WHERE s.school_id=? AND a.teacher_id=? AND a.class_id IN ({class_ph})
+                        AND a.subject_id IN ({subject_ph})""",
+                    [school_id,teacher_id]+teacher_class_ids+teacher_subject_ids
+                ).fetchone()["c"] or 0)
+                entered_marks=int(cur.execute(
+                    f"""SELECT COUNT(*) c FROM marks m
+                        JOIN students s ON s.id=m.student_id AND s.school_id=m.school_id
+                        JOIN teacher_allocations a ON a.school_id=m.school_id AND a.class_id=s.class_id AND a.subject_id=m.subject_id
+                        WHERE m.school_id=? AND m.exam_id=? AND a.teacher_id=?
+                        AND a.class_id IN ({class_ph}) AND a.subject_id IN ({subject_ph})
+                        AND m.marks IS NOT NULL AND CAST(m.marks AS TEXT)<>''""",
+                    [school_id,latest_exam_id,teacher_id]+teacher_class_ids+teacher_subject_ids
+                ).fetchone()["c"] or 0)
+
+            from datetime import date
+            today=date.today().isoformat()
+            attendance_total=attendance_present=attendance_absent=0
+            if teacher_class_ids:
+                class_ph=",".join("?" for _ in teacher_class_ids)
+                attendance_rows=cur.execute(
+                    f"""SELECT COALESCE(a.status,'Present') status,COUNT(*) c
+                        FROM students s LEFT JOIN attendance a
+                        ON a.student_id=s.id AND a.school_id=s.school_id AND a.date=?
+                        WHERE s.school_id=? AND s.class_id IN ({class_ph})
+                        GROUP BY COALESCE(a.status,'Present')""",
+                    [today,school_id]+teacher_class_ids
+                ).fetchall()
+                for ar in attendance_rows:
+                    status=str(ar["status"] or "Present").strip().lower()
+                    count=int(ar["c"] or 0)
+                    attendance_total+=count
+                    if status=="present": attendance_present+=count
+                    elif status=="absent": attendance_absent+=count
+
+            _ensure_marks_correction_requests_table(cur)
+            pending_corrections=int(cur.execute(
+                "SELECT COUNT(*) n FROM marks_correction_requests WHERE school_id=? AND teacher_id=? AND status='pending'",
+                (school_id,teacher_id)
+            ).fetchone()["n"] or 0)
+
+            marks_pct=(entered_marks/expected_marks*100) if expected_marks else 0
+            hover_tiles=[
+                ("My Classes",_modern_icon("school",30),str(class_count),f"{class_count} allocated class{'es' if class_count!=1 else ''}"),
+                ("My Subjects",_modern_icon("subject",30),str(subject_count),f"{subject_count} allocated subject{'s' if subject_count!=1 else ''}"),
+                ("My Students",_modern_icon("students",30),str(teacher_student_count),f"Students in your allocated classes"),
+                ("Record Marks",_modern_icon("marks",30),f"{marks_pct:.0f}%",f"{entered_marks}/{expected_marks} marks entered · {latest_exam_name}"),
+                ("Attendance",_modern_icon("attendance",30),str(attendance_present),f"{attendance_present} present · {attendance_absent} absent today"),
+                ("Corrections",_modern_icon("correction",30),str(pending_corrections),f"Pending mark correction request{'s' if pending_corrections!=1 else ''}"),
+                ("Analysis",_modern_icon("analysis",30),latest_exam_name,f"Latest exam · {entered_marks} marks recorded")
+            ]
+            tile_html=""
+            for title,icon,value,detail in hover_tiles:
+                href=" href='/app/academics/marks'" if title=="Record Marks" else ""
+                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} style='text-decoration:none;color:inherit'>
+<div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
+<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
-<div class='grid' style='grid-template-columns:repeat(5,1fr)'>
-<div class='card'><div class='label'>Students</div><div class='kpi'>{_modern_icon("students",28)}</div></div>
-<div class='card'><div class='label'>Classes</div><div class='kpi'>{_modern_icon("school",28)}</div></div>
-<a class='card' href='/app/academics/marks' style='text-decoration:none;color:inherit;cursor:pointer'><div class='label'>Record Marks</div><div class='kpi'>{_modern_icon("marks",28)}</div></a>
-<div class='card'><div class='label'>Attendance</div><div class='kpi'>{_modern_icon("attendance",28)}</div></div>
-<div class='card'><div class='label'>Analysis</div><div class='kpi'>{_modern_icon("analysis",28)}</div></div>
-</div></div>"""
+<div class='grid teacher-overview-grid'>{tile_html}</div>
+<style>
+.teacher-overview-grid{{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}}
+.teacher-hover-tile{{display:block;min-height:150px;perspective:900px}}
+.teacher-tile-inner{{position:relative;width:100%;height:150px;transition:transform .35s ease;transform-style:preserve-3d}}
+.teacher-hover-tile:hover .teacher-tile-inner,.teacher-hover-tile:focus .teacher-tile-inner{{transform:rotateY(180deg)}}
+.teacher-tile-face{{position:absolute;inset:0;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}}
+.teacher-tile-front .kpi{{margin-top:12px}}
+.teacher-tile-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
+.teacher-tile-back-title{{font-size:12px;text-transform:uppercase;font-weight:900;letter-spacing:.4px}}
+.teacher-tile-back-value{{font-size:28px;font-weight:900;margin:8px 0 5px}}
+.teacher-tile-back-detail{{font-size:11px;line-height:1.4;color:#fff}}
+@media(max-width:900px){{.teacher-overview-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
+@media(max-width:600px){{.teacher-overview-grid{{grid-template-columns:1fr 1fr;gap:10px}}.teacher-hover-tile,.teacher-tile-inner{{min-height:135px;height:135px}}.teacher-tile-face{{padding:12px}}.teacher-tile-back-value{{font-size:22px}}}}
+</style></div>""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
