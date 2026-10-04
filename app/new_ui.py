@@ -5,6 +5,8 @@ import base64
 import re
 from urllib.parse import quote
 import json
+import csv
+import io
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -1470,6 +1472,189 @@ def _marksheet_subject_order(subjects):
         ),
     )
 
+@router.get("/app/academics/marksheets/csv")
+def class_marksheets_csv(
+    request: Request,
+    exam_id: str = "",
+    exam_ids: str = "",
+    class_id: str = "",
+    term: str = "",
+    year: str = "",
+    stream: str = "",
+    subject_ids: str = "",
+    subject_metrics: str = "",
+    overall_metrics: str = "",
+):
+    """Export the selected MarkSheet as an Excel-compatible CSV."""
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if not _require_permission(request, sid, "reports.view"):
+        return Response("You do not have permission to export marksheets.", status_code=403)
+    con = _db()
+    cur = con.cursor()
+    try:
+        exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        classes = cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+        subjects = _marksheet_subject_order(cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall())
+        grading_rules = _load_grading_rules(cur, sid)
+        overall_rules = _load_overall_grading_rules(cur, sid)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET CSV LOOKUP FAILED:", repr(exc), flush=True)
+        try: con.close()
+        except Exception: pass
+        return Response("Unable to prepare the MarkSheet CSV export.", status_code=500)
+
+    selected_exam_ids = _parse_exam_ids(exam_ids, exam_id)
+    if not selected_exam_ids and exams:
+        selected_exam_ids = [int(exams[0]["id"])]
+    if not selected_exam_ids:
+        return Response("Please select an examination before downloading the MarkSheet.", status_code=400)
+
+    combined_mode = str(class_id).startswith("grade:")
+    combined_grade = str(class_id)[6:] if combined_mode else ""
+
+    def _grade_group_key(row):
+        name = str(row["name"] or "").strip()
+        stream_value = str(row["stream"] or "").strip()
+        if stream_value:
+            return name
+        match = re.match(r"^(.*?\d)\s*[A-Za-z]$", name)
+        return match.group(1).strip() if match else name
+
+    if combined_mode:
+        selected_class_ids = [int(c["id"]) for c in classes if _grade_group_key(c).lower() == combined_grade.strip().lower()]
+    else:
+        cid = int(class_id) if str(class_id).isdigit() else (int(classes[0]["id"]) if classes else 0)
+        selected_class_ids = [cid] if cid else []
+    if not selected_class_ids:
+        return Response("Please select a class before downloading the MarkSheet.", status_code=400)
+
+    placeholders = ",".join("?" for _ in selected_class_ids)
+    student_query = "SELECT * FROM students WHERE school_id=? AND class_id IN (" + placeholders + ")"
+    student_params = [sid] + selected_class_ids
+    if stream and not combined_mode:
+        student_query += " AND stream=?"
+        student_params.append(stream)
+    student_query += " ORDER BY name"
+    students = cur.execute(student_query, student_params).fetchall()
+
+    selected_subject_ids = []
+    for raw_id in str(subject_ids or "").split(","):
+        try:
+            if raw_id.strip():
+                value = int(raw_id.strip())
+                if value not in selected_subject_ids:
+                    selected_subject_ids.append(value)
+        except (TypeError, ValueError):
+            pass
+    if selected_subject_ids:
+        subjects = [s for s in subjects if int(s["id"]) in set(selected_subject_ids)]
+
+    subject_metric_map = {}
+    for part in str(subject_metrics or "").split(","):
+        if ":" not in part: continue
+        raw_id, raw_metrics = part.split(":", 1)
+        try:
+            metrics = [m for m in raw_metrics.split(".") if m in ("mks", "grade", "pts")]
+            if metrics: subject_metric_map[int(raw_id)] = metrics
+        except (TypeError, ValueError):
+            pass
+    for subject in subjects:
+        subject_metric_map.setdefault(int(subject["id"]), ["mks", "grade", "pts"])
+
+    overall_metric_list = [m for m in str(overall_metrics or "").split(",") if m in ("mks", "pts", "avg", "grade", "pos")]
+    if not overall_metric_list:
+        overall_metric_list = ["mks", "pts", "avg", "grade", "pos"]
+
+    marks = _aggregate_marks_for_students(cur, sid, [int(st["id"]) for st in students], selected_exam_ids, term, year)
+    computed = []
+    for student in students:
+        total = total_points = 0.0
+        count = 0
+        values = {}
+        for subject in subjects:
+            value = marks.get((int(student["id"]), int(subject["id"])))
+            values[int(subject["id"])] = value
+            if value is None: continue
+            try:
+                _, points, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
+            except Exception:
+                _, points = _default_grade_points(float(value))
+            total += float(value)
+            total_points += float(points or 0)
+            count += 1
+        computed.append((student, total, total_points, count, values))
+
+    computed.sort(key=lambda x: x[1], reverse=True)
+    positions = {}
+    last_total = None
+    last_position = 0
+    for index, item in enumerate(computed, 1):
+        total = float(item[1] or 0)
+        if last_total is None or total != last_total:
+            last_position = index
+            last_total = total
+        positions[int(item[0]["id"])] = last_position
+
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\r\n")
+    output.write("\ufeff")
+
+    metric_labels = {"mks": "MKS", "grade": "GRD", "pts": "PTS"}
+    headers = ["ADM NO.", "NAME"]
+    if combined_mode: headers.append("STREAM")
+    for subject in subjects:
+        label = _subject_marksheet_label(subject)
+        for metric in subject_metric_map[int(subject["id"])]:
+            headers.append("%s %s" % (label, metric_labels[metric]))
+    overall_labels = {"mks": "TOTAL MKS", "pts": "TOTAL PTS", "avg": "AVG %", "grade": "OVERALL GRD", "pos": "POS"}
+    headers.extend(overall_labels[m] for m in overall_metric_list)
+    writer.writerow(headers)
+
+    for student, total, total_points, count, values in computed:
+        row = [str(student["admission_no"] or ""), str(student["name"] or "")]
+        if combined_mode: row.append(str(student["stream"] or ""))
+        for subject in subjects:
+            value = values[int(subject["id"])]
+            metrics = subject_metric_map[int(subject["id"])]
+            if value is None:
+                row.extend([""] * len(metrics))
+                continue
+            try:
+                grade, points, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
+            except Exception:
+                grade, points = _default_grade_points(float(value))
+            for metric in metrics:
+                row.append("%.1f" % float(value) if metric == "mks" else str(grade) if metric == "grade" else "%.1f" % float(points or 0))
+        average = (float(total) / count) if count else 0.0
+        try:
+            overall_grade = _overall_grade(cur, sid, average, overall_rules) if count else "—"
+        except Exception:
+            overall_grade = _default_grade_points(average)[0] if count else "—"
+        overall_values = {
+            "mks": "%.1f" % float(total),
+            "pts": "%.1f" % float(total_points),
+            "avg": "%.1f%%" % average,
+            "grade": str(overall_grade),
+            "pos": str(positions[int(student["id"])]),
+        }
+        row.extend(overall_values[m] for m in overall_metric_list)
+        writer.writerow(row)
+
+    try: con.close()
+    except Exception: pass
+
+    if combined_mode:
+        safe_class = re.sub(r"[^A-Za-z0-9_-]+", "_", combined_grade).strip("_") or "Class"
+    else:
+        safe_class = re.sub(r"[^A-Za-z0-9_-]+", "_", str(next((c["name"] for c in classes if int(c["id"]) == selected_class_ids[0]), "Class"))).strip("_") or "Class"
+    return Response(
+        content=output.getvalue().encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="MarkSheet_%s.csv"' % safe_class},
+    )
+
 @router.get("/app/academics/marksheets", response_class=HTMLResponse)
 def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "", term: str = "", year: str = "", stream: str = "", page: int = 1, subject_ids: str = "", subject_metrics: str = "", overall_metrics: str = ""):
     sid = _school_session(request)
@@ -2054,7 +2239,7 @@ function printDocument(){
         "<input type='hidden' name='subject_ids' id='selectedSubjectIds' value='" + escape(','.join(str(x) for x in selected_subject_ids)) + "'>"
         "<input type='hidden' name='subject_metrics' id='selectedSubjectMetrics' value='" + escape(subject_metrics or '') + "'>"
         "<input type='hidden' name='overall_metrics' id='selectedOverallMetrics' value='" + escape(','.join(overall_metric_list)) + "'>"
-        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + pdf_marksheet_url +
+        "<button type='button' class='btn' onclick='printDocument()'>Print Marksheet</button>" + "<a class='btnlink' href='/app/academics/marksheets/csv?exam_ids=" + quote(','.join(str(x) for x in selected_exam_ids), safe='') + "&class_id=" + quote(str(class_id), safe='') + "&term=" + quote(str(term or ''), safe='') + "&year=" + quote(str(year or ''), safe='') + "&stream=" + quote(str(stream or ''), safe='') + "&subject_ids=" + quote(','.join(str(x) for x in selected_subject_ids), safe='') + "&subject_metrics=" + quote(subject_metrics or '', safe='') + "&overall_metrics=" + quote(','.join(overall_metric_list), safe='') + "'>⬇️ Download CSV (Excel)</a>" + pdf_marksheet_url +
         "<div class='subject-picker'><div class='subject-picker-title'>Subjects to display on MarkSheet</div><div class='subject-picker-grid'>" +
         "".join("<label><input type='checkbox' class='subject-choice' value='%s' %s> %s</label>" % (s["id"], "checked" if (not selected_subject_ids or int(s["id"]) in set(selected_subject_ids)) else "", escape(str(s["name"]))) for s in _marksheet_subject_order(cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall())) +
         "</div><div class='subject-picker-actions'><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=true})'>Select all</button><button type='button' class='btnlink' onclick='document.querySelectorAll(\".subject-choice\").forEach(function(x){x.checked=false})'>Clear</button></div></div>" +
