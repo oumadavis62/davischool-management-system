@@ -407,7 +407,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/school-settings",_modern_icon("settings"),"School Settings","settings.view"),
             ("/app/audit",_modern_icon("audit"),"Audit Trail","audit.view"),
         ]
-        if role != "school_admin" and school_id:
+        if role not in ("school_admin","registrar") and school_id:
             con = _db()
             try:
                 cur = con.cursor()
@@ -694,7 +694,7 @@ def session_keepalive(request: Request):
 
 def _school_session(request):
     role = str(request.session.get("role", ""))
-    if "email" not in request.session or role not in ("school_admin", "teacher"):
+    if "email" not in request.session or role not in ("school_admin", "registrar", "teacher"):
         return None
     sid = int(request.session.get("school_id") or 0)
     if not sid:
@@ -715,6 +715,10 @@ def _audit(cur, school_id, request, action, details):
     cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
                 (school_id,request.session.get("email",""),action,details,ts))
 
+def _is_school_admin_like(request):
+    """School-level administrator-equivalent roles retain separate account identities."""
+    return str(request.session.get("role","")) in ("school_admin","registrar")
+
 def _permission_enabled(cur, school_id, role, permission):
     # No custom rule means preserve the existing role behavior.
     row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
@@ -724,7 +728,7 @@ def _permission_enabled(cur, school_id, role, permission):
 def _require_permission(request, school_id, permission):
     """Enforce the School Admin configured permission for every school role."""
     role=str(request.session.get("role",""))
-    if role=="school_admin":
+    if role in ("school_admin","registrar"):
         return True
     con=_db()
     try:
@@ -1061,7 +1065,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
     actions=[("/app/academics/marks",_modern_icon("marks"),"Marks Entry","Enter and update learner marks"),("/app/academics/marksheets",_modern_icon("report"),"Class Marksheets","View class marks"),("/app/academics/subject-analysis",_modern_icon("analysis"),"Subject Analysis","Analyse subjects"),("/app/academics/student-analysis",_modern_icon("students"),"Student Analysis","Analyse a learner"),("/app/academics/class-analysis",_modern_icon("school"),"Class Analysis","Analyse a class"),("/app/academics/analysis",_modern_icon("analysis"),"Academic Analysis","View overall academic analysis"),("/app/academics/assessments",_modern_icon("exam"),"SBA / CBA","Continuous assessment"),("/app/academics/grading",_modern_icon("grading"),"Grade & Points","Set subject grading rules"),("/app/academics/allocations",_modern_icon("allocation"),"Teacher Allocation","Assign teachers"),("/app/report-cards",_modern_icon("report"),"Report Cards","Generate reports"),("/app/report-card-settings",_modern_icon("calendar"),"Report Card Dates","Set opening & closing dates"),("/app/exams",_modern_icon("exam"),"Examinations","Manage examinations"),("/app/subjects",_modern_icon("subject"),"Subjects","Manage subjects"),("/app/classes",_modern_icon("school"),"Classes & Streams","Manage classes")]
-    if role == "school_admin":
+    if role in ("school_admin","registrar"):
         actions.append(("/app/academics/marks-corrections",_modern_icon("correction"),"Marks Corrections","Review teacher correction requests"))
     # Preserve the current isolated browser-tab session when opening an Academic Manager tile.
     # The explicit query parameter prevents the tile navigation from falling back to the
@@ -1304,7 +1308,7 @@ def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
 def overall_grading(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can manage overall grading.", 403)
     if not _require_permission(request, sid, "reports.view"):
         return HTMLResponse("You do not have permission to view overall grading.", 403)
@@ -1338,7 +1342,7 @@ def overall_grading(request: Request):
 def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
@@ -1362,7 +1366,7 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
 def overall_grading_delete(request: Request,rule_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
@@ -3339,7 +3343,7 @@ def grading_setup(request: Request, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/")
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can manage subject grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to manage subject grading.", 403)
@@ -3467,7 +3471,7 @@ def grading_add(request: Request, subject_id: int = Form(0), min_mark: float = F
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
@@ -3541,7 +3545,7 @@ async def grading_copy(request: Request):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to manage subject grading.", 403)
@@ -3624,7 +3628,7 @@ def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
@@ -3690,7 +3694,7 @@ def grading_edit(
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
@@ -3758,7 +3762,7 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit grading.", 403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to edit grading.", 403)
@@ -4096,7 +4100,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     draft_action = ""
     lock_action = ""
     if locked:
-        if role == "school_admin":
+        if role in ("school_admin","registrar"):
             mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
         elif role == "teacher":
             # Once the School Admin finalizes these marks, the teacher side is
@@ -4681,7 +4685,7 @@ async def request_marks_correction(request: Request, exam_id:int=Form(0), class_
 def marks_correction_requests(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can review mark correction requests.",403)
 
     con=_db();cur=con.cursor()
@@ -4925,7 +4929,7 @@ def marks_correction_requests(request: Request):
 def approve_marks_correction(request: Request, request_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can approve corrections.",403)
     con=_db();cur=con.cursor();_ensure_academic_locks_table(cur);_ensure_marks_correction_requests_table(cur)
     row=cur.execute("SELECT * FROM marks_correction_requests WHERE id=? AND school_id=? AND status='pending'",(request_id,sid)).fetchone()
@@ -4949,7 +4953,7 @@ def clear_marks_correction_requests(request: Request, ds_tab: str = Form("")):
     """
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can clear correction requests.",403)
 
     # Prefer the tab id submitted by the form, but fall back to the query
@@ -4989,7 +4993,7 @@ def clear_marks_correction_requests(request: Request, ds_tab: str = Form("")):
 def reject_marks_correction(request: Request, request_id:int=Form(...)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can reject corrections.",403)
     con=_db();cur=con.cursor();_ensure_marks_correction_requests_table(cur)
     row=cur.execute("SELECT id FROM marks_correction_requests WHERE id=? AND school_id=? AND status='pending'",(request_id,sid)).fetchone()
@@ -5007,7 +5011,7 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
     sid=_school_session(request)
     if not sid:
         return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can lock marks from the Marks Corrections page.",403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to lock marks.",403)
@@ -5088,7 +5092,7 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
 def unfinalize_marks(request: Request, exam_id:int=Form(...), class_id:int=Form(...), subject_id:int=Form(...), return_exam_id:str=Form(""), return_class_id:str=Form(""), return_subject_id:str=Form(""), return_year:str=Form(""), return_term:str=Form(""), return_load:str=Form("1")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if str(request.session.get("role","")) != "school_admin":
+    if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can directly reopen finalized marks.",403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to unfinalize marks.", 403)
