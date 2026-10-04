@@ -6628,7 +6628,7 @@ def users_page(request: Request):
         creator_role=str(u["created_by_role"] or "") if "created_by_role" in u.keys() else ""
         if role_name=="school_admin":
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
-        elif role_name=="registrar" and (current_role!="school_admin" or creator_role!="school_admin"):
+        elif role_name=="registrar":
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Managed by Super Admin</span>"
         else:
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
@@ -6790,8 +6790,8 @@ def users_edit_page(request: Request, uid: int):
     current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin":
         return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
-    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
-        return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited by the School Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar":
+        return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited from the School Admin side. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
@@ -6817,8 +6817,8 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
     current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin": con.close(); return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
-    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
-        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited by the School Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar":
+        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited from the School Admin side. <a href='/app/users'>Back</a>",403)
     if role not in allowed: con.close(); return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     email_v=email.strip().lower()
     duplicate=cur.execute("SELECT id FROM users WHERE lower(email)=? AND id<>?",(email_v,uid)).fetchone()
@@ -6868,8 +6868,8 @@ def users_delete(request: Request, uid: int):
     current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin":
         con.close(); return HTMLResponse("School Admin accounts can only be deleted by the Super Admin. <a href='/app/users'>Back</a>",403)
-    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
-        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be removed by the School Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar":
+        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be removed from the School Admin side. <a href='/app/users'>Back</a>",403)
     if int(uid)==int(request.session.get("user_id") or 0):
         con.close(); return HTMLResponse("You cannot delete your own active account. <a href='/app/users'>Back</a>",400)
     cur.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,sid))
