@@ -387,7 +387,9 @@ def init_db():
     except Exception:
         pass
     cur.execute("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, action TEXT, details TEXT, timestamp TEXT)")
-    cur.execute("CREATE TABLE IF NOT EXISTS pending_schools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, auth_code TEXT, timestamp TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS pending_schools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, role TEXT DEFAULT 'school_admin', auth_code TEXT, timestamp TEXT)")
+    try: cur.execute("ALTER TABLE pending_schools ADD COLUMN role TEXT DEFAULT 'school_admin'")
+    except Exception: pass
     cur.execute("CREATE TABLE IF NOT EXISTS classes (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, level TEXT, stream TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, school_id INTEGER, admission_no TEXT, assessment_no TEXT, name TEXT, class_id INTEGER, gender TEXT, parent_phone TEXT, stream TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS subjects (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, code TEXT, initial TEXT)")
@@ -861,7 +863,7 @@ def dashboard(request: Request):
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = "", message: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role='school_admin'"); users = cur.fetchall(); pending=None
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role IN ('school_admin','registrar') ORDER BY id"); users = cur.fetchall(); pending=None
     if pending_id: cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,)); pending = cur.fetchone()
     con.close(); users_by_school = {u["school_id"]: u for u in users}
     popup=""
@@ -903,11 +905,14 @@ async function viewSchoolPassword(id){{
     else alert(d.message||'Password unavailable.');
   }}catch(e){{ alert('Unable to retrieve the password right now.'); }}
 }}
-</script><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1500px;margin:auto'><div><div class='card'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0b3d91;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='school_type' required><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
+</script><div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px;padding:16px;max-width:1500px;margin:auto'><div><div class='card'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Username</th><th>Password</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0b3d91;font-weight:700;font-size:12px'>⬅️ Back</a></div></div><div class='card' style='height:fit-content'><div style='font-weight:800'>➕ Register New School</div><form method='post' action='/register-school'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='role' required><option value='school_admin'>School Admin</option><option value='registrar'>Registrar</option></select><select name='school_type' required><option>Primary</option><option>Secondary</option><option>Primary & Junior Secondary</option></select><button style='width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;margin-top:10px'>📧 Send Code</button></form></div></div></body></html>""")
 @app.post("/register-school")
-def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), school_type: str = Form(...)):
+def register_school(school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), role: str = Form("school_admin"), school_type: str = Form(...)):
+    role = str(role or "school_admin").strip().lower()
+    if role not in {"school_admin", "registrar"}:
+        return RedirectResponse("/schools/manage?success=verify_error&message=Invalid%20account%20role",303)
     auth_code = str(random.randint(100000, 999999)); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, auth_code, ts))
+    cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,role,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, role, auth_code, ts))
     pending_id = cur.lastrowid; con.commit(); con.close(); return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
 @app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
@@ -932,7 +937,7 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
             raise ValueError("School administrator email is missing.")
 
         existing = cur.execute(
-            "SELECT id, school_id FROM users WHERE lower(email)=lower(?) AND role='school_admin'",
+            "SELECT id, school_id FROM users WHERE lower(email)=lower(?) AND role IN ('school_admin','registrar')",
             (email,)
         ).fetchone()
         if existing:
@@ -963,12 +968,15 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
         )
         school_id = cur.lastrowid
 
+        account_role = str(pending["role"] or "school_admin").strip().lower() if "role" in pending.keys() else "school_admin"
+        if account_role not in {"school_admin", "registrar"}:
+            account_role = "school_admin"
         cur.execute(
             "INSERT INTO users (email,password,role,full_name,school_id,credential_secret) VALUES (?,?,?,?,?,?)",
             (
                 email,
                 hash_password(unique_pass),
-                "school_admin",
+                account_role,
                 str(pending["principal"] or "").strip(),
                 school_id,
                 encrypt_credential(unique_pass),
