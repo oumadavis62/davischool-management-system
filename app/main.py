@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "9c546c4e6f8bcab4c008ec9117f06791a1411bef"
+BUILD_COMMIT = "students-main-route-fix-2026-10-04"
 
 app = FastAPI()
 
@@ -266,7 +266,7 @@ async def students_page_swipe_scroll(request: Request, call_next):
         try:
             body = response.body
             if body:
-                css = b"<style>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.app,.main,.page{min-height:auto}.page .card.section{min-width:0;max-width:100%;box-sizing:border-box}.page .card.section:has(table){overflow-x:auto;overflow-y:hidden;max-width:100%;width:100%;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain}.page .card.section:has(table) table{width:max-content;min-width:100%;max-width:none;white-space:nowrap}</style>"
+                css = b"<style id='davischool-students-scroll-fix'>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.app,.main,.page{min-height:auto}.page .card.section{min-width:0;max-width:100%;box-sizing:border-box}.page .card.section:has(table){max-width:100%;width:100%;box-sizing:border-box}.students-register-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain}.students-register-scroll table{width:max-content;min-width:100%;max-width:none;white-space:nowrap}</style>"
                 marker = b"</head>"
                 if marker in body:
                     body = body.replace(marker, css + marker, 1)
@@ -2966,9 +2966,15 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
             stream = str(row["stream"] or "").strip()
         cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",
                     (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, "active"))
+        # Keep the live /app/students save path in main.py PostgreSQL-safe.
+        # Do not use cursor.lastrowid; the Render PostgreSQL cursor does not expose it.
         con.commit()
     except Exception as exc:
-        con.rollback(); print(f"DAVISCHOOL APP STUDENT CREATE ERROR: {exc!r}", flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print(f"DAVISCHOOL APP STUDENT CREATE ERROR: {exc!r}", flush=True)
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally: con.close()
     return RedirectResponse("/app/students", 303)
