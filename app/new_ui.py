@@ -2710,7 +2710,8 @@ def app_home(request: Request):
                     gender_counts["Other"] += int(gr["count"] or 0)
             gender_total=sum(gender_counts.values())
             gender_bars=""
-            for label,count in gender_counts.items():
+            for label in ("Male","Female"):
+                count=gender_counts[label]
                 pct=(count/gender_total*100) if gender_total else 0
                 gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
 
@@ -2726,7 +2727,8 @@ def app_home(request: Request):
                     staff_gender_counts["Other"] += int(gr["count"] or 0)
             staff_gender_total=sum(staff_gender_counts.values())
             staff_gender_bars=""
-            for label,count in staff_gender_counts.items():
+            for label in ("Male","Female"):
+                count=staff_gender_counts[label]
                 pct=(count/staff_gender_total*100) if staff_gender_total else 0
                 staff_gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
 
