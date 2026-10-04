@@ -124,6 +124,7 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     request.session["email"] = user["email"]
     request.session["role"] = user["role"]
     request.session["school_id"] = user["school_id"]
+    request.session["user_id"] = user["id"]
     request.session["teacher_id"] = user["teacher_id"] if "teacher_id" in user.keys() and user["teacher_id"] else None
     if user["role"] == "teacher" and not request.session.get("teacher_id") and user["school_id"]:
         con = _db()
@@ -191,7 +192,7 @@ def _ensure_user_account_columns(cur, con=None):
     cur.execute("SELECT * FROM users LIMIT 0")
     columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
     changed = False
-    for column, definition in (("username", "TEXT"), ("teacher_id", "INTEGER"), ("student_id", "INTEGER"), ("temporary_password", "TEXT")):
+    for column, definition in (("username", "TEXT"), ("teacher_id", "INTEGER"), ("student_id", "INTEGER"), ("temporary_password", "TEXT"), ("created_by_role", "TEXT"), ("created_by_email", "TEXT")):
         if column not in columns:
             cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
             columns.add(column)
@@ -7082,8 +7083,8 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         password_ok,_=verify_password(generated_password,password_hash)
         if not password_ok:
             return HTMLResponse("The generated password could not be validated. No account was added. Please try again.",500)
-        cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (username,email_v,password_hash,role,full_name.strip(),sid,tid,stid,generated_password))
+        cur.execute("INSERT INTO users(username,email,password,role,full_name,school_id,teacher_id,student_id,temporary_password,created_by_role,created_by_email) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (username,email_v,password_hash,role,full_name.strip(),sid,tid,stid,generated_password,request.session.get("role",""),request.session.get("email","")))
 
         if role=="teacher" and tid:
             _ensure_teacher_allocations_table(cur)
