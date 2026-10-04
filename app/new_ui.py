@@ -6555,7 +6555,10 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     email=(email or "").strip()
     allowed={"school_admin","teacher","parent","student","accountant","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
-    # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.\n    if role=="school_admin":\n        return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)\n    con=_db();cur=con.cursor()
+    # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.
+    if role=="school_admin":
+        return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)
+    con=_db();cursorsor=con.cursor()
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
@@ -6710,7 +6713,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             if teacher_type in ("subject_teacher","both"):
                 for cid in class_ids:
                     for subject_id in subject_ids:
-                        cur.execute("INSERT OR IGNORE INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
+                        cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?) ON CONFLICT(school_id,teacher_id,class_id,subject_id) DO NOTHING",
                                     (sid,tid,cid,subject_id))
 
         try:
