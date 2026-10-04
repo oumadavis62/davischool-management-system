@@ -2697,6 +2697,7 @@ def app_home(request: Request):
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
             c=cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?",(school_id,)).fetchone()["c"]
+
             gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM students WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
             gender_counts={"Male":0,"Female":0,"Other":0}
             for gr in gender_rows:
@@ -2705,45 +2706,56 @@ def app_home(request: Request):
                     gender_counts["Male"] += int(gr["count"] or 0)
                 elif value.startswith("f"):
                     gender_counts["Female"] += int(gr["count"] or 0)
-                elif value:
-                    gender_counts["Other"] += int(gr["count"] or 0)
                 else:
                     gender_counts["Other"] += int(gr["count"] or 0)
             gender_total=sum(gender_counts.values())
-        staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
-        staff_gender_counts={"Male":0,"Female":0,"Other":0}
-        for gr in staff_gender_rows:
-            value=str(gr["gender"] or "").strip().lower()
-            if value.startswith("m"):
-                staff_gender_counts["Male"] += int(gr["count"] or 0)
-            elif value.startswith("f"):
-                staff_gender_counts["Female"] += int(gr["count"] or 0)
-            elif value:
-                staff_gender_counts["Other"] += int(gr["count"] or 0)
-            else:
-                staff_gender_counts["Other"] += int(gr["count"] or 0)
-        staff_gender_total=sum(staff_gender_counts.values())
-        staff_gender_bars=""
-        for label,count in staff_gender_counts.items():
-            pct=(count/staff_gender_total*100) if staff_gender_total else 0
-            staff_gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
             gender_bars=""
             for label,count in gender_counts.items():
                 pct=(count/gender_total*100) if gender_total else 0
                 gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
+
+            staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
+            staff_gender_counts={"Male":0,"Female":0,"Other":0}
+            for gr in staff_gender_rows:
+                value=str(gr["gender"] or "").strip().lower()
+                if value.startswith("m"):
+                    staff_gender_counts["Male"] += int(gr["count"] or 0)
+                elif value.startswith("f"):
+                    staff_gender_counts["Female"] += int(gr["count"] or 0)
+                else:
+                    staff_gender_counts["Other"] += int(gr["count"] or 0)
+            staff_gender_total=sum(staff_gender_counts.values())
+            staff_gender_bars=""
+            for label,count in staff_gender_counts.items():
+                pct=(count/staff_gender_total*100) if staff_gender_total else 0
+                staff_gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
+
+            class_size_rows=cur.execute("""SELECT c.id,c.name,c.stream,COUNT(s.id) AS student_count
+                                           FROM classes c
+                                           LEFT JOIN students s ON s.class_id=c.id AND s.school_id=c.school_id
+                                           WHERE c.school_id=?
+                                           GROUP BY c.id,c.name,c.stream
+                                           ORDER BY c.name,c.stream""",(school_id,)).fetchall()
+            class_size_max=max([int(row["student_count"] or 0) for row in class_size_rows] or [0])
+            class_size_bars=""
+            for row in class_size_rows:
+                class_name=str(row["name"] or "").strip()
+                stream=str(row["stream"] or "").strip()
+                label=(class_name + (" · "+stream if stream else "")).strip()
+                short_label=label if len(label)<=10 else label[:9]+"…"
+                count=int(row["student_count"] or 0)
+                pct=(count/class_size_max*100) if class_size_max else 0
+                class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
+
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
-<div class='grid'><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff Gender</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div></div>
+<div class='grid'><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff Gender</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card class-size-chart-card'><div class='label'>Class Size</div><div class='gender-chart-total'>{c} classes · {s} students</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
 .gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
-.gender-chart-card{{min-width:0;overflow:hidden}}
-.gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
-.gender-bar-row{{margin:8px 0}}
-.gender-chart-card{{min-width:0;overflow:hidden}}
-.gender-bar-row{{margin:8px 0}}
-.gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}.gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
+.gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}
+.gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
 .gender-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
 .gender-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
 .gender-bar-fill{{width:100%;height:0;border-radius:6px 6px 2px 2px;min-height:0}}
@@ -2751,7 +2763,16 @@ def app_home(request: Request):
 .gender-female{{background:#db2777}}
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
+.class-size-chart-card{{min-width:0;overflow:hidden}}
+.class-size-bars{{display:flex;align-items:flex-end;gap:9px;width:100%;min-height:125px;height:125px;padding:4px 4px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}}
+.class-size-bar-column{{display:flex;flex:0 0 42px;width:42px;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
+.class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
+.class-size-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
+.class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
+.class-size-bar-label{{font-size:10px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:42px;overflow:hidden;text-overflow:ellipsis}}
+.class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}
 </style></div>"""
+
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
