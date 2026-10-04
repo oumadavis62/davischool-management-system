@@ -147,6 +147,37 @@ def davischool_logout(request: Request):
     request.session.clear()
     return RedirectResponse("/", status_code=303)
 
+def _modern_icon(name, size=20):
+    """Return a consistent inline SVG icon without relying on device emoji fonts."""
+    paths = {
+        "dashboard": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+        "students": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        "staff": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        "academics": '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+        "attendance": '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+        "calendar": '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+        "finance": '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M7 15h4"/>',
+        "accounting": '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h2M12 14h2M8 18h2M12 18h2"/>',
+        "announcement": '<path d="M3 11v2a2 2 0 0 0 2 2h2l3 5h2l-2-5 10-4V5L7 9H5a2 2 0 0 0-2 2Z"/><path d="M21 8v8"/>',
+        "users": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>',
+        "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+        "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.55v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.55-1.03H6v-2.55h.85A1.7 1.7 0 0 0 8.4 10a1.7 1.7 0 0 0-.34-1.88L8 8.06l1.8-1.8.06.06A1.7 1.7 0 0 0 11.74 6 1.7 1.7 0 0 0 12.77 4.45V4h2.55v.45A1.7 1.7 0 0 0 16.35 6a1.7 1.7 0 0 0 1.88.32l.06-.06 1.8 1.8-.06.06A1.7 1.7 0 0 0 19.7 10c.15.62.7 1.03 1.33 1.03H22v2.55h-.97A1.7 1.7 0 0 0 19.4 15Z"/>',
+        "audit": '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+        "school": '<path d="m3 10 9-6 9 6"/><path d="M5 10v10h14V10M3 20h18M9 20v-6h6v6"/>',
+        "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+        "key": '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l2 2M14 9l2 2"/>',
+        "marks": '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+        "analysis": '<path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V7M16 16v-8"/>',
+        "grading": '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>',
+        "allocation": '<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6"/><path d="M17 15v6M14 18h6"/>',
+        "report": '<path d="M6 2h9l5 5v15H6z"/><path d="M15 2v6h6M9 13h6M9 17h6"/>',
+        "exam": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11l1.5 1.5L12 10M8 16h8"/>',
+        "subject": '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M4 5.5v13"/>',
+        "correction": '<path d="M4 4h16v16H4z"/><path d="m8 14 2-2 5-5 2 2-5 5-2 2H8zM15 7l2 2"/>'
+    }
+    path = paths.get(name, paths["dashboard"])
+    return f'<svg class="modern-icon" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{path}</svg>'
+
 def _db():
     from app.main import get_db
     return get_db()
@@ -351,26 +382,26 @@ def _shell(title, name, role, body, school_id=None):
     # protected routes. Super Admin remains on platform-level navigation.
     if role == "super_admin":
         nav = [
-            ("/app","⌂","Platform Overview",None),
-            ("/schools/manage","🏫","Manage Schools",None),
-            ("/super/global-control/dashboard","🌍","Global Control",None),
-            ("/account/change-password","🔑","My Account",None),
+            ("/app",_modern_icon("dashboard"),"Platform Overview",None),
+            ("/schools/manage",_modern_icon("school"),"Manage Schools",None),
+            ("/super/global-control/dashboard",_modern_icon("globe"),"Global Control",None),
+            ("/account/change-password",_modern_icon("key"),"My Account",None),
         ]
     else:
         nav = [
-            ("/app","⌂","Overview",None),
-            ("/app/students","🎓","Students","students.view"),
-            ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
-            ("/app/academics","📝","Academics","marks.view"),
-            ("/app/attendance","✓","Attendance","attendance.view"),
-            ("/app/timetable","🗓","Timetable","timetable.view"),
-            ("/app/finance","💰","Fees & Finance","fees.view"),
-            ("/app/accounting","📚","Accounting","finance.view"),
-            ("/app/announcements","📢","Announcements","communications.view"),
-            ("/app/users","👤","Users","users.manage"),
-            ("/app/roles","🔐","Roles & Permissions","settings.manage"),
-            ("/app/school-settings","⚙","School Settings","settings.view"),
-            ("/app/audit","🛡","Audit Trail","audit.view"),
+            ("/app",_modern_icon("dashboard"),"Overview",None),
+            ("/app/students",_modern_icon("students"),"Students","students.view"),
+            ("/app/staff",_modern_icon("staff"),"Staff & Teachers","staff.view"),
+            ("/app/academics",_modern_icon("academics"),"Academics","marks.view"),
+            ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
+            ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
+            ("/app/finance",_modern_icon("finance"),"Fees & Finance","fees.view"),
+            ("/app/accounting",_modern_icon("accounting"),"Accounting","finance.view"),
+            ("/app/announcements",_modern_icon("announcement"),"Announcements","communications.view"),
+            ("/app/users",_modern_icon("users"),"Users","users.manage"),
+            ("/app/roles",_modern_icon("shield"),"Roles & Permissions","settings.manage"),
+            ("/app/school-settings",_modern_icon("settings"),"School Settings","settings.view"),
+            ("/app/audit",_modern_icon("audit"),"Audit Trail","audit.view"),
         ]
         if role != "school_admin" and school_id:
             con = _db()
@@ -393,7 +424,7 @@ def _shell(title, name, role, body, school_id=None):
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#eef5fb;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
 .app{{display:flex;min-height:100vh}}.teacher-portal .side{{display:none}}.teacher-portal .main{{margin-left:0}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto}}
 .brand{{font-size:20px;font-weight:900;color:white;padding:8px 12px 24px}}.brand small{{display:block;font-size:10px;color:#bfdbfe;margin-top:4px;letter-spacing:1px}}
-.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}
+.modern-icon{display:block;flex:0 0 auto}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}
 .avatar{{width:36px;height:36px;border-radius:50%;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800}}
 .page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
@@ -1025,9 +1056,9 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
-    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/analysis","📊","Academic Analysis","View overall academic analysis"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
+    actions=[("/app/academics/marks",_modern_icon("marks"),"Marks Entry","Enter and update learner marks"),("/app/academics/marksheets",_modern_icon("report"),"Class Marksheets","View class marks"),("/app/academics/subject-analysis",_modern_icon("analysis"),"Subject Analysis","Analyse subjects"),("/app/academics/student-analysis",_modern_icon("students"),"Student Analysis","Analyse a learner"),("/app/academics/class-analysis",_modern_icon("school"),"Class Analysis","Analyse a class"),("/app/academics/analysis",_modern_icon("analysis"),"Academic Analysis","View overall academic analysis"),("/app/academics/assessments",_modern_icon("exam"),"SBA / CBA","Continuous assessment"),("/app/academics/grading",_modern_icon("grading"),"Grade & Points","Set subject grading rules"),("/app/academics/allocations",_modern_icon("allocation"),"Teacher Allocation","Assign teachers"),("/app/report-cards",_modern_icon("report"),"Report Cards","Generate reports"),("/app/report-card-settings",_modern_icon("calendar"),"Report Card Dates","Set opening & closing dates"),("/app/exams",_modern_icon("exam"),"Examinations","Manage examinations"),("/app/subjects",_modern_icon("subject"),"Subjects","Manage subjects"),("/app/classes",_modern_icon("school"),"Classes & Streams","Manage classes")]
     if role == "school_admin":
-        actions.append(("/app/academics/marks-corrections","🔓","Marks Corrections","Review teacher correction requests"))
+        actions.append(("/app/academics/marks-corrections",_modern_icon("correction"),"Marks Corrections","Review teacher correction requests"))
     # Preserve the current isolated browser-tab session when opening an Academic Manager tile.
     # The explicit query parameter prevents the tile navigation from falling back to the
     # generic login session even if the browser-side tab script has not run yet.
@@ -2906,11 +2937,11 @@ def app_home(request: Request):
         if role=="teacher":
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div>
 <div class='grid' style='grid-template-columns:repeat(5,1fr)'>
-<div class='card'><div class='label'>Students</div><div class='kpi'>🎓</div></div>
-<div class='card'><div class='label'>Classes</div><div class='kpi'>🏫</div></div>
-<a class='card' href='/app/academics/marks' style='text-decoration:none;color:inherit;cursor:pointer'><div class='label'>Record Marks</div><div class='kpi'>📝</div></a>
-<div class='card'><div class='label'>Attendance</div><div class='kpi'>✓</div></div>
-<div class='card'><div class='label'>Analysis</div><div class='kpi'>📊</div></div>
+<div class='card'><div class='label'>Students</div><div class='kpi'>{_modern_icon("students",28)}</div></div>
+<div class='card'><div class='label'>Classes</div><div class='kpi'>{_modern_icon("school",28)}</div></div>
+<a class='card' href='/app/academics/marks' style='text-decoration:none;color:inherit;cursor:pointer'><div class='label'>Record Marks</div><div class='kpi'>{_modern_icon("marks",28)}</div></a>
+<div class='card'><div class='label'>Attendance</div><div class='kpi'>{_modern_icon("attendance",28)}</div></div>
+<div class='card'><div class='label'>Analysis</div><div class='kpi'>{_modern_icon("analysis",28)}</div></div>
 </div></div>"""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
