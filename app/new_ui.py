@@ -411,11 +411,12 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='brand'>DaviSchool<small>MANAGEMENT PLATFORM</small></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(title)}</strong><div class='muted'>{escape(role.replace("_"," ").title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><span class='muted'>{escape(name)}</span><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
-// Keep the browser Back button focused on meaningful school workspaces.
-// Detail/edit/filter/data-entry states inside the same workspace replace the
-// current history entry instead of creating a long chain of intermediate pages.
-// Different sidebar workspaces still create normal history entries, so Back can
-// move between Students -> Academics -> Reports, etc.
+// Two-step browser history rule for the school workspace.
+// Step 1: the real workspace display remains the Back destination.
+// Step 2: opening a record/detail/edit/history view creates the single
+// temporary entry. Back therefore returns directly to the exact workspace
+// display the user came from. Moving between multiple detail views replaces
+// the temporary entry instead of building a chain of detail pages.
 // This changes browser history only; it never changes database records.
 (function(){{
   try{{
@@ -471,32 +472,71 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       }}catch(e){{return null;}}
     }}
 
-    function shouldReplace(target){{
-      var current=workspace(window.location.pathname);
-      var next=workspace(target.pathname);
-      return current!=='/' && current===next;
-    }}
+    // Mark the current document as the user's stable workspace or temporary
+    // second-step detail. This is informational and also survives normal
+    // full-page navigation because it is stored in the history entry.
+    try{{
+      var currentRoot=workspace(window.location.pathname);
+      var currentPath=cleanPath(window.location.pathname);
+      var currentKind=(currentRoot!=='/' && currentPath!==currentRoot)?'detail':'workspace';
+      var oldState=(history.state && typeof history.state==='object')?history.state:{{}};
+      history.replaceState(Object.assign({{}},oldState,{{daviHistoryStep:currentKind,daviWorkspace:currentRoot}}),'',window.location.href);
+    }}catch(e){{}}
 
-    // Normal links and GET filter/search forms intentionally keep a history entry.
-    // This preserves the original page display when the user presses Back after
-    // viewing, filtering, editing, or entering a record. Routine POST saves are
-    // handled below with replace() so repeated saves do not create long chains.
-    // If the current document was reached through an old same-workspace
-    // history chain, pressing Back may expose another identical workspace
-    // entry. Skip only consecutive entries whose pathname belongs to the same
-    // workspace; never jump across a different workspace.
-    var backGuard=false;
-    window.addEventListener('popstate',function(){{
-      if(backGuard)return;
-      var current=workspace(window.location.pathname);
-      if(current==='/' || current==='/app')return;
-      // A popstate itself already changed the browser entry. Do not use
-      // history.length or inspect prior URLs (the browser deliberately hides
-      // those URLs from page scripts). The guard only prevents accidental
-      // recursive handling.
-      backGuard=true;
-      window.setTimeout(function(){{backGuard=false;}},100);
+    document.addEventListener('click',function(event){{
+      var link=event.target.closest ? event.target.closest('a') : null;
+      if(!link || event.defaultPrevented)return;
+      if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
+      if(link.target==='_blank' || link.hasAttribute('download'))return;
+      if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+
+      var target=internalUrl(link.href);
+      if(!target || target.pathname.indexOf('/app')!==0)return;
+
+      var currentRoot=workspace(window.location.pathname);
+      var targetRoot=workspace(target.pathname);
+      if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
+
+      var currentPath=cleanPath(window.location.pathname);
+      var targetPath=cleanPath(target.pathname);
+      var currentIsDetail=currentPath!==currentRoot;
+      var targetIsDetail=targetPath!==targetRoot;
+
+      // Root/workspace -> detail is the one intentional push. The browser
+      // Back button will therefore return to the exact root/filter display.
+      if(!currentIsDetail && targetIsDetail){{
+        try{{
+          sessionStorage.setItem('davischool-two-step-origin:'+currentRoot,window.location.href);
+        }}catch(e){{}}
+        return;
+      }}
+
+      // Detail -> another detail stays within step 2. Replace the current
+      // entry so Back never walks through a chain of records.
+      if(currentIsDetail && targetIsDetail){{
+        event.preventDefault();
+        window.location.replace(target.toString());
+        return;
+      }}
+
+      // Detail -> workspace is an intentional return to step 1. Keep it as a
+      // normal navigation so the browser's Back/Forward semantics remain
+      // predictable and the workspace display is preserved.
+    }},true);
+
+    window.addEventListener('pageshow',function(){{
+      // A new detail view begins a fresh second step; the marker is cleared
+      // only when the user has actually returned to its workspace.
+      try{{
+        var root=workspace(window.location.pathname);
+        if(root!=='/' && cleanPath(window.location.pathname)===root){{
+          sessionStorage.removeItem('davischool-two-step-origin:'+root);
+        }}
+      }}catch(e){{}}
     }});
+
+    // Do not manufacture extra entries when a browser Back/Forward traversal
+    // occurs. The browser itself remains the source of truth for navigation.
   }}catch(e){{}}
 }})();
 // GET filter/search forms use a two-stage history rule across the system.
