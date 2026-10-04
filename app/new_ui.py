@@ -6700,7 +6700,6 @@ def users_page(request: Request):
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
-<input name='registrar_name' id='registrarName' type='text' placeholder='Registrar full name' class='field' style='display:none'>
 <div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
@@ -6715,14 +6714,11 @@ def users_page(request: Request):
  const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), email=document.getElementById('newTeacherEmail');
  const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
- const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv'), rn=document.getElementById('registrarName');
+ const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
  async function loadTeacherLinks(){{
    if(role.value!=='teacher'){{
-     cw.style.display='none'; sw.style.display='none'; cc.value=''; sc.value='';
-     if(rn) rn.style.display=role.value==='registrar'?'block':'none';
-     return;
+     cw.style.display='none'; sw.style.display='none'; cc.value=''; sc.value=''; return;
    }}
-   if(rn) rn.style.display='none';
    cw.style.display='block'; sw.style.display='block';
    try{{
      if(!teacher.value){{
@@ -6936,7 +6932,7 @@ def users_add_legacy(request: Request, email:str=Form(""), role:str=Form("teache
     return users_add(request, email, role, teacher_id, class_id, class_ids_csv, subject_ids_csv, teacher_type, student_id)
 
 @router.post("/app/users/add")
-def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form(""), registrar_name:str=Form("")):
+def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -6947,22 +6943,12 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.
     if role=="school_admin":
         return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)
-    current_role=str(request.session.get("role") or "")
-    if role=="registrar" and current_role!="school_admin":
-        return HTMLResponse("Only the School Admin can create a Registrar account.",403)
     con=_db();cur=con.cursor()
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
         full_name=""
         tid=int(teacher_id) if teacher_id.isdigit() else None
-        if role=="registrar":
-            full_name=str(registrar_name or "").strip() or (email_v.split("@",1)[0].replace(".", " ").replace("_", " ").replace("-", " ").strip().title() if email_v else "Registrar")
-            if not email_v:
-                return HTMLResponse("Enter the Registrar email address before creating the account. <a href='/app/users'>Back</a>",400)
-            existing_registrar=cur.execute("SELECT id FROM users WHERE school_id=? AND (lower(username)=? OR lower(email)=?) LIMIT 1",(sid,email_v,email_v)).fetchone()
-            if existing_registrar:
-                return HTMLResponse("A user account already exists with that Registrar email. <a href='/app/users'>Back</a>",400)
         stid=int(student_id) if student_id.isdigit() else None
 
         if tid and not cur.execute("SELECT id,name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone():
