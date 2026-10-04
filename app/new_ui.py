@@ -2715,7 +2715,7 @@ def app_home(request: Request):
                 pct=(count/gender_total*100) if gender_total else 0
                 gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
-<div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div>{gender_bars}</div></div>
+<div class='grid'><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
@@ -2726,7 +2726,7 @@ def app_home(request: Request):
 .gender-bar-row{{margin:8px 0}}
 .gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-bar-row{{margin:8px 0}}
-.gender-bar-column{{display:inline-flex;width:30%;height:125px;vertical-align:bottom;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
+.gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}.gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
 .gender-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
 .gender-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
 .gender-bar-fill{{width:100%;height:0;border-radius:6px 6px 2px 2px;min-height:0}}
