@@ -2951,6 +2951,66 @@ def portals_page(request: Request):
 <div class='card section'><h2>Portal Access</h2><div class='muted'>Use User Management to create and assign school accounts, then use the appropriate role to control portal access.</div><div style='margin-top:12px'><a class='action' href='/app/users'>👤 Open User Management</a> <a class='action' href='/app/roles'>🔐 Open Roles & Permissions</a></div></div></div>"""
     return _school_page(request,"School Portals",body)
 
+
+def _overview_health_panel(title, overall, summary, items, attention="No items currently require attention."):
+    status_class = "health-good" if str(overall).lower() in ("healthy","ready","operational") else "health-attention"
+    item_html = "".join(
+        f"<div class='health-check'><span class='health-dot {('health-dot-good' if ok else 'health-dot-attention')}'></span><div><b>{escape(str(label))}</b><small>{escape(str(detail))}</small></div></div>"
+        for label, ok, detail in items
+    )
+    return f"""<div class='overview-health-wrap'>
+<div class='overview-health-card' tabindex='0' role='button' aria-expanded='false' onclick='toggleOverviewHealth(this)' onkeydown='if(event.key==="Enter"||event.key===" "){{event.preventDefault();toggleOverviewHealth(this)}}'>
+  <div class='health-compact'>
+    <div><div class='health-kicker'>DaviSchool Health Status</div><div class='health-title'>{escape(title)}</div><div class='health-summary'>{escape(summary)}</div></div>
+    <div class='health-status-pill {status_class}'><span class='health-dot health-dot-good'></span>{escape(overall)}</div>
+  </div>
+  <div class='health-expanded'>
+    <div class='health-expanded-head'><div><div class='health-kicker'>DaviSchool Health Status</div><h2>{escape(title)}</h2><div class='health-summary'>{escape(summary)}</div></div><button type='button' class='health-close' onclick='event.stopPropagation();toggleOverviewHealth(this.closest(".overview-health-card"))'>Close</button></div>
+    <div class='health-grid'>{item_html}</div>
+    <div class='health-attention'><b>Attention</b><span>{escape(attention)}</span></div>
+    <div class='health-checked'>Checked when this Overview was loaded.</div>
+  </div>
+</div>
+</div>
+<style>
+.overview-health-wrap{{width:100%;grid-column:1 / -1;margin-top:18px}}
+.overview-health-card{{width:100%;box-sizing:border-box;background:#fff;border:1px solid #dbe5df;border-radius:18px;box-shadow:0 4px 16px #00000008;cursor:pointer;outline:none;transition:box-shadow .2s ease,border-color .2s ease}}
+.overview-health-card:hover{{border-color:#176B3A;box-shadow:0 8px 24px #00000010}}
+.health-compact{{min-height:92px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px}}
+.health-kicker{{font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#176B3A}}
+.health-title{{font-size:20px;font-weight:900;color:#0f172a;margin-top:3px}}
+.health-summary{{font-size:12px;color:#64748b;margin-top:4px}}
+.health-status-pill{{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;font-size:12px;font-weight:900;white-space:nowrap}}
+.health-good{{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}}
+.health-attention{{background:#fffbeb;color:#92400e;border:1px solid #fde68a}}
+.health-dot{{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 9px}}
+.health-dot-good{{background:#16a34a}}
+.health-dot-attention{{background:#f59e0b}}
+.health-expanded{{display:none;padding:24px}}
+.overview-health-card.expanded{{position:fixed;inset:10px;z-index:9999;width:auto;height:auto;overflow:auto;background:#fff;border-color:#176B3A;box-shadow:0 20px 60px #00000025;cursor:default}}
+.overview-health-card.expanded .health-compact{{display:none}}
+.overview-health-card.expanded .health-expanded{{display:block}}
+.health-expanded-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding-bottom:18px;border-bottom:1px solid #e5e7eb}}
+.health-expanded h2{{margin:4px 0 0;font-size:24px}}
+.health-close{{border:1px solid #dbe2ea;background:#176B3A;color:#fff;border-radius:9px;padding:9px 14px;font-weight:800;cursor:pointer}}
+.health-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}}
+.health-check{{display:flex;gap:10px;align-items:flex-start;padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc}}
+.health-check b{{display:block;font-size:12px;color:#0f172a}}
+.health-check small{{display:block;font-size:11px;color:#64748b;margin-top:4px;line-height:1.4}}
+.health-attention{{margin-top:14px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}}
+.health-attention span{{color:#64748b}}
+.health-checked{{margin-top:14px;font-size:10px;color:#94a3b8}}
+@media(max-width:700px){{.health-compact{{align-items:flex-start;flex-direction:column}}.health-status-pill{{align-self:flex-start}}.health-grid{{grid-template-columns:1fr}}.overview-health-card.expanded{{inset:0;border-radius:0}}.health-expanded{{padding:18px}}}}
+</style>
+<script>
+function toggleOverviewHealth(card){{
+  if(!card)return;
+  const open=card.classList.toggle('expanded');
+  card.setAttribute('aria-expanded',open?'true':'false');
+  document.body.style.overflow=open?'hidden':'';
+}}
+</script>"""
+
 @router.get("/app", response_class=HTMLResponse)
 def app_home(request: Request):
     if "email" not in request.session:
@@ -3082,8 +3142,26 @@ def app_home(request: Request):
                 tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} onclick='toggleTeacherTile(event,this)' aria-pressed='false' style='text-decoration:none;color:inherit'>
 <div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
 <div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
+
+            teacher_attention=[]
+            if class_count==0: teacher_attention.append("No class allocation is assigned to this teacher.")
+            if subject_count==0: teacher_attention.append("No subject allocation is assigned to this teacher.")
+            if expected_marks and entered_marks<expected_marks: teacher_attention.append(f"{expected_marks-entered_marks} marks are still outstanding for {latest_exam_name}.")
+            if pending_corrections: teacher_attention.append(f"{pending_corrections} mark correction request{'s' if pending_corrections!=1 else ''} are pending.")
+            teacher_health_items=[
+                ("Account", True, "Teacher account is active."),
+                ("Class allocations", class_count>0, f"{class_count} allocated class{'es' if class_count!=1 else ''}."),
+                ("Subject allocations", subject_count>0, f"{subject_count} allocated subject{'s' if subject_count!=1 else ''}."),
+                ("Marks workspace", (expected_marks==0 or entered_marks>=expected_marks), f"{entered_marks} of {expected_marks} marks entered for {latest_exam_name}."),
+                ("Attendance", True, f"{attendance_present} present and {attendance_absent} absent today."),
+                ("Correction requests", pending_corrections==0, f"{pending_corrections} pending request{'s' if pending_corrections!=1 else ''}.")
+            ]
+            teacher_health_overall="Ready" if not teacher_attention else "Attention"
+            teacher_health_summary="Your teaching workspace is ready." if not teacher_attention else f"{len(teacher_attention)} item{'s' if len(teacher_attention)!=1 else ''} need attention."
+            teacher_health=_overview_health_panel("Teacher Workspace",teacher_health_overall,teacher_health_summary,teacher_health_items," ".join(teacher_attention) if teacher_attention else "No items currently require attention.")
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
 <div class='grid teacher-overview-grid'>{tile_html}</div>
+<div class='teacher-health-slot'>{teacher_health}</div>
 <style>
 .teacher-overview-grid{{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}}
 .teacher-hover-tile{{display:block;min-height:150px;perspective:900px}}
@@ -3171,10 +3249,30 @@ function toggleTeacherTile(event, tile){{
                 class_color=class_size_colors[class_index % len(class_size_colors)]
                 class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
 
+
+            health_checks=[("Database",True,"Connected and responding to Overview queries."),("Student records",True,f"{s} student records available."),("Staff & teachers",True,f"{t} staff/teacher records available."),("Classes",True,f"{c} classes available.")]
+            health_attention=[]
+            try:
+                subject_count=int(cur.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
+                health_checks.append(("Subjects",True,f"{subject_count} subjects available."))
+            except Exception:
+                health_checks.append(("Subjects",False,"Subject records could not be checked."))
+                health_attention.append("Subject records could not be checked.")
+            for table,label in (("marks","Marks"),("attendance","Attendance"),("fee_payments","Fees & finance")):
+                try:
+                    count=int(cur.execute(f"SELECT COUNT(*) c FROM {table} WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
+                    health_checks.append((label,True,f"{count} records available."))
+                except Exception:
+                    health_checks.append((label,False,f"{label} records could not be checked."))
+                    health_attention.append(f"{label} records could not be checked.")
+            admin_health_overall="Healthy" if not health_attention else "Attention"
+            admin_health_summary="School systems are responding normally." if not health_attention else f"{len(health_attention)} system area{'s' if len(health_attention)!=1 else ''} need attention."
+            admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
+
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
 <div class='grid overview-charts'><div class='card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card class-size-chart-card'><div class='label'>Class</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
+<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div>{admin_health}</div>
 <style>
 .overview-school-heading{{text-align:center;margin-bottom:2px}}.overview-school-heading h1{{margin-bottom:6px}}.overview-school-heading .muted{{margin:0}}.gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
