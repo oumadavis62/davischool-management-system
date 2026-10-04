@@ -7065,16 +7065,9 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         import secrets
         if role in ("teacher","registrar"):
             if role == "registrar":
-                # Registrar credentials use a separate, exactly 10-character
-                # cryptographically random password format.
-                alphabet="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%"
-                while True:
-                    generated_password="".join(secrets.choice(alphabet) for _ in range(10))
-                    if (any(ch.isupper() for ch in generated_password)
-                        and any(ch.islower() for ch in generated_password)
-                        and any(ch.isdigit() for ch in generated_password)
-                        and any(ch in "@#$%" for ch in generated_password)):
-                        break
+                # Registrar password: firstname + two random digits + @ + current year.
+                first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Registrar")
+                generated_password=first_name + str(secrets.randbelow(100)).zfill(2) + "@" + str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
             else:
                 first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
                 generated_password=first_name+"@"+str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
