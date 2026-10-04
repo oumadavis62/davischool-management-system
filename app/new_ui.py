@@ -6948,7 +6948,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     if role=="registrar":
         existing_registrar=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(COALESCE(role,''))='registrar' LIMIT 1",(sid,)).fetchone()
         if existing_registrar:
-            return HTMLResponse("This school already has a Registrar account. Only one Registrar can exist at a time. Please use the existing Registrar account or remove it before creating another one. <a href='/app/users'>Back</a>",400)
+            return RedirectResponse("/app/users",303)
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
