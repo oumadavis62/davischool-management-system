@@ -2939,7 +2939,7 @@ def app_home(request: Request):
         school=cur.execute("SELECT * FROM schools WHERE id=?",(school_id,)).fetchone()
         school_name=school["name"] if school else "School"
         if role=="teacher":
-            body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div>
+            body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
 <div class='grid' style='grid-template-columns:repeat(5,1fr)'>
 <div class='card'><div class='label'>Students</div><div class='kpi'>{_modern_icon("students",28)}</div></div>
 <div class='card'><div class='label'>Classes</div><div class='kpi'>{_modern_icon("school",28)}</div></div>
@@ -3005,12 +3005,12 @@ def app_home(request: Request):
                 class_color=class_size_colors[class_index % len(class_size_colors)]
                 class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
 
-            body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
+            body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
 <div class='grid'><div class='card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card class-size-chart-card'><div class='label'>Class</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
-.gender-chart-card{{min-width:0;overflow:hidden}}
+.overview-school-heading{text-align:center;margin-bottom:2px}.overview-school-heading h1{margin-bottom:6px}.overview-school-heading .muted{margin:0}.gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
 .gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}
 .gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
