@@ -17,7 +17,7 @@ from app.schema_compat import ensure_schema_compatibility
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
-BUILD_COMMIT = "students-main-route-fix-2026-10-04"
+BUILD_COMMIT = "students-save-role-fix-2026-10-04"
 
 app = FastAPI()
 
@@ -264,7 +264,7 @@ async def students_page_swipe_scroll(request: Request, call_next):
     response = await call_next(request)
     if request.url.path == "/app/students" and response.headers.get("content-type", "").lower().startswith("text/html"):
         try:
-            body = response.body
+            body = getattr(response, "body", None)
             if body:
                 css = b"<style id='davischool-students-scroll-fix'>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.app,.main,.page{min-height:auto}.page .card.section{min-width:0;max-width:100%;box-sizing:border-box}.page .card.section:has(table){max-width:100%;width:100%;box-sizing:border-box}.students-register-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain}.students-register-scroll table{width:max-content;min-width:100%;max-width:none;white-space:nowrap}</style>"
                 marker = b"</head>"
@@ -2911,7 +2911,7 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
     school = get_school_obj(request)
     if not school:
         return RedirectResponse("/", 303)
-    if not _role_permission(request, school["id"], "students.create"):
+    if not _role_permission(request, "students.create"):
         return HTMLResponse("You do not have permission to create students.", 403)
     admission = admission_no.strip()
     student_name = (name or student_name).strip()
@@ -2950,7 +2950,7 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
     if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school: return RedirectResponse("/", 303)
-    if not _role_permission(request, school["id"], "students.create"): return HTMLResponse("You do not have permission to create students.", 403)
+    if not _role_permission(request, "students.create"): return HTMLResponse("You do not have permission to create students.", 403)
     admission, student_name = admission_no.strip(), name.strip()
     if not admission or not student_name: return HTMLResponse("Admission number and full name are required.", 400)
     con = get_db()
@@ -2985,7 +2985,7 @@ def main_app_student_edit(request: Request, student_id: int, admission_no: str =
     if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school: return RedirectResponse("/", 303)
-    if not _role_permission(request, school["id"], "students.edit"): return HTMLResponse("You do not have permission to edit students.", 403)
+    if not _role_permission(request, "students.edit"): return HTMLResponse("You do not have permission to edit students.", 403)
     admission, student_name = admission_no.strip(), name.strip()
     if not admission or not student_name: return HTMLResponse("Admission number and full name are required.", 400)
     new_status = status.strip().lower()
