@@ -361,14 +361,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app","⌂","Overview",None),
             ("/app/students","🎓","Students","students.view"),
             ("/app/staff","👩‍🏫","Staff & Teachers","staff.view"),
-            ("/app/classes","🏫","Classes","classes.view"),
-            ("/app/subjects","📚","Subjects","subjects.view"),
-            ("/app/exams","🧪","Examinations","exams.view"),
             ("/app/academics","📝","Academics","marks.view"),
-            ("/app/academics/allocations","👩‍🏫","Teacher Allocations","staff.edit"),
-            ("/app/academics/assessments","📋","SBA / CBA","marks.edit"),
-            ("/app/academics/analysis","📊","Academic Analysis","reports.view"),
-            ("/app/report-cards","📄","Report Cards","reports.view"),
             ("/app/attendance","✓","Attendance","attendance.view"),
             ("/app/timetable","🗓","Timetable","timetable.view"),
             ("/app/finance","💰","Fees & Finance","fees.view"),
@@ -1034,7 +1027,9 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
-    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
+    actions=[("/app/academics/marks","📝","Marks Entry","Enter and update learner marks"),("/app/academics/marksheets","📋","Class Marksheets","View class marks"),("/app/academics/subject-analysis","📊","Subject Analysis","Analyse subjects"),("/app/academics/student-analysis","👤","Student Analysis","Analyse a learner"),("/app/academics/class-analysis","🏫","Class Analysis","Analyse a class"),("/app/academics/analysis","📊","Academic Analysis","View overall academic analysis"),("/app/academics/assessments","🧪","SBA / CBA","Continuous assessment"),("/app/academics/grading","🎯","Grade & Points","Set subject grading rules"),("/app/academics/allocations","👩‍🏫","Teacher Allocation","Assign teachers"),("/app/report-cards","📄","Report Cards","Generate reports"),("/app/report-card-settings","📅","Report Card Dates","Set opening & closing dates"),("/app/exams","⚙","Examinations","Manage examinations"),("/app/subjects","📚","Subjects","Manage subjects"),("/app/classes","🏷","Classes & Streams","Manage classes")]
+    if role == "school_admin":
+        actions.append(("/app/academics/marks-corrections","🔓","Marks Corrections","Review teacher correction requests"))
     # Preserve the current isolated browser-tab session when opening an Academic Manager tile.
     # The explicit query parameter prevents the tile navigation from falling back to the
     # generic login session even if the browser-side tab script has not run yet.
