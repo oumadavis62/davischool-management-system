@@ -6799,18 +6799,15 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
                         "INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at) VALUES(?,?,?,?)",
                         (sid,cid,tid,now)
                     )
-            if teacher_type in ("subject_teacher","both"):
-                for cid in class_ids:
-                    for subject_id in subject_ids:
-                        existing_allocation=cur.execute(
-                            "SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",
-                            (sid,tid,cid,subject_id)
-                        ).fetchone()
-                        if not existing_allocation:
-                            cur.execute(
-                                "INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
-                                (sid,tid,cid,subject_id)
-                            )
+            # IMPORTANT: creating a teacher account must NOT create subject
+            # allocations automatically. Teacher allocations are explicit school-admin
+            # decisions and must only be created from the Teacher Allocations page
+            # through the "Save Allocation" action.
+            #
+            # The selected class/subject values on the account form are retained for
+            # account setup compatibility, but they are never written to
+            # teacher_allocations here. This prevents unapproved allocations from
+            # reappearing after login or after revisiting the allocations page.
 
         try:
             _audit(cur,sid,request,"USER_CREATE",f"Created {role} account {email_v}")
