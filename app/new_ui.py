@@ -2953,7 +2953,7 @@ def portals_page(request: Request):
 
 
 def _overview_health_panel(title, overall, summary, items, attention="No items currently require attention."):
-    status_class = "health-good" if str(overall).lower() in ("healthy","ready","operational") else "health-attention"
+    status_class = "health-good" if str(overall).lower() in ("healthy","ready","operational") else "health-status-attention"
     item_html = "".join(
         f"<div class='health-check'><span class='health-dot {('health-dot-good' if ok else 'health-dot-attention')}'></span><div><b>{escape(str(label))}</b><small>{escape(str(detail))}</small></div></div>"
         for label, ok, detail in items
@@ -2962,7 +2962,7 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 <div class='overview-health-card' tabindex='0' role='button' aria-expanded='false' onclick='toggleOverviewHealth(this)' onkeydown='if(event.key==="Enter"||event.key===" "){{event.preventDefault();toggleOverviewHealth(this)}}'>
   <div class='health-compact'>
     <div><div class='health-kicker'>DaviSchool Health Status</div><div class='health-title'>{escape(title)}</div><div class='health-summary'>{escape(summary)}</div></div>
-    <div class='health-status-pill {status_class}'><span class='health-dot health-dot-good'></span>{escape(overall)}</div>
+    <div class='health-status-pill {status_class}'><span class='health-dot {'health-dot-good' if status_class=='health-good' else 'health-dot-attention'}'></span>{escape(overall)}</div>
   </div>
   <div class='health-expanded'>
     <div class='health-expanded-head'><div><div class='health-kicker'>DaviSchool Health Status</div><h2>{escape(title)}</h2><div class='health-summary'>{escape(summary)}</div></div><button type='button' class='health-close' onclick='event.stopPropagation();toggleOverviewHealth(this.closest(".overview-health-card"))'>Close</button></div>
@@ -2982,7 +2982,7 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 .health-summary{{font-size:12px;color:#64748b;margin-top:4px}}
 .health-status-pill{{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;font-size:12px;font-weight:900;white-space:nowrap}}
 .health-good{{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}}
-.health-attention{{background:#fffbeb;color:#92400e;border:1px solid #fde68a}}
+.health-status-attention{{background:#fffbeb;color:#92400e;border:1px solid #fde68a}}
 .health-dot{{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 9px}}
 .health-dot-good{{background:#16a34a}}
 .health-dot-attention{{background:#f59e0b}}
