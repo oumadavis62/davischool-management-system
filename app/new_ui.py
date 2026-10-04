@@ -6790,8 +6790,11 @@ def users_edit_page(request: Request, uid: int):
     assigned_class=cur.execute("SELECT class_id FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? ORDER BY id DESC LIMIT 1",(sid,int(user["teacher_id"] or 0))).fetchone() if user["teacher_id"] else None
     con.close()
     if not user:return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin":
         return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
+        return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited by the School Admin. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
@@ -6815,7 +6818,10 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
+    current_role=str(request.session.get("role") or "")
     if str(user["role"] or "")=="school_admin": con.close(); return HTMLResponse("School Admin accounts can only be edited by the Super Admin. <a href='/app/users'>Back</a>",403)
+    if str(user["role"] or "")=="registrar" and (current_role!="school_admin" or str(user["created_by_role"] or "")!="school_admin"):
+        con.close(); return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited by the School Admin. <a href='/app/users'>Back</a>",403)
     if role not in allowed: con.close(); return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     email_v=email.strip().lower()
     duplicate=cur.execute("SELECT id FROM users WHERE lower(email)=? AND id<>?",(email_v,uid)).fetchone()
