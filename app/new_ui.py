@@ -3010,7 +3010,7 @@ def app_home(request: Request):
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
-.overview-school-heading{text-align:center;margin-bottom:2px}.overview-school-heading h1{margin-bottom:6px}.overview-school-heading .muted{margin:0}.gender-chart-card{{min-width:0;overflow:hidden}}
+.overview-school-heading{{text-align:center;margin-bottom:2px}}.overview-school-heading h1{{margin-bottom:6px}}.overview-school-heading .muted{{margin:0}}.gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
 .gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}
 .gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
