@@ -770,8 +770,7 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
         else:
             class_stream = str(class_row["stream"] or "").strip()
     cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),class_stream,"active"))
-    student_id=cur.lastrowid
-    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
+    # Do not use cursor.lastrowid here: the production PostgreSQL cursor does not expose it.\n    # The inserted row does not need its generated ID for this save operation.\n    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
     con.commit(); con.close(); return RedirectResponse("/app/students",303)
 
 @router.get("/app/students/edit/{student_id}",response_class=HTMLResponse)
