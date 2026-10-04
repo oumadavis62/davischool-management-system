@@ -266,7 +266,7 @@ async def students_page_swipe_scroll(request: Request, call_next):
         try:
             body = response.body
             if body:
-                css = b"<style>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.app,.main,.page{min-height:auto}.page .card.section{min-width:0}.page .card.section table{width:max-content;min-width:100%}.page .card.section:has(table){overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain}.page .card.section:has(table) table{white-space:nowrap}</style>"
+                css = b"<style>html,body{min-height:100%;height:auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}.app,.main,.page{min-height:auto}.page .card.section{min-width:0;max-width:100%;box-sizing:border-box}.page .card.section:has(table){overflow-x:auto;overflow-y:hidden;max-width:100%;width:100%;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain}.page .card.section:has(table) table{width:max-content;min-width:100%;max-width:none;white-space:nowrap}</style>"
                 marker = b"</head>"
                 if marker in body:
                     body = body.replace(marker, css + marker, 1)
