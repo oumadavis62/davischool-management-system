@@ -1734,6 +1734,11 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
         return RedirectResponse("/",303)
     role_v=role.strip().lower()
     allowed={"teacher","parent","student","school_admin","accountant","registrar"}
+    current_role=str(request.session.get("role") or "")
+    if role_v=="school_admin" and current_role!="super_admin":
+        return HTMLResponse("Only the Super Admin can create School Admin accounts.",403)
+    if role_v=="registrar" and current_role not in ("school_admin","super_admin"):
+        return HTMLResponse("Only the School Admin or Super Admin can create Registrar accounts.",403)
     if role_v not in allowed or not full_name.strip() or not email.strip() or not password.strip():
         return HTMLResponse("Invalid user details.",400)
     con=get_db(); cur=con.cursor()
@@ -1750,7 +1755,7 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
         con.close(); return HTMLResponse("A teacher account must be linked to a teacher.",400)
     if role_v in ("student","parent") and stid is None:
         con.close(); return HTMLResponse("A student/parent account must be linked to a student.",400)
-    cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id) VALUES (?,?,?,?,?,?,?)",(email.strip(),hash_password(password.strip()),role_v,full_name.strip(),school_obj["id"],tid,stid))
+    cur.execute("INSERT INTO users (email,password,role,full_name,school_id,teacher_id,student_id,created_by_role,created_by_email) VALUES (?,?,?,?,?,?,?,?,?)",(email.strip(),hash_password(password.strip()),role_v,full_name.strip(),school_obj["id"],tid,stid,current_role,request.session.get("email","")))
     con.commit(); con.close()
     return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/delete-user/{uid}")
@@ -1762,9 +1767,16 @@ def sys_del_user(request: Request, uid: int):
     if not user:
         con.close()
         return RedirectResponse("/school/system-settings/user-management",303)
-    if str(user["role"] or "")=="school_admin" and request.session.get("role")!="super_admin":
+    current_role=str(request.session.get("role") or "")
+    if str(user["role"] or "")=="school_admin" and current_role!="super_admin":
         con.close()
-        return HTMLResponse("School Admin accounts can only be deleted by the Super Admin. <a href='/school/system-settings/user-management'>Back</a>",403)
+        return HTMLResponse("School Admin accounts can only be managed by the Super Admin. <a href='/school/system-settings/user-management'>Back</a>",403)
+    if str(user["role"] or "")=="registrar" and not (
+        (current_role=="school_admin" and str(user["created_by_role"] or "")=="school_admin") or
+        (current_role=="super_admin" and str(user["created_by_role"] or "")=="super_admin")
+    ):
+        con.close()
+        return HTMLResponse("This Registrar account is managed by its creator and cannot be removed here.",403)
     cur.execute("DELETE FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"]))
     con.commit(); con.close(); return RedirectResponse("/school/system-settings/user-management",303)
 @app.get("/school/system-settings/backup/download")
