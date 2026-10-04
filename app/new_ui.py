@@ -442,7 +442,8 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       '/app/roles',
       '/app/school-settings',
       '/app/audit',
-      '/app/account'
+      '/app/account',
+      '/app/teacher'
     ];
 
     function cleanPath(path){{
