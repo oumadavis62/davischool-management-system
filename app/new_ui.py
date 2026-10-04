@@ -2763,7 +2763,8 @@ def app_home(request: Request):
 .gender-female{{background:#db2777}}
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
-.class-size-chart-card{{min-width:0;overflow:hidden}}
+.class-size-chart-card{{min-width:0;width:100%;max-width:100%;overflow:hidden;box-sizing:border-box;align-self:stretch;min-height:190px}}
+@media(max-width:600px){{.grid .class-size-chart-card{{grid-column:1 / -1;width:100%;max-width:100%;min-width:0;min-height:200px}}}}
 .class-size-bars{{display:flex;align-items:flex-end;gap:9px;width:100%;min-height:125px;height:125px;padding:4px 4px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}}
 .class-size-bar-column{{display:flex;flex:0 0 42px;width:42px;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
