@@ -2764,13 +2764,13 @@ def app_home(request: Request):
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
 .class-size-chart-card{{min-width:0;width:100%;max-width:100%;overflow:hidden;box-sizing:border-box;align-self:stretch;min-height:190px}}
-@media(max-width:600px){{.grid .class-size-chart-card{{grid-column:1 / -1;width:100%;max-width:100%;min-width:0;min-height:225px}}}}
+@media(max-width:600px){{.grid .class-size-chart-card{{grid-column:1 / -1;width:100%;max-width:100%;min-width:0;min-height:200px}}}}
 .class-size-bars{{display:flex;align-items:flex-end;gap:9px;width:100%;min-height:125px;height:125px;padding:4px 4px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}}
 .class-size-bar-column{{display:flex;flex:0 0 42px;width:42px;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
 .class-size-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
 .class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
-.class-size-bar-label{{font-size:10px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:42px;overflow:hidden;text-overflow:ellipsis}}
+.class-size-bar-label{{font-size:10px;color:#334155;font-weight:700;text-align:center;white-space:normal;max-width:42px;min-height:24px;line-height:12px;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}}
 .class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}
 </style></div>"""
 
