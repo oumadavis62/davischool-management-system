@@ -2719,13 +2719,13 @@ def app_home(request: Request):
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>📝</span>Record Marks</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📄</span>Report Cards</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
-.gender-chart-card{min-width:0;overflow:hidden}
-.gender-chart-total{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}
-.gender-bar-row{margin:8px 0}
-.gender-bar-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#334155;margin-bottom:4px}
-.gender-bar-label b{font-size:12px;color:#0f172a}
-.gender-bar-track{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}
-.gender-bar-fill{height:100%;background:#176B3A;border-radius:999px;min-width:0}
+.gender-chart-card{{min-width:0;overflow:hidden}}
+.gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
+.gender-bar-row{{margin:8px 0}}
+.gender-bar-label{{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#334155;margin-bottom:4px}}
+.gender-bar-label b{{font-size:12px;color:#0f172a}}
+.gender-bar-track{{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}}
+.gender-bar-fill{{height:100%;background:#176B3A;border-radius:999px;min-width:0}}
 </style></div>"""
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
