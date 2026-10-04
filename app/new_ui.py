@@ -3032,7 +3032,7 @@ def app_home(request: Request):
             tile_html=""
             for title,icon,value,detail in hover_tiles:
                 href=" href='/app/academics/marks'" if title=="Record Marks" else ""
-                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} style='text-decoration:none;color:inherit'>
+                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} onclick='toggleTeacherTile(event,this)' aria-pressed='false' style='text-decoration:none;color:inherit'>
 <div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
 <div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
@@ -3041,7 +3041,8 @@ def app_home(request: Request):
 .teacher-overview-grid{{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}}
 .teacher-hover-tile{{display:block;min-height:150px;perspective:900px}}
 .teacher-tile-inner{{position:relative;width:100%;height:150px;transition:transform .35s ease;transform-style:preserve-3d}}
-.teacher-hover-tile:hover .teacher-tile-inner,.teacher-hover-tile:focus .teacher-tile-inner{{transform:rotateY(180deg)}}
+.teacher-hover-tile.active .teacher-tile-inner{{transform:rotateY(180deg)}}
+.teacher-hover-tile:focus-visible{{outline:2px solid #176B3A;outline-offset:3px}}
 .teacher-tile-face{{position:absolute;inset:0;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}}
 .teacher-tile-front .kpi{{margin-top:12px}}
 .teacher-tile-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
@@ -3050,7 +3051,21 @@ def app_home(request: Request):
 .teacher-tile-back-detail{{font-size:11px;line-height:1.4;color:#fff}}
 @media(max-width:900px){{.teacher-overview-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
 @media(max-width:600px){{.teacher-overview-grid{{grid-template-columns:1fr 1fr;gap:10px}}.teacher-hover-tile,.teacher-tile-inner{{min-height:135px;height:135px}}.teacher-tile-face{{padding:12px}}.teacher-tile-back-value{{font-size:22px}}}}
-</style></div>"""
+</style>
+<script>
+function toggleTeacherTile(event, tile){{
+    const isActive=tile.classList.contains('active');
+    if(!isActive){{
+        event.preventDefault();
+        tile.classList.add('active');
+        tile.setAttribute('aria-pressed','true');
+    }}else{{
+        tile.classList.remove('active');
+        tile.setAttribute('aria-pressed','false');
+        if(!tile.getAttribute('href')) event.preventDefault();
+    }}
+}}
+</script></div>"""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
