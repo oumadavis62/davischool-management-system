@@ -5187,7 +5187,7 @@ def teacher_allocations_page(request: Request):
 <div class='allocation-cap'><span>Maximum Allocations</span><b>{allocation_max}</b></div>
 <div class='allocation-cap'><span>Current Allocations</span><b>{allocation_current}</b></div>
 <div class='allocation-cap'><span>Remaining</span><b>{allocation_remaining}</b></div>
-<div class='allocation-formula'>Classes ({len(classes)}) × Subjects ({len(subjects)}) = <b>{allocation_max}</b></div>
+
 </div>
 <div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
