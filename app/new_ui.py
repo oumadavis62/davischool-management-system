@@ -6626,8 +6626,10 @@ def users_page(request: Request):
         safe_name=escape(str(u["full_name"] or "user")).replace("'","&#39;")
         current_role=str(request.session.get("role") or "")
         creator_role=str(u["created_by_role"] or "") if "created_by_role" in u.keys() else ""
-        if role_name=="school_admin" or role_name=="registrar":
-            actions=""
+        if role_name=="school_admin":
+            actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
+        elif role_name=="registrar":
+            actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Managed by Super Admin</span>"
         else:
             actions=f"<div style='display:flex;gap:6px;flex-wrap:wrap'><a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:6px 9px;border-radius:7px;background:#e0f2fe;color:#075985;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/app/users/delete/{int(u['id'])}' style='display:inline' onsubmit=\"return confirm('Delete {safe_name} account? This cannot be undone.')\"><button type='submit' style='border:0;padding:6px 9px;border-radius:7px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;cursor:pointer'>🗑️ Delete</button></form></div>"
         rows += f"<tr><td>{escape(str(u['full_name'] or ''))}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(str(u['temporary_password'] or '—'))}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{linked}</td><td>{actions}</td></tr>"
