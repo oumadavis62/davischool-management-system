@@ -6580,6 +6580,7 @@ def users_page(request: Request):
     teachers=cur.execute("SELECT id,name,email FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    registrar_exists=bool(cur.execute("SELECT id FROM users WHERE school_id=? AND lower(COALESCE(role,''))='registrar' LIMIT 1",(sid,)).fetchone())
     _ensure_teacher_allocations_table(cur)
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -6697,10 +6698,10 @@ def users_page(request: Request):
 {credential_modal}<div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
-<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar'>Registrar</option></select>
+<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar' ${registrar_exists ? "": "disabled"}>Registrar${registrar_exists ? " (already assigned)" : ""}</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
-<div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
+<div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>{registrar_exists ? "<div style='grid-column:1/-1;padding:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;color:#9a3412;font-weight:700'>Only one Registrar is allowed for each school. The Registrar option is unavailable while an existing Registrar account remains.</div>" : ""}
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
 <div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{''.join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations.</div></div>
@@ -6944,6 +6945,10 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     if role=="school_admin":
         return HTMLResponse("School Admin accounts can only be created by the Super Admin.",403)
     con=_db();cur=con.cursor()
+    if role=="registrar":
+        existing_registrar=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(COALESCE(role,''))='registrar' LIMIT 1",(sid,)).fetchone()
+        if existing_registrar:
+            return HTMLResponse("This school already has a Registrar account. Only one Registrar can exist at a time. Please use the existing Registrar account or remove it before creating another one. <a href='/app/users'>Back</a>",400)
     try:
         _ensure_user_account_columns(cur, con)
         email_v=email.strip().lower()
