@@ -7063,8 +7063,20 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         from app.main import hash_password, verify_password
         import secrets
         if role in ("teacher","registrar"):
-            first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
-            generated_password=first_name+"@"+str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+            if role == "registrar":
+                # Registrar credentials use a separate, exactly 10-character
+                # cryptographically random password format.
+                alphabet="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%"
+                while True:
+                    generated_password="".join(secrets.choice(alphabet) for _ in range(10))
+                    if (any(ch.isupper() for ch in generated_password)
+                        and any(ch.islower() for ch in generated_password)
+                        and any(ch.isdigit() for ch in generated_password)
+                        and any(ch in "@#$%" for ch in generated_password)):
+                        break
+            else:
+                first_name=re.sub(r"[^A-Za-z0-9]", "", full_name.split()[0] if full_name.split() else "Teacher")
+                generated_password=first_name+"@"+str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
             username=email_v
         else:
             generated_password="DS-"+secrets.token_urlsafe(8)
