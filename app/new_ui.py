@@ -3159,10 +3159,10 @@ def app_home(request: Request):
             ]
             tile_html=""
             for title,icon,value,detail in hover_tiles:
-                tile_href="/app/academics/marks" if title=="Record Marks" else ""
-                tile_html+=f"""<div class='teacher-hover-tile' title='{escape(detail)}' data-href='{escape(tile_href)}' role='button' tabindex='0' onclick='toggleTeacherTile(event,this)' onkeydown='if(event.key==="Enter"||event.key===" "){{event.preventDefault();toggleTeacherTile(event,this)}}' aria-pressed='false'>
+                href=" href='/app/academics/marks'" if title=="Record Marks" else ""
+                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} onclick='toggleTeacherTile(event,this)' aria-pressed='false' style='text-decoration:none;color:inherit'>
 <div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
-<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></div>"""
+<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
 
             # Marks need attention only while one or more allocated subject/class
             # combinations are still open for editing. Once a subject is locked/finalized,
@@ -3219,17 +3219,16 @@ def app_home(request: Request):
 <script>
 function toggleTeacherTile(event, tile){{
     if(!tile)return;
-    if(event)event.preventDefault();
     const isActive=tile.classList.contains('active');
     if(!isActive){{
+        if(event)event.preventDefault();
         tile.classList.add('active');
         tile.setAttribute('aria-pressed','true');
-        return;
+    }}else{{
+        tile.classList.remove('active');
+        tile.setAttribute('aria-pressed','false');
+        if(!tile.getAttribute('href') && event)event.preventDefault();
     }}
-    tile.classList.remove('active');
-    tile.setAttribute('aria-pressed','false');
-    const href=tile.getAttribute('data-href');
-    if(href)window.location.href=href;
 }}
 </script></div>"""
         else:
