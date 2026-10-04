@@ -2697,11 +2697,36 @@ def app_home(request: Request):
             s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
             c=cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?",(school_id,)).fetchone()["c"]
-            fees=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments WHERE school_id=?",(school_id,)).fetchone()["v"]
+            gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM students WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
+            gender_counts={"Male":0,"Female":0,"Other":0}
+            for gr in gender_rows:
+                value=str(gr["gender"] or "").strip().lower()
+                if value.startswith("m"):
+                    gender_counts["Male"] += int(gr["count"] or 0)
+                elif value.startswith("f"):
+                    gender_counts["Female"] += int(gr["count"] or 0)
+                elif value:
+                    gender_counts["Other"] += int(gr["count"] or 0)
+                else:
+                    gender_counts["Other"] += int(gr["count"] or 0)
+            gender_total=sum(gender_counts.values())
+            gender_bars=""
+            for label,count in gender_counts.items():
+                pct=(count/gender_total*100) if gender_total else 0
+                gender_bars += f"<div class='gender-bar-row'><div class='gender-bar-label'><span>{label}</span><b>{count}</b></div><div class='gender-bar-track'><div class='gender-bar-fill' style='width:{pct:.1f}%'></div></div></div>"
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
-<div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div></div>
+<div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div>{gender_bars}</div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>📝</span>Record Marks</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📄</span>Report Cards</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
-<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div></div>"""
+<div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
+<style>
+.gender-chart-card{min-width:0;overflow:hidden}
+.gender-chart-total{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}
+.gender-bar-row{margin:8px 0}
+.gender-bar-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#334155;margin-bottom:4px}
+.gender-bar-label b{font-size:12px;color:#0f172a}
+.gender-bar-track{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}
+.gender-bar-fill{height:100%;background:#176B3A;border-radius:999px;min-width:0}
+</style></div>"""
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
 
