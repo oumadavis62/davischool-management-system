@@ -2713,7 +2713,7 @@ def app_home(request: Request):
             gender_bars=""
             for label,count in gender_counts.items():
                 pct=(count/gender_total*100) if gender_total else 0
-                gender_bars += f"<div class='gender-bar-row'><div class='gender-bar-label'><span>{label}</span><b>{count}</b></div><div class='gender-bar-track'><div class='gender-bar-fill' style='width:{pct:.1f}%'></div></div></div>"
+                gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card'><div class='label'>Students</div><div class='kpi'>{s}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div>{gender_bars}</div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
@@ -2721,11 +2721,19 @@ def app_home(request: Request):
 <style>
 .gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
+.gender-chart-card{{min-width:0;overflow:hidden}}
+.gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
 .gender-bar-row{{margin:8px 0}}
-.gender-bar-label{{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#334155;margin-bottom:4px}}
-.gender-bar-label b{{font-size:12px;color:#0f172a}}
-.gender-bar-track{{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}}
-.gender-bar-fill{{height:100%;background:#176B3A;border-radius:999px;min-width:0}}
+.gender-chart-card{{min-width:0;overflow:hidden}}
+.gender-bar-row{{margin:8px 0}}
+.gender-bar-column{{display:inline-flex;width:30%;height:125px;vertical-align:bottom;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
+.gender-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
+.gender-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
+.gender-bar-fill{{width:100%;height:0;border-radius:6px 6px 2px 2px;min-height:0}}
+.gender-male{{background:#2563eb}}
+.gender-female{{background:#db2777}}
+.gender-other{{background:#f59e0b}}
+.gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
 </style></div>"""
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body))
