@@ -2738,14 +2738,16 @@ def app_home(request: Request):
                                            ORDER BY c.name,c.stream""",(school_id,)).fetchall()
             class_size_max=max([int(row["student_count"] or 0) for row in class_size_rows] or [0])
             class_size_bars=""
-            for row in class_size_rows:
+            class_size_colors=["#2563eb","#16a34a","#dc2626","#9333ea","#ea580c","#0891b2","#ca8a04","#db2777"]
+            for class_index,row in enumerate(class_size_rows):
                 class_name=str(row["name"] or "").strip()
                 stream=str(row["stream"] or "").strip()
                 label=(class_name + (" · "+stream if stream else "")).strip()
                 short_label=label
                 count=int(row["student_count"] or 0)
                 pct=(count/class_size_max*100) if class_size_max else 0
-                class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
+                class_color=class_size_colors[class_index % len(class_size_colors)]
+                class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
 
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
 <div class='grid'><div class='card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card class-size-chart-card'><div class='label'>Class</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div></div>
