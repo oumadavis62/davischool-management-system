@@ -2742,7 +2742,7 @@ def app_home(request: Request):
                 class_name=str(row["name"] or "").strip()
                 stream=str(row["stream"] or "").strip()
                 label=(class_name + (" · "+stream if stream else "")).strip()
-                short_label=label if len(label)<=10 else label[:9]+"…"
+                short_label=label
                 count=int(row["student_count"] or 0)
                 pct=(count/class_size_max*100) if class_size_max else 0
                 class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
