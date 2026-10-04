@@ -436,10 +436,57 @@ def _shell(title, name, role, body, school_id=None):
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:22px 0}}.card{{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005}}.kpi{{font-size:28px;font-weight:900;margin-top:10px}}.label{{font-size:11px;color:#64748b;text-transform:uppercase;font-weight:800}}
 .section{{margin-top:18px}}.section h2{{font-size:16px;margin:0 0 12px}}.actions{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative;z-index:1}}.action{{display:block;position:relative;z-index:2;background:white;border:1px solid #e5e7eb;border-radius:14px;padding:15px;text-decoration:none;color:#172033;font-weight:800;font-size:13px;cursor:pointer;pointer-events:auto}}.action:hover,.action:focus-visible,.tile:hover,.tile:focus-visible{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important;box-shadow:0 6px 16px #176B3A33;transform:translateY(-1px)}}.action:hover small,.action:focus-visible small,.tile:hover small,.tile:focus-visible small{{color:#fff!important}}.action,.tile{{transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}}.actions > .action{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:105px}}.action span{{font-size:21px;display:block;margin-bottom:8px}}.actions > .action small{{display:block;text-align:center}}
 table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
+.ds-action-cell{{position:relative;min-width:88px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}}
+.ds-action-cell:not(.ds-action-open)>*{{opacity:0;visibility:hidden;pointer-events:none;transform:scale(.98)}}
+.ds-action-cell.ds-action-open{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important}}
+.ds-action-cell.ds-action-open>*{{opacity:1;visibility:visible;pointer-events:auto;transform:none}}
+.ds-action-cell>*{{transition:opacity .12s ease,visibility .12s ease,transform .12s ease}}
+.ds-action-cell.ds-action-open .action{{background:#fff!important;color:#176B3A!important;border-color:#fff!important;box-shadow:none!important}}
+.ds-action-cell.ds-action-open .action:hover,.ds-action-cell.ds-action-open .action:focus-visible{{background:#0F4D2A!important;color:#fff!important;border-color:#0F4D2A!important}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{{"sidebar-hidden" if teacher_locked else ""}}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
-<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(name)}</strong><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
+<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><strong>{escape(name)}</strong><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'><div class='avatar'>{escape(initials)}</div></div></header>{body}<script>(function(){{
+function setupDaviActionCells(){{
+  document.querySelectorAll('table').forEach(function(table){{
+    var headerRow=table.querySelector('thead tr');
+    if(!headerRow)return;
+    var headers=Array.prototype.slice.call(headerRow.children);
+    var actionIndex=-1;
+    headers.some(function(header,index){{
+      if(String(header.textContent||'').trim().toLowerCase()==='action'){{
+        actionIndex=index;
+        return true;
+      }}
+      return false;
+    }});
+    if(actionIndex<0)return;
+    table.querySelectorAll('tbody tr').forEach(function(row){{
+      var cells=row.children;
+      if(!cells || cells.length<=actionIndex)return;
+      var cell=cells[actionIndex];
+      if(cell.dataset.daviActionToggle==='1')return;
+      cell.dataset.daviActionToggle='1';
+      cell.classList.add('ds-action-cell');
+      cell.setAttribute('aria-expanded','false');
+      cell.addEventListener('click',function(event){{
+        if(event.target.closest && event.target.closest('a,button,input,select,textarea'))return;
+        var open=!cell.classList.contains('ds-action-open');
+        table.querySelectorAll('.ds-action-cell.ds-action-open').forEach(function(other){{
+          if(other!==cell){{
+            other.classList.remove('ds-action-open');
+            other.setAttribute('aria-expanded','false');
+          }}
+        }});
+        cell.classList.toggle('ds-action-open',open);
+        cell.setAttribute('aria-expanded',open?'true':'false');
+      }});
+    }});
+  }});
+}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupDaviActionCells);
+else setupDaviActionCells();
+}})();</script><script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
 // Two-step browser history rule for the school workspace.
 // Step 1: the real workspace display remains the Back destination.
 // Step 2: opening a record/detail/edit/history view creates the single
