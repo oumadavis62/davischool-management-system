@@ -2710,12 +2710,29 @@ def app_home(request: Request):
                 else:
                     gender_counts["Other"] += int(gr["count"] or 0)
             gender_total=sum(gender_counts.values())
+        staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
+        staff_gender_counts={"Male":0,"Female":0,"Other":0}
+        for gr in staff_gender_rows:
+            value=str(gr["gender"] or "").strip().lower()
+            if value.startswith("m"):
+                staff_gender_counts["Male"] += int(gr["count"] or 0)
+            elif value.startswith("f"):
+                staff_gender_counts["Female"] += int(gr["count"] or 0)
+            elif value:
+                staff_gender_counts["Other"] += int(gr["count"] or 0)
+            else:
+                staff_gender_counts["Other"] += int(gr["count"] or 0)
+        staff_gender_total=sum(staff_gender_counts.values())
+        staff_gender_bars=""
+        for label,count in staff_gender_counts.items():
+            pct=(count/staff_gender_total*100) if staff_gender_total else 0
+            staff_gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
             gender_bars=""
             for label,count in gender_counts.items():
                 pct=(count/gender_total*100) if gender_total else 0
                 gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
             body=f"""<div class='page'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div>
-<div class='grid'><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card'><div class='label'>Staff</div><div class='kpi'>{t}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div></div>
+<div class='grid'><div class='card gender-chart-card'><div class='label'>Student Gender</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff Gender</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>{c}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'><div class='action'><span>🎓</span>Students</div><div class='action'><span>✓</span>Attendance</div><div class='action'><span>💰</span>Finance</div><div class='action'><span>📊</span>Analysis</div><div class='action'><span>📚</span>Accounting</div><div class='action'><span>👤</span>Users</div></div></div>
 <div class='section'><h2>Administration</h2><div class='actions'><div class='action'><span>⚙</span>School Settings</div><div class='action'><span>🎓</span>Promotion / Transfer</div><div class='action'><span>🔐</span>Roles</div><div class='action'><span>🛡</span>Audit Trail</div><div class='action'><span>🌐</span>Portals</div></div></div></div>
 <style>
