@@ -377,7 +377,7 @@ def init_db():
     try:
         cur.execute("SELECT * FROM users LIMIT 0")
         user_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
-        for column, definition in (("username","TEXT"),("teacher_id","INTEGER"),("student_id","INTEGER")):
+        for column, definition in (("username","TEXT"),("teacher_id","INTEGER"),("student_id","INTEGER"),("created_by_role","TEXT"),("created_by_email","TEXT")):
             if column not in user_columns:
                 try:
                     cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
@@ -1688,16 +1688,10 @@ def school_system_settings(sub: str, request: Request):
         rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c[0]}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
         panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add</button></form></div></div>"""
     elif sub=="user-management":
-        urows = "".join([
-            f"<tr><td style='padding:10px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td>" +
-            (f"<span style='display:inline-block;padding:5px 8px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
-             if str(u['role'] or '')=="school_admin" else
-             f"<a href='{base_path}/delete-user/{u['id']}' onclick=\"return confirm('Delete {str(u['full_name'] or 'this user')} account? This cannot be undone.')\" style='background:#fee2e2;color:#991b1b;padding:5px 8px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>🗑️ Delete</a>") +
-            f"</td></tr>" for u in users
-        ]) or "<tr><td colspan='4' style='padding:30px;text-align:center'>No users</td></tr>"
-        teacher_opts=''.join([f"<option value='{x['id']}'>{x['name']} — {x['id_no'] or ''}</option>" for x in teachers_for_users])
-        student_opts=''.join([f"<option value='{x['id']}'>{x['name']} — {x['admission_no'] or ''}</option>" for x in students_for_users])
-        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px'><div style='padding:14px'><b>👥 Users ({len(users)})</b></div><table style='width:100%'><tbody>{urows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Add User / Portal Account</b><form method='post' action='{base_path}/add-user'><input name='full_name' required class='input-field' placeholder='Name'><input name='email' required class='input-field' placeholder='Email'><input name='password' required class='input-field' placeholder='Password'><select name='role' class='input-field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='school_admin'>School Admin</option></select><select name='teacher_id' class='input-field'><option value=''>Link Teacher (optional)</option>{teacher_opts}</select><select name='student_id' class='input-field'><option value=''>Link Student (for parent/student)</option>{student_opts}</select><button class='add-btn'>Create Account</button></form></div></div>"""
+        urows = "".join([f"<tr><td style='padding:10px;font-size:12px'>{u['full_name']}</td><td>{u['email']}</td><td>{u['role']}</td><td>{'Super Admin' if str(u['role'] or '') in ('school_admin','registrar') and (str(u['role'] or '')=='school_admin' or str(u['created_by_role'] or '')=='super_admin') else ('School Admin' if str(u['role'] or '')=='registrar' else '—')}</td><td><a href='{base_path}/edit-user/{u['id']}' style='background:#e0f2fe;color:#075985;padding:4px 8px;border-radius:6px;text-decoration:none;margin-right:4px'>✏️ Edit</a><a href='{base_path}/delete-user/{u['id']}' onclick="return confirm('Delete this account? This cannot be undone.')" style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for u in users[:100]]) or "<tr><td colspan='5' style='padding:30px;text-align:center'>No users</td></tr>"
+        school_rows = cur.execute("SELECT id,name,email FROM schools ORDER BY name").fetchall()
+        school_opts = "".join([f"<option value='{s['id']}'>{escape(str(s['name'] or ''))} ({escape(str(s['email'] or ''))})</option>" for s in school_rows])
+        panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'><div style='padding:14px'><b>👥 Global Users ({len(users)})</b></div><div style='overflow-x:auto'><table style='width:100%'><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Owner</th><th>Actions</th></tr></thead><tbody>{urows}</tbody></table></div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px'><b>➕ Create Account</b><div style='font-size:12px;color:#64748b;margin:6px 0 10px'>Super Admin can create a School Admin or Registrar for one selected school.</div><form method='post' action='{base_path}/add-user'><select name='school_id' required class='input-field'>{school_opts}</select><input name='full_name' required placeholder='Full name' class='input-field'><input name='email' type='email' required placeholder='Email / Username' class='input-field'><input name='password' required minlength='8' placeholder='Password' class='input-field'><select name='role' class='input-field'><option value='school_admin'>School Admin</option><option value='registrar'>Registrar</option></select><button class='add-btn'>Create Account</button></form></div></div>"""
     elif sub=="database-backup":
         panel = f"""<div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px'><h3>💾 Backup — {school['name']}</h3><a href='{base_path}/backup/download' style='background:#0b3d91;color:white;padding:12px 18px;border-radius:10px;text-decoration:none'>⬇️ Download</a></div>"""
     elif sub=="system-audit":
@@ -2006,18 +2000,75 @@ def global_sys_del_class(cname: str, stream: str, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("DELETE FROM classes WHERE name=? AND stream=?", (cname, stream)); con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/classes",303)
 @app.post("/super/global-control/system-settings/add-user")
-def global_sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
+def global_sys_add_user(request: Request, school_id: int = Form(...), full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...)):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
-    for sch in schools:
-        cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)", (email.strip(), hash_password(password.strip()), role.strip(), full_name.strip(), sch["id"]))
-    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+    role_v=role.strip().lower()
+    if role_v not in ("school_admin","registrar"):
+        return HTMLResponse("Super Admin can create only School Admin or Registrar accounts from this page.",400)
+    con=get_db(); cur=con.cursor()
+    school=cur.execute("SELECT id FROM schools WHERE id=?",(school_id,)).fetchone()
+    if not school:
+        con.close(); return HTMLResponse("Selected school was not found.",404)
+    email_v=email.strip().lower()
+    if cur.execute("SELECT id FROM users WHERE lower(email)=lower(?) AND school_id=?",(email_v,school_id)).fetchone():
+        con.close(); return HTMLResponse("That email is already registered for this school.",409)
+    cur.execute("""INSERT INTO users (email,password,role,full_name,school_id,created_by_role,created_by_email)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (email_v,hash_password(password.strip()),role_v,full_name.strip(),school_id,"super_admin",request.session.get("email","")))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/system-settings/user-management",303)
+
 @app.get("/super/global-control/system-settings/delete-user/{uid}")
 def global_sys_del_user(uid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT email FROM users WHERE id=?", (uid,)); u = cur.fetchone()
-    if u: cur.execute("DELETE FROM users WHERE email=?", (u["email"],))
+    con=get_db(); cur=con.cursor()
+    u=cur.execute("SELECT id,email,role,created_by_role FROM users WHERE id=?",(uid,)).fetchone()
+    if not u:
+        con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+    if str(u["role"] or "") not in ("school_admin","registrar") or (str(u["role"] or "")=="registrar" and str(u["created_by_role"] or "")!="super_admin"):
+        con.close(); return HTMLResponse("This account is not managed by the Super Admin.",403)
+    cur.execute("DELETE FROM users WHERE id=?",(uid,))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+
+@app.get("/super/global-control/system-settings/edit-user/{uid}", response_class=HTMLResponse)
+def global_sys_edit_user_page(uid: int, request: Request):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    u=cur.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+    if not u:
+        con.close(); return HTMLResponse("User account not found.",404)
+    if str(u["role"] or "") not in ("school_admin","registrar") or (str(u["role"] or "")=="registrar" and str(u["created_by_role"] or "")!="super_admin"):
+        con.close(); return HTMLResponse("This account is not managed by the Super Admin.",403)
+    schools=cur.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
+    con.close()
+    opts="".join(f"<option value='{s['id']}' {'selected' if int(s['id'])==int(u['school_id']) else ''}>{escape(str(s['name'] or ''))}</option>" for s in schools)
+    html=f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.wrap{{max-width:620px;margin:40px auto;padding:16px}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:22px}}input,select{{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin:7px 0}}button,a{{display:inline-block;padding:11px 16px;border-radius:9px;text-decoration:none;font-weight:800;border:0}}button{{background:#0b3d91;color:white}}a{{background:#f1f5f9;color:#334155}}</style></head><body><div class='wrap'><div class='card'><h2>Edit Account</h2><form method='post' action='/super/global-control/system-settings/edit-user/{uid}'><input name='full_name' required value="{escape(str(u['full_name'] or ''))}"><input name='email' type='email' required value="{escape(str(u['email'] or ''))}"><select name='school_id' required>{opts}</select><select name='role' required><option value='school_admin' {'selected' if u['role']=='school_admin' else ''}>School Admin</option><option value='registrar' {'selected' if u['role']=='registrar' else ''}>Registrar</option></select><input name='password' type='password' minlength='8' placeholder='New password (optional)'><button>Save Changes</button> <a href='/super/global-control/system-settings/user-management'>Cancel</a></form></div></div></body></html>"""
+    return HTMLResponse(html)
+
+@app.post("/super/global-control/system-settings/edit-user/{uid}")
+def global_sys_edit_user(uid: int, request: Request, full_name: str=Form(...), email: str=Form(...), school_id: int=Form(...), role: str=Form(...), password: str=Form("")):
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    u=cur.execute("SELECT * FROM users WHERE id=?",(uid,)).fetchone()
+    if not u:
+        con.close(); return HTMLResponse("User account not found.",404)
+    if str(u["role"] or "") not in ("school_admin","registrar") or (str(u["role"] or "")=="registrar" and str(u["created_by_role"] or "")!="super_admin"):
+        con.close(); return HTMLResponse("This account is not managed by the Super Admin.",403)
+    if not cur.execute("SELECT id FROM schools WHERE id=?",(school_id,)).fetchone():
+        con.close(); return HTMLResponse("Selected school was not found.",404)
+    duplicate=cur.execute("SELECT id FROM users WHERE lower(email)=lower(?) AND id<>?",(email.strip().lower(),uid)).fetchone()
+    if duplicate:
+        con.close(); return HTMLResponse("That email is already registered.",409)
+    if role not in ("school_admin","registrar"):
+        con.close(); return HTMLResponse("Invalid role.",400)
+    if password and len(password)<8:
+        con.close(); return HTMLResponse("Password must be at least 8 characters.",400)
+    if password:
+        cur.execute("UPDATE users SET full_name=?,email=?,school_id=?,role=?,password=? WHERE id=?",(full_name.strip(),email.strip().lower(),school_id,role,hash_password(password),uid))
+    else:
+        cur.execute("UPDATE users SET full_name=?,email=?,school_id=?,role=? WHERE id=?",(full_name.strip(),email.strip().lower(),school_id,role,uid))
+    con.commit(); con.close(); return RedirectResponse("/super/global-control/system-settings/user-management",303)
+
 @app.get("/super/global-control/system-settings/backup/download")
 def global_sys_backup_download(request: Request): return RedirectResponse("/super/global-control/system-settings/database-backup",303)
 @app.get("/super/global-control/system-settings/audit/clear")
