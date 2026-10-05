@@ -3041,31 +3041,31 @@ def app_home(request: Request):
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
     flip_script = """<script>
-(function(){{
+(function(){
   var isTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
   if(!isTouch) return;
-  document.querySelectorAll('.overview-flip-tile').forEach(function(tile){{
+  document.querySelectorAll('.overview-flip-tile').forEach(function(tile){
     var moved=false,startX=0,startY=0;
-    tile.addEventListener('touchstart',function(e){{
+    tile.addEventListener('touchstart',function(e){
       moved=false;
-      if(e.touches&&e.touches[0]){{
+      if(e.touches&&e.touches[0]){
         startX=e.touches[0].clientX;
         startY=e.touches[0].clientY;
-      }}
-    }},{{passive:true}});
-    tile.addEventListener('touchmove',function(e){{
+      }
+    },{passive:true});
+    tile.addEventListener('touchmove',function(e){
       if(e.touches&&e.touches[0] &&
          (Math.abs(e.touches[0].clientX-startX)>8 ||
-          Math.abs(e.touches[0].clientY-startY)>8)){{
+          Math.abs(e.touches[0].clientY-startY)>8)){
         moved=true;
-      }}
-    }},{{passive:true}});
-    tile.addEventListener('click',function(e){{
+      }
+    },{passive:true});
+    tile.addEventListener('click',function(e){
       if(moved || e.target.closest('.class-size-bars')) return;
       tile.classList.toggle('is-flipped');
-    }});
-  }});
-}})();
+    });
+  });
+})();
 </script>"""
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
