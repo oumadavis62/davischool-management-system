@@ -439,7 +439,7 @@ def _shell(title, name, role, body, school_id=None):
 .top-system-title{{font-size:18px;font-weight:900;color:#176B3A;line-height:1.1;margin-bottom:2px}}.top-welcome{{font-size:15px;color:#172033;line-height:1.15}}.page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
 .grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:22px 0}}.card{{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005}}.kpi{{font-size:28px;font-weight:900;margin-top:10px}}.label{{font-size:11px;color:#64748b;text-transform:uppercase;font-weight:800}}
 .section{{margin-top:18px}}.section h2{{font-size:16px;margin:0 0 12px}}.actions{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative;z-index:1}}.action{{display:block;position:relative;z-index:2;background:white;border:1px solid #e5e7eb;border-radius:14px;padding:15px;text-decoration:none;color:#172033;font-weight:800;font-size:13px;cursor:pointer;pointer-events:auto}}.action:hover,.action:focus-visible,.tile:hover,.tile:focus-visible{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important;box-shadow:0 6px 16px #176B3A33;transform:translateY(-1px)}}.action:hover small,.action:focus-visible small,.tile:hover small,.tile:focus-visible small{{color:#fff!important}}.action,.tile{{transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}}.actions > .action{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:105px}}.action span{{font-size:21px;display:block;margin-bottom:8px}}.actions > .action small{{display:block;text-align:center}}
-table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
+table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}.audit-table-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;border-radius:14px}}.audit-table-scroll table{{min-width:720px;margin:0}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
 .ds-action-cell{{position:relative;min-width:88px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}}
 .ds-action-cell:not(.ds-action-open)>*{{opacity:0;visibility:hidden;pointer-events:none;transform:scale(.98)}}
 .ds-action-cell.ds-action-open{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important}}
@@ -3339,7 +3339,24 @@ function toggleTeacherTile(event, tile){{
             admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
 
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
-<div class='grid overview-charts'><div class='card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div><div class='card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div><a class='overview-class-hover' href='/app/classes' onclick="if(!this.classList.contains('active')){{event.preventDefault();this.classList.add('active');this.setAttribute('aria-pressed','true');}}else{{this.classList.remove('active');this.setAttribute('aria-pressed','false');}}" aria-pressed='false' style='text-decoration:none;color:inherit'><div class='overview-class-inner'><div class='overview-class-face overview-class-front'><div class='label'>Class</div><div class='overview-class-icon'>{_modern_icon("school",30)}</div><div class='overview-class-count'>{c}</div><div class='muted'>classes</div></div></div></a><div class='card class-size-chart-card classes-overview-card'><div class='label'>Classes Overview</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div></div>
+<div class='grid overview-charts'>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Student</div><div class='overview-flip-value'>{gender_total}</div><div class='overview-flip-detail'>Students</div></div>
+</div></div>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Staff</div><div class='overview-flip-value'>{staff_gender_total}</div><div class='overview-flip-detail'>Staff members</div></div>
+</div></div>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front'><div class='label'>Class</div><div class='overview-class-icon'>{_modern_icon("school",30)}</div><div class='overview-class-count'>{c}</div><div class='muted'>classes</div></div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Class</div><div class='overview-flip-value'>{c}</div><div class='overview-flip-detail'>Classes</div></div>
+</div></div>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card class-size-chart-card classes-overview-card'><div class='label'>Classes Overview</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Classes Overview</div><div class='overview-flip-value'>{c}</div><div class='overview-flip-detail'>Classes</div></div>
+</div></div>
+</div>
 <div class='overview-recent-row'><div class='card recent-activity-card'><div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div><a href='/app/audit' class='recent-view-all'>View All</a></div><div class='recent-activity-list'>{recent_activity_html}</div></div></div>
 <div class='section'><h2>Daily operations</h2><div class='actions'>
 <div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Students</div>
@@ -3367,8 +3384,23 @@ function toggleTeacherTile(event, tile){{
 .gender-female{{background:#db2777}}
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
-@media(min-width:601px){{.overview-charts{{grid-template-columns:repeat(4,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}.overview-charts .gender-chart-card,.overview-charts .class-size-chart-card,.overview-class-hover{{min-width:0;width:100%;max-width:100%;box-sizing:border-box;align-self:stretch;min-height:255px}}.overview-class-hover{{display:block}}.overview-class-inner{{position:relative;width:100%;height:255px;transition:transform .2s ease}}.overview-class-hover.active .overview-class-inner{{transform:translateY(-2px) rotate(-1deg)}}.overview-class-face{{position:absolute;inset:0;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;transition:background .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease}}.overview-class-hover:hover .overview-class-face,.overview-class-hover.active .overview-class-face{{background:#176B3A;color:#fff;border-color:#176B3A;box-shadow:0 6px 16px #176B3A33}}.overview-class-hover:hover .overview-class-icon,.overview-class-hover.active .overview-class-icon{{color:#fff}}.overview-class-hover:hover .overview-class-count,.overview-class-hover.active .overview-class-count{{color:#fff}}.overview-class-front .label{{margin-bottom:10px}}.overview-class-icon{{color:#176B3A;margin-bottom:6px}}.overview-class-count{{font-size:32px;font-weight:900;color:#172033;line-height:1}}.overview-charts .class-size-chart-card{{overflow:hidden}}.overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}.overview-charts .class-size-bar-column{{flex-basis:56px;width:56px;height:165px}}.overview-charts .class-size-bar-track{{height:118px}}.overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}}}
-@media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}@media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr}}.grid .class-size-chart-card{{grid-column:1 / -1;width:100%;max-width:100%;min-width:0;min-height:200px}}.overview-class-hover{{display:block;position:relative;min-height:200px;height:200px}}.overview-class-inner{{position:relative;width:100%;height:200px}}.overview-class-face{{position:absolute;inset:0;padding:12px}}}}
+.overview-charts{{grid-template-columns:repeat(4,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
+.overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px}}
+.overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d}}
+.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg)}}
+.overview-flip-face{{position:absolute;inset:0;box-sizing:border-box;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;overflow:hidden}}
+.overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
+.overview-flip-back .label,.overview-flip-back .overview-flip-detail{{color:#fff}}
+.overview-flip-value{{font-size:32px;font-weight:900;line-height:1;margin:8px 0 5px}}
+.overview-flip-detail{{font-size:12px;font-weight:800;color:#64748b}}
+.overview-class-icon{{color:#176B3A;margin-bottom:6px}}
+.overview-class-count{{font-size:32px;font-weight:900;color:#172033;line-height:1}}
+.overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}
+.overview-charts .class-size-bar-column{{flex-basis:56px;width:56px;height:165px}}
+.overview-charts .class-size-bar-track{{height:118px}}
+.overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
+@media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
+@media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
 .class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:7px;width:100%;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
@@ -8266,10 +8298,10 @@ def audit_page(request: Request):
 <div class='card section'>
 <div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
 <h2 style='margin:0'>Recent activity ({len(rows)})</h2>
-<form method='post' action='/app/audit/clear' onsubmit="return confirm('Clear all audit trail records for this school? This action cannot be undone.');">
+<form method='post' action='/app/audit/clear' data-native-post onsubmit="return confirm('Clear all audit trail records for this school? This action cannot be undone.');">
 <button class='btn' type='submit' style='background:#b91c1c!important;border-color:#b91c1c!important'>🗑️ Clear</button>
 </form></div>
-<table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table>
+<div class='audit-table-scroll'><table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table></div>
 </div></div>"""
     return _school_page(request,"Audit Trail",body)
 
