@@ -6339,6 +6339,7 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         story += [t, Spacer(1,7), Paragraph(
             f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
             styles["normal"])]
+        _report_card_bar_graph(story, result.get("details", []), styles)
         return _pdf_response(_pdf_build(story, A4, "Student Report Card"), f"report_card_{st['name']}.pdf")
     except Exception as exc:
         return _pdf_route_error(request, "report-cards/pdf", exc)
@@ -6391,6 +6392,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             story.append(Paragraph(
                 f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
                 styles["normal"]))
+            _report_card_bar_graph(story, result.get("details", []), styles)
             if index < len(students)-1:
                 story.append(PageBreak())
         from reportlab.lib.pagesizes import A4
@@ -6399,6 +6401,41 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         return _pdf_route_error(request, "report-cards/class-pdf", exc)
     finally:
         con.close()
+
+
+def _report_card_bar_graph(story, details, styles):
+    """Append a compact 0-100 performance bar graph to a report card PDF."""
+    try:
+        from reportlab.graphics.shapes import Drawing, Rect, String, Line
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        items=[]
+        for rr,mark,grade,points in details:
+            try: value=max(0.0,min(100.0,float(mark)))
+            except Exception: continue
+            label=str(rr["name"] or "").strip()
+            if label: items.append((label,value))
+        if not items: return
+        width=178*mm; height=62*mm; drawing=Drawing(width,height)
+        left=10*mm; bottom=13*mm; chart_w=width-left-4*mm; chart_h=height-bottom-10*mm
+        drawing.add(String(width/2,height-5*mm,"Performance by Subject",textAnchor="middle",fontName="Helvetica-Bold",fontSize=9))
+        drawing.add(Line(left,bottom,left+chart_w,bottom,strokeColor=colors.black,strokeWidth=.5))
+        drawing.add(Line(left,bottom,left,bottom+chart_h,strokeColor=colors.black,strokeWidth=.5))
+        for tick in (0,25,50,75,100):
+            y=bottom+chart_h*tick/100.0
+            drawing.add(Line(left,y,left+chart_w,y,strokeColor=colors.lightgrey,strokeWidth=.3))
+            drawing.add(String(left-2*mm,y-2,str(tick),textAnchor="end",fontSize=6))
+        slot=chart_w/max(len(items),1); bar_w=min(11*mm,slot*.58)
+        for i,(label,value) in enumerate(items):
+            x=left+slot*i+(slot-bar_w)/2; bar_h=chart_h*value/100.0
+            drawing.add(Rect(x,bottom,bar_w,bar_h,fillColor=colors.HexColor("#176B3A"),strokeColor=colors.HexColor("#176B3A")))
+            drawing.add(String(x+bar_w/2,bottom+bar_h+2,f"{value:.0f}",textAnchor="middle",fontSize=6,fontName="Helvetica-Bold"))
+            drawing.add(String(x+bar_w/2,bottom-9,label[:8],textAnchor="middle",fontSize=5.5))
+        story.append(drawing)
+        from reportlab.platypus import Spacer
+        story.append(Spacer(1,4))
+    except Exception as exc:
+        print("DAVISCHOOL REPORT CARD GRAPH FALLBACK:",repr(exc),flush=True)
 
 def _report_attendance_summary(cur, sid, student_id, opening_date="", closing_date=""):
     where = "school_id=? AND student_id=?"
@@ -6511,6 +6548,13 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                         saved_comment = ""
                 details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
                                (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(saved_comment))))
+            graph_bars=[]
+            for rr,mark,grade,points in result["details"]:
+                try: graph_value=max(0.0,min(100.0,float(mark)))
+                except Exception: continue
+                graph_label=escape(str(rr["name"] or ""))
+                graph_bars.append("<div class='report-graph-item'><div class='report-graph-value'>%.0f</div><div class='report-graph-track'><div class='report-graph-fill' style='height:%.1f%%'></div></div><div class='report-graph-label'>%s</div></div>" % (graph_value,graph_value,graph_label))
+            graph_html="<div class='report-graph'><div class='report-graph-title'>Performance by Subject</div><div class='report-graph-axis'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div class='report-graph-bars'>%s</div></div>" % "".join(graph_bars) if graph_bars else ""
             try:
                 grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
                                        (sid,str(result.get("overall_grade","")))).fetchone()
@@ -6527,13 +6571,14 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
               <table><thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Points</th><th>Performance Comments</th></tr></thead>
               <tbody>%s</tbody></table>
               <div class='summary'><div><b>Total marks</b><br><b>%.1f</b></div><div><b>Average</b><br><b>%.1f%%</b></div><div><b>Total points</b><br><b>%.1f</b></div><div><b>Overall grade</b><br><b>%s</b></div></div>
+              %s
               <div class='comments'><b>Class Teacher's Comment</b><p>%s</p><b>Principal's Comment</b><p>%s</p></div>
               <div class='sign'><div><b>Class Teacher</b>: %s<hr>Signature</div><div><b>Principal</b>: %s<hr>Signature</div></div>
               <div class='report-dates'><b>Date of closing:</b> %s <b>Date of opening:</b> %s</div>
             </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
                               escape(str(cls["name"] or "")),escape(str(cls["stream"] or "")),
                               term_text,exam_text,"".join(details),float(result["total"]),float(result["average"]),float(result["points"]),
-                              escape(str(result["overall_grade"])),escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
+                              escape(str(result["overall_grade"])),graph_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
                               escape(str((grade_rule["principal_comment"] if grade_rule else "") or "")),
                               escape(str(class_teacher_name or "Not Assigned")),escape(str(principal_name or "Not Assigned")),
                               closing_text,opening_text) + footer_html)
@@ -6546,7 +6591,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         .toolbar .print{background:#176B3A;color:#fff}.report-card{background:#fff;max-width:1000px;margin:18px auto;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always}
         .doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.print-footer{margin-top:18px;padding-top:5px;border-top:2px solid #2E8B57;text-align:center;font-size:8px;color:#176B3A}.print-footer i{font-style:italic}
         h1{text-align:center;font-size:20px;margin:18px 0 8px}.student{display:flex;gap:28px;flex-wrap:wrap;font-size:14px;margin:4px 0}.student span{font-weight:600}.student-name-value{font-size:18px;font-weight:900;display:inline-block}.student-class,.student-term{margin-top:6px}.report-dates{display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin:14px 0 0}.report-dates b{font-weight:900}
-        table{width:100%%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:20px;border:0;border-top:1px solid #172033;width:120px;margin-left:0}
+        table{width:100%%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.report-graph{position:relative;margin-top:14px;border:1px solid #cbd5e1;padding:12px 10px 8px 34px;height:190px}.report-graph-title{text-align:center;font-weight:900;font-size:12px;margin-bottom:8px}.report-graph-axis{position:absolute;left:8px;top:36px;bottom:30px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#64748b}.report-graph-bars{height:128px;display:flex;align-items:flex-end;justify-content:space-around;gap:5px;border-bottom:1px solid #172033}.report-graph-item{height:128px;flex:1;max-width:55px;min-width:24px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.report-graph-value{font-size:8px;font-weight:900;height:12px}.report-graph-track{width:70%;height:108px;display:flex;align-items:flex-end;background:repeating-linear-gradient(to top,#e2e8f0 0,#e2e8f0 1px,transparent 1px,transparent 27px)}.report-graph-fill{width:100%;background:#176B3A;min-height:1px}.report-graph-label{font-size:7px;text-align:center;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:20px;border:0;border-top:1px solid #172033;width:120px;margin-left:0}
         @page{size:A4 portrait;margin:12mm} @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;width:100%%;min-height:0;page-break-after:always;break-after:page}}
         </style></head><body><div class='toolbar'><div><b>🖨️ Class / Stream Report Cards Preview</b><div style='font-size:12px;opacity:.8'>%s · %d student(s)</div></div><div><button class='print' onclick='window.print()'>🖨️ Print All Report Cards</button><button onclick='window.close()'>✕ Close</button></div></div>%s</body></html>""" % (escape(str(cls["name"] or ""))+(((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else "")),len(students),body)
         return HTMLResponse(html)
