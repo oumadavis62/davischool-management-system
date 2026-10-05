@@ -3040,6 +3040,7 @@ def app_home(request: Request):
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
+    flip_script = "<script>(function(){\\n  var tiles=document.querySelectorAll('.overview-flip-tile');\\n  tiles.forEach(function(tile){\\n    var moved=false,startX=0,startY=0;\\n    tile.addEventListener('touchstart',function(e){\\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\\n      moved=false;\\n    },{passive:true});\\n    tile.addEventListener('touchmove',function(e){\\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\\n    },{passive:true});\\n    tile.addEventListener('click',function(e){\\n      if(moved || e.target.closest('.class-size-bars')) return;\\n      tile.classList.toggle('is-flipped');\\n    });\\n  });\\n})();</script>"
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
