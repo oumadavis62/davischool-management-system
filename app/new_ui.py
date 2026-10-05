@@ -6339,8 +6339,10 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         story += [t, Spacer(1,7), Paragraph(
             f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
             styles["normal"])]
-        _report_card_bar_graph(story, result.get("details", []), styles)
-        return _pdf_response(_pdf_build(story, A4, "Student Report Card"), f"report_card_{st['name']}.pdf")
+        trend=_report_card_exam_trend(cur,sid,stid,selected_exam_ids,grading_rules,overall_rules)
+        _report_card_bar_graph(story,result.get("details",[]),styles)
+        _report_card_line_graph(story,trend,styles)
+        return _pdf_response(_pdf_build(story,A4,"Student Report Card"),f"report_card_{st['name']}.pdf")
     except Exception as exc:
         return _pdf_route_error(request, "report-cards/pdf", exc)
     finally:
@@ -6392,7 +6394,9 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             story.append(Paragraph(
                 f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
                 styles["normal"]))
-            _report_card_bar_graph(story, result.get("details", []), styles)
+            trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            _report_card_bar_graph(story,result.get("details",[]),styles)
+            _report_card_line_graph(story,trend,styles)
             if index < len(students)-1:
                 story.append(PageBreak())
         from reportlab.lib.pagesizes import A4
@@ -6436,6 +6440,53 @@ def _report_card_bar_graph(story, details, styles):
         story.append(Spacer(1,4))
     except Exception as exc:
         print("DAVISCHOOL REPORT CARD GRAPH FALLBACK:",repr(exc),flush=True)
+
+
+def _report_card_exam_trend(cur, school_id, student_id, selected_exam_ids, grading_rules=None, overall_rules=None):
+    """Return chronological exam means using the same result engine as report cards."""
+    ids=_parse_assessment_ids(",".join(str(x) for x in (selected_exam_ids or [])))
+    if not ids:return []
+    selected=cur.execute("SELECT id,year,term FROM exams WHERE school_id=? AND id IN (%s) ORDER BY id ASC"%",".join("?" for _ in ids),[school_id]+ids).fetchall()
+    if not selected:return []
+    anchor=selected[-1]; year=str(anchor["year"] or "").strip(); term=str(anchor["term"] or "").strip(); sql="SELECT id,name,year,term FROM exams WHERE school_id=?"; params=[school_id]
+    if year:sql+=" AND year=?"; params.append(year)
+    if term:sql+=" AND term=?"; params.append(term)
+    trend=[]
+    for exam in cur.execute(sql+" ORDER BY id ASC",params).fetchall():
+        eid=int(exam["id"]); result=_student_result_for_assessments(cur,school_id,student_id,[eid],grading_rules,overall_rules)
+        if int(result.get("count",0) or 0)<=0:continue
+        try:mean=max(0.0,min(100.0,float(result.get("average",0.0))))
+        except (TypeError,ValueError):continue
+        trend.append((str(exam["name"] or "Exam %s"%eid).strip(),mean,eid))
+    return trend
+
+def _report_card_line_graph(story,trend,styles):
+    try:
+        from reportlab.graphics.shapes import Drawing,String,Line,Circle
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        if not trend:return
+        width=178*mm; height=50*mm; drawing=Drawing(width,height); left=13*mm; right=5*mm; bottom=12*mm; top=9*mm; cw=width-left-right; ch=height-bottom-top
+        drawing.add(String(width/2,height-5*mm,"Performance Trend",textAnchor="middle",fontName="Helvetica-Bold",fontSize=9))
+        for tick in (0,25,50,75,100):
+            y=bottom+ch*tick/100.0; drawing.add(Line(left,y,left+cw,y,strokeColor=colors.lightgrey,strokeWidth=.3)); drawing.add(String(left-2*mm,y-2,str(tick),textAnchor="end",fontSize=6))
+        drawing.add(Line(left,bottom,left+cw,bottom,strokeColor=colors.black,strokeWidth=.5)); drawing.add(Line(left,bottom,left,bottom+ch,strokeColor=colors.black,strokeWidth=.5))
+        slot=cw/max(len(trend)-1,1); pts=[]
+        for i,(label,value,eid) in enumerate(trend):pts.append((left+(slot*i if len(trend)>1 else cw/2),bottom+ch*value/100.0,label,value))
+        for i in range(1,len(pts)):drawing.add(Line(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1],strokeColor=colors.HexColor("#176B3A"),strokeWidth=1.4))
+        for x,y,label,value in pts:
+            drawing.add(Circle(x,y,2.1,fillColor=colors.HexColor("#176B3A"),strokeColor=colors.HexColor("#176B3A"))); drawing.add(String(x,y+4,"%.1f"%value,textAnchor="middle",fontSize=6,fontName="Helvetica-Bold")); drawing.add(String(x,bottom-9,label[:12],textAnchor="middle",fontSize=5.5))
+        story.append(drawing)
+        from reportlab.platypus import Spacer
+        story.append(Spacer(1,3))
+    except Exception as exc:print("DAVISCHOOL REPORT CARD TREND GRAPH FALLBACK:",repr(exc),flush=True)
+
+def _report_card_line_graph_html(trend):
+    if not trend:return ""
+    count=len(trend); pts=[]
+    for i,(label,value,eid) in enumerate(trend):pts.append((5 if count==1 else i*90.0/(count-1)+5,96-float(value)*.76,label,value))
+    poly=" ".join("%.1f,%.1f"%(x,y) for x,y,_,_ in pts); circles="".join("<circle cx='%.1f' cy='%.1f' r='1.7'></circle><text x='%.1f' y='%.1f' class='trend-value'>%.1f</text>"%(x,y,x,y-4,v) for x,y,_,v in pts); labels="".join("<text x='%.1f' y='108' class='trend-label'>%s</text>"%(x,escape(label[:12])) for x,_,label,_ in pts)
+    return "<div class='report-trend'><div class='report-graph-title'>Performance Trend</div><div class='trend-chart'><div class='trend-y'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><svg viewBox='0 0 100 112' preserveAspectRatio='none' aria-label='Performance trend'><g class='trend-grid'><line x1='5' y1='20' x2='95' y2='20'></line><line x1='5' y1='39' x2='95' y2='39'></line><line x1='5' y1='58' x2='95' y2='58'></line><line x1='5' y1='77' x2='95' y2='77'></line><line x1='5' y1='96' x2='95' y2='96'></line></g><polyline points='%s'></polyline><g class='trend-points'>%s</g><g class='trend-labels'>%s</g></svg></div></div>"%(poly,circles,labels)
 
 def _report_attendance_summary(cur, sid, student_id, opening_date="", closing_date=""):
     where = "school_id=? AND student_id=?"
@@ -6555,6 +6606,8 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                 graph_label=escape(str(rr["name"] or ""))
                 graph_bars.append("<div class='report-graph-item'><div class='report-graph-value'>%.0f</div><div class='report-graph-track'><div class='report-graph-fill' style='height:%.1f%%'></div></div><div class='report-graph-label'>%s</div></div>" % (graph_value,graph_value,graph_label))
             graph_html="<div class='report-graph'><div class='report-graph-title'>Performance by Subject</div><div class='report-graph-axis'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div class='report-graph-bars'>%s</div></div>" % "".join(graph_bars) if graph_bars else ""
+            trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            trend_html=_report_card_line_graph_html(trend)
             try:
                 grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
                                        (sid,str(result.get("overall_grade","")))).fetchone()
@@ -6572,13 +6625,14 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
               <tbody>%s</tbody></table>
               <div class='summary'><div><b>Total marks</b><br><b>%.1f</b></div><div><b>Average</b><br><b>%.1f%%</b></div><div><b>Total points</b><br><b>%.1f</b></div><div><b>Overall grade</b><br><b>%s</b></div></div>
               %s
+              %s
               <div class='comments'><b>Class Teacher's Comment</b><p>%s</p><b>Principal's Comment</b><p>%s</p></div>
               <div class='sign'><div><b>Class Teacher</b>: %s<hr>Signature</div><div><b>Principal</b>: %s<hr>Signature</div></div>
               <div class='report-dates'><b>Date of closing:</b> %s <b>Date of opening:</b> %s</div>
             </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
                               escape(str(cls["name"] or "")),escape(str(cls["stream"] or "")),
                               term_text,exam_text,"".join(details),float(result["total"]),float(result["average"]),float(result["points"]),
-                              escape(str(result["overall_grade"])),graph_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
+                              escape(str(result["overall_grade"])),graph_html,trend_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
                               escape(str((grade_rule["principal_comment"] if grade_rule else "") or "")),
                               escape(str(class_teacher_name or "Not Assigned")),escape(str(principal_name or "Not Assigned")),
                               closing_text,opening_text) + footer_html)
@@ -6591,7 +6645,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         .toolbar .print{background:#176B3A;color:#fff}.report-card{background:#fff;max-width:1000px;margin:18px auto;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always}
         .doc-header{display:flex;align-items:flex-start;gap:14px;border-top:2px solid #2E8B57;border-bottom:3px solid #176B3A;padding:8px 4px 10px;margin-bottom:10px}.doc-logo{width:86px;height:70px;display:flex;align-items:center;justify-content:center;flex:0 0 86px}.doc-logo img{max-width:82px;max-height:66px;object-fit:contain}.doc-school-block{flex:1;min-width:0}.doc-school{font-size:20px;line-height:1.15;font-weight:900;text-transform:uppercase;color:#176B3A}.doc-contact{font-size:10px;color:#334155;margin-top:5px;line-height:1.55}.doc-contact div{display:block;margin:1px 0}.doc-right{font-size:10px;color:#176B3A;line-height:1.65;text-align:left;min-width:155px}.doc-right div{display:block;margin:1px 0}.print-footer{margin-top:18px;padding-top:5px;border-top:2px solid #2E8B57;text-align:center;font-size:8px;color:#176B3A}.print-footer i{font-style:italic}
         h1{text-align:center;font-size:20px;margin:18px 0 8px}.student{display:flex;gap:28px;flex-wrap:wrap;font-size:14px;margin:4px 0}.student span{font-weight:600}.student-name-value{font-size:18px;font-weight:900;display:inline-block}.student-class,.student-term{margin-top:6px}.report-dates{display:flex;gap:24px;flex-wrap:wrap;font-size:12px;margin:14px 0 0}.report-dates b{font-weight:900}
-        table{width:100%%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.report-graph{position:relative;margin-top:14px;border:1px solid #cbd5e1;padding:12px 10px 8px 34px;height:190px}.report-graph-title{text-align:center;font-weight:900;font-size:12px;margin-bottom:8px}.report-graph-axis{position:absolute;left:8px;top:36px;bottom:30px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#64748b}.report-graph-bars{height:128px;display:flex;align-items:flex-end;justify-content:space-around;gap:5px;border-bottom:1px solid #172033}.report-graph-item{height:128px;flex:1;max-width:55px;min-width:24px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.report-graph-value{font-size:8px;font-weight:900;height:12px}.report-graph-track{width:70%;height:108px;display:flex;align-items:flex-end;background:repeating-linear-gradient(to top,#e2e8f0 0,#e2e8f0 1px,transparent 1px,transparent 27px)}.report-graph-fill{width:100%;background:#176B3A;min-height:1px}.report-graph-label{font-size:7px;text-align:center;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:20px;border:0;border-top:1px solid #172033;width:120px;margin-left:0}
+        table{width:100%%;border-collapse:collapse}th,td{border:1px solid #172033;padding:7px;font-size:12px;text-align:left}th{font-weight:900}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary>div{border:1px solid #cbd5e1;padding:10px;text-align:center}.report-graph{position:relative;margin-top:14px;border:1px solid #cbd5e1;padding:12px 10px 8px 34px;height:190px}.report-graph-title{text-align:center;font-weight:900;font-size:12px;margin-bottom:8px}.report-graph-axis{position:absolute;left:8px;top:36px;bottom:30px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#64748b}.report-graph-bars{height:128px;display:flex;align-items:flex-end;justify-content:space-around;gap:5px;border-bottom:1px solid #172033}.report-graph-item{height:128px;flex:1;max-width:55px;min-width:24px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}.report-graph-value{font-size:8px;font-weight:900;height:12px}.report-graph-track{width:70%;height:108px;display:flex;align-items:flex-end;background:repeating-linear-gradient(to top,#e2e8f0 0,#e2e8f0 1px,transparent 1px,transparent 27px)}.report-graph-fill{width:100%;background:#176B3A;min-height:1px}.report-graph-label{font-size:7px;text-align:center;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.report-trend{position:relative;margin-top:10px;border:1px solid #cbd5e1;padding:8px 8px 5px 34px;height:160px}.trend-chart{position:relative;height:122px}.trend-chart svg{width:100%;height:122px;display:block;overflow:visible}.trend-y{position:absolute;left:-26px;top:7px;bottom:24px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#64748b}.trend-grid line{stroke:#e2e8f0;stroke-width:.4}.trend-chart polyline{fill:none;stroke:#176B3A;stroke-width:1.5;vector-effect:non-scaling-stroke}.trend-points circle{fill:#176B3A;stroke:#176B3A}.trend-value{font-size:2.5px;font-weight:900;text-anchor:middle;fill:#172033}.trend-label{font-size:2.5px;text-anchor:middle;fill:#334155}.trend-labels{overflow:visible}.comments{margin-top:14px}.comments p{border:1px solid #cbd5e1;min-height:38px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.sign hr{margin-top:20px;border:0;border-top:1px solid #172033;width:120px;margin-left:0}
         @page{size:A4 portrait;margin:12mm} @media print{body{background:#fff}.toolbar{display:none!important}.report-card{box-shadow:none;margin:0;max-width:none;width:100%%;min-height:0;page-break-after:always;break-after:page}}
         </style></head><body><div class='toolbar'><div><b>🖨️ Class / Stream Report Cards Preview</b><div style='font-size:12px;opacity:.8'>%s · %d student(s)</div></div><div><button class='print' onclick='window.print()'>🖨️ Print All Report Cards</button><button onclick='window.close()'>✕ Close</button></div></div>%s</body></html>""" % (escape(str(cls["name"] or ""))+(((" · "+escape(str(cls["stream"] or ""))) if cls["stream"] else "")),len(students),body)
         return HTMLResponse(html)
