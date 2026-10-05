@@ -3387,7 +3387,8 @@ function toggleTeacherTile(event, tile){{
 .overview-charts{{grid-template-columns:repeat(4,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
 .overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px}}
 .overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d}}
-.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg)}}
+@media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg)}}}}
+.overview-flip-tile.is-flipped .overview-flip-inner{{transform:rotateY(180deg)}}
 .overview-flip-face{{position:absolute;inset:0;box-sizing:border-box;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;overflow:hidden}}
 .overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
 .overview-flip-back .label,.overview-flip-back .overview-flip-detail{{color:#fff}}
@@ -3401,17 +3402,15 @@ function toggleTeacherTile(event, tile){{
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
 @media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
-.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:7px;width:100%;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;cursor:grab}}
+.class-size-bars:active{{cursor:grabbing}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
 .class-size-bar-track{{height:62px;width:18px;background:#e2e8f0;border-radius:5px 5px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
 .class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
 .class-size-bar-label{{font-size:9px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:38px;min-height:22px;line-height:11px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
 .class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}.overview-recent-row{{display:grid;grid-template-columns:minmax(0,1fr);margin:18px 0}}.recent-activity-card{{min-width:0}}.recent-activity-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}}.recent-activity-head h2{{font-size:16px;margin:0 0 4px}}.recent-view-all{{color:#176B3A;font-size:12px;font-weight:900;text-decoration:none;white-space:nowrap}}.recent-view-all:hover{{text-decoration:underline}}.recent-activity-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px}}.recent-activity-item{{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid #eef2f7;min-width:0}}.recent-activity-icon{{width:34px;height:34px;min-width:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:#e8f6ee;color:#176B3A}}.recent-staff{{background:#f1eaff;color:#7c3aed}}.recent-marks{{background:#e7f0ff;color:#2563eb}}.recent-exam{{background:#e8f6ee;color:#15803d}}.recent-activity-copy{{min-width:0;display:flex;flex-direction:column;gap:3px}}.recent-activity-copy b{{font-size:12px;color:#172033}}.recent-activity-copy span{{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.recent-activity-empty{{padding:18px 4px;color:#64748b;font-size:12px}}@media(max-width:700px){{.top-system-title{{font-size:15px}}.top-welcome{{font-size:13px}}.recent-activity-list{{grid-template-columns:1fr}}.recent-activity-head{{align-items:flex-start}}}}
-</style></div>"""
-
-    con.close()
-    return HTMLResponse(_shell("DaviSchool",name,role,body))
+</style><script>(function(){\n  var tiles=document.querySelectorAll('.overview-flip-tile');\n  tiles.forEach(function(tile){\n    var moved=false,startX=0,startY=0;\n    tile.addEventListener('touchstart',function(e){\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\n      moved=false;\n    },{passive:true});\n    tile.addEventListener('touchmove',function(e){\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\n    },{passive:true});\n    tile.addEventListener('click',function(e){\n      if(moved || e.target.closest('.class-size-bars')) return;\n      tile.classList.toggle('is-flipped');\n    });\n  });\n})();</script></style></div>\"\"\"\n\n    con.close()\n    return HTMLResponse(_shell(\"DaviSchool\",name,role,body))
 
 
 def _grade(mark, out_of=100):
