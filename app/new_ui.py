@@ -3066,6 +3066,37 @@ def app_home(request: Request):
     });
   });
 })();
+</script>
+<script>
+(function(){
+  document.querySelectorAll('.class-size-bars').forEach(function(scroller){
+    var dragging=false,startX=0,startScroll=0;
+    scroller.addEventListener('pointerdown',function(e){
+      if(e.pointerType==='mouse' && e.button!==0) return;
+      dragging=true;
+      startX=e.clientX;
+      startScroll=scroller.scrollLeft;
+      scroller.setPointerCapture && scroller.setPointerCapture(e.pointerId);
+    });
+    scroller.addEventListener('pointermove',function(e){
+      if(!dragging) return;
+      var dx=e.clientX-startX;
+      if(Math.abs(dx)>2) scroller.scrollLeft=startScroll-dx;
+    });
+    function stopDrag(){ dragging=false; }
+    scroller.addEventListener('pointerup',stopDrag);
+    scroller.addEventListener('pointercancel',stopDrag);
+    scroller.addEventListener('pointerleave',function(e){
+      if(e.pointerType==='mouse') stopDrag();
+    });
+    scroller.addEventListener('wheel',function(e){
+      if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){
+        scroller.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    },{passive:false});
+  });
+})();
 </script>"""
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
@@ -3431,7 +3462,7 @@ function toggleTeacherTile(event, tile){{
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
 @media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
-.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto;scroll-behavior:auto;user-select:none;-webkit-user-select:none}}
 .class-size-bars:active{{cursor:grabbing}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
