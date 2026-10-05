@@ -3337,14 +3337,14 @@ function toggleTeacherTile(event, tile){{
 .gender-female{{background:#db2777}}
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
-@media(min-width:601px){{.overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1180px;margin:22px auto;align-items:stretch}}.overview-charts .gender-chart-card,.overview-charts .class-size-chart-card{{min-width:0;width:100%;max-width:100%;box-sizing:border-box;align-self:stretch;min-height:255px}}.overview-charts .class-size-chart-card{{overflow:hidden}}.overview-charts .class-size-bars{{min-height:165px;height:165px;gap:14px;padding:8px 8px 0}}.overview-charts .class-size-bar-column{{flex-basis:56px;width:56px;height:165px}}.overview-charts .class-size-bar-track{{height:118px}}.overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}}}
+@media(min-width:601px){{.overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1180px;margin:22px auto;align-items:stretch}}.overview-charts .gender-chart-card,.overview-charts .class-size-chart-card{{min-width:0;width:100%;max-width:100%;box-sizing:border-box;align-self:stretch;min-height:255px}}.overview-charts .class-size-chart-card{{overflow:hidden}}.overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}.overview-charts .class-size-bar-column{{flex-basis:56px;width:56px;height:165px}}.overview-charts .class-size-bar-track{{height:118px}}.overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}}}
 @media(max-width:600px){{.grid .class-size-chart-card{{grid-column:1 / -1;width:100%;max-width:100%;min-width:0;min-height:200px}}}}
-.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:9px;width:100%;min-height:125px;height:125px;padding:4px 8px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box}}
-.class-size-bar-column{{display:flex;flex:0 0 42px;width:42px;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:7px;width:100%;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box}}
+.class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
-.class-size-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
+.class-size-bar-track{{height:62px;width:18px;background:#e2e8f0;border-radius:5px 5px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
 .class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
-.class-size-bar-label{{font-size:10px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:42px;min-height:24px;line-height:12px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
+.class-size-bar-label{{font-size:9px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:38px;min-height:22px;line-height:11px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
 .class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}
 </style></div>"""
 
