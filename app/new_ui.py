@@ -6340,7 +6340,6 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
             f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
             styles["normal"])]
         trend=_report_card_exam_trend(cur,sid,stid,selected_exam_ids,grading_rules,overall_rules)
-        _report_card_bar_graph(story,result.get("details",[]),styles)
         _report_card_line_graph(story,trend,styles)
         return _pdf_response(_pdf_build(story,A4,"Student Report Card"),f"report_card_{st['name']}.pdf")
     except Exception as exc:
@@ -6395,7 +6394,6 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
                 f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
                 styles["normal"]))
             trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
-            _report_card_bar_graph(story,result.get("details",[]),styles)
             _report_card_line_graph(story,trend,styles)
             if index < len(students)-1:
                 story.append(PageBreak())
@@ -6405,41 +6403,6 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         return _pdf_route_error(request, "report-cards/class-pdf", exc)
     finally:
         con.close()
-
-
-def _report_card_bar_graph(story, details, styles):
-    """Append a compact 0-100 performance bar graph to a report card PDF."""
-    try:
-        from reportlab.graphics.shapes import Drawing, Rect, String, Line
-        from reportlab.lib import colors
-        from reportlab.lib.units import mm
-        items=[]
-        for rr,mark,grade,points in details:
-            try: value=max(0.0,min(100.0,float(mark)))
-            except Exception: continue
-            label=str(rr["name"] or "").strip()
-            if label: items.append((label,value))
-        if not items: return
-        width=178*mm; height=62*mm; drawing=Drawing(width,height)
-        left=10*mm; bottom=13*mm; chart_w=width-left-4*mm; chart_h=height-bottom-10*mm
-        drawing.add(String(width/2,height-5*mm,"Performance by Subject",textAnchor="middle",fontName="Helvetica-Bold",fontSize=9))
-        drawing.add(Line(left,bottom,left+chart_w,bottom,strokeColor=colors.black,strokeWidth=.5))
-        drawing.add(Line(left,bottom,left,bottom+chart_h,strokeColor=colors.black,strokeWidth=.5))
-        for tick in (0,25,50,75,100):
-            y=bottom+chart_h*tick/100.0
-            drawing.add(Line(left,y,left+chart_w,y,strokeColor=colors.lightgrey,strokeWidth=.3))
-            drawing.add(String(left-2*mm,y-2,str(tick),textAnchor="end",fontSize=6))
-        slot=chart_w/max(len(items),1); bar_w=min(11*mm,slot*.58)
-        for i,(label,value) in enumerate(items):
-            x=left+slot*i+(slot-bar_w)/2; bar_h=chart_h*value/100.0
-            drawing.add(Rect(x,bottom,bar_w,bar_h,fillColor=colors.HexColor("#176B3A"),strokeColor=colors.HexColor("#176B3A")))
-            drawing.add(String(x+bar_w/2,bottom+bar_h+2,f"{value:.0f}",textAnchor="middle",fontSize=6,fontName="Helvetica-Bold"))
-            drawing.add(String(x+bar_w/2,bottom-9,label[:8],textAnchor="middle",fontSize=5.5))
-        story.append(drawing)
-        from reportlab.platypus import Spacer
-        story.append(Spacer(1,4))
-    except Exception as exc:
-        print("DAVISCHOOL REPORT CARD GRAPH FALLBACK:",repr(exc),flush=True)
 
 
 def _report_card_exam_trend(cur, school_id, student_id, selected_exam_ids, grading_rules=None, overall_rules=None):
@@ -6599,13 +6562,6 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                         saved_comment = ""
                 details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
                                (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(saved_comment))))
-            graph_bars=[]
-            for rr,mark,grade,points in result["details"]:
-                try: graph_value=max(0.0,min(100.0,float(mark)))
-                except Exception: continue
-                graph_label=escape(str(rr["name"] or ""))
-                graph_bars.append("<div class='report-graph-item'><div class='report-graph-value'>%.0f</div><div class='report-graph-track'><div class='report-graph-fill' style='height:%.1f%%'></div></div><div class='report-graph-label'>%s</div></div>" % (graph_value,graph_value,graph_label))
-            graph_html="<div class='report-graph'><div class='report-graph-title'>Performance by Subject</div><div class='report-graph-axis'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div class='report-graph-bars'>%s</div></div>" % "".join(graph_bars) if graph_bars else ""
             trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
             trend_html=_report_card_line_graph_html(trend)
             try:
@@ -6625,14 +6581,13 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
               <tbody>%s</tbody></table>
               <div class='summary'><div><b>Total marks</b><br><b>%.1f</b></div><div><b>Average</b><br><b>%.1f%%</b></div><div><b>Total points</b><br><b>%.1f</b></div><div><b>Overall grade</b><br><b>%s</b></div></div>
               %s
-              %s
               <div class='comments'><b>Class Teacher's Comment</b><p>%s</p><b>Principal's Comment</b><p>%s</p></div>
               <div class='sign'><div><b>Class Teacher</b>: %s<hr>Signature</div><div><b>Principal</b>: %s<hr>Signature</div></div>
               <div class='report-dates'><b>Date of closing:</b> %s <b>Date of opening:</b> %s</div>
             </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
                               escape(str(cls["name"] or "")),escape(str(cls["stream"] or "")),
                               term_text,exam_text,"".join(details),float(result["total"]),float(result["average"]),float(result["points"]),
-                              escape(str(result["overall_grade"])),graph_html,trend_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
+                              escape(str(result["overall_grade"])),trend_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
                               escape(str((grade_rule["principal_comment"] if grade_rule else "") or "")),
                               escape(str(class_teacher_name or "Not Assigned")),escape(str(principal_name or "Not Assigned")),
                               closing_text,opening_text) + footer_html)
