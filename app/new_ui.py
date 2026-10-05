@@ -3200,6 +3200,8 @@ def app_home(request: Request):
             teacher_health_overall="Ready" if not teacher_attention else "Attention"
             teacher_health_summary="Your teaching workspace is ready." if not teacher_attention else f"{len(teacher_attention)} item{'s' if len(teacher_attention)!=1 else ''} need attention."
             teacher_health=_overview_health_panel("Teacher Workspace",teacher_health_overall,teacher_health_summary,teacher_health_items," ".join(teacher_attention) if teacher_attention else "No items currently require attention.")
+            flip_script = "<script>(function(){\n  var tiles=document.querySelectorAll('.overview-flip-tile');\n  tiles.forEach(function(tile){\n    var moved=false,startX=0,startY=0;\n    tile.addEventListener('touchstart',function(e){\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\n      moved=false;\n    },{passive:true});\n    tile.addEventListener('touchmove',function(e){\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\n    },{passive:true});\n    tile.addEventListener('click',function(e){\n      if(moved || e.target.closest('.class-size-bars')) return;\n      tile.classList.toggle('is-flipped');\n    });\n  });\n})();</script>"
+
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
 <div class='grid teacher-overview-grid'>{tile_html}</div>
 <div class='teacher-health-slot'>{teacher_health}</div>
@@ -3410,23 +3412,9 @@ function toggleTeacherTile(event, tile){{
 .class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
 .class-size-bar-label{{font-size:9px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:38px;min-height:22px;line-height:11px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
 .class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}.overview-recent-row{{display:grid;grid-template-columns:minmax(0,1fr);margin:18px 0}}.recent-activity-card{{min-width:0}}.recent-activity-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}}.recent-activity-head h2{{font-size:16px;margin:0 0 4px}}.recent-view-all{{color:#176B3A;font-size:12px;font-weight:900;text-decoration:none;white-space:nowrap}}.recent-view-all:hover{{text-decoration:underline}}.recent-activity-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px}}.recent-activity-item{{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid #eef2f7;min-width:0}}.recent-activity-icon{{width:34px;height:34px;min-width:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:#e8f6ee;color:#176B3A}}.recent-staff{{background:#f1eaff;color:#7c3aed}}.recent-marks{{background:#e7f0ff;color:#2563eb}}.recent-exam{{background:#e8f6ee;color:#15803d}}.recent-activity-copy{{min-width:0;display:flex;flex-direction:column;gap:3px}}.recent-activity-copy b{{font-size:12px;color:#172033}}.recent-activity-copy span{{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.recent-activity-empty{{padding:18px 4px;color:#64748b;font-size:12px}}@media(max-width:700px){{.top-system-title{{font-size:15px}}.top-welcome{{font-size:13px}}.recent-activity-list{{grid-template-columns:1fr}}.recent-activity-head{{align-items:flex-start}}}}
-</style><script>(function(){
-  var tiles=document.querySelectorAll('.overview-flip-tile');
-  tiles.forEach(function(tile){
-    var moved=false,startX=0,startY=0;
-    tile.addEventListener('touchstart',function(e){
-      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}
-      moved=false;
-    },{passive:true});
-    tile.addEventListener('touchmove',function(e){
-      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;
-    },{passive:true});
-    tile.addEventListener('click',function(e){
-      if(moved || e.target.closest('.class-size-bars')) return;
-      tile.classList.toggle('is-flipped');
-    });
-  });
-})();</script></div>\"\"\"\n\n    con.close()\n    return HTMLResponse(_shell(\"DaviSchool\",name,role,body))
+</style>{flip_script}</div>
+
+    con.close()\n    return HTMLResponse(_shell(\"DaviSchool\",name,role,body))
 
 
 def _grade(mark, out_of=100):
