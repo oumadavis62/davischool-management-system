@@ -119,6 +119,18 @@ class DaviSchoolTabSessionMiddleware:
     // in a new tab: a stale ds_tab in the URL must never cause this tab to use
     // another tab's authenticated cookie.
     if (urlTabId !== id) {
+      var sharedTab = currentUrl.searchParams.get("ds_tab_shared") === "1";
+      if (sharedTab && urlTabId) {
+        // Print/preview windows intentionally reuse the authenticated opener
+        // tab session. Normal new tabs still receive their own isolated ID.
+        id = urlTabId;
+        sessionStorage.setItem(KEY, id);
+        currentUrl.searchParams.delete("ds_tab_shared");
+        currentUrl.searchParams.set("ds_tab", id);
+        markInternalNavigation();
+        window.location.replace(currentUrl.pathname + currentUrl.search + currentUrl.hash);
+        return;
+      }
       currentUrl.searchParams.set("ds_tab", id);
       markInternalNavigation();
       window.location.replace(currentUrl.pathname + currentUrl.search + currentUrl.hash);
