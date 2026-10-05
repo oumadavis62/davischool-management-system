@@ -3040,7 +3040,33 @@ def app_home(request: Request):
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
-    flip_script = "<script>(function(){\\n  var tiles=document.querySelectorAll('.overview-flip-tile');\\n  tiles.forEach(function(tile){\\n    var moved=false,startX=0,startY=0;\\n    tile.addEventListener('touchstart',function(e){\\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\\n      moved=false;\\n    },{passive:true});\\n    tile.addEventListener('touchmove',function(e){\\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\\n    },{passive:true});\\n    tile.addEventListener('click',function(e){\\n      if(moved || e.target.closest('.class-size-bars')) return;\\n      tile.classList.toggle('is-flipped');\\n    });\\n  });\\n})();</script>"
+    flip_script = """<script>
+(function(){{
+  var isTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+  if(!isTouch) return;
+  document.querySelectorAll('.overview-flip-tile').forEach(function(tile){{
+    var moved=false,startX=0,startY=0;
+    tile.addEventListener('touchstart',function(e){{
+      moved=false;
+      if(e.touches&&e.touches[0]){{
+        startX=e.touches[0].clientX;
+        startY=e.touches[0].clientY;
+      }}
+    }},{{passive:true}});
+    tile.addEventListener('touchmove',function(e){{
+      if(e.touches&&e.touches[0] &&
+         (Math.abs(e.touches[0].clientX-startX)>8 ||
+          Math.abs(e.touches[0].clientY-startY)>8)){{
+        moved=true;
+      }}
+    }},{{passive:true}});
+    tile.addEventListener('click',function(e){{
+      if(moved || e.target.closest('.class-size-bars')) return;
+      tile.classList.toggle('is-flipped');
+    }});
+  }});
+}})();
+</script>"""
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
@@ -3388,10 +3414,10 @@ function toggleTeacherTile(event, tile){{
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
 .overview-charts{{grid-template-columns:repeat(4,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
-.overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px}}
-.overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d}}
-@media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg)}}}}
-.overview-flip-tile.is-flipped .overview-flip-inner{{transform:rotateY(180deg)}}
+.overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px;position:relative;cursor:default}}
+.overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;will-change:transform}}
+@media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}}}
+.overview-flip-tile.is-flipped .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}
 .overview-flip-face{{position:absolute;inset:0;box-sizing:border-box;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;overflow:hidden}}
 .overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
 .overview-flip-back .label,.overview-flip-back .overview-flip-detail{{color:#fff}}
@@ -3400,12 +3426,12 @@ function toggleTeacherTile(event, tile){{
 .overview-class-icon{{color:#176B3A;margin-bottom:6px}}
 .overview-class-count{{font-size:32px;font-weight:900;color:#172033;line-height:1}}
 .overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}
-.overview-charts .class-size-bar-column{{flex-basis:56px;width:56px;height:165px}}
+.overview-charts .class-size-bar-column{{flex:0 0 56px;flex-basis:56px;width:56px;min-width:56px;height:165px}}
 .overview-charts .class-size-bar-track{{height:118px}}
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
 @media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
-.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;cursor:grab}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto}}
 .class-size-bars:active{{cursor:grabbing}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
