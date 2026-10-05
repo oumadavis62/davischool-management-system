@@ -6323,11 +6323,11 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         class_name = f"{st['class_name'] or ''} {st['stream'] or ''}".strip()
         exam_names = ", ".join(str(e["name"] or "") for e in exams if int(e["id"]) in set(selected_exam_ids))
         styles = _pdf_styles()
-        story = _pdf_school_header(school, styles, "Student Report Card", f"{st['name']} · Admission {st['admission_no'] or ''} · {exam_names}")
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm
+        story = _pdf_school_header(school, styles, "Student Report Card", f"{st['name']} · Admission {st['admission_no'] or ''} · {exam_names}")
         story.append(Paragraph(f"Class: {escape(class_name)}", styles["normal"]))
         data = [["Subject","Mark","Grade","Points","Performance Comment"]]
         for rr, mark, grade, points in result.get("details", []):
@@ -6373,6 +6373,10 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         exam_names = ", ".join(str(e["name"] or "") for e in exams if int(e["id"]) in set(selected_exam_ids))
         styles = _pdf_styles()
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
         story = []
         for index, st in enumerate(students):
             result = _student_result_for_assessments(cur, sid, int(st["id"]), selected_exam_ids, grading_rules, overall_rules)
@@ -6384,9 +6388,6 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
                 data.append([str(rr["name"]), f"{float(mark):.1f}", str(grade), f"{float(points):.1f}", ""])
             if len(data) == 1:
                 data.append(["No marks recorded.","","","",""])
-            from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
-            from reportlab.lib import colors
-            from reportlab.lib.units import mm
             t = Table(data, colWidths=[35*mm,18*mm,20*mm,20*mm,80*mm], repeatRows=1)
             t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.black),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7)]))
             story.append(t)
@@ -6773,7 +6774,7 @@ function printReportCard(){
   w.document.open();w.document.write(html);w.document.close();w.focus();
 }
 </script>""";
-    bulk_btn=(f"<div style='margin-top:10px;padding:12px;border:2px solid #176B3A;border-radius:10px;background:#f0fdf4'><b>📚 Whole Class / Stream Report</b><div class='muted' style='margin:5px 0 9px'>The preview below contains every student in the selected class/stream, not just the first student.</div><a class='btn' style='display:inline-block;text-decoration:none;background:#176B3A' target='_blank' href='/app/report-cards/class-preview?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>🖨️ Print All Class / Stream Reports</a> <a class='btn' style='display:inline-block;text-decoration:none' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>⬇️ Download All Class / Stream Reports</a></div>" if cid and eid else "")
+    bulk_btn=(f"<div style='margin-top:10px;padding:12px;border:2px solid #176B3A;border-radius:10px;background:#f0fdf4'><b>📚 Whole Class / Stream Report</b><div class='muted' style='margin:5px 0 9px'>The preview below contains every student in the selected class/stream, not just the first student.</div><a class='btn' style='display:inline-block;text-decoration:none;background:#176B3A' target='_blank' href='/app/report-cards/class-preview?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}&ds_tab_shared=1'>🖨️ Print All Class / Stream Reports</a> <a class='btn' style='display:inline-block;text-decoration:none' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>⬇️ Download All Class / Stream Reports</a></div>" if cid and eid else "")
     report_pdf_query=quote(",".join(str(x) for x in selected_exam_ids))
     print_btn=((
         "<button type='button' class='btn' style='margin-top:8px;background:#176B3A' onclick='printReportCard()'>🖨️ Print MarkSheet / Report Preview</button> "
