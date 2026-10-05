@@ -3077,12 +3077,14 @@ def app_home(request: Request):
       startX=e.clientX;
       startScroll=scroller.scrollLeft;
       scroller.setPointerCapture && scroller.setPointerCapture(e.pointerId);
+      e.preventDefault();
     });
     scroller.addEventListener('pointermove',function(e){
       if(!dragging) return;
+      if(e.cancelable) e.preventDefault();
       var dx=e.clientX-startX;
-      if(Math.abs(dx)>2) scroller.scrollLeft=startScroll-dx;
-    });
+      scroller.scrollLeft=startScroll-dx;
+    },{passive:false});
     function stopDrag(){ dragging=false; }
     scroller.addEventListener('pointerup',stopDrag);
     scroller.addEventListener('pointercancel',stopDrag);
@@ -3349,7 +3351,7 @@ function toggleTeacherTile(event, tile){{
                 count=int(row["student_count"] or 0)
                 pct=(count/class_size_max*100) if class_size_max else 0
                 class_color=class_size_colors[class_index % len(class_size_colors)]
-                class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count}</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
+                class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count} students</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
 
             recent_activity=[]
             try:
@@ -3462,7 +3464,7 @@ function toggleTeacherTile(event, tile){{
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
 @media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
-.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto;scroll-behavior:auto;user-select:none;-webkit-user-select:none}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:none;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto;scroll-behavior:auto;user-select:none;-webkit-user-select:none}}
 .class-size-bars:active{{cursor:grabbing}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:110px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
 .class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
