@@ -5119,6 +5119,33 @@ async def request_marks_correction(request: Request, exam_id:int=Form(0), class_
         return_params.append("ds_tab="+quote(tab_value,safe=""))
     return RedirectResponse("/app/academics/marks-corrections" + (("?"+"&".join(return_params)) if return_params else ""),303)
 
+@router.post("/app/academics/marks-corrections/load")
+def load_marks_correction_students(
+    request: Request,
+    exam_id: str = Form(""),
+    class_id: str = Form(""),
+    subject_id: str = Form(""),
+    year: str = Form(""),
+    term: str = Form(""),
+    ds_tab: str = Form(""),
+):
+    """Handle the Marks Corrections Load button as a native POST, then render the same filtered results."""
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _is_school_admin_like(request):
+        return HTMLResponse("Only the school administrator can load marks corrections.", 403)
+
+    params = ["load=1"]
+    for name, value in (("exam_id", exam_id), ("class_id", class_id), ("subject_id", subject_id), ("year", year), ("term", term)):
+        value = str(value or "").strip()
+        if value:
+            params.append(name + "=" + quote(value, safe=""))
+    tab_value = str(ds_tab or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_value):
+        params.append("ds_tab=" + quote(tab_value, safe=""))
+    return RedirectResponse("/app/academics/marks-corrections?" + "&".join(params), 303)
+
 @router.get("/app/academics/marks-corrections", response_class=HTMLResponse)
 def marks_correction_requests(request: Request):
     sid=_school_session(request)
@@ -5321,7 +5348,7 @@ def marks_correction_requests(request: Request):
 <div class='muted'>Select the examination, class, subject, year and term, then click <b>Load</b> to display the saved subject marks for that selection.</div>
 <div class='card section'>
 <h2>Load Saved & Submitted Subject Marks</h2>
-<form method='get' action='/app/academics/marks-corrections' class='marks-filter-form'>
+<form method='post' action='/app/academics/marks-corrections/load' class='marks-filter-form' data-native-post='1'>
 <div class='filter-grid'>
 <label>Examination<select name='exam_id' class='field'><option value=''>All Examinations</option>{exam_options}</select></label>
 <label>Class<select name='class_id' class='field'><option value=''>All Classes</option>{class_options}</select></label>
@@ -5330,7 +5357,7 @@ def marks_correction_requests(request: Request):
 <label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label>
 </div>
 <div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px'>
-<button class='load-btn' type='submit' name='load' value='1'>🔎 Load</button>
+<input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>🔎 Load Students</button>
 <a class='clear-btn' href='/app/academics/marks-corrections'>Clear</a>
 </div>
 </form>
