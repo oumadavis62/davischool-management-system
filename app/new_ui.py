@@ -6292,17 +6292,46 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
     return _school_page(request,"Academic Analysis",body)
 
 @router.post("/app/report-cards/overall-grade-comments")
-def save_overall_grade_comments(request: Request, rule_id:int=Form(...), class_teacher_comment:str=Form(""), principal_comment:str=Form("")):
+async def save_overall_grade_comments(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "reports.edit"):
-        return HTMLResponse("You do not have permission to edit overall-grade report comments.",403)
-    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
-    cur.execute("UPDATE overall_grading_rules SET class_teacher_comment=?, principal_comment=? WHERE id=? AND school_id=?",
-                (class_teacher_comment.strip(),principal_comment.strip(),rule_id,sid))
-    _audit(cur,sid,request,"OVERALL_GRADE_REPORT_COMMENTS","Updated grade-based report card comments")
-    con.commit();con.close()
-    return RedirectResponse("/app/report-cards?tab=overall-comments",303)
+        return HTMLResponse("You do not have permission to edit overall-grade report card comments.",403)
+    try:
+        form=await request.form()
+        rule_id=int(str(form.get("rule_id") or "0"))
+        class_teacher_comment=str(form.get("class_teacher_comment") or "").strip()
+        principal_comment=str(form.get("principal_comment") or "").strip()
+    except Exception:
+        return HTMLResponse("Invalid overall-grade comment submission. <a href='/app/academics/overall-grading'>Back</a>",400)
+    con=_db()
+    cur=con.cursor()
+    try:
+        _ensure_overall_grading_table(cur)
+        rule=cur.execute("SELECT id FROM overall_grading_rules WHERE id=? AND school_id=?",(rule_id,sid)).fetchone()
+        if not rule:
+            con.rollback()
+            return HTMLResponse("Overall grading rule not found. <a href='/app/academics/overall-grading'>Back</a>",404)
+        cur.execute("UPDATE overall_grading_rules SET class_teacher_comment=?, principal_comment=? WHERE id=? AND school_id=?",
+                    (class_teacher_comment,principal_comment,rule_id,sid))
+        _audit(cur,sid,request,"OVERALL_GRADE_REPORT_COMMENTS",
+               "Updated grade-based report card comments for rule %s" % rule_id)
+        con.commit()
+        saved=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE id=? AND school_id=?",
+                          (rule_id,sid)).fetchone()
+        if not saved or str(saved["class_teacher_comment"] or "") != class_teacher_comment or str(saved["principal_comment"] or "") != principal_comment:
+            con.rollback()
+            return HTMLResponse("The overall-grade comments could not be saved to the database. <a href='/app/academics/overall-grading'>Back</a>",500)
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        print("DAVISCHOOL OVERALL GRADE COMMENTS SAVE ERROR:",repr(exc),flush=True)
+        return HTMLResponse("DaviSchool could not save the overall-grade comments. Technical detail: %s <a href='/app/academics/overall-grading'>Back</a>" % escape(str(exc)),500)
+    finally:
+        try: con.close()
+        except Exception: pass
+    return RedirectResponse("/app/academics/overall-grading",303)
+
 
 @router.post("/app/report-cards/subject-comment")
 def save_subject_comment(request: Request, student_id:int=Form(...), exam_id:int=Form(...), subject_id:int=Form(...), comment:str=Form("")):
