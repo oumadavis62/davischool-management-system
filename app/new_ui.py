@@ -1469,27 +1469,66 @@ def overall_grading(request: Request):
     return _school_page(request,"Overall Grade & Position Settings",body)
 
 @router.post("/app/academics/overall-grading/add")
-def overall_grading_add(request: Request,min_total:float=Form(...),max_total:float=Form(...),grade:str=Form(...)):
+async def overall_grading_add(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
-    if min_total<0 or max_total>100 or max_total<min_total or not grade.strip():
+
+    # Read the posted values explicitly so the Save action works consistently
+    # with both the SQLite and PostgreSQL database paths.
+    try:
+        form=await request.form()
+        min_total=float(str(form.get("min_total") or "").strip())
+        max_total=float(str(form.get("max_total") or "").strip())
+        grade=str(form.get("grade") or "").strip()
+    except Exception:
+        return HTMLResponse("Please enter a valid minimum, maximum and overall grade. <a href='/app/academics/overall-grading'>Back</a>",400)
+
+    if min_total<0 or max_total>100 or max_total<min_total or not grade:
         return HTMLResponse("Invalid average-percentage range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
-    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
-    overlap=cur.execute(
-        """SELECT id FROM overall_grading_rules
-           WHERE school_id=? AND min_total<=? AND max_total>=? LIMIT 1""",
-        (sid,max_total,min_total)
-    ).fetchone()
-    if overlap:
-        con.close()
-        return HTMLResponse("That overall grading range overlaps an existing range. <a href='/app/academics/overall-grading'>Back</a>",400)
-    cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,min_total,max_total,grade.strip()))
-    _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE","Configured overall grade %s for %.1f-%.1f%% average"%(grade.strip(),min_total,max_total))
-    con.commit();con.close()
+
+    con=_db()
+    cur=con.cursor()
+    try:
+        _ensure_overall_grading_table(cur)
+        overlap=cur.execute(
+            """SELECT id FROM overall_grading_rules
+               WHERE school_id=? AND min_total<=? AND max_total>=? LIMIT 1""",
+            (sid,max_total,min_total)
+        ).fetchone()
+        if overlap:
+            con.rollback()
+            return HTMLResponse("That overall grading range overlaps an existing range. <a href='/app/academics/overall-grading'>Back</a>",400)
+
+        cur.execute(
+            "INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",
+            (sid,min_total,max_total,grade)
+        )
+        _audit(cur,sid,request,"OVERALL_GRADING_RULE_CREATE",
+               "Configured overall grade %s for %.1f-%.1f%% average"%(grade,min_total,max_total))
+        con.commit()
+
+        # Verify the insert before redirecting. This prevents a successful-looking
+        # redirect when the database did not actually persist the new rule.
+        saved=cur.execute(
+            "SELECT id FROM overall_grading_rules WHERE school_id=? AND min_total=? AND max_total=? AND grade=? ORDER BY id DESC LIMIT 1",
+            (sid,min_total,max_total,grade)
+        ).fetchone()
+        if not saved:
+            con.rollback()
+            return HTMLResponse("The overall grade could not be saved to the database. <a href='/app/academics/overall-grading'>Back</a>",500)
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        print("DAVISCHOOL OVERALL GRADING SAVE ERROR:",repr(exc),flush=True)
+        return HTMLResponse("DaviSchool could not save the overall grade. Technical detail: %s <a href='/app/academics/overall-grading'>Back</a>"%escape(str(exc)),500)
+    finally:
+        try: con.close()
+        except Exception: pass
+
     return RedirectResponse("/app/academics/overall-grading",303)
 
 @router.post("/app/academics/overall-grading/delete/{rule_id}")
