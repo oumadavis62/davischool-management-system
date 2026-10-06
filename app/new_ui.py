@@ -5310,7 +5310,7 @@ def marks_correction_requests(request: Request):
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'><input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ''))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ''))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ''))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ''))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ''))}'><input type='hidden' name='return_load' value='1'>"
                     f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
         marks_rows += (
-            f"<tr class='correction-subject-row' tabindex='0' onclick='selectCorrectionSubject(this,event)' onkeydown='if(event.key===\"Enter\"||event.key===\" \"){selectCorrectionSubject(this,event)}'><td>{escape(str(r['exam_name'] or ''))}</td>"
+            f"<tr class='correction-subject-row' tabindex='0' onclick='selectCorrectionSubject(this,event)'><td>{escape(str(r['exam_name'] or ''))}</td>"
             f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
             f"<td><b>{escape(str(r['subject_name'] or ''))}</b></td>"
             f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
