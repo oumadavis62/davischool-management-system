@@ -2515,46 +2515,45 @@ function printDocument(){
         for subject, mean, count in subject_mean_rows
     }
 
-    # Compact on-screen/print-preview grade distributions. They deliberately
-    # use horizontal grade columns so the entire analysis fits one landscape page.
-    # Keep the grade-distribution columns fixed to the configured school grading
-    # scale order, with the system-generated X grade always present at the end.
+    # Compact on-screen/print-preview grade distributions. Keep both tables on
+    # one fixed, normalized grade scale so the columns can never move because a
+    # school stored a grade with different casing or surrounding spaces.
     grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
-    overall_grade_counts = {}
-    subject_grade_counts = {int(s["id"]): {} for s in subjects}
-    # This MarkSheet route stores computed rows as tuples:
-    # (student, total, total_points, count, cells). Recalculate the same
-    # grades used by the visible table so the distribution counts stay accurate.
+    def _distribution_grade(value):
+        value = str(value or "").strip().upper()
+        return value if value in grade_order else ""
+
+    overall_grade_counts = {grade: 0 for grade in grade_order}
+    subject_grade_counts = {int(s["id"]): {grade: 0 for grade in grade_order} for s in subjects}
+
+    # Use the same grade engines as the visible MarkSheet, but normalize the
+    # returned grade before counting it. This prevents EE1/ee1/"EE1 " from
+    # becoming separate buckets and guarantees the requested column order.
     for item in computed:
         student, total, total_points, count, cells = item
         if int(count or 0) > 0:
             average = float(total or 0) / int(count)
             try:
-                og = str(_marksheet_overall_grade(cur, sid, average, count, overall_rules) or "").strip()
+                og = _distribution_grade(_marksheet_overall_grade(cur, sid, average, count, overall_rules))
             except Exception:
                 og = ""
-            if og and og != "—":
-                overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
+            if og:
+                overall_grade_counts[og] += 1
         for subject in subjects:
             value = marks.get((int(student["id"]), int(subject["id"])))
             if value is None:
                 continue
             try:
                 sg, _, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
-                sg = str(sg or "").strip()
+                sg = _distribution_grade(sg)
             except Exception:
                 sg = ""
-            if sg and sg != "—":
-                bucket = subject_grade_counts[int(subject["id"])]
-                bucket[sg] = bucket.get(sg, 0) + 1
+            if sg:
+                subject_grade_counts[int(subject["id"])][sg] += 1
 
-    all_grades = set(overall_grade_counts.keys())
-    for counts in subject_grade_counts.values():
-        all_grades.update(counts.keys())
-    # Always render every grade column, including X even when its count is zero.
+    # Never append alphabetically sorted grades after X. Both distribution
+    # tables must always be exactly: EE1, EE2, ME1, ME2, AE1, AE2, BE1, BE2, X.
     distribution_grades = list(grade_order)
-    distribution_grades += sorted(g for g in all_grades if g not in grade_order)
-
     # computed rows are tuples: (student, total, total_points, count, cells).
     # Keep this summary based on the actual selected students; do not treat the
     # tuple as a mapping (which previously caused the grade-selection request
