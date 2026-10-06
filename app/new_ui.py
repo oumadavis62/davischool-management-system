@@ -1465,7 +1465,11 @@ def overall_grading(request: Request):
     con=_db();cur=con.cursor()
     try:
         _ensure_overall_grading_table(cur)
-        rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,max_total DESC",(sid,)).fetchall()
+        x_rule=cur.execute("SELECT id FROM overall_grading_rules WHERE school_id=? AND upper(trim(grade))='X' LIMIT 1",(sid,)).fetchone()
+        if not x_rule:
+            cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,None,None,"X"))
+            con.commit()
+        rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,max_total DESC",(sid,)).fetchall()
     except Exception as exc:
         print("DAVISCHOOL OVERALL GRADING PAGE FALLBACK:", repr(exc), flush=True)
         rules=[]
@@ -1475,11 +1479,12 @@ def overall_grading(request: Request):
     for r in rules:
         grade=escape(str(r["grade"]))
         rid=str(r["id"])
+        is_x=str(r["grade"] or "").strip().upper()=="X"
         teacher=escape(str(r["class_teacher_comment"] or ""))
         principal=escape(str(r["principal_comment"] or ""))
         grade_rows.append(
             "<tr>"
-            "<td><b>%s</b></td>"
+            "<td><b>%s</b>%s</td>"
             "<td><input form='overall-comments-%s' name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'></td>"
             "<td><input form='overall-comments-%s' name='principal_comment' value='%s' class='field' placeholder='Principal comment'></td>"
             "<td class='action-cell'>"
@@ -1488,15 +1493,16 @@ def overall_grading(request: Request):
             "<button class='btn' type='submit'>Save Comments</button>"
             "</form>"
             "</td>"
-            "</tr>" % (grade,rid,teacher,rid,principal,rid,rid)
+            "</tr>" % (grade,(" <span class='muted'>(0%% average)</span>" if is_x else ""),rid,teacher,rid,principal,rid,rid)
         )
 
+    structured_rules=[r for r in rules if r["min_total"] is not None and r["max_total"] is not None and str(r["grade"] or "").strip().upper()!="X"]
     rule_rows="".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td>"
         "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline' data-native-post>"
         "<button class='btn danger-btn' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
         "</form></td></tr>"
-        % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules
+        % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in structured_rules
     )
 
     body=(
@@ -1509,7 +1515,7 @@ def overall_grading(request: Request):
       "<input name='grade' required placeholder='Overall grade e.g. A' class='field'>"
       "<button class='btn' type='submit'>Save</button></form></div>"
       "<div class='card section'><h2>Report Card Comments by Overall Grade</h2>"
-      "<div class='muted'>Set the class teacher and principal comment that will automatically appear on report cards for each overall grade.</div>"
+      "<div class='muted'>X is built in for every school and is automatically used when a learner's overall average is 0%. Add your school's structured overall grades below; X remains available for its report-card comments.</div>"
       "<div class='table-scroll'><table class='overall-comments-table'><thead><tr>"
       "<th>Grade</th><th>Class Teacher Comment</th><th>Principal Comment</th><th>Action</th>"
       "</tr></thead><tbody>"
@@ -1556,7 +1562,7 @@ async def overall_grading_add(request: Request):
     except Exception:
         return HTMLResponse("Please enter a valid minimum, maximum and overall grade. <a href='/app/academics/overall-grading'>Back</a>",400)
 
-    if min_total<0 or max_total>100 or max_total<min_total or not grade:
+    if min_total<0 or max_total>100 or max_total<min_total or not grade or grade.upper()=="X":
         return HTMLResponse("Invalid average-percentage range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
 
     con=_db()
@@ -1565,7 +1571,8 @@ async def overall_grading_add(request: Request):
         _ensure_overall_grading_table(cur)
         overlap=cur.execute(
             """SELECT id FROM overall_grading_rules
-               WHERE school_id=? AND min_total<=? AND max_total>=? LIMIT 1""",
+               WHERE school_id=? AND min_total IS NOT NULL AND max_total IS NOT NULL
+                 AND min_total<=? AND max_total>=? LIMIT 1""
             (sid,max_total,min_total)
         ).fetchone()
         if overlap:
@@ -1627,6 +1634,12 @@ def overall_grading_delete(request: Request,rule_id:int):
             return HTMLResponse(
                 "Overall grading rule not found. <a href='/app/academics/overall-grading'>Back</a>",
                 404
+            )
+        if str(rule["grade"] or "").strip().upper()=="X":
+            con.rollback()
+            return HTMLResponse(
+                "X is a built-in overall result and cannot be deleted. <a href='/app/academics/overall-grading'>Back</a>",
+                400
             )
         cur.execute(
             "DELETE FROM overall_grading_rules WHERE id=? AND school_id=?",
@@ -7172,7 +7185,7 @@ function printReportCard(){
     report_html=f"""<div class='card section' id='report' style='background:white'>{doc_brand}<h2>{escape(str(st['name']))}</h2><div class='student student-identity'><span><b>Student Name:</b> <span class='student-name-value'>{escape(str(st['name'] or ''))}</span></span><span><b>Adm No:</b> {escape(str(st['admission_no'] or ''))}</span><span><b>Class:</b> {escape(str(st['class_name'] or ''))}</span><span><b>Stream:</b> {escape(str(st['stream'] or ''))}</span></div><div class='student student-term'><span><b>Term:</b> {escape(str(exams[0]['term'] or '') if exams else '')}</span><span><b>Assessment:</b> <span class='assessment-name'>{escape(', '.join(str(e['name'] or '') for e in exams if e['name']))}</span></span></div>{final_banner}<table style='margin-top:14px'><thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Points</th><th>Performance Comments</th></tr></thead><tbody>{report_subject_rows}</tbody></table><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>{len(rows)}</div></div><div class='card'><div class='label'><b>Total marks</b></div><div class='kpi'>{total:.1f}</div></div><div class='card'><div class='label'>Average</div><div class='kpi'>{avg:.1f}%</div></div><div class='card'><div class='label'><b>Total points</b></div><div class='kpi'>{result['points']:.1f}</div></div><div class='card'><div class='label'><b>Overall grade</b></div><div class='kpi'>{escape(str(result["overall_grade"]))}</div></div><div class='card'><div class='label'>Position</div><div class='kpi'>{position} / {class_total_students}</div></div></div><div class='report-summary-extra'><div><b>Class Mean</b><strong>{class_mean:.1f}%</strong></div><div><b>Difference</b><strong>{(avg-class_mean):+.1f}%</strong></div><div><b>Subjects Recorded</b><strong>{len(result['details'])}</strong></div><div><b>Result Status</b><strong>{'Final' if report_final else 'Draft'}</strong></div></div>{performance_graph}<div class='report-attendance'><b>Attendance</b><span>Days Recorded: {attendance_summary['open']}</span><span>Present: {attendance_summary['present']}</span><span>Absent: {attendance_summary['absent']}</span></div><div class='report-comment-form'><form method='post' action='/app/report-cards/comment'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='student_id' value='{stid}'><textarea name='comment' class='field' rows='3' placeholder='Teacher / principal comment'>{escape(str(comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Comment</button></form></div><div style='margin-top:14px'><b>Class Teacher's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['class_teacher_comment'] if grade_comment_rule else "") or class_teacher_comment or ""))}</div></div><div style='margin-top:14px'><b>Principal's Comment</b><div class='actual-comment' style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:55px;font-style:italic'>{escape(str((grade_comment_rule['principal_comment'] if grade_comment_rule else "") or ""))}</div></div><div class='grid report-signatories' style='margin-top:18px'><div class='report-signatory'><b>Class Teacher:</b> <span class='signatory-name'>{escape(str(class_teacher_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:85%'></div><small>Signature</small></div><div class='report-signatory'><b>Principal:</b> <span class='signatory-name'>{escape(str(principal_name or 'Not Assigned'))}</span><div style='margin-top:18px;border-bottom:1px solid #172033;width:85%'></div><small>Signature</small></div></div><div class='report-dates'><b>Date of closing:</b> {escape(_format_report_card_date(closing_date))} <b>Date of opening:</b> {escape(_format_report_card_date(opening_date))}</div>{grade_key_html}<div style='margin-top:14px'><b>Additional Report Comment</b><div style='border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-height:45px'>{escape(str(comment or ''))}</div></div><div class='print-footer'><i>DaviSchool Management System</i> · Generated: {datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%d/%m/%Y %H:%M:%S EAT')}</div>{print_btn}{print_script}</div>""" if st else "<div class='card section'>Select a student and examination.</div>"
     subject_editor="".join(f"""<div class='card' style='margin-top:10px'><div style='font-weight:800;margin-bottom:7px'>{escape(str(r['name']))}</div><form method='post' action='/app/report-cards/subject-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='subject_id' value='{r['subject_id']}'><textarea name='comment' class='field' rows='2' placeholder='Performance comment for this subject'>{escape(str(subject_comments.get(int(r['subject_id']),'')))}</textarea><button class='btn' style='margin-top:7px'>Save Subject Comment</button></form></div>""" for r in rows) if st and eid else ""
     teacher_editor=f"""<div class='card section no-print'><h2>Class Teacher's Comment</h2><form method='post' action='/app/report-cards/class-teacher-comment'><input type='hidden' name='student_id' value='{stid}'><input type='hidden' name='exam_id' value='{eid}'><textarea name='comment' class='field' rows='4' placeholder='Enter the class teacher's comment'>{escape(str(class_teacher_comment or ''))}</textarea><button class='btn' style='margin-top:8px'>Save Class Teacher Comment</button></form></div>""" if st and eid else ""
-    overall_rows=cur.execute("SELECT id,grade,min_total,max_total,class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,id DESC",(sid,)).fetchall()
+    overall_rows=cur.execute("SELECT id,grade,min_total,max_total,class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,id DESC",(sid,)).fetchall()
     overall_comment_rows_html = (
         "".join(
             "<tr><td><b>%s</b></td><td>%.1f%% – %.1f%%</td><td colspan='2'><form method='post' action='/app/report-cards/overall-grade-comments'><input type='hidden' name='rule_id' value='%s'><div class='grid'><textarea name='class_teacher_comment' rows='3' class='field' placeholder='Class teacher performance comment'>%s</textarea><textarea name='principal_comment' rows='3' class='field' placeholder='Principal performance comment'>%s</textarea></div><button class='btn' style='margin-top:8px'>Save Performance Comments</button></form></td><td></td></tr>"
