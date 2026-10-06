@@ -6553,7 +6553,7 @@ def _report_card_line_graph_html(trend):
         value=max(0.0,min(100.0,float(value)))
         x=5+i*slot+slot*.18; width=slot*.64; top=96-value*.76
         bars.append("<rect x='%.1f' y='%.1f' width='%.1f' height='%.1f' rx='0.8'></rect><text x='%.1f' y='%.1f' class='trend-value'>%.1f</text><text x='%.1f' y='108' class='trend-label'>%s</text>"%(x,top,width,96-top,x+width/2,max(10,top-3),value,x+width/2,escape(label[:12])))
-    return "<div class='report-trend'><div class='report-graph-title'>Performance Trend</div><div class='trend-chart'><div class='trend-y'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><svg viewBox='0 0 100 112' preserveAspectRatio='none' aria-label='Performance trend'><g class='trend-grid'><line x1='5' y1='20' x2='95' y2='20'></line><line x1='5' y1='39' x2='95' y2='39'></line><line x1='5' y1='58' x2='95' y2='58'></line><line x1='5' y1='77' x2='95' y2='77'></line><line x1='5' y1='96' x2='95' y2='96'></line></g><g class='trend-bars'>%s</g></svg></div></div>"%%s"
+    return "<div class='report-trend'><div class='report-graph-title'>Performance Trend</div><div class='trend-chart'><div class='trend-y'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><svg viewBox='0 0 100 112' preserveAspectRatio='none' aria-label='Performance trend'><g class='trend-grid'><line x1='5' y1='20' x2='95' y2='20'></line><line x1='5' y1='39' x2='95' y2='39'></line><line x1='5' y1='58' x2='95' y2='58'></line><line x1='5' y1='77' x2='95' y2='77'></line><line x1='5' y1='96' x2='95' y2='96'></line></g><g class='trend-bars'>%s</g></svg></div></div>"%bars
 
 def _report_attendance_summary(cur, sid, student_id, opening_date="", closing_date=""):
     where = "school_id=? AND student_id=?"
