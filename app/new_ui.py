@@ -2615,7 +2615,7 @@ function printDocument(){
                     ("%.2f" % subject_summary_values[int(subject["id"])][0]) if subject_summary_values.get(int(subject["id"]), (None,))[0] is not None else "—",
                     str(subject_summary_values.get(int(subject["id"]), (None, 0, "—"))[2]),
                 )
-                for subject in subjects
+                for subject, mean, count in subject_mean_rows
             ) +
             "</tbody></table></div>"
         )
