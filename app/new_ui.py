@@ -6652,8 +6652,8 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         school_phone=escape(str(school["phone"] or "")) if school and "phone" in school.keys() and school["phone"] else ""
         school_email=escape(str(school["email"] or "")) if school and "email" in school.keys() and school["email"] else ""
         doc_postal_line=" ".join(x for x in [postal,postal_code] if x)
-        doc_contact_lines="".join("<div>%s</div>" % x for x in [doc_postal_line,("Email: "+school_email) if school_email else "",("Phone: "+school_phone) if school_phone else ""] if x)
-        brand="<div class='doc-header report-school-header'><div class='doc-logo'>%s</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div></div>" % (("<img src='%s' alt='School logo'>" % escape(logo)) if logo else "",school_name,doc_contact_lines)
+        doc_contact_lines="".join("<div>%s</div>" % x for x in [doc_postal_line,("☎ "+school_phone) if school_phone else "",("✉ "+school_email) if school_email else ""] if x)
+        brand="<div class='doc-header report-school-header'><div class='doc-logo'>%s</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-student-photo' title='Student photo'>👤</div></div>" % (("<img src='%s' alt='School logo'>" % escape(logo)) if logo else "🏫",school_name,doc_contact_lines)
         exam_text=", ".join(escape(str(e["name"] or "")) for e in exams)
         term_values=[]
         for e in exams:
