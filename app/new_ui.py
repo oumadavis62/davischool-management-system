@@ -1568,6 +1568,14 @@ MARKSHEET_SUBJECT_ORDER = (
     "Pre-technical Studies",
 )
 
+def _report_card_subject_position(subject_name):
+    """Return the requested curriculum position for report-card subjects."""
+    name=re.sub(r"[^a-z0-9]+", " ", str(subject_name or "").strip().casefold())
+    name=" ".join(name.split())
+    aliases={"english":0,"eng":0,"kiswahili":1,"kis":1,"mathematics":2,"math":2,"mat":2,"integrated science":3,"igs":3,"agriculture":4,"agr":4,"creative arts and sports":5,"creative arts":5,"cas":5,"social studies":6,"sst":6,"christian religious education":7,"christian religious studies":7,"cre":7,"pre technical studies":8,"pre technical":8,"pret":8}
+    return aliases.get(name,99)
+
+
 def _subject_marksheet_label(subject):
     """Return the subject initial/code for MarkSheet headings, with a safe name fallback."""
     try:
@@ -6637,7 +6645,8 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                 </section>""" % (escape(str(st["name"] or "")), escape(str(st["admission_no"] or ""))))
                 continue
             details=[]
-            for rr,mark,grade,points in result["details"]:
+            ordered_details=sorted(result["details"], key=lambda x: (_report_card_subject_position(x[0]["name"]), str(x[0]["name"] or "").casefold()))
+            for rr,mark,grade,points in ordered_details:
                 saved_comment=""
                 # Comments are stored per student + subject + assessment.
                 # Check every selected assessment so a saved comment is not
@@ -6807,8 +6816,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,_load_grading_rules(cur,sid),_load_overall_grading_rules(cur,sid)) if st and selected_exam_ids else {"rows":[],"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
     total=result["total"];avg=result["average"]
     attendance_summary=_report_attendance_summary(cur,sid,stid,opening_date,closing_date) if st and eid else {"open":0,"present":0,"absent":0}
-    subject_order={"ENG":0,"KIS":1,"MAT":2,"IGS":3,"AGR":4,"CAS":5,"SST":6,"CRE":7,"PRET":8}
-    result["details"]=sorted(result.get("details",[]),key=lambda x:(subject_order.get(str(x[0]["name"] or "").strip().upper(),99),str(x[0]["name"] or "").upper()))
+    result["details"]=sorted(result.get("details",[]),key=lambda x:(_report_card_subject_position(x[0]["name"]),str(x[0]["name"] or "").casefold()))
     class_mean=0.0
     if st and selected_exam_ids:
         q="SELECT student_id,marks FROM marks WHERE school_id=? AND exam_id IN (%s) AND student_id IN (SELECT id FROM students WHERE school_id=? AND class_id=?) AND marks IS NOT NULL" % ",".join("?" for _ in selected_exam_ids)
