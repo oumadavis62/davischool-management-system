@@ -1382,8 +1382,12 @@ def _report_signatories(cur, school_id, class_id):
 def _load_overall_grading_rules(cur, school_id):
     try:
         _ensure_overall_grading_table(cur)
+        x_rule=cur.execute("SELECT id FROM overall_grading_rules WHERE school_id=? AND upper(trim(grade))='X' LIMIT 1",(school_id,)).fetchone()
+        if not x_rule:
+            cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(school_id,None,None,"X"))
+            cur.connection.commit()
         return cur.execute(
-            "SELECT min_total,max_total,grade FROM overall_grading_rules WHERE school_id=? ORDER BY min_total DESC,id DESC",
+            "SELECT min_total,max_total,grade FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,id DESC",
             (school_id,)
         ).fetchall()
     except Exception as exc:
