@@ -2526,8 +2526,19 @@ function printDocument(){
     # school stored a grade with different casing or surrounding spaces.
     grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
     def _distribution_grade(value):
-        value = str(value or "").strip().upper()
-        return value if value in grade_order else ""
+        # Grade rules are user-configurable, and existing schools may have
+        # stored the competency grades as "EE 1", "EE-1", "EE_1", etc.
+        # Canonicalize those variants to the exact distribution buckets.
+        raw = str(value or "").strip().upper()
+        compact = re.sub(r"[^A-Z0-9]+", "", raw)
+        aliases = {
+            "EE1": "EE1", "EE2": "EE2",
+            "ME1": "ME1", "ME2": "ME2",
+            "AE1": "AE1", "AE2": "AE2",
+            "BE1": "BE1", "BE2": "BE2",
+            "X": "X",
+        }
+        return aliases.get(compact, "")
 
     overall_grade_counts = {grade: 0 for grade in grade_order}
     subject_grade_counts = {int(s["id"]): {grade: 0 for grade in grade_order} for s in subjects}
