@@ -644,16 +644,6 @@ else setupDaviActionCells();
     // occurs. The browser itself remains the source of truth for navigation.
   }}catch(e){{}}
 }})();
-// Overall Grade & Position Settings two-step Back rule.
-document.addEventListener('DOMContentLoaded',function(){{
-  try{{
-    if(window.location.pathname!=='/app/academics/overall-grading')return;
-    if(!history.state || !history.state.daviOverallGradeRoot){{
-      history.replaceState({{daviOverallGradeRoot:true}},'',window.location.href);
-      history.pushState({{daviOverallGradeStep:1}},'',window.location.href);
-    }}
-  }}catch(e){{}}
-}});
 // Marks Corrections POST filters use an explicit, deterministic two-step history rule.
 // Do not rely on sessionStorage to decide whether the first filter has happened.
 // The URL itself is the source of truth:
