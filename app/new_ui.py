@@ -1779,16 +1779,22 @@ def class_marksheets_csv(
     writer = csv.writer(output, lineterminator="\r\n")
     output.write("\ufeff")
 
-    metric_labels = {"mks": "MKS", "grade": "GRD", "pts": "PTS"}
-    headers = ["ADM NO.", "NAME"]
-    if combined_mode: headers.append("STREAM")
+    # CSV preserves the same two header levels as the Print Preview.
+    metric_labels = {"mks": "MKS", "grade": "GRD", "pts": "PTS", "avg": "AVG %", "pos": "POS"}
+    header_top = ["ADM NO.", "NAME"]
+    header_bottom = ["", ""]
+    if combined_mode:
+        header_top.append("STREAM")
+        header_bottom.append("")
     for subject in subjects:
         label = _subject_marksheet_label(subject)
-        for metric in subject_metric_map[int(subject["id"])]:
-            headers.append("%s %s" % (label, metric_labels[metric]))
-    overall_labels = {"mks": "TOTAL MKS", "pts": "TOTAL PTS", "avg": "AVG %", "grade": "OVERALL GRD", "pos": "POS"}
-    headers.extend(overall_labels[m] for m in overall_metric_list)
-    writer.writerow(headers)
+        metrics = subject_metric_map[int(subject["id"])]
+        header_top.extend([label] + [""] * (len(metrics) - 1))
+        header_bottom.extend(metric_labels[m] for m in metrics)
+    header_top.extend(["OVERALL"] + [""] * (len(overall_metric_list) - 1))
+    header_bottom.extend(metric_labels[m] for m in overall_metric_list)
+    writer.writerow(header_top)
+    writer.writerow(header_bottom)
 
     for student, total, total_points, count, values in computed:
         row = [str(student["admission_no"] or ""), str(student["name"] or "")]
@@ -2665,15 +2671,31 @@ def class_marksheets_pdf(
             % (class_title, exam_title, term or "All", year or "All"),
         ))
 
-        header = ["ADM NO.", "STUDENT NAME"]
+        # Build the PDF header exactly like the MarkSheet preview:
+        # first row = grouped subject/OVERALL headings; second row = metrics.
+        metric_labels_pdf = {"mks": "MKS", "grade": "GRD", "pts": "PTS", "avg": "AVG %", "pos": "POS"}
+        header_top = [Paragraph("ADM NO.", styles["table_head"]), Paragraph("STUDENT NAME", styles["table_head"])]
+        header_bottom = [Paragraph("", styles["table_head"]), Paragraph("", styles["table_head"])]
+        header_spans = [("SPAN", (0, 0), (0, 1)), ("SPAN", (1, 0), (1, 1))]
+        col_cursor = 2
         for subject in subjects:
+            metrics = subject_metric_map[int(subject["id"])]
             label = _subject_marksheet_label(subject)
-            for metric in subject_metric_map[int(subject["id"])]:
-                header.append("%s %s" % (label, {"mks": "MKS", "grade": "GRD", "pts": "PTS"}[metric]))
+            header_top.append(Paragraph(escape(label), styles["table_head"]))
+            header_spans.append(("SPAN", (col_cursor, 0), (col_cursor + len(metrics) - 1, 0)))
+            for metric in metrics:
+                header_bottom.append(Paragraph(metric_labels_pdf[metric], styles["table_head"]))
+            col_cursor += len(metrics)
+        if combined_mode:
+            header_top.insert(2, Paragraph("STREAM", styles["table_head"]))
+            header_bottom.insert(2, Paragraph("", styles["table_head"]))
+            header_spans.extend([("SPAN", (2, 0), (2, 1))])
+            col_cursor += 1
+        header_top.append(Paragraph("OVERALL", styles["table_head"]))
+        header_spans.append(("SPAN", (col_cursor, 0), (col_cursor + len(overall_metric_list) - 1, 0)))
         for metric in overall_metric_list:
-            header.append("OVERALL " + {"mks": "MKS", "pts": "PTS", "avg": "AVG %", "grade": "GRD", "pos": "POS"}[metric])
-
-        table_rows = [[Paragraph(escape(str(x)), styles["table_head"]) for x in header]]
+            header_bottom.append(Paragraph(metric_labels_pdf[metric], styles["table_head"]))
+        table_rows = [header_top, header_bottom]
         for item in computed:
             student = item["student"]
             row = [
@@ -2720,12 +2742,12 @@ def class_marksheets_pdf(
             else:
                 col_widths.append(11 * mm)
 
-        table = Table(table_rows, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+        table = Table(table_rows, colWidths=col_widths, repeatRows=2, hAlign="LEFT")
         table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.45, colors.black),
             ("BACKGROUND", (0, 0), (-1, 0), colors.white),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("ALIGN", (1, 1), (1, -1), "LEFT"),
