@@ -2702,6 +2702,8 @@ def class_marksheets_pdf(
                 Paragraph(escape(str(student["admission_no"] or "")), styles["table"]),
                 Paragraph(escape(str(student["name"] or "")), styles["table"]),
             ]
+            if combined_mode:
+                row.append(Paragraph(escape(str(student["stream"] or "")), styles["table"]))
             for subject in subjects:
                 value = item["values"].get(int(subject["id"]))
                 for metric in subject_metric_map[int(subject["id"])]:
@@ -2728,24 +2730,21 @@ def class_marksheets_pdf(
                 row.append(Paragraph(escape(text_value), styles["table"]))
             table_rows.append(row)
 
-        col_count = max(1, len(header))
-        # Match the on-screen MarkSheet proportions with fixed admission/name columns and compact metrics.
+        col_count = len(header_top)
         col_widths = [16 * mm, 45 * mm]
-        for idx in range(2, col_count):
-            label = str(header[idx]).upper()
-            if "AVG" in label:
-                col_widths.append(15 * mm)
-            elif "GRD" in label:
-                col_widths.append(12 * mm)
-            elif "POS" in label:
-                col_widths.append(13 * mm)
-            else:
-                col_widths.append(11 * mm)
+        if combined_mode:
+            col_widths.append(15 * mm)
+        for subject in subjects:
+            for metric in subject_metric_map[int(subject["id"])]:
+                col_widths.append(15 * mm if metric == "avg" else 12 * mm if metric == "grade" else 13 * mm if metric == "pos" else 11 * mm)
+        for metric in overall_metric_list:
+            col_widths.append(15 * mm if metric == "avg" else 12 * mm if metric == "grade" else 13 * mm if metric == "pos" else 11 * mm)
 
         table = Table(table_rows, colWidths=col_widths, repeatRows=2, hAlign="LEFT")
         table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.45, colors.black),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.white),
+            ("BACKGROUND", (0, 0), (-1, 1), colors.white),
+            *header_spans,
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
             ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
