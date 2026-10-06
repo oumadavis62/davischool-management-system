@@ -1569,21 +1569,12 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _report_card_subject_position(subject_name):
-    """Return the exact requested curriculum position for report-card subjects."""
-    name=re.sub(r"[^a-z0-9]+", " ", str(subject_name or "").strip().casefold())
-    name=" ".join(name.split())
-    aliases={
-        "english":0, "eng":0,
-        "kiswahili":1, "kis":1,
-        "mathematics":2, "math":2, "mat":2,
-        "integrated science":3, "igs":3,
-        "agriculture":4, "agr":4,
-        "creative arts and sports":5, "creative arts":5, "cas":5,
-        "social studies":6, "sst":6,
-        "christian religious education":7, "christian religious studies":7, "cre":7,
-        "pre technical studies":8, "pre technical":8, "pret":8,
-    }
-    return aliases.get(name,99)
+    """Use the exact same curriculum ordering as the MarkSheet."""
+    ordered=_marksheet_subject_order([{"name":str(subject_name or "")}])
+    if not ordered:
+        return 100
+    name=str(subject_name or "").strip().casefold()
+    return 0 if ordered[0]["name"].strip().casefold()==name else 100
 
 
 def _subject_marksheet_label(subject):
@@ -6448,7 +6439,11 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
         story = _pdf_school_header(school, styles, "Student Report Card", f"{st['name']} · Admission {st['admission_no'] or ''} · {exam_names}")
         story.append(Paragraph(f"Class: {escape(class_name)}", styles["normal"]))
         data = [["Subject","Mark","Grade","Points","Performance Comment"]]
-        for rr, mark, grade, points in result.get("details", []):
+        pdf_details = sorted(
+            result.get("details", []),
+            key=lambda x: (_report_card_subject_position(x[0]["name"]), str(x[0]["name"] or "").casefold())
+        )
+        for rr, mark, grade, points in pdf_details:
             data.append([str(rr["name"]), f"{float(mark):.1f}", str(grade), f"{float(points):.1f}", comments.get(int(rr["subject_id"]), "")])
         if len(data) == 1:
             data.append(["No marks recorded.","","","",""])
@@ -6856,7 +6851,8 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
         class_teacher_name, principal_name = _report_signatories(cur,sid,int(st["class_id"] or 0))
     if result.get("overall_grade") and result.get("overall_grade") != "—":
         grade_comment_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",(sid,str(result["overall_grade"]))).fetchone()
-    markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td></tr>" for r,mark,grade,points in result["details"])
+    report_details = sorted(result["details"], key=lambda x: (_report_card_subject_position(x[0]["name"]), str(x[0]["name"] or "").casefold()))
+    markrows="".join(f"<tr><td>{escape(str(r['name']))}</td><td>{mark:.1f}</td><td>{escape(str(grade))}</td><td>{points:.1f}</td></tr>" for r,mark,grade,points in report_details)
     report_subject_rows="".join(
         "<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" % (
             escape(str(r["name"])),
@@ -6865,7 +6861,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
             points,
             escape(str(subject_comments.get(int(r["subject_id"]),"")))
         )
-        for r,mark,grade,points in result["details"]
+        for r,mark,grade,points in report_details
     )
     school_row=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     school_name=escape(str(school_row["name"] or "DaviSchool")) if school_row else "DaviSchool"
