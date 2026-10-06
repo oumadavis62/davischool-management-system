@@ -1230,7 +1230,9 @@ def _student_result(cur, school_id, student_id, exam_id, grading_rules=None, ove
         graded += 1
         details.append((r,mark,grade,float(pt or 0)))
     average=(total/graded) if graded else 0.0
-    overall=_overall_grade(cur,school_id,average,overall_rules) if graded else "—"
+    # A 0% overall average is always represented as X. This is independent
+    # of whether the school has explicitly added X to its grading structure.
+    overall=_overall_grade(cur,school_id,average,overall_rules)
     return {"rows":rows,"details":details,"total":total,"points":points,
             "count":graded,"average":average,"overall_grade":overall}
 
@@ -1272,7 +1274,8 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
         points += float(pt or 0)
     count = len(details)
     average = total / count if count else 0.0
-    overall = _overall_grade(cur, school_id, average, overall_rules) if count else "—"
+    # If the selected assessments produce a 0% overall average, use X.
+    overall = _overall_grade(cur, school_id, average, overall_rules)
     return {"rows": rows, "details": details, "exam_marks": exam_marks,
             "total": total, "points": points, "count": count,
             "average": average, "overall_grade": overall}
@@ -1413,9 +1416,13 @@ def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
                 valid_rules.append((float(rule["min_total"]), float(rule["max_total"]), str(rule["grade"])))
             except (TypeError, ValueError, KeyError):
                 continue
+        average = float(average_percentage)
+        # Zero overall average is a special result: always display X,
+        # regardless of whether X exists in the configured grading bands.
+        if average == 0.0:
+            return "X"
         if not valid_rules:
             return "—"
-        average = float(average_percentage)
         # First honor an explicitly configured range.
         for minimum, maximum, grade in sorted(valid_rules, key=lambda x: (x[0], x[1]), reverse=True):
             if minimum <= average <= maximum:
