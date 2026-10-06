@@ -2346,23 +2346,27 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         subject_positions[int(item[0]["id"])] = last_subject_position
 
     computed=[]
+    computed_subject_grades={}
+    computed_overall_grades={}
     for student in students:
         total=0.0
         total_points=0.0
         count=0
         cells=""
+        student_subject_grades={}
         for subject in subjects:
-            value=marks.get((int(student["id"]),int(subject["id"])))
-            metrics = subject_metric_map.get(int(subject["id"]), ["mks", "grade", "pts"])
+            subject_id=int(subject["id"])
+            value=marks.get((int(student["id"]),subject_id))
+            metrics = subject_metric_map.get(subject_id, ["mks", "grade", "pts"])
             if value is None:
                 cells += "".join("<td>—</td>" for _ in metrics)
             else:
                 try:
-                    grade,points,_=_subject_grade_details(cur,sid,int(subject["id"]),value,grading_rules)
+                    grade,points,_=_subject_grade_details(cur,sid,subject_id,value,grading_rules)
                 except Exception as exc:
                     print("DAVISCHOOL MARKSHEET GRADE FALLBACK:", repr(exc), flush=True)
                     grade,points=_default_grade_points(float(value))
-                    _ = ""
+                student_subject_grades[subject_id]=str(grade or "").strip()
                 total+=float(value or 0)
                 total_points+=float(points or 0)
                 count+=1
@@ -2372,6 +2376,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                     "pts": "<td class='points-cell'>%.1f</td>" % float(points),
                 }
                 cells += "".join(metric_html[m] for m in metrics)
+        computed_subject_grades[int(student["id"])]=student_subject_grades
         computed.append((student,total,total_points,count,cells))
     computed.sort(key=lambda x:x[1],reverse=True)
     page_size=30
@@ -2392,6 +2397,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         try:
             average=(total/count) if count else 0
             overall_grade=_marksheet_overall_grade(cur,sid,average,count,overall_rules)
+            computed_overall_grades[int(student["id"])]=str(overall_grade or "").strip()
         except Exception as exc:
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
             overall_grade=_default_grade_points(average)[0] if count else "—"
@@ -2526,30 +2532,20 @@ function printDocument(){
     overall_grade_counts = {grade: 0 for grade in grade_order}
     subject_grade_counts = {int(s["id"]): {grade: 0 for grade in grade_order} for s in subjects}
 
-    # Use the same grade engines as the visible MarkSheet, but normalize the
-    # returned grade before counting it. This prevents EE1/ee1/"EE1 " from
-    # becoming separate buckets and guarantees the requested column order.
+    # Count the exact grades already used to render the MarkSheet rows.
+    # This guarantees that the distribution cannot disagree with what the
+    # user can see in the subject/overall grade columns.
     for item in computed:
         student, total, total_points, count, cells = item
-        if int(count or 0) > 0:
-            average = float(total or 0) / int(count)
-            try:
-                og = _distribution_grade(_marksheet_overall_grade(cur, sid, average, count, overall_rules))
-            except Exception:
-                og = ""
-            if og:
-                overall_grade_counts[og] += 1
+        student_id=int(student["id"])
+        og=_distribution_grade(computed_overall_grades.get(student_id, ""))
+        if og:
+            overall_grade_counts[og]+=1
         for subject in subjects:
-            value = marks.get((int(student["id"]), int(subject["id"])))
-            if value is None:
-                continue
-            try:
-                sg, _, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
-                sg = _distribution_grade(sg)
-            except Exception:
-                sg = ""
+            subject_id=int(subject["id"])
+            sg=_distribution_grade(computed_subject_grades.get(student_id, {}).get(subject_id, ""))
             if sg:
-                subject_grade_counts[int(subject["id"])][sg] += 1
+                subject_grade_counts[subject_id][sg]+=1
 
     # Never append alphabetically sorted grades after X. Both distribution
     # tables must always be exactly: EE1, EE2, ME1, ME2, AE1, AE2, BE1, BE2, X.
