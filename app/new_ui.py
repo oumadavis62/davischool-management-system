@@ -1569,12 +1569,21 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _report_card_subject_position(subject_name):
-    """Use the exact same curriculum ordering as the MarkSheet."""
-    ordered=_marksheet_subject_order([{"name":str(subject_name or "")}])
-    if not ordered:
-        return 100
+    """Use the exact same curriculum positions as the MarkSheet."""
     name=str(subject_name or "").strip().casefold()
-    return 0 if ordered[0]["name"].strip().casefold()==name else 100
+    name=re.sub(r"[^a-z0-9]+"," ",name)
+    name=" ".join(name.split())
+    tokens=set(name.split())
+    if "english" in tokens: return 1
+    if "kiswahili" in tokens: return 2
+    if "mathematics" in tokens or "math" in tokens: return 3
+    if "science" in tokens and "agriculture" not in tokens: return 4
+    if "agriculture" in tokens: return 5
+    if "creative" in tokens and "arts" in tokens and "sport" in tokens: return 6
+    if "social" in tokens and "studies" in tokens: return 7
+    if name=="cre" or "christian religious education" in name or ("christian" in tokens and "religious" in tokens and "education" in tokens): return 8
+    if "pre" in tokens and "technical" in tokens: return 9
+    return 100
 
 
 def _subject_marksheet_label(subject):
