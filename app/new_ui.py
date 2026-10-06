@@ -639,9 +639,13 @@ else setupDaviActionCells();
     // occurs. The browser itself remains the source of truth for navigation.
   }}catch(e){{}}
 }})();
-// POST filter forms (including Marks Corrections) use the same two-step rule.
-// The first filter creates one filtered history entry; later filter changes
-// replace that entry so Back returns directly to the unfiltered workspace.
+// Marks Corrections POST filters use an explicit, deterministic two-step history rule.
+// Do not rely on sessionStorage to decide whether the first filter has happened.
+// The URL itself is the source of truth:
+//   unfiltered workspace -> duplicate unfiltered history entry -> filtered page
+// Therefore Back #1 always returns to the unfiltered workspace and Back #2 to
+// the page that opened Marks Corrections. Further filters replace the current
+// filtered entry instead of creating a chain.
 document.addEventListener('submit',function(event){{
   var form=event.target;
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
@@ -651,27 +655,37 @@ document.addEventListener('submit',function(event){{
     var action=form.getAttribute('action') || window.location.href;
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin || url.pathname.indexOf('/app')!==0)return;
+
     var current=new URL(window.location.href);
-    var hasQuery=false;
-    current.searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasQuery=true;}});
-    var key='davischool-post-filter:'+window.location.pathname;
-    var started=false;
-    try{{started=sessionStorage.getItem(key)==='1';}}catch(e){{}}
+    var hasRealCurrentQuery=false;
+    current.searchParams.forEach(function(value,key){{
+      if(key!=='ds_tab')hasRealCurrentQuery=true;
+    }});
+
     event.preventDefault();
     var data=new FormData(form);
-    fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',cache:'no-store'}}).then(function(response){{
+
+    fetch(url.toString(),{{
+      method:'POST',
+      body:data,
+      credentials:'same-origin',
+      redirect:'follow',
+      cache:'no-store'
+    }}).then(function(response){{
       var finalUrl=response.url || url.toString();
-      if(!started && !hasQuery){{
-        // Preserve the current unfiltered workspace as a real history entry,
-        // then navigate normally to the filtered result. This guarantees:
-        // Back #1 = unfiltered workspace, Back #2 = parent Academics page.
-        try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
-        history.pushState({{daviFilterStep:true,daviFilterWorkspace:true}},'',window.location.href);
+
+      if(!hasRealCurrentQuery){{
+        // We are on the real, unfiltered Marks Corrections workspace.
+        // First create a second copy of THIS exact workspace entry. Then
+        // perform a normal navigation to the filtered result. The browser
+        // history becomes:
+        //   Academics -> Marks Corrections (default) -> Marks Corrections (filtered)
+        // so Back is guaranteed to take two steps.
+        history.pushState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterWorkspace:true}},'',window.location.href);
         window.location.href=finalUrl;
       }}else{{
-        // Once a filtered entry exists, replace it so filter changes never
-        // create a chain of intermediate filtered states.
-        history.replaceState({{daviFilterStep:true}},'',finalUrl);
+        // Already filtered: changing filters must not add another Back step.
+        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
         window.location.reload();
       }}
     }}).catch(function(){{form.submit();}});
