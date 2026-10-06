@@ -1473,7 +1473,7 @@ def overall_grading(request: Request):
         if not x_rule:
             cur.execute("INSERT INTO overall_grading_rules(school_id,min_total,max_total,grade) VALUES(?,?,?,?)",(sid,None,None,"X"))
             con.commit()
-        rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 1 ELSE 0 END,min_total DESC,max_total DESC",(sid,)).fetchall()
+        rules=cur.execute("SELECT * FROM overall_grading_rules WHERE school_id=? ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,max_total DESC",(sid,)).fetchall()
     except Exception as exc:
         print("DAVISCHOOL OVERALL GRADING PAGE FALLBACK:", repr(exc), flush=True)
         rules=[]
@@ -1517,7 +1517,7 @@ def overall_grading(request: Request):
         "</form></td></tr>"
         % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in structured_rules
     )
-    rule_rows=structured_rule_rows+x_rule_row
+    rule_rows=x_rule_row+structured_rule_rows
 
     body=(
       "<div class='page'><h1>Overall Grade & Position Settings</h1>"
