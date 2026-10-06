@@ -644,6 +644,16 @@ else setupDaviActionCells();
     // occurs. The browser itself remains the source of truth for navigation.
   }}catch(e){{}}
 }})();
+// Overall Grade & Position Settings two-step Back rule.
+document.addEventListener('DOMContentLoaded',function(){{
+  try{{
+    if(window.location.pathname!=='/app/academics/overall-grading')return;
+    if(!history.state || !history.state.daviOverallGradeRoot){{
+      history.replaceState({{daviOverallGradeRoot:true}},'',window.location.href);
+      history.pushState({{daviOverallGradeStep:1}},'',window.location.href);
+    }}
+  }}catch(e){{}}
+}});
 // Marks Corrections POST filters use an explicit, deterministic two-step history rule.
 // Do not rely on sessionStorage to decide whether the first filter has happened.
 // The URL itself is the source of truth:
@@ -1560,15 +1570,20 @@ async def overall_grading_add(request: Request):
                "Configured overall grade %s for %.1f-%.1f%% average"%(grade,min_total,max_total))
         con.commit()
 
-        # Verify the insert before redirecting. This prevents a successful-looking
-        # redirect when the database did not actually persist the new rule.
-        saved=cur.execute(
-            "SELECT id FROM overall_grading_rules WHERE school_id=? AND min_total=? AND max_total=? AND grade=? ORDER BY id DESC LIMIT 1",
-            (sid,min_total,max_total,grade)
-        ).fetchone()
-        if not saved:
-            con.rollback()
-            return HTMLResponse("The overall grade could not be saved to the database. <a href='/app/academics/overall-grading'>Back</a>",500)
+        # The INSERT and commit above are authoritative. Avoid exact floating-point
+        # equality checks after commit because database numeric representation can
+        # differ slightly from the Python float that was submitted.
+        try:
+            inserted_id=cur.lastrowid
+        except Exception:
+            inserted_id=None
+        if inserted_id:
+            saved=cur.execute(
+                "SELECT id FROM overall_grading_rules WHERE id=? AND school_id=?",
+                (inserted_id,sid)
+            ).fetchone()
+            if not saved:
+                return HTMLResponse("DaviSchool could not verify the saved overall grade. <a href='/app/academics/overall-grading'>Back</a>",500)
     except Exception as exc:
         try: con.rollback()
         except Exception: pass
