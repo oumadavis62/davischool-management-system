@@ -355,10 +355,10 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
             postal_parts.append(str(school_row["postal_code"]))
         if postal_parts:
             address_lines.append(" ".join(postal_parts))
-        if "phone" in school_row.keys() and school_row["phone"]:
-            right_contact_lines.append("Phone: " + str(school_row["phone"]))
         if "email" in school_row.keys() and school_row["email"]:
-            right_contact_lines.append("Email: " + str(school_row["email"]))
+            address_lines.append("Email: " + str(school_row["email"]))
+        if "phone" in school_row.keys() and school_row["phone"]:
+            address_lines.append("Phone: " + str(school_row["phone"]))
     logo_flowable = Paragraph("SCHOOL", styles["title"])
     logo_data = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     if logo_data:
@@ -372,7 +372,7 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
     text.extend(Paragraph(escape(line), styles["small"]) for line in address_lines)
     if subtitle:
         text.append(Paragraph(escape(subtitle), styles["small"]))
-    right = [Paragraph(escape(line), styles["small"]) for line in right_contact_lines] or [Paragraph("", styles["small"])]
+    right = [Paragraph("", styles["small"])]
     table = Table([[logo_flowable, text, right]], colWidths=[30*mm, None, 52*mm])
     table.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"TOP"),
@@ -2226,7 +2226,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     school_postal_code = escape(str(school_row["postal_code"] or "")) if school_row and "postal_code" in school_row.keys() else ""
     school_logo = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
     doc_postal_line = " ".join(x for x in [school_postal, school_postal_code] if x)
-    doc_contact_lines = "".join("<div>%s</div>" % x for x in [doc_postal_line, school_email, school_phone] if x)
+    doc_contact_lines = "".join("<div>%s</div>" % x for x in [doc_postal_line, ("Email: " + school_email) if school_email else "", ("Phone: " + school_phone) if school_phone else ""] if x)
     doc_brand = "<div class='doc-header'><div class='doc-logo'>%s</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-student-photo' title='Student photo'>👤</div></div>" % (("<img src='%s' alt='School logo'>" % escape(school_logo)) if school_logo else "🏫",school_name,doc_contact_lines)
     if combined_mode and combined_grade:
         class_title = escape(str(combined_grade)) + " — ALL STREAMS"
