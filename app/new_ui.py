@@ -348,10 +348,13 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
     address_lines = []
     right_contact_lines = []
     if school_row:
+        postal_parts = []
         if "postal_address" in school_row.keys() and school_row["postal_address"]:
-            address_lines.append("P.O. Box " + str(school_row["postal_address"]))
+            postal_parts.append("P.O. Box " + str(school_row["postal_address"]))
         if "postal_code" in school_row.keys() and school_row["postal_code"]:
-            address_lines.append("Postal Code " + str(school_row["postal_code"]))
+            postal_parts.append(str(school_row["postal_code"]))
+        if postal_parts:
+            address_lines.append(" ".join(postal_parts))
         if "phone" in school_row.keys() and school_row["phone"]:
             right_contact_lines.append("Phone: " + str(school_row["phone"]))
         if "email" in school_row.keys() and school_row["email"]:
