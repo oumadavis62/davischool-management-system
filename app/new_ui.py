@@ -642,35 +642,35 @@ else setupDaviActionCells();
 // POST filter forms (including Marks Corrections) use the same two-step rule.
 // The first filter creates one filtered history entry; later filter changes
 // replace that entry so Back returns directly to the unfiltered workspace.
-document.addEventListener('submit',function(event){
+document.addEventListener('submit',function(event){{
   var form=event.target;
   if(!form || String(form.method||'get').toLowerCase()!=='post')return;
   if(!form.matches('.marks-filter-form'))return;
   if(form.hasAttribute('data-no-history-filter'))return;
-  try{
+  try{{
     var action=form.getAttribute('action') || window.location.href;
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin || url.pathname.indexOf('/app')!==0)return;
     var current=new URL(window.location.href);
     var hasQuery=false;
-    current.searchParams.forEach(function(value,key){if(key!=='ds_tab')hasQuery=true;});
+    current.searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasQuery=true;}});
     var key='davischool-post-filter:'+window.location.pathname;
     var started=false;
-    try{started=sessionStorage.getItem(key)==='1';}catch(e){}
+    try{{started=sessionStorage.getItem(key)==='1';}}catch(e){{}}
     event.preventDefault();
     var data=new FormData(form);
-    fetch(url.toString(),{method:'POST',body:data,credentials:'same-origin',redirect:'follow',cache:'no-store'}).then(function(response){
+    fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',cache:'no-store'}}).then(function(response){{
       var finalUrl=response.url || url.toString();
-      if(!started && !hasQuery){
-        try{sessionStorage.setItem(key,'1');}catch(e){}
-        history.pushState({daviFilterStep:true},'',finalUrl);
-      }else{
-        history.replaceState({daviFilterStep:true},'',finalUrl);
-      }
+      if(!started && !hasQuery){{
+        try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
+        history.pushState({{daviFilterStep:true}},'',finalUrl);
+      }}else{{
+        history.replaceState({{daviFilterStep:true}},'',finalUrl);
+      }}
       window.location.reload();
-    }).catch(function(){form.submit();});
-  }catch(e){form.submit();}
-},true);
+    }}).catch(function(){{form.submit();}});
+  }}catch(e){{form.submit();}}
+}},true);
 
 // GET filter/search forms use a two-stage history rule across the system.
 // The first filter/search action creates ONE history entry so the original
