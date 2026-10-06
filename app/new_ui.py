@@ -2524,7 +2524,7 @@ function printDocument(){
     # Compact on-screen/print-preview grade distributions. Keep both tables on
     # one fixed, normalized grade scale so the columns can never move because a
     # school stored a grade with different casing or surrounding spaces.
-    grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
+    grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
     def _distribution_grade(value):
         # Grade rules are user-configurable, and existing schools may have
         # stored the competency grades as "EE 1", "EE-1", "EE_1", etc.
