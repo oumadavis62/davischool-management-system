@@ -2517,7 +2517,9 @@ function printDocument(){
 
     # Compact on-screen/print-preview grade distributions. They deliberately
     # use horizontal grade columns so the entire analysis fits one landscape page.
-    grade_order = ["A", "B", "C", "D", "E"]
+    # Keep the grade-distribution columns fixed to the configured school grading
+    # scale order, with the system-generated X grade always present at the end.
+    grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
     overall_grade_counts = {}
     subject_grade_counts = {int(s["id"]): {} for s in subjects}
     for student, total, total_points, count, cells in computed:
@@ -2545,7 +2547,8 @@ function printDocument(){
     all_grades = set(overall_grade_counts.keys())
     for counts in subject_grade_counts.values():
         all_grades.update(counts.keys())
-    distribution_grades = [g for g in grade_order if g in all_grades]
+    # Always render every grade column, including X even when its count is zero.
+    distribution_grades = list(grade_order)
     distribution_grades += sorted(g for g in all_grades if g not in grade_order)
 
     # computed rows are tuples: (student, total, total_points, count, cells).
@@ -2987,13 +2990,13 @@ def class_marksheets_pdf(
             subject_positions[int(item[0]["id"])] = last_pos
 
         # Overall grade distribution: grades across columns, counts directly below.
-        grade_order = ["A", "B", "C", "D", "E"]
+        grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
         grade_counts = {}
         for item in computed:
             grade = str(item.get("grade") or "").strip()
             if grade and grade != "—":
                 grade_counts[grade] = grade_counts.get(grade, 0) + 1
-        ordered_grades = [g for g in grade_order if g in grade_counts]
+        ordered_grades = list(grade_order)
         ordered_grades += sorted(g for g in grade_counts if g not in grade_order)
 
         story.append(Spacer(1, 4 * mm))
@@ -3054,7 +3057,7 @@ def class_marksheets_pdf(
         all_subject_grades = set()
         for counts in subject_grade_counts.values():
             all_subject_grades.update(counts.keys())
-        subject_grades = [g for g in grade_order if g in all_subject_grades]
+        subject_grades = list(grade_order)
         subject_grades += sorted(g for g in all_subject_grades if g not in grade_order)
 
         story.append(Spacer(1, 4 * mm))
