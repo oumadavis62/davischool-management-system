@@ -1450,22 +1450,71 @@ def overall_grading(request: Request):
         print("DAVISCHOOL OVERALL GRADING PAGE FALLBACK:", repr(exc), flush=True)
         rules=[]
     con.close()
-    rows="".join("<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button></form></td></tr>"%(float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules)
-    body=("<div class='page'><h1>Overall Grade & Position Settings</h1>"
+
+    grade_rows=[]
+    for r in rules:
+        grade=escape(str(r["grade"]))
+        rid=str(r["id"])
+        teacher=escape(str(r["class_teacher_comment"] or ""))
+        principal=escape(str(r["principal_comment"] or ""))
+        grade_rows.append(
+            "<tr>"
+            "<td><b>%s</b></td>"
+            "<td><input form='overall-comments-%s' name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'></td>"
+            "<td><input form='overall-comments-%s' name='principal_comment' value='%s' class='field' placeholder='Principal comment'></td>"
+            "<td class='action-cell'>"
+            "<form id='overall-comments-%s' method='post' action='/app/report-cards/overall-grade-comments'>"
+            "<input type='hidden' name='rule_id' value='%s'>"
+            "<button class='btn' type='submit'>Save Comments</button>"
+            "</form>"
+            "</td>"
+            "</tr>" % (grade,rid,teacher,rid,principal,rid,rid)
+        )
+
+    rule_rows="".join(
+        "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td>"
+        "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'>"
+        "<button class='btn danger-btn' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
+        "</form></td></tr>"
+        % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules
+    )
+
+    body=(
+      "<div class='page'><h1>Overall Grade & Position Settings</h1>"
       "<div class='muted'>Set the average-percentage bands your school uses for the final overall grade. The overall grade is based on the learner's average percentage across entered subjects. Position is calculated automatically from total marks within the selected class and stream.</div>"
-      "<div class='card section'><h2>Add overall grade band</h2><form method='post' action='/app/academics/overall-grading/add' style='display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px'>"
+      "<div class='card section'><h2>Add overall grade band</h2>"
+      "<form method='post' action='/app/academics/overall-grading/add' class='overall-add-form'>"
       "<input name='min_total' type='number' min='0' max='100' step='0.01' required placeholder='Minimum average %' class='field'>"
       "<input name='max_total' type='number' min='0' max='100' step='0.01' required placeholder='Maximum average %' class='field'>"
-      "<input name='grade' required placeholder='Overall grade e.g. A' class='field'><button class='btn'>Save</button></form></div>"
-      "<div class='card section'><h2>Report Card Comments by Overall Grade</h2><div class='muted'>Set the class teacher and principal comment that will automatically appear on report cards for each overall grade.</div>"
-      "<table><thead><tr><th>Grade</th><th>Class Teacher Comment</th><th>Principal Comment</th><th>Action</th></tr></thead><tbody>"
-      + "".join("<tr><td><b>%s</b></td><td colspan='2'><form method='post' action='/app/report-cards/overall-grade-comments'><input type='hidden' name='rule_id' value='%s'><input name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'><input name='principal_comment' value='%s' class='field' style='margin-top:6px' placeholder='Principal comment'><button class='btn' style='margin-top:6px'>Save Comments</button></form></td><td></td></tr>" %
-          (escape(str(r["grade"])),r["id"],escape(str(r["class_teacher_comment"] or "")),escape(str(r["principal_comment"] or ""))) for r in rules)
-      + ("<tr><td colspan='4'>No overall grading bands configured yet.</td></tr>" if not rules else "")
-      + "</tbody></table></div>"
-      + "<div class='card section'><table><thead><tr><th>Minimum Average %</th><th>Maximum Average %</th><th>Overall Grade</th><th>Action</th></tr></thead><tbody>"+(rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")+"</tbody></table></div>"
+      "<input name='grade' required placeholder='Overall grade e.g. A' class='field'>"
+      "<button class='btn' type='submit'>Save</button></form></div>"
+      "<div class='card section'><h2>Report Card Comments by Overall Grade</h2>"
+      "<div class='muted'>Set the class teacher and principal comment that will automatically appear on report cards for each overall grade.</div>"
+      "<div class='table-scroll'><table class='overall-comments-table'><thead><tr>"
+      "<th>Grade</th><th>Class Teacher Comment</th><th>Principal Comment</th><th>Action</th>"
+      "</tr></thead><tbody>"
+      + ("".join(grade_rows) if grade_rows else "<tr><td colspan='4'>No overall grading bands configured yet.</td></tr>")
+      + "</tbody></table></div></div>"
+      "<div class='card section'><div class='table-scroll'><table><thead><tr>"
+      "<th>Minimum Average %</th><th>Maximum Average %</th><th>Overall Grade</th><th>Action</th>"
+      "</tr></thead><tbody>"
+      + (rule_rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")
+      + "</tbody></table></div></div>"
       "<div class='card section'><b>Overall grade:</b> Based on average percentage. <b>Position:</b> ranked automatically by total marks, highest total first; equal totals receive the same position.</div>"
-      "<style>.field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;box-sizing:border-box}.marks-table{width:100%%;table-layout:fixed;border-collapse:collapse}.marks-table th,.marks-table td{vertical-align:middle;text-align:left;padding:8px 7px;box-sizing:border-box}.marks-table th{white-space:nowrap}.marks-table .col-admission{width:12%%}.marks-table .col-student{width:22%%}.marks-table .col-mark{width:12%%}.marks-table .col-grade{width:10%%}.marks-table .col-points{width:10%%}.marks-table .col-comment{width:34%%}.marks-table td:nth-child(1),.marks-table td:nth-child(2),.marks-table td:nth-child(4),.marks-table td:nth-child(5){white-space:nowrap}.markcell,.gradecell,.pointcell,.commentcell{height:1px}.markinput{width:100%%;max-width:110px;padding:8px;border:1px solid #dbe2ea;border-radius:8px;box-sizing:border-box}.commentinput{display:block;flex:0 1 210px;width:210px;max-width:210px;min-width:0;box-sizing:border-box}.comment-wrap{display:flex;align-items:center;gap:6px;min-width:0}.editbtn{flex:0 0 auto;padding:6px 8px;border:0;border-radius:7px;background:#111827;color:#fff;font-weight:800;cursor:pointer;white-space:nowrap}.btn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin-right:5px}</style></div>")
+      "<style>"
+      ".overall-add-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:center}"
+      ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;box-sizing:border-box}"
+      ".overall-comments-table{width:100%%;table-layout:fixed;border-collapse:collapse}"
+      ".overall-comments-table th,.overall-comments-table td{vertical-align:middle;text-align:left;padding:9px 7px;box-sizing:border-box}"
+      ".overall-comments-table th:nth-child(1){width:10%%}.overall-comments-table th:nth-child(2){width:35%%}.overall-comments-table th:nth-child(3){width:35%%}.overall-comments-table th:nth-child(4){width:20%%}"
+      ".action-cell{text-align:center!important;vertical-align:middle!important;white-space:nowrap}"
+      ".action-cell form{margin:0;display:inline}"
+      ".btn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin:0}"
+      ".danger-btn{background:#b42318}"
+      ".table-scroll{width:100%%;overflow-x:auto}"
+      "@media(max-width:700px){.overall-add-form{grid-template-columns:1fr}.overall-comments-table{min-width:760px}}"
+      "</style></div>"
+    )
     return _school_page(request,"Overall Grade & Position Settings",body)
 
 @router.post("/app/academics/overall-grading/add")
