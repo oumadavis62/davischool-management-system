@@ -662,12 +662,18 @@ document.addEventListener('submit',function(event){{
     fetch(url.toString(),{{method:'POST',body:data,credentials:'same-origin',redirect:'follow',cache:'no-store'}}).then(function(response){{
       var finalUrl=response.url || url.toString();
       if(!started && !hasQuery){{
+        // Preserve the current unfiltered workspace as a real history entry,
+        // then navigate normally to the filtered result. This guarantees:
+        // Back #1 = unfiltered workspace, Back #2 = parent Academics page.
         try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
-        history.pushState({{daviFilterStep:true}},'',finalUrl);
+        history.pushState({{daviFilterStep:true,daviFilterWorkspace:true}},'',window.location.href);
+        window.location.href=finalUrl;
       }}else{{
+        // Once a filtered entry exists, replace it so filter changes never
+        // create a chain of intermediate filtered states.
         history.replaceState({{daviFilterStep:true}},'',finalUrl);
+        window.location.reload();
       }}
-      window.location.reload();
     }}).catch(function(){{form.submit();}});
   }}catch(e){{form.submit();}}
 }},true);
