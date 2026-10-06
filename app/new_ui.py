@@ -1474,7 +1474,7 @@ def overall_grading_add(request: Request,min_total:float=Form(...),max_total:flo
     if not sid:return RedirectResponse("/",303)
     if not _is_school_admin_like(request):
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
-    if not _require_permission(request, sid, "marks.edit"):
+    if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
     if min_total<0 or max_total>100 or max_total<min_total or not grade.strip():
         return HTMLResponse("Invalid average-percentage range or grade. <a href='/app/academics/overall-grading'>Back</a>",400)
