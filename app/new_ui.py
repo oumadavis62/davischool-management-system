@@ -219,7 +219,7 @@ def _pdf_build(story, pagesize, title):
         footer = "DaviSchool Management System  ·  Generated: %s  ·  Page %d" % (
             generated_at, canvas.getPageNumber()
         )
-        canvas.setFillColorRGB(0.04, 0.24, 0.57)
+        canvas.setFillColorRGB(0.09, 0.42, 0.23)
         canvas.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
         canvas.restoreState()
 
