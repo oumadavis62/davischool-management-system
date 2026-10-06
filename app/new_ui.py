@@ -2522,20 +2522,27 @@ function printDocument(){
     grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
     overall_grade_counts = {}
     subject_grade_counts = {int(s["id"]): {} for s in subjects}
-    # Count the exact grades already calculated for each MarkSheet row.
-    # This keeps the analysis synchronized with the visible Overall GRD and
-    # subject GRD cells, including the system-generated X for zero-mark learners.
+    # This MarkSheet route stores computed rows as tuples:
+    # (student, total, total_points, count, cells). Recalculate the same
+    # grades used by the visible table so the distribution counts stay accurate.
     for item in computed:
-        og = str(item.get("grade") or "").strip()
-        if og and og != "—":
-            overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
+        student, total, total_points, count, cells = item
+        if int(count or 0) > 0:
+            average = float(total or 0) / int(count)
+            try:
+                og = str(_marksheet_overall_grade(cur, sid, average, count, overall_rules) or "").strip()
+            except Exception:
+                og = ""
+            if og and og != "—":
+                overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
         for subject in subjects:
-            value = item.get("values", {}).get(int(subject["id"]))
+            value = marks.get((int(student["id"]), int(subject["id"])))
             if value is None:
                 continue
             try:
-                sg = str(value[1] or "").strip()
-            except (IndexError, TypeError):
+                sg, _, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
+                sg = str(sg or "").strip()
+            except Exception:
                 sg = ""
             if sg and sg != "—":
                 bucket = subject_grade_counts[int(subject["id"])]
