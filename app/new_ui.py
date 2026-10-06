@@ -2532,10 +2532,10 @@ function printDocument(){
         raw = str(value or "").strip().upper()
         compact = re.sub(r"[^A-Z0-9]+", "", raw)
         aliases = {
-            "EE1": "EE1", "EE2": "EE2",
-            "ME1": "ME1", "ME2": "ME2",
-            "AE1": "AE1", "AE2": "AE2",
-            "BE1": "BE1", "BE2": "BE2",
+            "EE1": "E.E1", "EE2": "E.E2",
+            "ME1": "M.E1", "ME2": "M.E2",
+            "AE1": "A.E1", "AE2": "A.E2",
+            "BE1": "B.E1", "BE2": "B.E2",
             "X": "X",
         }
         return aliases.get(compact, "")
