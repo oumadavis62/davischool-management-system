@@ -2707,9 +2707,18 @@ def class_marksheets_pdf(
             table_rows.append(row)
 
         col_count = max(1, len(header))
-        col_widths = [17 * mm, 34 * mm] + [9.5 * mm] * (col_count - 2)
-        if col_count > 15:
-            col_widths = [15 * mm, 29 * mm] + [7.5 * mm] * (col_count - 2)
+        # Match the on-screen MarkSheet proportions with fixed admission/name columns and compact metrics.
+        col_widths = [16 * mm, 45 * mm]
+        for idx in range(2, col_count):
+            label = str(header[idx]).upper()
+            if "AVG" in label:
+                col_widths.append(15 * mm)
+            elif "GRD" in label:
+                col_widths.append(12 * mm)
+            elif "POS" in label:
+                col_widths.append(13 * mm)
+            else:
+                col_widths.append(11 * mm)
 
         table = Table(table_rows, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
         table.setStyle(TableStyle([
