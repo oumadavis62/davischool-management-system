@@ -715,6 +715,7 @@ document.addEventListener('submit',function(event){{
 window.addEventListener('popstate',function(){{
   try{{
     sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-post-filter:'+window.location.pathname);
     sessionStorage.removeItem('davischool-marksheet-filter-started');
   }}catch(e){{}}
 }});
