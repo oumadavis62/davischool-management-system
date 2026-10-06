@@ -341,7 +341,9 @@ def _pdf_styles():
 
 def _pdf_school_header(school_row, styles, title, subtitle=""):
     from reportlab.lib import colors
-    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak, PageBreak, PageBreak
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
     from reportlab.lib.units import mm
     from io import BytesIO
     name = str(school_row["name"] or "DaviSchool") if school_row else "DaviSchool"
