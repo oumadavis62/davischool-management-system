@@ -800,7 +800,7 @@ document.addEventListener('submit',function(event){{
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin)return;
     var path=url.pathname.toLowerCase();
-    if(path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add')return;
+    if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
@@ -1463,7 +1463,7 @@ def overall_grading(request: Request):
             "<td><input form='overall-comments-%s' name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'></td>"
             "<td><input form='overall-comments-%s' name='principal_comment' value='%s' class='field' placeholder='Principal comment'></td>"
             "<td class='action-cell'>"
-            "<form id='overall-comments-%s' method='post' action='/app/report-cards/overall-grade-comments'>"
+            "<form id='overall-comments-%s' method='post' action='/app/report-cards/overall-grade-comments' data-native-post>"
             "<input type='hidden' name='rule_id' value='%s'>"
             "<button class='btn' type='submit'>Save Comments</button>"
             "</form>"
@@ -1473,7 +1473,7 @@ def overall_grading(request: Request):
 
     rule_rows="".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td>"
-        "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline'>"
+        "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline' data-native-post>"
         "<button class='btn danger-btn' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
         "</form></td></tr>"
         % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in rules
@@ -1483,7 +1483,7 @@ def overall_grading(request: Request):
       "<div class='page'><h1>Overall Grade & Position Settings</h1>"
       "<div class='muted'>Set the average-percentage bands your school uses for the final overall grade. The overall grade is based on the learner's average percentage across entered subjects. Position is calculated automatically from total marks within the selected class and stream.</div>"
       "<div class='card section'><h2>Add overall grade band</h2>"
-      "<form method='post' action='/app/academics/overall-grading/add' class='overall-add-form'>"
+      "<form method='post' action='/app/academics/overall-grading/add' class='overall-add-form' data-native-post>"
       "<input name='min_total' type='number' min='0' max='100' step='0.01' required placeholder='Minimum average %' class='field'>"
       "<input name='max_total' type='number' min='0' max='100' step='0.01' required placeholder='Maximum average %' class='field'>"
       "<input name='grade' required placeholder='Overall grade e.g. A' class='field'>"
@@ -1588,9 +1588,55 @@ def overall_grading_delete(request: Request,rule_id:int):
         return HTMLResponse("Only the school administrator can edit overall grading.", 403)
     if not _require_permission(request, sid, "reports.edit"):
         return HTMLResponse("You do not have permission to edit overall grading.", 403)
-    con=_db();cur=con.cursor();_ensure_overall_grading_table(cur)
-    cur.execute("DELETE FROM overall_grading_rules WHERE id=? AND school_id=?",(rule_id,sid))
-    con.commit();con.close()
+
+    con=_db()
+    cur=con.cursor()
+    try:
+        _ensure_overall_grading_table(cur)
+        rule=cur.execute(
+            "SELECT id,grade,min_total,max_total FROM overall_grading_rules WHERE id=? AND school_id=?",
+            (rule_id,sid)
+        ).fetchone()
+        if not rule:
+            con.rollback()
+            return HTMLResponse(
+                "Overall grading rule not found. <a href='/app/academics/overall-grading'>Back</a>",
+                404
+            )
+        cur.execute(
+            "DELETE FROM overall_grading_rules WHERE id=? AND school_id=?",
+            (rule_id,sid)
+        )
+        _audit(
+            cur,sid,request,"OVERALL_GRADING_RULE_DELETE",
+            "Deleted overall grade %s for %.1f-%.1f%% average" % (
+                str(rule["grade"]),float(rule["min_total"]),float(rule["max_total"])
+            )
+        )
+        con.commit()
+        remaining=cur.execute(
+            "SELECT id FROM overall_grading_rules WHERE id=? AND school_id=?",
+            (rule_id,sid)
+        ).fetchone()
+        if remaining:
+            con.rollback()
+            return HTMLResponse(
+                "DaviSchool could not delete the overall grading rule. <a href='/app/academics/overall-grading'>Back</a>",
+                500
+            )
+    except Exception as exc:
+        try: con.rollback()
+        except Exception: pass
+        print("DAVISCHOOL OVERALL GRADING DELETE ERROR:",repr(exc),flush=True)
+        return HTMLResponse(
+            "DaviSchool could not delete the overall grading rule. Technical detail: %s "
+            "<a href='/app/academics/overall-grading'>Back</a>" % escape(str(exc)),
+            500
+        )
+    finally:
+        try: con.close()
+        except Exception: pass
+
     return RedirectResponse("/app/academics/overall-grading",303)
 
 
