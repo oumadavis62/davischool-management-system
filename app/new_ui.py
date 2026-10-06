@@ -2522,24 +2522,21 @@ function printDocument(){
     grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
     overall_grade_counts = {}
     subject_grade_counts = {int(s["id"]): {} for s in subjects}
-    for student, total, total_points, count, cells in computed:
-        if count:
-            average = total / count
-            try:
-                og = str(_overall_grade(cur, sid, average, overall_rules) or "").strip()
-            except Exception:
-                og = str(_default_grade_points(average)[0] or "").strip()
-            if og and og != "—":
-                overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
+    # Count the exact grades already calculated for each MarkSheet row.
+    # This keeps the analysis synchronized with the visible Overall GRD and
+    # subject GRD cells, including the system-generated X for zero-mark learners.
+    for item in computed:
+        og = str(item.get("grade") or "").strip()
+        if og and og != "—":
+            overall_grade_counts[og] = overall_grade_counts.get(og, 0) + 1
         for subject in subjects:
-            value = marks.get((int(student["id"]), int(subject["id"])))
+            value = item.get("values", {}).get(int(subject["id"]))
             if value is None:
                 continue
             try:
-                sg, _, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
-            except Exception:
-                sg, _ = _default_grade_points(float(value))
-            sg = str(sg or "").strip()
+                sg = str(value[1] or "").strip()
+            except (IndexError, TypeError):
+                sg = ""
             if sg and sg != "—":
                 bucket = subject_grade_counts[int(subject["id"])]
                 bucket[sg] = bucket.get(sg, 0) + 1
