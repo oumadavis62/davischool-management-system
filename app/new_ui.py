@@ -1434,6 +1434,19 @@ def _overall_grade(cur, school_id, average_percentage, overall_rules=None):
         print("DAVISCHOOL OVERALL GRADING ERROR:", repr(exc), flush=True)
         return "—"
 
+def _marksheet_overall_grade(cur, school_id, average_percentage, graded_count, overall_rules=None):
+    """Apply configured overall grading, including X for learners with no recorded marks."""
+    if int(graded_count or 0) == 0:
+        rules = overall_rules if overall_rules is not None else _load_overall_grading_rules(cur, school_id)
+        for rule in (rules or []):
+            try:
+                if str(rule["grade"] or "").strip().upper() == "X":
+                    return "X"
+            except (KeyError, TypeError):
+                continue
+        return "—"
+    return _overall_grade(cur, school_id, average_percentage, overall_rules)
+
 @router.get("/app/academics/overall-grading", response_class=HTMLResponse)
 def overall_grading(request: Request):
     sid=_school_session(request)
@@ -1971,7 +1984,7 @@ def class_marksheets_csv(
                 row.append("%.1f" % float(value) if metric == "mks" else str(grade) if metric == "grade" else "%.1f" % float(points or 0))
         average = (float(total) / count) if count else 0.0
         try:
-            overall_grade = _overall_grade(cur, sid, average, overall_rules) if count else "—"
+            overall_grade = _marksheet_overall_grade(cur, sid, average, count, overall_rules)
         except Exception:
             overall_grade = _default_grade_points(average)[0] if count else "—"
         overall_values = {
@@ -2344,7 +2357,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             last_total=total
         try:
             average=(total/count) if count else 0
-            overall_grade=_overall_grade(cur,sid,average,overall_rules) if count else "—"
+            overall_grade=_marksheet_overall_grade(cur,sid,average,count,overall_rules)
         except Exception as exc:
             print("DAVISCHOOL MARKSHEET OVERALL GRADE FALLBACK:", repr(exc), flush=True)
             overall_grade=_default_grade_points(average)[0] if count else "—"
@@ -2779,7 +2792,7 @@ def class_marksheets_pdf(
                 total_points += float(points or 0)
                 count += 1
             average = (total / count) if count else 0.0
-            overall_grade = _overall_grade(cur, sid, average, overall_rules) if count else "—"
+            overall_grade = _marksheet_overall_grade(cur, sid, average, count, overall_rules)
             computed.append({
                 "student": student,
                 "values": values,
