@@ -1569,10 +1569,20 @@ MARKSHEET_SUBJECT_ORDER = (
 )
 
 def _report_card_subject_position(subject_name):
-    """Return the requested curriculum position for report-card subjects."""
+    """Return the exact requested curriculum position for report-card subjects."""
     name=re.sub(r"[^a-z0-9]+", " ", str(subject_name or "").strip().casefold())
     name=" ".join(name.split())
-    aliases={"english":0,"eng":0,"kiswahili":1,"kis":1,"mathematics":2,"math":2,"mat":2,"integrated science":3,"igs":3,"agriculture":4,"agr":4,"creative arts and sports":5,"creative arts":5,"cas":5,"social studies":6,"sst":6,"christian religious education":7,"christian religious studies":7,"cre":7,"pre technical studies":8,"pre technical":8,"pret":8}
+    aliases={
+        "english":0, "eng":0,
+        "kiswahili":1, "kis":1,
+        "mathematics":2, "math":2, "mat":2,
+        "integrated science":3, "igs":3,
+        "agriculture":4, "agr":4,
+        "creative arts and sports":5, "creative arts":5, "cas":5,
+        "social studies":6, "sst":6,
+        "christian religious education":7, "christian religious studies":7, "cre":7,
+        "pre technical studies":8, "pre technical":8, "pret":8,
+    }
     return aliases.get(name,99)
 
 
