@@ -6718,7 +6718,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
               %s
               <div class='comments'><b>Class Teacher's Comment</b><p>%s</p><b>Principal's Comment</b><p>%s</p></div>
               <div class='sign'><div class='report-signatory'><b>Class Teacher:</b> <span class='signatory-name'>%s</span><hr>Signature</div><div class='report-signatory'><b>Principal:</b> <span class='signatory-name'>%s</span><hr>Signature</div></div>
-              <div class='report-dates'><b>Date of closing:</b> %s <b>Date of opening:</b> %s</div>
+              <div class='report-dates'><span><b>Date of closing:</b> %s</span><span><b>Date of opening:</b> %s</span></div>
               %s
             </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
                               escape(str(cls["name"] or "")),escape(str(cls["stream"] or "")),
