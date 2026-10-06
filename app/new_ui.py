@@ -1479,8 +1479,10 @@ def overall_grading(request: Request):
         rules=[]
     con.close()
 
+    # Keep the built-in X row at the very bottom of the comments section.
     grade_rows=[]
-    for r in rules:
+    comment_rules=[r for r in rules if str(r["grade"] or "").strip().upper()!="X"] + [r for r in rules if str(r["grade"] or "").strip().upper()=="X"]
+    for r in comment_rules:
         grade=escape(str(r["grade"]))
         rid=str(r["id"])
         is_x=str(r["grade"] or "").strip().upper()=="X"
