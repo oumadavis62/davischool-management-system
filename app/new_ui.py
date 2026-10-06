@@ -1500,14 +1500,22 @@ def overall_grading(request: Request):
             "</tr>" % (grade,(" <span class='muted'>(0%% average)</span>" if is_x else ""),rid,teacher,rid,principal,rid,rid)
         )
 
+    x_rules=[r for r in rules if str(r["grade"] or "").strip().upper()=="X"]
     structured_rules=[r for r in rules if r["min_total"] is not None and r["max_total"] is not None and str(r["grade"] or "").strip().upper()!="X"]
-    rule_rows="".join(
+    x_rule_row=(
+        "<tr><td>0.0</td><td>0.0</td><td><b>X</b></td>"
+        "<td class='action-cell'><button class='btn' type='button' disabled "
+        "style='opacity:.55;cursor:not-allowed;background:#64748b'>System generated</button></td></tr>"
+        if x_rules else ""
+    )
+    structured_rule_rows="".join(
         "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td>"
         "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline' data-native-post>"
         "<button class='btn danger-btn' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
         "</form></td></tr>"
         % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in structured_rules
     )
+    rule_rows=x_rule_row+structured_rule_rows
 
     body=(
       "<div class='page'><h1>Overall Grade & Position Settings</h1>"
@@ -1576,7 +1584,7 @@ async def overall_grading_add(request: Request):
         overlap=cur.execute(
             """SELECT id FROM overall_grading_rules
                WHERE school_id=? AND min_total IS NOT NULL AND max_total IS NOT NULL
-                 AND min_total<=? AND max_total>=? LIMIT 1""
+                 AND min_total<=? AND max_total>=? LIMIT 1""",
             (sid,max_total,min_total)
         ).fetchone()
         if overlap:
