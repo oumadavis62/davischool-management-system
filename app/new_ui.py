@@ -873,7 +873,7 @@ def students_page(request: Request):
 <div class='card section'><div style='display:flex;justify-content:space-between'><h2>Student register ({len(students)})</h2><a class='action' href='/app/students'>Refresh</a></div>
 <div class='students-register-scroll'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead>
 <tbody>{rows or '<tr><td colspan=7>No students yet.</td></tr>'}</tbody></table></div></div>
-<style>.students-register-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px}}.students-register-scroll table{{width:max-content;min-width:100%;white-space:nowrap}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+<style>.students-register-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px}}.students-register-scroll table{{width:max-content;min-width:100%;white-space:nowrap}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style><script>function selectCorrectionSubject(row,event){{if(event&&event.target&&event.target.closest&&event.target.closest('a,button,form'))return;document.querySelectorAll('.correction-subject-row.selected').forEach(function(r){{if(r!==row)r.classList.remove('selected')}});row.classList.toggle('selected')}}</script>"""
     return _school_page(request,"Students",body)
 
 @router.post("/app/students/add")
@@ -5310,7 +5310,7 @@ def marks_correction_requests(request: Request):
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'><input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ''))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ''))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ''))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ''))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ''))}'><input type='hidden' name='return_load' value='1'>"
                     f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
         marks_rows += (
-            f"<tr><td>{escape(str(r['exam_name'] or ''))}</td>"
+            f"<tr class='correction-subject-row' tabindex='0' onclick='selectCorrectionSubject(this,event)' onkeydown='if(event.key===\"Enter\"||event.key===\" \"){selectCorrectionSubject(this,event)}'><td>{escape(str(r['exam_name'] or ''))}</td>"
             f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
             f"<td><b>{escape(str(r['subject_name'] or ''))}</b></td>"
             f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
@@ -5384,7 +5384,7 @@ def marks_correction_requests(request: Request):
 .btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
 .btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
 .unlock-btn{{background:#b45309}}
-.lock-btn{{background:#176B3A}}
+.lock-btn{{background:#176B3A}}.correction-subject-row{{cursor:pointer;transition:background .15s,box-shadow .15s}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row .lock-btn,.correction-subject-row .unlock-btn{{display:none}}.correction-subject-row.selected .lock-btn,.correction-subject-row.selected .unlock-btn{{display:inline-block}}.correction-subject-row:focus{{outline:2px solid #176B3A;outline-offset:-2px}}
 @media(max-width:900px){{.filter-grid{{grid-template-columns:repeat(2,minmax(150px,1fr))}}}}
 @media(max-width:560px){{.filter-grid{{grid-template-columns:1fr}}}}
 </style>"""
