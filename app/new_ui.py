@@ -445,12 +445,31 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 .ds-action-cell.ds-action-open{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important}}
 .ds-action-cell.ds-action-open>*{{opacity:1;visibility:visible;pointer-events:auto;transform:none}}
 .ds-action-cell>*{{transition:opacity .12s ease,visibility .12s ease,transform .12s ease}}
+.correction-subject-row{{cursor:pointer;transition:background .15s ease,box-shadow .15s ease}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4!important;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row.selected .ds-action-cell{{background:#176B3A!important;color:#fff!important}}.correction-subject-row.selected .ds-action-cell>*{{opacity:1!important;visibility:visible!important;pointer-events:auto!important;transform:none!important}}
 .ds-action-cell.ds-action-open .action{{background:#fff!important;color:#176B3A!important;border-color:#fff!important;box-shadow:none!important}}
 .ds-action-cell.ds-action-open .action:hover,.ds-action-cell.ds-action-open .action:focus-visible{{background:#0F4D2A!important;color:#fff!important;border-color:#0F4D2A!important}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{"sidebar-hidden" if teacher_locked else ""}{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+window.selectCorrectionSubject=function(row,event){{
+  if(!row)return;
+  if(event&&event.target&&event.target.closest&&event.target.closest('a,button,input,select,textarea,form'))return;
+  document.querySelectorAll('.correction-subject-row.selected').forEach(function(other){{
+    if(other!==row){{
+      other.classList.remove('selected');
+      var otherAction=other.querySelector('.ds-action-cell');
+      if(otherAction){{otherAction.classList.remove('ds-action-open');otherAction.setAttribute('aria-expanded','false');}}
+    }}
+  }});
+  var was=row.classList.contains('selected');
+  row.classList.toggle('selected',!was);
+  var action=row.querySelector('.ds-action-cell') || row.lastElementChild;
+  if(action){{
+    action.classList.toggle('ds-action-open',!was);
+    action.setAttribute('aria-expanded',!was?'true':'false');
+  }}
+}};
 function setupDaviActionCells(){{
   document.querySelectorAll('table').forEach(function(table){{
     var headerRow=table.querySelector('thead tr');
