@@ -2462,7 +2462,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", marksheet_tab_id):
         marksheet_tab_id = ""
     marksheet_tab_q = ("&ds_tab=" + quote(marksheet_tab_id, safe="")) if marksheet_tab_id else ""
-    pdf_marksheet_url = f"<a class='btnlink' href='/app/academics/marksheets/pdf?exam_id={eid}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}&subject_metrics={quote(subject_metrics or '', safe='')}&overall_metrics={quote(','.join(overall_metric_list), safe='')}{marksheet_tab_q}'>⬇️ Download PDF</a>"
+    pdf_marksheet_url = f"<a class='btnlink' target='_blank' rel='noopener' href='/app/academics/marksheets/pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids), safe='')}&class_id={selected_class_param}&term={quote(str(term or ''), safe='')}&year={quote(str(year or ''), safe='')}&stream={quote(str(stream or ''), safe='')}&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}&subject_metrics={quote(subject_metrics or '', safe='')}&overall_metrics={quote(','.join(overall_metric_list), safe='')}{marksheet_tab_q}'>⬇️ Download PDF</a>"
     marksheet_page_query = (
         f"exam_id={quote(str(eid), safe='')}"
         f"&class_id={selected_class_param}"
@@ -2506,7 +2506,12 @@ function printDocument(){
   var previewBar='<div class="marksheet-preview-bar no-print"><div><b>🖨️ MarkSheet Print Preview</b><span>Review the complete MarkSheet before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print MarkSheet</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.marksheet-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.marksheet-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.marksheet-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.marksheet-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.marksheet-preview-bar{display:none!important}}';
   var html='<!doctype html><html><head><meta charset="utf-8"><title>MarkSheet Print Preview</title><style>'+css+previewCss+'</style></head><body>'+previewBar+printDoc.outerHTML+footer+'</body></html>';
-  w.document.open();w.document.write(html);w.document.close();w.focus();
+  w.document.open();w.document.write(html);w.document.close();
+  w.focus();
+  // Give the new document a moment to finish rendering before the browser print UI is invoked.
+  // This is especially important on Android/mobile browsers, where calling print immediately
+  // after document.write can otherwise produce a blank or non-responsive preview.
+  setTimeout(function(){try{w.print();}catch(e){try{window.print();}catch(ignore){}}},350);
 }
 </script>'''
     subject_mean_rows = sorted(
@@ -3008,19 +3013,21 @@ def class_marksheets_pdf(
             subject_positions[int(item[0]["id"])] = last_pos
 
         # Overall grade distribution: grades across columns, counts directly below.
-        grade_order = ["EE1", "EE2", "ME1", "ME2", "AE1", "AE2", "BE1", "BE2", "X"]
-        grade_counts = {}
+        grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
+        grade_counts = {g: 0 for g in grade_order}
         for item in computed:
-            grade = str(item.get("grade") or "").strip()
-            if grade and grade != "—":
-                grade_counts[grade] = grade_counts.get(grade, 0) + 1
+            raw_grade = str(item.get("grade") or "").strip().upper()
+            compact_grade = re.sub(r"[^A-Z0-9]+", "", raw_grade)
+            aliases = {"EE1":"E.E1","EE2":"E.E2","ME1":"M.E1","ME2":"M.E2","AE1":"A.E1","AE2":"A.E2","BE1":"B.E1","BE2":"B.E2","X":"X"}
+            grade = aliases.get(compact_grade, "")
+            if grade:
+                grade_counts[grade] += 1
         ordered_grades = list(grade_order)
-        ordered_grades += sorted(g for g in grade_counts if g not in grade_order)
 
         story.append(Spacer(1, 4 * mm))
         story.append(Paragraph("OVERALL GRADE DISTRIBUTION", styles["subtitle"]))
         if ordered_grades:
-            overall_entries_pdf = sum(1 for item in computed if int(item.get("count", 0) or 0) > 0)
+            overall_entries_pdf = sum(grade_counts.get(g, 0) for g in ordered_grades)
             # PDF Class Mean must use eligible students' actual total marks,
             # matching the MarkSheet HTML calculation. Partial exam attempts count;
             # only students with no recorded exam mark are excluded.
@@ -3066,9 +3073,13 @@ def class_marksheets_pdf(
             for item in computed:
                 value = item["values"].get(sid_subject)
                 if value is None:
+                    counts["X"] = counts.get("X", 0) + 1
                     continue
-                grade = str(value[1] or "").strip()
-                if grade and grade != "—":
+                raw_grade = str(value[1] or "").strip().upper()
+                compact_grade = re.sub(r"[^A-Z0-9]+", "", raw_grade)
+                aliases = {"EE1":"E.E1","EE2":"E.E2","ME1":"M.E1","ME2":"M.E2","AE1":"A.E1","AE2":"A.E2","BE1":"B.E1","BE2":"B.E2","X":"X"}
+                grade = aliases.get(compact_grade, "")
+                if grade:
                     counts[grade] = counts.get(grade, 0) + 1
             subject_grade_counts[sid_subject] = counts
 
@@ -3100,7 +3111,7 @@ def class_marksheets_pdf(
                     Paragraph(str(counts.get(g, 0)), styles["table"])
                     for g in subject_grades
                 ] + [
-                    Paragraph(str(subject_counts[sid_subject]), styles["table"]),
+                    Paragraph(str(sum(counts.get(g, 0) for g in subject_grades)), styles["table"]),
                     Paragraph(("%.2f" % mean) if mean is not None else "—", styles["table"]),
                     Paragraph(str(subject_positions.get(sid_subject, "—")), styles["table"]),
                 ])
