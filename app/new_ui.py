@@ -2554,9 +2554,15 @@ function printDocument(){
             overall_grade_counts[og]+=1
         for subject in subjects:
             subject_id=int(subject["id"])
-            sg=_distribution_grade(computed_subject_grades.get(student_id, {}).get(subject_id, ""))
+            raw_subject_grade = computed_subject_grades.get(student_id, {}).get(subject_id, "")
+            sg=_distribution_grade(raw_subject_grade)
             if sg:
                 subject_grade_counts[subject_id][sg]+=1
+            elif raw_subject_grade in ("", "—", "-"):
+                # A dash/no mark means the student did not sit this subject.
+                # Keep the dash on the MarkSheet itself, but count it as X in
+                # the per-subject distribution analysis.
+                subject_grade_counts[subject_id]["X"] += 1
 
     # Never append alphabetically sorted grades after X. Both distribution
     # tables must always be exactly: EE1, EE2, ME1, ME2, AE1, AE2, BE1, BE2, X.
