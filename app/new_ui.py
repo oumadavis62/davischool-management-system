@@ -2979,6 +2979,7 @@ def class_marksheets_pdf(
         exam_title = " + ".join(str(e["name"] or "") for e in exam_rows)
         styles = _pdf_styles()
         from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.units import mm
