@@ -2579,7 +2579,9 @@ function printDocument(){
     mean_eligible_students = [
         item for item in computed if int(item[3] or 0) > 0
     ]
-    overall_entries = len(mean_eligible_students)
+    # Entries in the distribution table must include every displayed grade,
+    # including X. This keeps the total consistent with the grade columns.
+    overall_entries = sum(overall_grade_counts.get(g, 0) for g in distribution_grades)
     # Mean of eligible students' TOTAL MARKS. Partial exam attempts are included.
     overall_class_mean = (
         sum(float(item[1] or 0) for item in mean_eligible_students)
@@ -2617,7 +2619,7 @@ function printDocument(){
                         "<td>%d</td>" % subject_grade_counts[int(subject["id"])].get(g, 0)
                         for g in distribution_grades
                     ),
-                    int(subject_summary_values.get(int(subject["id"]), (None, 0, "—"))[1] or 0),
+                    sum(subject_grade_counts[int(subject["id"])].get(g, 0) for g in distribution_grades),
                     ("%.2f" % subject_summary_values[int(subject["id"])][0]) if subject_summary_values.get(int(subject["id"]), (None,))[0] is not None else "—",
                     str(subject_summary_values.get(int(subject["id"]), (None, 0, "—"))[2]),
                 )
