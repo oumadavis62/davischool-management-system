@@ -385,7 +385,10 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
         ("LEFTPADDING",(0,0),(-1,-1),4),
         ("RIGHTPADDING",(0,0),(-1,-1),4),
     ]))
-    return [table, Spacer(1, 5), Paragraph(escape(title), styles["subtitle"])]
+    result = [table, Spacer(1, 5)]
+    if str(title or "").strip():
+        result.append(Paragraph(escape(title), styles["subtitle"]))
+    return result
 
 def _shell(title, name, role, body, school_id=None):
     # Sidebar visibility follows the same permission vocabulary enforced by
@@ -1984,8 +1987,27 @@ def class_marksheets_csv(
     writer.writerow(["Phone: " + csv_phone if csv_phone else "", "Email: " + csv_email if csv_email else ""])
     writer.writerow([])
 
-    # CSV preserves the same two header levels as the Print Preview.
+    # CSV mirrors the same MarkSheet information hierarchy as Print Preview:
+    # school identity, title, class/stream/assessment/term/year, then the exact
+    # two-level marks table followed by the same grade-distribution analysis.
     metric_labels = {"mks": "MKS", "grade": "GRD", "pts": "PTS", "avg": "AVG %", "pos": "POS"}
+    csv_exam_title = " + ".join(str(e["name"] or "") for e in exams if int(e["id"]) in set(selected_exam_ids))
+    if not term and selected_exam_ids:
+        first_selected_exam = next((e for e in exams if int(e["id"]) == selected_exam_ids[0]), None)
+        term = str(first_selected_exam["term"] or "") if first_selected_exam else ""
+    if not year and selected_exam_ids:
+        first_selected_exam = next((e for e in exams if int(e["id"]) == selected_exam_ids[0]), None)
+        year = str(first_selected_exam["year"] or "") if first_selected_exam else ""
+    if combined_mode:
+        csv_class_title = str(combined_grade).strip() + " — ALL STREAMS"
+    else:
+        csv_class_row = next((cc for cc in classes if int(cc["id"]) == selected_class_ids[0]), None)
+        csv_class_title = str(csv_class_row["name"] or "") if csv_class_row else "Class"
+        selected_stream = str(stream or (csv_class_row["stream"] or "")).strip() if csv_class_row else str(stream or "")
+        csv_class_title += " — STREAM: " + selected_stream if selected_stream else " — ALL STREAMS"
+    writer.writerow(["STUDENT MARKSHEET"])
+    writer.writerow(["CLASS", csv_class_title, "STREAM", str(stream or "All"), "ASSESSMENT", csv_exam_title, "TERM", str(term or "All"), "YEAR", str(year or "All")])
+    writer.writerow([])
     header_top = ["ADM NO.", "NAME"]
     header_bottom = ["", ""]
     if combined_mode:
@@ -2008,7 +2030,7 @@ def class_marksheets_csv(
             value = values[int(subject["id"])]
             metrics = subject_metric_map[int(subject["id"])]
             if value is None:
-                row.extend([""] * len(metrics))
+                row.extend(["—"] * len(metrics))
                 continue
             try:
                 grade, points, _ = _subject_grade_details(cur, sid, int(subject["id"]), value, grading_rules)
@@ -2030,6 +2052,74 @@ def class_marksheets_csv(
         }
         row.extend(overall_values[m] for m in overall_metric_list)
         writer.writerow(row)
+
+    # Match the Print Preview's grade-distribution analysis in the CSV data layout.
+    grade_order_csv = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
+    def _csv_distribution_grade(value):
+        raw = str(value or "").strip().upper()
+        compact = re.sub(r"[^A-Z0-9]+", "", raw)
+        return {"EE1":"E.E1","EE2":"E.E2","ME1":"M.E1","ME2":"M.E2","AE1":"A.E1","AE2":"A.E2","BE1":"B.E1","BE2":"B.E2","X":"X"}.get(compact, "")
+
+    overall_grade_counts_csv = {g: 0 for g in grade_order_csv}
+    subject_grade_counts_csv = {int(s["id"]): {g: 0 for g in grade_order_csv} for s in subjects}
+    subject_totals_csv = {int(s["id"]): 0.0 for s in subjects}
+    subject_counts_csv = {int(s["id"]): 0 for s in subjects}
+    for student, total, total_points, count, values in computed:
+        average = (float(total) / count) if count else 0.0
+        og = _csv_distribution_grade(_marksheet_overall_grade(cur, sid, average, count, overall_rules))
+        if og:
+            overall_grade_counts_csv[og] += 1
+        for subject in subjects:
+            subject_id = int(subject["id"])
+            value = values.get(subject_id)
+            if value is None:
+                subject_grade_counts_csv[subject_id]["X"] += 1
+                continue
+            try:
+                grade, _, _ = _subject_grade_details(cur, sid, subject_id, value, grading_rules)
+            except Exception:
+                grade, _ = _default_grade_points(float(value))
+            sg = _csv_distribution_grade(grade)
+            if sg:
+                subject_grade_counts_csv[subject_id][sg] += 1
+            subject_totals_csv[subject_id] += float(value)
+            subject_counts_csv[subject_id] += 1
+
+    writer.writerow([])
+    writer.writerow(["GRADE DISTRIBUTION ANALYSIS"])
+    writer.writerow(["OVERALL GRADE DISTRIBUTION — " + csv_class_title])
+    writer.writerow(grade_order_csv + ["Entries", "Class Mean"])
+    eligible_csv = [item for item in computed if int(item[3] or 0) > 0]
+    overall_mean_csv = (sum(float(item[1] or 0) for item in eligible_csv) / len(eligible_csv)) if eligible_csv else None
+    writer.writerow([overall_grade_counts_csv[g] for g in grade_order_csv] + [sum(overall_grade_counts_csv.values()), "%.2f" % overall_mean_csv if overall_mean_csv is not None else "—"])
+
+    ranked_subjects_csv = []
+    for subject in subjects:
+        subject_id = int(subject["id"])
+        mean = subject_totals_csv[subject_id] / subject_counts_csv[subject_id] if subject_counts_csv[subject_id] else None
+        ranked_subjects_csv.append((subject, mean))
+    ranked_subjects_csv = sorted([x for x in ranked_subjects_csv if x[1] is not None], key=lambda x: (-float(x[1]), str(x[0]["name"]).casefold()))
+    subject_positions_csv = {}
+    last_mean_csv = None
+    last_pos_csv = 0
+    for idx, (subject, mean) in enumerate(ranked_subjects_csv, 1):
+        if last_mean_csv is None or float(mean) != float(last_mean_csv):
+            last_pos_csv = idx
+            last_mean_csv = float(mean)
+        subject_positions_csv[int(subject["id"])] = last_pos_csv
+
+    writer.writerow([])
+    writer.writerow(["PER-SUBJECT GRADE DISTRIBUTION"])
+    writer.writerow(["Subject"] + grade_order_csv + ["Entries", "Mean", "Position"])
+    for subject in subjects:
+        subject_id = int(subject["id"])
+        counts = subject_grade_counts_csv[subject_id]
+        mean = subject_totals_csv[subject_id] / subject_counts_csv[subject_id] if subject_counts_csv[subject_id] else None
+        writer.writerow(
+            [_subject_marksheet_label(subject)]
+            + [counts[g] for g in grade_order_csv]
+            + [sum(counts.values()), "%.2f" % mean if mean is not None else "—", subject_positions_csv.get(subject_id, "—")]
+        )
 
     try: con.close()
     except Exception: pass
@@ -2894,12 +2984,27 @@ def class_marksheets_pdf(
         from reportlab.lib.units import mm
 
         story = []
-        story.extend(_pdf_school_header(
-            school_row,
-            styles,
-            "STUDENT MARKSHEET",
-            "Class: %s   |   Examination: %s   |   Term: %s   |   Year: %s"
-            % (class_title, exam_title, term or "All", year or "All"),
+        # The PDF uses the same header order as the Print Preview:
+        # two school logos at the far left/right, centered school identity,
+        # centered STUDENT MARKSHEET title, then the class/stream/assessment/
+        # term/year metadata line below it.
+        story.extend(_pdf_school_header(school_row, styles, "", ""))
+        story.append(Paragraph("STUDENT MARKSHEET", styles["title"]))
+        marksheet_meta_style = ParagraphStyle(
+            "DaviMarkSheetMeta",
+            parent=styles["normal"],
+            fontSize=9,
+            leading=11,
+            alignment=1,
+            fontName="Helvetica-Bold",
+            textColor="#172033",
+            spaceBefore=1,
+            spaceAfter=6,
+        )
+        story.append(Paragraph(
+            "CLASS: %s   |   STREAM: %s   |   ASSESSMENT: %s   |   TERM: %s   |   YEAR: %s"
+            % (class_title, escape(stream or "All"), escape(exam_title), escape(term or "All"), escape(year or "All")),
+            marksheet_meta_style,
         ))
 
         # Build the PDF header exactly like the MarkSheet preview:
@@ -3025,7 +3130,10 @@ def class_marksheets_pdf(
         ordered_grades = list(grade_order)
 
         story.append(Spacer(1, 4 * mm))
-        story.append(Paragraph("OVERALL GRADE DISTRIBUTION", styles["subtitle"]))
+        story.append(Paragraph(
+            "OVERALL GRADE DISTRIBUTION — %s" % escape(class_title),
+            styles["subtitle"],
+        ))
         if ordered_grades:
             overall_entries_pdf = sum(grade_counts.get(g, 0) for g in ordered_grades)
             # PDF Class Mean must use eligible students' actual total marks,
