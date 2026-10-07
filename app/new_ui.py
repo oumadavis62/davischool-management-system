@@ -2756,7 +2756,7 @@ function printDocument(){
         "<div id='marksheet-all-rows' style='display:none'><table><tbody>" + all_rows_html + "</tbody></table></div>" +
         "<div class='card section marksheet-card'>" + doc_brand +
         "<div class='marksheet-title'>STUDENT MARKSHEET</div>"
-        "<div class='marksheet-meta'>CLASS: " + class_title + " &nbsp;&nbsp; STREAM: " + escape(stream or "All") + " &nbsp;&nbsp; ASSESSMENT: " + exam_name +
+        "<div class='marksheet-meta'>CLASS: " + class_title + " &nbsp;&nbsp; ASSESSMENT: " + exam_name +
         " &nbsp;&nbsp; TERM: " + escape(term or "All") + " &nbsp;&nbsp; YEAR: " + escape(year or "All") + "</div>"
         "<div class='marksheet-scroll' tabindex='0'><table class='marksheet'><colgroup>"
         "<col class='adm-no-col'><col class='name-col'>" + stream_colgroup_html + subject_colgroup +
