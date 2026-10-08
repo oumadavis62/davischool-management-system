@@ -1,2 +1,3 @@
 DaviSchool deployment persistence test.
 This file is intentionally harmless and can be removed after verification.
+Persistence test commit: 2026-10-08
