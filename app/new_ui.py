@@ -848,15 +848,23 @@ def _claim_permission_controller(request, school_id, cur):
     role=str(request.session.get("role",""))
     if role not in ("school_admin","registrar"):
         return None
-    _ensure_roles_permission_controller(cur)
-    cur.execute(
-        "INSERT INTO roles_permission_controller(school_id,controller_role,controller_email,claimed_at) "
-        "VALUES(?,?,?,?) ON CONFLICT(school_id) DO NOTHING",
-        (int(school_id),role,str(request.session.get("email","")),
-         datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"))
-    )
-    row=cur.execute("SELECT controller_role FROM roles_permission_controller WHERE school_id=? LIMIT 1",(school_id,)).fetchone()
-    return str(row["controller_role"]) if row and row["controller_role"] else None
+    # The controller table is additive and must never make the Roles page
+    # unusable if an older database has not received it yet.
+    try:
+        _ensure_roles_permission_controller(cur)
+        cur.execute(
+            "INSERT INTO roles_permission_controller(school_id,controller_role,controller_email,claimed_at) "
+            "VALUES(?,?,?,?) ON CONFLICT(school_id) DO NOTHING",
+            (int(school_id),role,str(request.session.get("email","")),
+             datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        row=cur.execute("SELECT controller_role FROM roles_permission_controller WHERE school_id=? LIMIT 1",(school_id,)).fetchone()
+        return str(row["controller_role"]) if row and row["controller_role"] else None
+    except Exception as exc:
+        # Never turn a normal Roles & Permissions GET into HTTP 500 because
+        # of an optional controller-table migration.
+        print("DAVISCHOOL PERMISSION CONTROLLER INIT WARNING:", repr(exc), flush=True)
+        return None
 
 def _permission_enabled(cur, school_id, role, permission):
     row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
@@ -8906,7 +8914,11 @@ def roles_page(request: Request):
     role=str(request.session.get("role",""))
     con=_db();cur=con.cursor()
     controller_role=_claim_permission_controller(request,sid,cur)
-    con.commit()
+    try:
+        con.commit()
+    except Exception:
+        try: con.rollback()
+        except Exception: pass
     if role not in ("school_admin","registrar") and not _require_permission(request,sid,"settings.manage"):
         con.close()
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
