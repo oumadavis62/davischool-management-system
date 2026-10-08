@@ -2745,7 +2745,13 @@ def global_roles_permissions(request: Request, school_id: int = 0, role_filter: 
 <div style='padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap'><div><b>%s</b><div style='font-size:11px;color:#64748b'>Controlling: %s</div></div><span style='font-size:11px;color:#64748b'>%d access features shown</span></div>
 <table style='width:100%%;border-collapse:collapse'><thead><tr><th style='text-align:left;padding:9px 12px;font-size:11px'>Access feature</th><th style='text-align:right;padding:9px 12px;font-size:11px'>Status</th></tr></thead><tbody>%s</tbody></table></div>
 <div style='margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px;font-size:11px;color:#9a3412'>School Admin and Registrar no longer control each other. All school-role permission control is centralized here under Super Admin.</div>
-</div><style>@media(max-width:700px){form{grid-template-columns:1fr!important}.input-field{margin:0}.add-btn{margin-top:4px!important}}</style>""" % (school_opts,role_opts,cat_opts,escape(str(selected_school["name"] or "")),escape(GLOBAL_ROLE_LABELS[role_filter]),len(permissions),"".join(controls))
+</div><style>@media(max-width:700px){form{grid-template-columns:1fr!important}.input-field{margin:0}.add-btn{margin-top:4px!important}}</style>"""
+    body=body.replace("100%%","100%",1)
+    body=body.replace("%s",school_opts,1).replace("%s",role_opts,1).replace("%s",cat_opts,1)
+    body=body.replace("%s",escape(str(selected_school["name"] or "")),1)
+    body=body.replace("%s",escape(GLOBAL_ROLE_LABELS[role_filter]),1)
+    body=body.replace("%d",str(len(permissions)),1)
+    body=body.replace("%s","".join(controls),1)
     header=global_header(request.session.get("name",""),"system-settings/roles-permissions")
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{body}</div></div></body></html>")
 
