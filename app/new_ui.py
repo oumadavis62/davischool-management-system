@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
+_USER_ACCOUNT_COLUMNS_READY = False
+
 def _pdf_route_error(request, route_name, exc):
     import traceback
     print("DAVISCHOOL PDF ROUTE ERROR: %s %s %s" % (route_name, request.method, request.url.path), flush=True)
@@ -188,7 +190,10 @@ def _db():
     return get_db()
 
 def _ensure_user_account_columns(cur, con=None):
-    """Ensure generated-account columns exist on both SQLite and PostgreSQL."""
+    """Ensure generated-account columns exist once per application process."""
+    global _USER_ACCOUNT_COLUMNS_READY
+    if _USER_ACCOUNT_COLUMNS_READY:
+        return
     cur.execute("SELECT * FROM users LIMIT 0")
     columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
     changed = False
@@ -199,6 +204,7 @@ def _ensure_user_account_columns(cur, con=None):
             changed = True
     if changed and con is not None:
         con.commit()
+    _USER_ACCOUNT_COLUMNS_READY = True
 
 def _pdf_response(pdf_bytes, filename):
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("_") or "davischool.pdf"
