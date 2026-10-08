@@ -830,42 +830,6 @@ def _is_school_admin_like(request):
     """School-level administrator-equivalent roles retain separate account identities."""
     return str(request.session.get("role","")) in ("school_admin","registrar")
 
-def _ensure_roles_permission_controller(cur, con=None):
-    cur.execute("""CREATE TABLE IF NOT EXISTS roles_permission_controller (
-        school_id INTEGER PRIMARY KEY,
-        controller_role TEXT NOT NULL,
-        controller_email TEXT,
-        claimed_at TEXT NOT NULL
-    )""")
-    if con is not None:
-        con.commit()
-
-def _permission_controller_role(cur, school_id):
-    row=cur.execute("SELECT controller_role FROM roles_permission_controller WHERE school_id=? LIMIT 1",(school_id,)).fetchone()
-    return str(row["controller_role"]) if row and row["controller_role"] else None
-
-def _claim_permission_controller(request, school_id, cur):
-    role=str(request.session.get("role",""))
-    if role not in ("school_admin","registrar"):
-        return None
-    # The controller table is additive and must never make the Roles page
-    # unusable if an older database has not received it yet.
-    try:
-        _ensure_roles_permission_controller(cur)
-        cur.execute(
-            "INSERT INTO roles_permission_controller(school_id,controller_role,controller_email,claimed_at) "
-            "VALUES(?,?,?,?) ON CONFLICT(school_id) DO NOTHING",
-            (int(school_id),role,str(request.session.get("email","")),
-             datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        row=cur.execute("SELECT controller_role FROM roles_permission_controller WHERE school_id=? LIMIT 1",(school_id,)).fetchone()
-        return str(row["controller_role"]) if row and row["controller_role"] else None
-    except Exception as exc:
-        # Never turn a normal Roles & Permissions GET into HTTP 500 because
-        # of an optional controller-table migration.
-        print("DAVISCHOOL PERMISSION CONTROLLER INIT WARNING:", repr(exc), flush=True)
-        return None
-
 def _permission_enabled(cur, school_id, role, permission):
     row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
                     (school_id,role,permission)).fetchone()
@@ -8908,29 +8872,12 @@ def announcements_add(request: Request,title:str=Form(...),message:str=Form(...)
     _audit(cur,sid,request,"ANNOUNCEMENT_CREATE",title.strip());con.commit();con.close();return RedirectResponse("/app/announcements",303)
 
 @router.get("/app/roles", response_class=HTMLResponse)
-def roles_page(request: Request, role_filter: str = "", permission_category: str = "All"):
+def roles_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    role=str(request.session.get("role",""))
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     con=_db();cur=con.cursor()
-    controller_role=_claim_permission_controller(request,sid,cur)
-
-    allowed_permissions=[
-        "students.view","students.create","students.edit","classes.view","classes.create",
-        "subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit",
-        "attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit",
-        "finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit",
-        "communications.view","communications.edit","settings.view","settings.edit","audit.view",
-        "users.manage","class_teacher.view","class_teacher.edit","settings.manage"
-    ]
-
-    # The first School Admin/Registrar to access this page is the controller.
-    # Permissions default to ON when no explicit row exists. We do not write
-    # default rows here, keeping this GET page safe on every database backend.
-    if role not in ("school_admin","registrar") and not _require_permission(request,sid,"settings.manage"):
-        con.close()
-        return HTMLResponse("You do not have permission to manage roles and permissions.",403)
-
     rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall()
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -8939,118 +8886,27 @@ def roles_page(request: Request, role_filter: str = "", permission_category: str
         FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id JOIN teachers t ON t.id=a.teacher_id
         WHERE a.school_id=? ORDER BY c.name,c.stream""",(sid,)).fetchall()
     con.close()
-
-    permission_categories={
-        "Students":["students.view","students.create","students.edit"],
-        "Classes":["classes.view","classes.create"],
-        "Subjects":["subjects.view","subjects.create"],
-        "Exams":["exams.view","exams.create"],
-        "Marks":["marks.view","marks.edit"],
-        "Attendance":["attendance.view","attendance.edit"],
-        "Timetable":["timetable.view","timetable.edit"],
-        "Fees":["fees.view","fees.edit"],
-        "Finance":["finance.view","finance.edit"],
-        "Reports":["reports.view","reports.edit"],
-        "Staff":["staff.view","staff.create","staff.edit"],
-        "Communications":["communications.view","communications.edit"],
-        "Settings":["settings.view","settings.edit","settings.manage"],
-        "Audit":["audit.view"],
-        "Users":["users.manage"],
-        "Class Teacher":["class_teacher.view","class_teacher.edit"]
-    }
-    category_by_permission={}
-    for category,permissions in permission_categories.items():
-        for permission in permissions:
-            category_by_permission[permission]=category
-
-    valid_roles={"school_admin","registrar","teacher","parent","student","accountant"}
-    selected_role=role_filter.strip().lower()
-    if selected_role not in valid_roles:
-        selected_role="school_admin" if role=="school_admin" else "registrar" if role=="registrar" else "school_admin"
-    selected_category=permission_category.strip() or "All"
-    if selected_category not in permission_categories and selected_category!="All":
-        selected_category="All"
-
-    matrix={}
-    for r in rows:
-        rr=str(r["role"]); pp=str(r["permission"])
-        matrix.setdefault(rr,{})[pp]=bool(int(r["enabled"] or 0))
-
-    other_role="registrar" if role=="school_admin" else "school_admin"
-    is_controller=(role in ("school_admin","registrar") and controller_role==role)
-    controller_name="School Admin" if controller_role=="school_admin" else "Registrar" if controller_role=="registrar" else "Not assigned"
-    if is_controller:
-        control_banner=f"<div class='card section' style='border-left:5px solid #176B3A'><h2>Permission Controller: {escape(controller_name)}</h2><div class='muted'>You were the first School Admin/Registrar to open this page. Your access features are enabled by default, and you control the permissions of the other role.</div><form method='post' action='/app/roles/block-other' style='margin-top:12px'><button class='btn danger' type='submit'>🔒 Block {escape('Registrar' if other_role=='registrar' else 'School Admin')}</button></form></div>"
-    elif role in ("school_admin","registrar"):
-        control_banner=f"<div class='card section' style='border-left:5px solid #64748b'><h2>Permission Controller: {escape(controller_name)}</h2><div class='muted'>The {escape(controller_name)} is currently the permission controller. You can view this page, but you cannot change School Admin/Registrar permissions.</div></div>"
-    else:
-        control_banner="<div class='card section'><div class='muted'>School Admin and Registrar permissions are independently configurable here.</div></div>"
-
-    def permission_table(target_role):
-        label={"school_admin":"School Admin","registrar":"Registrar","teacher":"Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}.get(target_role,target_role.replace("_"," ").title())
-        target_permissions=allowed_permissions[:]
-        if selected_category!="All":
-            target_permissions=[p for p in target_permissions if category_by_permission.get(p)==selected_category]
-        checked_count=0
-        controls=[]
-        for p in target_permissions:
-            checked=matrix.get(target_role,{}).get(p,True)
-            if checked: checked_count += 1
-            disabled=not (role not in ("school_admin","registrar") or is_controller)
-            controls.append(
-                "<tr><td><span class='permission-name'>%s</span><span class='permission-category'>%s</span></td><td><form method='post' action='/app/roles/add' style='margin:0;display:flex;justify-content:center'>"
-                "<input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'>"
-                "<input type='hidden' name='enabled' value='%s'>"
-                "<button class='permission-toggle %s' type='submit' %s title='%s'>%s</button></form></td></tr>"
-                % (escape(p),escape(category_by_permission.get(p,"Other")),target_role,p,
-                   "0" if checked else "1","on" if checked else "off",
-                   "disabled" if disabled else "",
-                   "Enabled" if checked else "Disabled","ON" if checked else "OFF")
-            )
-        return "<div class='card section permission-card'><h2>%s</h2><div class='muted'>Independent access for this role · %d/%d enabled</div><table><thead><tr><th>Access Feature</th><th>Status</th></tr></thead><tbody>%s</tbody></table></div>"%(label,checked_count,len(target_permissions),"".join(controls))
-
+    tr=_simple_rows(rows,["role","permission","enabled"])
     class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
     teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
-    assignment_rows="".join("<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a></td></tr>"%(
-        escape(str(a["class_name"])),(" · "+escape(str(a["stream"] or ""))) if a["stream"] else "",escape(str(a["teacher_name"])),a["id"]) for a in assignments)
-
-    role_options="".join("<option value='%s' %s>%s</option>"%(rname,"selected" if rname==selected_role else "",label) for rname,label in [
-        ("school_admin","School Admin"),("registrar","Registrar"),("teacher","Teacher"),
-        ("parent","Parent"),("student","Student"),("accountant","Accountant")
-    ])
-    category_options="<option value='All' %s>All access features</option>"%("selected" if selected_category=="All" else "")
-    category_options += "".join("<option value='%s' %s>%s</option>"%(escape(cat),"selected" if cat==selected_category else "",escape(cat)) for cat in permission_categories)
-
-    body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Select a role and access category to manage permissions without displaying every role at once.</div>
-{control_banner}
-<div class='card section permission-filters'><form method='get' action='/app/roles' class='permission-filter-form'>
-<div><label>Role</label><select name='role_filter' class='field'>{role_options}</select></div>
-<div><label>Access category</label><select name='permission_category' class='field'>{category_options}</select></div>
-<div class='filter-actions'><button class='btn' type='submit'>Filter</button><a class='btn secondary' href='/app/roles'>Reset</a></div>
-</form></div>
-{permission_table(selected_role)}
-<div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class.</div>
+    assignment_rows=[]
+    for a in assignments:
+        assignment_rows.append(
+            "<tr><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/roles/class-teacher-assignment/edit/%s'>Edit</a></td></tr>"
+            % (
+                escape(str(a["class_name"])),
+                (" · " + escape(str(a["stream"] or ""))) if a["stream"] else "",
+                escape(str(a["teacher_name"])),
+                a["id"],
+            )
+        )
+    assignment_rows="".join(assignment_rows)
+    body=f"""<div class='page'><h1>Roles & Permissions</h1><div class='muted'>Control permissions for school roles.</div>
+<div class='card section'><h2>Class Teacher Assignments</h2><div class='muted'>Assign the staff member who has the Class Teacher responsibility to each class. Report cards automatically use this assignment for the class teacher name and signature line.</div>
 <form method='post' action='/app/roles/class-teacher-assignment' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'><select name='class_id' class='field' required><option value=''>Select class</option>{class_opts}</select><select name='teacher_id' class='field' required><option value=''>Select class teacher</option>{teacher_opts}</select><button class='btn'>Save Assignment</button></form>
 <table style='margin-top:14px'><thead><tr><th>Class</th><th>Class Teacher</th><th>Actions</th></tr></thead><tbody>{assignment_rows or "<tr><td colspan='3'>No class teacher assignments yet.</td></tr>"}</tbody></table></div>
-</div>
-<style>
-.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}
-.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer;text-decoration:none}}
-.secondary{{background:#64748b}}
-.danger{{background:#b91c1c}} .edit{{background:#176B3A}}
-.permission-filters{{margin-bottom:14px}}
-.permission-filter-form{{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}}
-.permission-filter-form label{{display:block;font-size:12px;font-weight:800;color:#334155;margin:0 0 6px}}
-.permission-card{{margin-bottom:14px}}
-.permission-card h2{{margin:0 0 4px}}
-.permission-name{{font-weight:800;display:block}}
-.permission-category{{display:block;font-size:11px;color:#64748b;margin-top:2px}}
-.permission-toggle{{min-width:62px;padding:7px 12px;border:0;border-radius:999px;font-weight:800;cursor:pointer}}
-.permission-toggle.on{{background:#176B3A;color:#fff}}
-.permission-toggle.off{{background:#cbd5e1;color:#334155}}
-.permission-toggle:disabled{{opacity:.55;cursor:not-allowed}}
-@media(max-width:700px){{.permission-filter-form{{grid-template-columns:1fr}}.permission-toggle{{min-width:56px}}}}
-</style>"""
+<div class='card section'><h2>Grant permission</h2><form method='post' action='/app/roles/add' style='display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px'><select name='role' class='field'><option>school_admin</option><option>teacher</option><option>parent</option><option>student</option><option>accountant</option><option>registrar</option></select><select name='permission' required class='field'><option value=''>Select permission</option><option>students.view</option><option>students.create</option><option>students.edit</option><option>classes.view</option><option>classes.create</option><option>subjects.view</option><option>subjects.create</option><option>exams.view</option><option>exams.create</option><option>marks.view</option><option>marks.edit</option><option>attendance.view</option><option>attendance.edit</option><option>timetable.view</option><option>timetable.edit</option><option>fees.view</option><option>fees.edit</option><option>finance.view</option><option>finance.edit</option><option>reports.view</option><option>reports.edit</option><option>staff.view</option><option>staff.create</option><option>staff.edit</option><option>communications.view</option><option>communications.edit</option><option>settings.view</option><option>settings.edit</option><option>audit.view</option><option>users.manage</option><option>settings.manage</option></select><select name='enabled' class='field'><option value='1'>Enabled</option><option value='0'>Disabled</option></select><button class='btn'>Save Permission</button></form></div>
+<div class='card section'><h2>Configured permissions ({len(rows)})</h2><table><thead><tr><th>Role</th><th>Permission</th><th>Enabled</th></tr></thead><tbody>{tr or '<tr><td colspan=3>No custom permissions yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Roles & Permissions",body)
 
 @router.post("/app/roles/class-teacher-assignment")
@@ -9156,50 +9012,12 @@ def delete_class_teacher_assignment(request: Request, assignment_id:int):
     return RedirectResponse("/app/roles",303)
 
 
-@router.post("/app/roles/block-other")
-def roles_block_other(request: Request):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
-    role=str(request.session.get("role",""))
-    if role not in ("school_admin","registrar"):
-        return HTMLResponse("Only School Admin or Registrar can control these permissions.",403)
-    con=_db();cur=con.cursor()
-    controller=_claim_permission_controller(request,sid,cur)
-    if controller != role:
-        con.close()
-        return HTMLResponse("You are not the permission controller for this school.",403)
-    other="registrar" if role=="school_admin" else "school_admin"
-    allowed=[
-        "students.view","students.create","students.edit","classes.view","classes.create",
-        "subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit",
-        "attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit",
-        "finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit",
-        "communications.view","communications.edit","settings.view","settings.edit","audit.view",
-        "users.manage","class_teacher.view","class_teacher.edit"
-    ]
-    for permission in allowed:
-        existing=cur.execute("SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(sid,other,permission)).fetchone()
-        if existing:
-            cur.execute("UPDATE roles_permissions SET enabled=0 WHERE id=? AND school_id=?",(existing["id"],sid))
-        else:
-            cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,0)",(sid,other,permission))
-    _audit(cur,sid,request,"ROLE_BLOCK",f"{role} blocked {other} permissions")
-    con.commit();con.close()
-    return RedirectResponse("/app/roles",303)
-
 @router.post("/app/roles/add")
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    current_role=str(request.session.get("role",""))
-    if current_role in ("school_admin","registrar"):
-        con0=_db();cur0=con0.cursor()
-        controller=_permission_controller_role(cur0,sid)
-        con0.close()
-        if controller != current_role:
-            return HTMLResponse("Only the permission controller can change School Admin/Registrar permissions.",403)
-    elif not _require_permission(request, sid, "settings.manage"):
-        return HTMLResponse("You do not have permission to manage roles and permissions.",403)
+    if not _require_permission(request, sid, "settings.manage"):
+        return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
     allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
