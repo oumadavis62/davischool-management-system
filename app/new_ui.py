@@ -1303,6 +1303,70 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
             "average": average, "overall_grade": overall}
 
 
+def _bulk_student_results_for_assessments(cur, school_id, students, exam_ids, grading_rules=None, overall_rules=None):
+    """Calculate many learner results with one marks query instead of one query per learner."""
+    ids = _parse_assessment_ids(",".join(str(x) for x in (exam_ids or [])))
+    student_ids = [int(s["id"]) for s in (students or [])]
+    if not ids or not student_ids:
+        return {}
+    exam_ph = ",".join("?" for _ in ids)
+    student_ph = ",".join("?" for _ in student_ids)
+    rows = cur.execute(
+        "SELECT sub.id subject_id,sub.name,m.student_id,m.exam_id,m.marks "
+        "FROM marks m JOIN subjects sub ON sub.id=m.subject_id "
+        "WHERE m.school_id=? AND m.student_id IN (" + student_ph + ") "
+        "AND m.exam_id IN (" + exam_ph + ") ORDER BY m.student_id,sub.name,m.exam_id",
+        [school_id] + student_ids + ids
+    ).fetchall()
+    by_student = {}
+    for row in rows:
+        try:
+            if row["marks"] is None or str(row["marks"]).strip() == "":
+                continue
+            by_student.setdefault(int(row["student_id"]), []).append(row)
+        except (TypeError, ValueError):
+            continue
+    results = {}
+    for student in students:
+        student_id = int(student["id"])
+        student_rows = by_student.get(student_id, [])
+        buckets = {}
+        sources = {}
+        for row in student_rows:
+            try:
+                subject_id = int(row["subject_id"])
+                exam_value = int(row["exam_id"])
+                buckets.setdefault(subject_id, {})[exam_value] = float(row["marks"])
+                sources.setdefault(subject_id, row)
+            except (TypeError, ValueError):
+                continue
+        details = []
+        exam_marks = {}
+        total = points = 0.0
+        for subject_id, by_exam in buckets.items():
+            values = list(by_exam.values())
+            average = sum(values) / len(values)
+            source = sources[subject_id]
+            grade, pt = _subject_grade_points(cur, school_id, subject_id, average, grading_rules)
+            details.append((source, average, grade, float(pt or 0)))
+            exam_marks[subject_id] = {exam_id: by_exam[exam_id] for exam_id in ids if exam_id in by_exam}
+            total += average
+            points += float(pt or 0)
+        count = len(details)
+        average = total / count if count else 0.0
+        results[student_id] = {
+            "rows": student_rows,
+            "details": details,
+            "exam_marks": exam_marks,
+            "total": total,
+            "points": points,
+            "count": count,
+            "average": average,
+            "overall_grade": _overall_grade(cur, school_id, average, overall_rules),
+        }
+    return results
+
+
 def _ensure_overall_grading_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS overall_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6568,19 +6632,19 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
             except Exception: pass
             stats=[]
         students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
+        bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
+        try:
+            lock_rows=cur.execute(
+                "SELECT class_id,COUNT(*) c FROM academic_locks WHERE school_id=? AND exam_id=? GROUP BY class_id",
+                (sid,eid)
+            ).fetchall()
+            lock_counts={int(row["class_id"]):int(row["c"] or 0) for row in lock_rows}
+        except Exception as exc:
+            print("DAVISCHOOL ANALYSIS LOCK COUNT FALLBACK:", repr(exc), flush=True)
+            lock_counts={}
         for st in students:
-            try:
-                result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
-            except Exception as exc:
-                print("DAVISCHOOL ANALYSIS STUDENT RESULT FALLBACK:", repr(exc), flush=True)
-                result={"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
-            try:
-                locks=cur.execute("""SELECT COUNT(*) c FROM academic_locks
-                    WHERE school_id=? AND exam_id=? AND class_id=?""",(sid,eid,st["class_id"])).fetchone()["c"]
-            except Exception as exc:
-                print("DAVISCHOOL ANALYSIS LOCK COUNT FALLBACK:", repr(exc), flush=True)
-                locks=0
-            student_results.append((st,result,int(locks or 0)))
+            result=bulk_results.get(int(st["id"]),{"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"})
+            student_results.append((st,result,lock_counts.get(int(st["class_id"] or 0),0)))
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     rows="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in stats)
@@ -7508,12 +7572,11 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
                 WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
                 list(selected_exam_ids)+[sid,sid,cid]).fetchall()
             students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
+            class_grading_rules=_load_grading_rules(cur,sid)
+            class_overall_rules=_load_overall_grading_rules(cur,sid)
+            bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,class_grading_rules,class_overall_rules)
             for st in students:
-                try:
-                    res=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,_load_grading_rules(cur,sid),None)
-                except Exception as exc:
-                    print("DAVISCHOOL CLASS ANALYSIS RESULT FALLBACK:",repr(exc),flush=True)
-                    res={"total":0.0,"average":0.0,"overall_grade":"—","count":0}
+                res=bulk_results.get(int(st["id"]),{"total":0.0,"average":0.0,"overall_grade":"—","count":0})
                 ranking.append((st,res))
             ranking.sort(key=lambda x:(-float(x[1]["total"]),str(x[0]["name"])))
     except Exception as exc:
