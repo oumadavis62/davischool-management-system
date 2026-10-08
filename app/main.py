@@ -162,7 +162,9 @@ def _initialize_database_background():
     try:
         init_db()
         init_extended_db()
-        _repair_recreated_subject_references()
+        # Subject-reference repair is intentionally not run during every startup.
+        # It is a one-time maintenance task and can scan many academic tables,
+        # causing unnecessary startup/database load on production replicas.
         DB_INIT_READY = True
         print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
     except Exception as exc:
