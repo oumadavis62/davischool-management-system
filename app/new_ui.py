@@ -465,7 +465,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{"sidebar-hidden" if teacher_locked else ""}{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
-<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' onclick='toggleSidebar()'>☰</button>"}<div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button>"}<div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 window.selectCorrectionSubject=function(row,event){{
   if(!row)return;
   if(event&&event.target&&event.target.closest&&event.target.closest('a,button,input,select,textarea,form'))return;
@@ -523,7 +523,28 @@ function setupDaviActionCells(){{
 }}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupDaviActionCells);
 else setupDaviActionCells();
-}})();</script><script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}<script>(function(){{
+}})();</script><script>(function(){{
+  function applySidebarState(hidden){{
+    try{{document.body.classList.toggle('sidebar-hidden', !!hidden);}}catch(e){{}}
+    var b=document.getElementById('sidebarToggle');
+    if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}
+  }}
+  function toggleSidebar(){{
+    var hidden=!document.body.classList.contains('sidebar-hidden');
+    applySidebarState(hidden);
+    try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}
+  }}
+  window.toggleSidebar=toggleSidebar;
+  function initSidebar(){{
+    try{{applySidebarState(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1');}}catch(e){{}}
+    var b=document.getElementById('sidebarToggle');
+    if(b && b.dataset.sidebarBound!=='1'){{
+      b.dataset.sidebarBound='1';
+      b.addEventListener('click',function(event){{event.preventDefault();event.stopPropagation();toggleSidebar();}});
+    }}
+  }}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initSidebar);else initSidebar();
+}})();</script>{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}<script>(function(){{
   // Warm the exact browser Back destinations in the HTTP cache while the
   // current page is being viewed. This keeps the existing two-step history
   // rule intact but makes Back return much faster.
@@ -564,142 +585,34 @@ else setupDaviActionCells();
   }}catch(e){{}}
 }})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
 // Two-step browser history rule for the school workspace.
-// Step 1: the real workspace display remains the Back destination.
-// Step 2: opening a record/detail/edit/history view creates the single
-// temporary entry. Back therefore returns directly to the exact workspace
-// display the user came from. Moving between multiple detail views replaces
-// the temporary entry instead of building a chain of detail pages.
-// This changes browser history only; it never changes database records.
 (function(){{
   try{{
-    var WORKSPACES=[
-      '/app',
-      '/app/students',
-      '/app/staff',
-      '/app/classes',
-      '/app/subjects',
-      '/app/exams',
-      '/app/academics/marks-corrections',
-      '/app/academics/allocations',
-      '/app/academics/assessments',
-      '/app/academics/analysis',
-      '/app/academics',
-      '/app/report-cards',
-      '/app/attendance',
-      '/app/timetable',
-      '/app/finance',
-      '/app/accounting',
-      '/app/announcements',
-      '/app/users',
-      '/app/roles',
-      '/app/school-settings',
-      '/app/audit',
-      '/app/account',
-      '/app/teacher',
-      '/schools/manage',
-      '/super/global-control/dashboard',
-      '/account/change-password'
-    ];
-
-    var SYSTEM_PREFIXES=['/app','/schools','/super','/account'];
-    function isSystemPath(path){{
-      path=cleanPath(path);
-      return SYSTEM_PREFIXES.some(function(prefix){{return path===prefix || path.indexOf(prefix+'/')===0;}});
+    var WORKSPACES=['/app','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/schools/manage','/super/global-control/dashboard','/account/change-password'];
+    function cleanPath(path){{path=String(path||'/').split('#')[0];if(path.length>1)path=path.replace(/\\/+$/,'');return path;}}
+    function workspace(path){{path=cleanPath(path);var best='/';WORKSPACES.forEach(function(root){{if(path===root || (root!=='/app' && path.indexOf(root+'/')===0) || (root==='/app' && path.indexOf('/app/')===0)){{if(root.length>best.length)best=root;}}}});return best;}}
+    function isFiltered(url){{var u=url instanceof URL?url:new URL(url,window.location.href);return Array.from(u.searchParams.keys()).some(function(k){{return k!=='ds_tab';}});}}
+    function unfilteredUrl(url){{var u=new URL(url,window.location.href);var keep=u.searchParams.get('ds_tab');u.search='';if(keep!==null)u.searchParams.set('ds_tab',keep);return u.toString();}}
+    var root=workspace(window.location.pathname);
+    if(root!=='/' && isFiltered(window.location.href)){{
+      var currentUrl=window.location.href;
+      var state=(history.state && typeof history.state==='object')?history.state:{{}};
+      if(state.daviHistoryStep!=='filtered' || state.daviWorkspace!==root){{history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',unfilteredUrl(currentUrl));history.pushState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);}}
+    }}else if(root!=='/' && cleanPath(window.location.pathname)===root){{
+      var state=(history.state && typeof history.state==='object')?history.state:{{}};
+      if(state.daviHistoryStep!=='workspace' || state.daviWorkspace!==root){{history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',window.location.href);}}
     }}
-
-    function cleanPath(path){{
-      path=String(path||'/').split('?')[0].split('#')[0];
-      if(path.length>1)path=path.replace(/\\/+$/,'');
-      return path;
-    }}
-
-    function workspace(path){{
-      path=cleanPath(path);
-      var best='/';
-      for(var i=0;i<WORKSPACES.length;i++){{
-        var root=WORKSPACES[i];
-        if(path===root || (root!=='/app' && path.indexOf(root+'/')===0)){{
-          if(root.length>best.length)best=root;
-        }}
-      }}
-      return best;
-    }}
-
-    function internalUrl(value){{
-      try{{
-        var u=new URL(value,window.location.href);
-        if(u.origin!==window.location.origin)return null;
-        if(u.protocol!=='http:' && u.protocol!=='https:')return null;
-        return u;
-      }}catch(e){{return null;}}
-    }}
-
-    // Mark the current document as the user's stable workspace or temporary
-    // second-step detail. This is informational and also survives normal
-    // full-page navigation because it is stored in the history entry.
-    try{{
-      var currentRoot=workspace(window.location.pathname);
-      var currentPath=cleanPath(window.location.pathname);
-      var currentKind=(currentRoot!=='/' && currentPath!==currentRoot)?'detail':'workspace';
-      var oldState=(history.state && typeof history.state==='object')?history.state:{{}};
-      history.replaceState(Object.assign({{}},oldState,{{daviHistoryStep:currentKind,daviWorkspace:currentRoot}}),'',window.location.href);
-    }}catch(e){{}}
-
     document.addEventListener('click',function(event){{
-      var link=event.target.closest ? event.target.closest('a') : null;
-      if(!link || event.defaultPrevented)return;
-      if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
-      if(link.target==='_blank' || link.hasAttribute('download'))return;
-      if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
-
-      var target=internalUrl(link.href);
-      if(!target || !isSystemPath(target.pathname))return;
-
-      var currentRoot=workspace(window.location.pathname);
-      var targetRoot=workspace(target.pathname);
+      var link=event.target.closest?event.target.closest('a'):null;
+      if(!link || event.defaultPrevented || link.target==='_blank' || link.hasAttribute('download'))return;
+      if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var target;try{{target=new URL(link.href,window.location.href);}}catch(e){{return;}}
+      if(target.origin!==window.location.origin)return;
+      var currentRoot=workspace(window.location.pathname),targetRoot=workspace(target.pathname);
       if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
-
-      var currentPath=cleanPath(window.location.pathname);
-      var targetPath=cleanPath(target.pathname);
-      var currentIsDetail=currentPath!==currentRoot;
-      var targetIsDetail=targetPath!==targetRoot;
-
-      // Root/workspace -> detail is the one intentional push. The browser
-      // Back button will therefore return to the exact root/filter display.
-      if(!currentIsDetail && targetIsDetail){{
-        try{{
-          sessionStorage.setItem('davischool-two-step-origin:'+currentRoot,window.location.href);
-        }}catch(e){{}}
-        return;
-      }}
-
-      // Detail -> another detail stays within step 2. Replace the current
-      // entry so Back never walks through a chain of records.
-      if(currentIsDetail && targetIsDetail){{
-        event.preventDefault();
-        window.location.replace(target.toString());
-        return;
-      }}
-
-      // Detail -> workspace is an intentional return to step 1. Keep it as a
-      // normal navigation so the browser's Back/Forward semantics remain
-      // predictable and the workspace display is preserved.
+      var currentPath=cleanPath(window.location.pathname),targetPath=cleanPath(target.pathname);
+      if(currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
     }},true);
-
-    window.addEventListener('pageshow',function(){{
-      // A new detail view begins a fresh second step; the marker is cleared
-      // only when the user has actually returned to its workspace.
-      try{{
-        var root=workspace(window.location.pathname);
-        if(root!=='/' && cleanPath(window.location.pathname)===root){{
-          sessionStorage.removeItem('davischool-two-step-origin:'+root);
-        }}
-      }}catch(e){{}}
-    }});
-
-    // Do not manufacture extra entries when a browser Back/Forward traversal
-    // occurs. The browser itself remains the source of truth for navigation.
-  }}catch(e){{}}
+  }}catch(e){{console.warn('DaviSchool navigation handler:',e);}}
 }})();
 // Marks Corrections POST filters use an explicit, deterministic two-step history rule.
 // Do not rely on sessionStorage to decide whether the first filter has happened.
