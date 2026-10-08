@@ -283,6 +283,23 @@ class DaviSchoolTabSessionMiddleware:
 </script>"""
 
     async def __call__(self, scope, receive, send):
+        # Serve the tab-session controller once as a cacheable JavaScript
+        # resource. It is intentionally handled by this middleware so the
+        # application does not need a separate route or session lookup.
+        if scope.get("type") == "http" and scope.get("path") == "/app/tab-session.js":
+            body = self._browser_script().encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/javascript; charset=utf-8"),
+                    (b"cache-control", b"public, max-age=3600"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
         if scope.get("type") not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
@@ -346,7 +363,12 @@ class DaviSchoolTabSessionMiddleware:
                 body_chunks.append(message.get("body", b""))
                 if not message.get("more_body", False):
                     body = b"".join(body_chunks)
-                    script = self._browser_script().encode("utf-8")
+                    # Load the tab-session controller as a cacheable external
+                    # script instead of embedding the full controller into every
+                    # HTML response. This keeps the same tab isolation/history/
+                    # keepalive behavior while dramatically reducing response
+                    # size and server-side HTML buffering work.
+                    script = b"<script src='/app/tab-session.js' defer></script>"
                     marker = b"</body>"
                     if marker in body.lower():
                         idx = body.lower().rfind(marker)
