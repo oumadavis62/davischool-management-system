@@ -7588,7 +7588,7 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
         con.close()
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    class_comment_rules=_load_grading_rules(cur,sid) if stats else {}
+    class_comment_rules=class_grading_rules if stats else {}
     ar="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{int(x['entries'] or 0)}</td><td>{float(x['average'] or 0):.2f}</td><td>{float(x['highest'] or 0):.1f}</td><td>{float(x['lowest'] or 0):.1f}</td><td>{escape(str(_subject_grade_details(cur,sid,int(x['subject_id']),float(x['average'] or 0),class_comment_rules)[2] or ''))}</td></tr>" for x in stats)
     sr="".join(f"<tr><td>{i}</td><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td></tr>" for i,(st,res) in enumerate(ranking,1))
     body=f"""<div class='page'><h1>Class Analysis</h1><div class='muted'>Class-level subject performance and learner results.</div>
