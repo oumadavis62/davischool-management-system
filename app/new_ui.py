@@ -1368,6 +1368,9 @@ def _bulk_student_results_for_assessments(cur, school_id, students, exam_ids, gr
 
 
 def _ensure_overall_grading_table(cur):
+    global OVERALL_GRADING_SCHEMA_READY
+    if OVERALL_GRADING_SCHEMA_READY:
+        return
     cur.execute("""CREATE TABLE IF NOT EXISTS overall_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER,
@@ -1388,6 +1391,7 @@ def _ensure_overall_grading_table(cur):
                 cur.execute("RELEASE SAVEPOINT davischool_overall_comment_column")
             except Exception:
                 pass
+    OVERALL_GRADING_SCHEMA_READY = True
 
 def _ensure_class_teacher_assignments_table(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS class_teacher_assignments(
@@ -4137,6 +4141,9 @@ def _ensure_report_card_fields(cur):
                     print("DAVISCHOOL REPORT FIELD SCHEMA WARNING:",repr(exc),flush=True)
 
 def _ensure_academic_locks_table(cur):
+    global ACADEMIC_LOCKS_SCHEMA_READY
+    if ACADEMIC_LOCKS_SCHEMA_READY:
+        return
     """Ensure the lock table exists and safely upgrade legacy schemas.
     
     Existing production tables are upgraded additively only.  Each ALTER is
@@ -4184,6 +4191,7 @@ def _ensure_academic_locks_table(cur):
             msg=str(exc).lower()
             if "already exists" not in msg and "duplicate column" not in msg:
                 print("DAVISCHOOL ACADEMIC LOCK SCHEMA WARNING:",repr(exc),flush=True)
+    ACADEMIC_LOCKS_SCHEMA_READY = True
 
 def _academic_lock(cur, school_id, exam_id, class_id, subject_id):
     _ensure_academic_locks_table(cur)
@@ -4219,7 +4227,15 @@ def _pending_marks_correction(cur, school_id, exam_id, class_id, subject_id, tea
     q += " ORDER BY id DESC LIMIT 1"
     return cur.execute(q,params).fetchone()
 
+GRADING_SCHEMA_READY = False
+OVERALL_GRADING_SCHEMA_READY = False
+ACADEMIC_LOCKS_SCHEMA_READY = False
+
+
 def _ensure_grading_table(cur):
+    global GRADING_SCHEMA_READY
+    if GRADING_SCHEMA_READY:
+        return
     cur.execute("""CREATE TABLE IF NOT EXISTS subject_grading_rules(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER,
@@ -4258,6 +4274,7 @@ def _ensure_grading_table(cur):
                         cur._connection.rollback()
                     except Exception:
                         pass
+    GRADING_SCHEMA_READY = True
 
 def _default_grade_points(mark):
     grade = _grade(mark)
