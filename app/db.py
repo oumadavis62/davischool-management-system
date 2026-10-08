@@ -165,8 +165,10 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
     if pool is None:
         pool = ConnectionPool(
             conninfo=key,
-            min_size=1,
-            max_size=8,
+            # Keep two PostgreSQL connections warm so the first page request
+            # does not have to wait for a brand-new database connection.
+            min_size=2,
+            max_size=10,
             timeout=connect_timeout,
             max_idle=300,
             kwargs={"row_factory": _row_factory, "connect_timeout": connect_timeout},
