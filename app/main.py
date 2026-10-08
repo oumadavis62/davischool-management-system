@@ -2775,7 +2775,7 @@ def global_roles_permissions_block_other(request: Request, school_id:int=Form(..
         else:
             cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,0)",(school_id,other,permission))
     con.commit(); con.close()
-    return RedirectResponse("/super/global-control/system-settings/roles-permissions?school_id=%s&role_filter=%s"%(school_id,role,safe=""),303)
+    return RedirectResponse("/super/global-control/system-settings/roles-permissions?school_id=%s&role_filter=%s"%(school_id,quote(role,safe="")),303)
 
 @app.get("/super/global-control/{path}", response_class=HTMLResponse)
 def global_other(path: str, request: Request):
