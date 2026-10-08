@@ -8924,26 +8924,9 @@ def roles_page(request: Request, role_filter: str = "", permission_category: str
         "users.manage","class_teacher.view","class_teacher.edit","settings.manage"
     ]
 
-    # The first School Admin/Registrar to access this page becomes the controller.
-    # On that first access only, give the controller every access feature enabled
-    # by default. Later visits do not overwrite any permission choices.
-    if controller_role in ("school_admin","registrar"):
-        configured_count=cur.execute(
-            "SELECT COUNT(*) AS c FROM roles_permissions WHERE school_id=? AND role=?",
-            (sid,controller_role)
-        ).fetchone()
-        if not configured_count or int(configured_count["c"] or 0)==0:
-            for permission in allowed_permissions:
-                cur.execute(
-                    "INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,1)",
-                    (sid,controller_role,permission)
-                )
-            try:
-                con.commit()
-            except Exception:
-                try: con.rollback()
-                except Exception: pass
-
+    # The first School Admin/Registrar to access this page is the controller.
+    # Permissions default to ON when no explicit row exists. We do not write
+    # default rows here, keeping this GET page safe on every database backend.
     if role not in ("school_admin","registrar") and not _require_permission(request,sid,"settings.manage"):
         con.close()
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
@@ -9004,7 +8987,7 @@ def roles_page(request: Request, role_filter: str = "", permission_category: str
         control_banner="<div class='card section'><div class='muted'>School Admin and Registrar permissions are independently configurable here.</div></div>"
 
     def permission_table(target_role):
-        label="School Admin" if target_role=="school_admin" else "Registrar"
+        label={"school_admin":"School Admin","registrar":"Registrar","teacher":"Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}.get(target_role,target_role.replace("_"," ").title())
         target_permissions=allowed_permissions[:]
         if selected_category!="All":
             target_permissions=[p for p in target_permissions if category_by_permission.get(p)==selected_category]
