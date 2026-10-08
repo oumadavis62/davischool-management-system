@@ -310,10 +310,13 @@ async def security_headers(request: Request, call_next):
     return response
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
-# Production deployments must use the persistent PostgreSQL database.  SQLite is
-# still available for deliberate local development by explicitly setting
-# DAVISCHOOL_REQUIRE_DATABASE=0.
-REQUIRE_DATABASE = os.environ.get("DAVISCHOOL_REQUIRE_DATABASE", "1").lower() in {"1", "true", "yes"}
+# Production deployments MUST use the persistent PostgreSQL database.
+# SQLite is allowed only when the process explicitly identifies itself as local
+# development.  This prevents a hosting environment from silently falling back
+# to an ephemeral SQLite file after a deploy/restart and making accounts,
+# students, marks, and other records appear to disappear.
+LOCAL_DEVELOPMENT = os.environ.get("DAVISCHOOL_LOCAL_DEVELOPMENT", "0").strip().lower() in {"1", "true", "yes"}
+REQUIRE_DATABASE = True
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 310000
@@ -356,11 +359,17 @@ def get_db():
     development/backwards compatibility when DATABASE_URL is absent.
     """
     database_url = os.environ.get("DATABASE_URL", "").strip()
-    if REQUIRE_DATABASE and not database_url:
-        raise RuntimeError("DAVISCHOOL_REQUIRE_DATABASE is enabled but DATABASE_URL is not configured; refusing to use local SQLite for production data.")
     if database_url:
         from app.db import connect as pg_connect
         return pg_connect(database_url, connect_timeout=10)
+
+    if not LOCAL_DEVELOPMENT:
+        raise RuntimeError(
+            "DaviSchool production database is not configured: DATABASE_URL is missing. "
+            "Refusing to fall back to local SQLite because local SQLite is not persistent "
+            "across normal hosting deployments/restarts. Set DATABASE_URL to the persistent "
+            "PostgreSQL database used by DaviSchool."
+        )
 
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
