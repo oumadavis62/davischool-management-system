@@ -523,7 +523,46 @@ function setupDaviActionCells(){{
 }}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupDaviActionCells);
 else setupDaviActionCells();
-}})();</script><script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
+}})();</script><script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}<script>(function(){{
+  // Warm the exact browser Back destinations in the HTTP cache while the
+  // current page is being viewed. This keeps the existing two-step history
+  // rule intact but makes Back return much faster.
+  try{{
+    var targets=[];
+    function addTarget(value){{
+      if(!value)return;
+      try{{
+        var u=new URL(value,window.location.href);
+        if(u.origin!==window.location.origin)return;
+        if(u.protocol!=='http:' && u.protocol!=='https:')return;
+        var s=u.toString();
+        if(targets.indexOf(s)<0)targets.push(s);
+      }}catch(e){{}}
+    }}
+    // The exact page that opened this page is the highest-priority Back target.
+    addTarget(document.referrer);
+    // The two-step workspace is also warmed so the second Back is immediate.
+    var path=window.location.pathname;
+    var roots=['/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/app'];
+    var root='/app';
+    roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
+    var u=new URL(window.location.href);
+    var unfiltered=new URL(u.toString());
+    unfiltered.pathname=root;
+    Array.from(unfiltered.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfiltered.searchParams.delete(k);}});
+    addTarget(unfiltered.toString());
+    var originKey='davischool-two-step-origin:'+root;
+    try{{addTarget(sessionStorage.getItem(originKey));}}catch(e){{}}
+    targets.slice(0,3).forEach(function(url){{
+      var link=document.createElement('link');
+      link.rel='prefetch';
+      link.href=url;
+      link.as='document';
+      document.head.appendChild(link);
+      fetch(url,{{credentials:'same-origin',cache:'force-cache',priority:'low',headers:{{'X-DaviSchool-Prefetch':'1'}}}}).catch(function(){{}});
+    }});
+  }}catch(e){{}}
+}})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
 // Two-step browser history rule for the school workspace.
 // Step 1: the real workspace display remains the Back destination.
 // Step 2: opening a record/detail/edit/history view creates the single
