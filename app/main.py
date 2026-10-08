@@ -2722,7 +2722,7 @@ def global_roles_permissions(request: Request, school_id: int = 0, role_filter: 
             "<button type='submit' style='min-width:62px;padding:7px 12px;border:0;border-radius:999px;font-weight:800;cursor:pointer;background:%s;color:white'>%s</button></form></td></tr>"
             %(escape(p),escape(p.split(".",1)[0].replace("_"," ").title()),school_id,role_filter,p,"0" if enabled else "1","#176B3A" if enabled else "#94a3b8","ON" if enabled else "OFF")
         )
-    body=f"""<div style='padding:18px;max-width:1100px;margin:auto'>
+    body="""<div style='padding:18px;max-width:1100px;margin:auto'>
 <div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:14px'>
 <h2 style='margin:0 0 4px'>School Role Permission Controller</h2>
 <div style='font-size:12px;color:#64748b'>Super Admin controls access for every school. Permissions not yet configured are ON by default.</div>
