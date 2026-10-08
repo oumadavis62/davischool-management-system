@@ -8,4 +8,5 @@ gunicorn==23.0.0
 python-multipart==0.0.20
 itsdangerous==2.2.0
 psycopg[pool,binary]==3.3.6
+psycopg-pool==3.3.3
 cryptography==46.0.4
