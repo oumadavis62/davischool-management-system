@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import psycopg
+from psycopg_pool import ConnectionPool
 
 
 class CompatRow(dict):
@@ -155,15 +156,33 @@ class CompatCursor:
         return getattr(self._cursor, name)
 
 
+_pools = {}
+
+def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
+    """Return one process-local PostgreSQL connection pool."""
+    key = database_url.strip()
+    pool = _pools.get(key)
+    if pool is None:
+        pool = ConnectionPool(
+            conninfo=key,
+            min_size=1,
+            max_size=8,
+            timeout=connect_timeout,
+            max_idle=300,
+            kwargs={"row_factory": _row_factory, "connect_timeout": connect_timeout},
+            open=True,
+        )
+        _pools[key] = pool
+    return pool
+
+
 class CompatConnection:
     def __init__(self, database_url: str, **kwargs):
-        self._conn = psycopg.connect(
-            database_url,
-            row_factory=_row_factory,
-            connect_timeout=int(kwargs.pop("connect_timeout", 10)),
-            **kwargs,
-        )
+        connect_timeout = int(kwargs.pop("connect_timeout", 10))
+        self._pool = _get_pool(database_url, connect_timeout=connect_timeout)
+        self._conn = self._pool.getconn(timeout=connect_timeout)
         self._row_factory = None
+        self._returned = False
 
     @property
     def row_factory(self):
@@ -187,7 +206,15 @@ class CompatConnection:
         return self._conn.rollback()
 
     def close(self):
-        return self._conn.close()
+        if self._returned:
+            return None
+        self._returned = True
+        try:
+            if not self._conn.closed:
+                self._conn.rollback()
+        finally:
+            self._pool.putconn(self._conn)
+        return None
 
     def __enter__(self):
         return self
@@ -199,12 +226,11 @@ class CompatConnection:
             else:
                 self._conn.commit()
         finally:
-            self._conn.close()
+            self.close()
         return False
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
-
 
 def connect(database_url: str, **kwargs) -> CompatConnection:
     return CompatConnection(database_url, **kwargs)
