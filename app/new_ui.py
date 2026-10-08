@@ -826,11 +826,19 @@ def session_keepalive(request: Request):
     return JSONResponse({"authenticated": True})
 
 def _school_session(request):
+    # Cache the authenticated school check for the lifetime of this request.
+    # This avoids repeated remote PostgreSQL round trips when page helpers
+    # call _school_session() more than once during one request.
+    cached = getattr(request.state, "davischool_school_session", None)
+    if cached is not None:
+        return cached
     role = str(request.session.get("role", ""))
     if "email" not in request.session or role not in ("school_admin", "registrar", "teacher"):
+        request.state.davischool_school_session = None
         return None
     sid = int(request.session.get("school_id") or 0)
     if not sid:
+        request.state.davischool_school_session = None
         return None
     con = _db()
     try:
@@ -840,7 +848,9 @@ def _school_session(request):
     status = str(school["status"] or "active").strip().lower() if school else "suspended"
     if status not in ("active", "enabled"):
         request.session.clear()
+        request.state.davischool_school_session = None
         return None
+    request.state.davischool_school_session = sid
     return sid
 
 def _audit(cur, school_id, request, action, details):
@@ -859,15 +869,24 @@ def _permission_enabled(cur, school_id, role, permission):
     return True if row is None else bool(int(row["enabled"] or 0))
 
 def _require_permission(request, school_id, permission):
-    """Enforce the School Admin configured permission for every school role."""
+    """Enforce the School Admin configured permission with request-local caching."""
     role=str(request.session.get("role",""))
     if role in ("school_admin","registrar"):
         return True
+    cache = getattr(request.state, "davischool_permission_cache", None)
+    if cache is None:
+        cache = {}
+        request.state.davischool_permission_cache = cache
+    key = (int(school_id), role, str(permission))
+    if key in cache:
+        return cache[key]
     con=_db()
     try:
-        return _permission_enabled(con.cursor(),school_id,role,permission)
+        allowed = _permission_enabled(con.cursor(),school_id,role,permission)
     finally:
         con.close()
+    cache[key] = allowed
+    return allowed
 
 def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None):
     """Restrict teacher academic actions to their allocated class/subject."""
