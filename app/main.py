@@ -310,7 +310,10 @@ async def security_headers(request: Request, call_next):
     return response
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
-REQUIRE_DATABASE = os.environ.get("DAVISCHOOL_REQUIRE_DATABASE", "0").lower() in {"1", "true", "yes"}
+# Production deployments must use the persistent PostgreSQL database.  SQLite is
+# still available for deliberate local development by explicitly setting
+# DAVISCHOOL_REQUIRE_DATABASE=0.
+REQUIRE_DATABASE = os.environ.get("DAVISCHOOL_REQUIRE_DATABASE", "1").lower() in {"1", "true", "yes"}
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 310000
