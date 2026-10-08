@@ -2634,6 +2634,149 @@ def global_report_cards(request:Request):
 def global_attendance(request:Request):
     return global_table_page(request,'🗓️ Attendance — Global',"SELECT sc.name school,s.name student,a.date,a.status FROM attendance a JOIN schools sc ON sc.id=a.school_id JOIN students s ON s.id=a.student_id ORDER BY a.id DESC",{'school':'School','student':'Student','date':'Date','status':'Status'},'attendance')
 
+
+# === SUPER ADMIN — SCHOOL ROLE PERMISSION CONTROLLER ===
+GLOBAL_ROLE_PERMISSIONS = [
+    "students.view","students.create","students.edit",
+    "classes.view","classes.create",
+    "subjects.view","subjects.create",
+    "exams.view","exams.create",
+    "marks.view","marks.edit",
+    "attendance.view","attendance.edit",
+    "timetable.view","timetable.edit",
+    "fees.view","fees.edit",
+    "finance.view","finance.edit",
+    "reports.view","reports.edit",
+    "staff.view","staff.create","staff.edit",
+    "communications.view","communications.edit",
+    "settings.view","settings.edit",
+    "audit.view","users.manage",
+    "class_teacher.view","class_teacher.edit",
+    "settings.manage",
+]
+GLOBAL_ROLE_LABELS = {
+    "school_admin":"School Admin",
+    "registrar":"Registrar",
+    "teacher":"Teacher",
+    "parent":"Parent",
+    "student":"Student",
+    "accountant":"Accountant",
+}
+GLOBAL_PERMISSION_CATEGORIES = {
+    "Students": {"students.view","students.create","students.edit"},
+    "Classes": {"classes.view","classes.create"},
+    "Subjects": {"subjects.view","subjects.create"},
+    "Exams": {"exams.view","exams.create"},
+    "Marks": {"marks.view","marks.edit"},
+    "Attendance": {"attendance.view","attendance.edit"},
+    "Timetable": {"timetable.view","timetable.edit"},
+    "Fees": {"fees.view","fees.edit"},
+    "Finance": {"finance.view","finance.edit"},
+    "Reports": {"reports.view","reports.edit"},
+    "Staff": {"staff.view","staff.create","staff.edit"},
+    "Communications": {"communications.view","communications.edit"},
+    "Settings": {"settings.view","settings.edit","settings.manage"},
+    "Audit": {"audit.view"},
+    "Users": {"users.manage"},
+    "Class Teacher": {"class_teacher.view","class_teacher.edit"},
+}
+
+@app.get("/super/global-control/system-settings/roles-permissions", response_class=HTMLResponse)
+def global_roles_permissions(request: Request, school_id: int = 0, role_filter: str = "school_admin", permission_category: str = "All"):
+    if request.session.get("role")!="super_admin":
+        return RedirectResponse("/")
+    con=get_db(); cur=con.cursor()
+    schools=cur.execute("SELECT id,name,code FROM schools ORDER BY name").fetchall()
+    if not schools:
+        con.close()
+        header=global_header(request.session.get("name",""), "system-settings/roles-permissions")
+        return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}<div style='padding:20px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:24px'><h2 style='margin-top:0'>School Role Permissions</h2><div style='color:#64748b'>No schools have been created yet.</div></div></div></div></div></body></html>")
+    if not school_id:
+        school_id=int(schools[0]["id"])
+    if not any(int(s["id"])==int(school_id) for s in schools):
+        school_id=int(schools[0]["id"])
+    allowed_roles=set(GLOBAL_ROLE_LABELS)
+    if role_filter not in allowed_roles:
+        role_filter="school_admin"
+    rows=cur.execute("SELECT role,permission,enabled FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(school_id,)).fetchall()
+    con.close()
+    matrix={(str(r["role"]),str(r["permission"])):bool(int(r["enabled"] or 0)) for r in rows}
+    category_set=GLOBAL_PERMISSION_CATEGORIES.get(permission_category) if permission_category!="All" else None
+    permissions=[p for p in GLOBAL_ROLE_PERMISSIONS if not category_set or p in category_set]
+    selected_school=next(s for s in schools if int(s["id"])==school_id)
+    school_opts="".join(
+        "<option value='%s' %s>%s%s</option>" % (s["id"],"selected" if int(s["id"])==school_id else "",
+            escape(str(s["name"] or "")),(" · "+escape(str(s["code"] or ""))) if s["code"] else "")
+        for s in schools
+    )
+    role_opts="".join("<option value='%s' %s>%s</option>"%(r,"selected" if r==role_filter else "",GLOBAL_ROLE_LABELS[r]) for r in GLOBAL_ROLE_LABELS)
+    cat_opts="<option value='All' %s>All access</option>"%("selected" if permission_category=="All" else "")
+    cat_opts += "".join("<option value='%s' %s>%s</option>"%(cat,"selected" if permission_category==cat else "",cat) for cat in GLOBAL_PERMISSION_CATEGORIES)
+    controls=[]
+    for p in permissions:
+        enabled=matrix.get((role_filter,p),True)
+        controls.append(
+            "<tr><td style='padding:11px 12px'><b>%s</b><div style='font-size:10px;color:#94a3b8;margin-top:2px'>%s</div></td>"
+            "<td style='padding:11px 12px;text-align:right'><form method='post' action='/super/global-control/system-settings/roles-permissions/toggle' style='margin:0'>"
+            "<input type='hidden' name='school_id' value='%s'><input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'>"
+            "<button type='submit' style='min-width:62px;padding:7px 12px;border:0;border-radius:999px;font-weight:800;cursor:pointer;background:%s;color:white'>%s</button></form></td></tr>"
+            %(escape(p),escape(p.split(".",1)[0].replace("_"," ").title()),school_id,role_filter,p,"0" if enabled else "1","#176B3A" if enabled else "#94a3b8","ON" if enabled else "OFF")
+        )
+    body=f"""<div style='padding:18px;max-width:1100px;margin:auto'>
+<div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:14px'>
+<h2 style='margin:0 0 4px'>School Role Permission Controller</h2>
+<div style='font-size:12px;color:#64748b'>Super Admin controls access for every school. Permissions not yet configured are ON by default.</div>
+<form method='get' action='/super/global-control/system-settings/roles-permissions' style='display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:10px;align-items:end;margin-top:14px'>
+<label style='font-size:11px;font-weight:800;color:#475569'>School<select name='school_id' class='input-field'>%s</select></label>
+<label style='font-size:11px;font-weight:800;color:#475569'>Role<select name='role_filter' class='input-field'>%s</select></label>
+<label style='font-size:11px;font-weight:800;color:#475569'>Access category<select name='permission_category' class='input-field'>%s</select></label>
+<button class='add-btn' style='margin-top:0'>Filter</button>
+</form></div>
+<div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'>
+<div style='padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap'><div><b>%s</b><div style='font-size:11px;color:#64748b'>Controlling: %s</div></div><span style='font-size:11px;color:#64748b'>%d access features shown</span></div>
+<table style='width:100%%;border-collapse:collapse'><thead><tr><th style='text-align:left;padding:9px 12px;font-size:11px'>Access feature</th><th style='text-align:right;padding:9px 12px;font-size:11px'>Status</th></tr></thead><tbody>%s</tbody></table></div>
+<div style='margin-top:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:12px;font-size:11px;color:#9a3412'>School Admin and Registrar no longer control each other. All school-role permission control is centralized here under Super Admin.</div>
+</div><style>@media(max-width:700px){form{grid-template-columns:1fr!important}.input-field{margin:0}.add-btn{margin-top:4px!important}}</style>""" % (school_opts,role_opts,cat_opts,escape(str(selected_school["name"] or "")),escape(GLOBAL_ROLE_LABELS[role_filter]),len(permissions),"".join(controls))
+    header=global_header(request.session.get("name",""),"system-settings/roles-permissions")
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{body}</div></div></body></html>")
+
+@app.post("/super/global-control/system-settings/roles-permissions/toggle")
+def global_roles_permissions_toggle(request: Request, school_id:int=Form(...), role:str=Form(...), permission:str=Form(...), enabled:int=Form(...)):
+    if request.session.get("role")!="super_admin":
+        return RedirectResponse("/")
+    if role not in GLOBAL_ROLE_LABELS or permission not in GLOBAL_ROLE_PERMISSIONS:
+        return HTMLResponse("Invalid role or permission.",400)
+    con=get_db(); cur=con.cursor()
+    if not cur.execute("SELECT id FROM schools WHERE id=?",(school_id,)).fetchone():
+        con.close(); return HTMLResponse("School not found.",404)
+    existing=cur.execute("SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(school_id,role,permission)).fetchone()
+    value=1 if int(enabled) else 0
+    if existing:
+        cur.execute("UPDATE roles_permissions SET enabled=? WHERE id=? AND school_id=?",(value,existing["id"],school_id))
+    else:
+        cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,?)",(school_id,role,permission,value))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/system-settings/roles-permissions?school_id=%s&role_filter=%s"%(school_id,quote(role,safe="")),303)
+
+@app.post("/super/global-control/system-settings/roles-permissions/block-other")
+def global_roles_permissions_block_other(request: Request, school_id:int=Form(...), role:str=Form(...)):
+    if request.session.get("role")!="super_admin":
+        return RedirectResponse("/")
+    if role not in ("school_admin","registrar"):
+        return HTMLResponse("Only School Admin or Registrar can be controlled here.",400)
+    other="registrar" if role=="school_admin" else "school_admin"
+    con=get_db(); cur=con.cursor()
+    if not cur.execute("SELECT id FROM schools WHERE id=?",(school_id,)).fetchone():
+        con.close(); return HTMLResponse("School not found.",404)
+    for permission in GLOBAL_ROLE_PERMISSIONS:
+        existing=cur.execute("SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",(school_id,other,permission)).fetchone()
+        if existing:
+            cur.execute("UPDATE roles_permissions SET enabled=0 WHERE id=? AND school_id=?",(existing["id"],school_id))
+        else:
+            cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,0)",(school_id,other,permission))
+    con.commit(); con.close()
+    return RedirectResponse("/super/global-control/system-settings/roles-permissions?school_id=%s&role_filter=%s"%(school_id,role,safe=""),303)
+
 @app.get("/super/global-control/{path}", response_class=HTMLResponse)
 def global_other(path: str, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
