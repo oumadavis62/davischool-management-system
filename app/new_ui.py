@@ -5670,10 +5670,10 @@ def marks_correction_requests(request: Request):
         "SELECT id,name FROM subjects WHERE school_id=? ORDER BY name,id",(sid,)
     ).fetchall()
     filter_years=cur.execute(
-        "SELECT DISTINCT year FROM marks WHERE school_id=? AND year IS NOT NULL AND TRIM(CAST(year AS TEXT))<>'' ORDER BY year DESC",(sid,)
+        "SELECT DISTINCT year FROM marks WHERE school_id=? AND year IS NOT NULL AND year<>'' ORDER BY year DESC",(sid,)
     ).fetchall()
     filter_terms=cur.execute(
-        "SELECT DISTINCT term FROM marks WHERE school_id=? AND term IS NOT NULL AND TRIM(CAST(term AS TEXT))<>'' ORDER BY term",(sid,)
+        "SELECT DISTINCT term FROM marks WHERE school_id=? AND term IS NOT NULL AND term<>'' ORDER BY term",(sid,)
     ).fetchall()
 
     # Nothing is displayed until the administrator selects filters and clicks Load.
@@ -5715,10 +5715,10 @@ def marks_correction_requests(request: Request):
             except (TypeError,ValueError):
                 subject_filter=""
         if year_filter:
-            where.append("CAST(m.year AS TEXT)=?")
+            where.append("m.year=?")
             query_params.append(year_filter)
         if term_filter:
-            where.append("CAST(m.term AS TEXT)=?")
+            where.append("m.term=?")
             query_params.append(term_filter)
 
         saved_rows=cur.execute("""
