@@ -5728,11 +5728,17 @@ def marks_correction_requests(request: Request):
                 sub.name subject_name,
                 COUNT(m.id) mark_count,
                 AVG(m.marks) mark_mean,
-                MAX(m.year) mark_year,MAX(m.term) mark_term
+                MAX(m.year) mark_year,MAX(m.term) mark_term,
+                MAX(CASE WHEN al.status='finalized' THEN 'finalized' ELSE '' END) lock_status
             FROM marks m
             LEFT JOIN exams e ON e.id=m.exam_id
             LEFT JOIN classes c ON c.id=m.class_id
             LEFT JOIN subjects sub ON sub.id=m.subject_id
+            LEFT JOIN academic_locks al
+              ON al.school_id=m.school_id
+             AND al.exam_id=m.exam_id
+             AND al.class_id=m.class_id
+             AND al.subject_id=m.subject_id
             WHERE %s
             GROUP BY m.exam_id,m.class_id,m.subject_id,e.name,c.name,c.stream,sub.name
             ORDER BY COALESCE(e.name,''),COALESCE(c.name,''),COALESCE(c.stream,''),COALESCE(sub.name,'')
@@ -5748,12 +5754,6 @@ def marks_correction_requests(request: Request):
         WHERE r.school_id=?
         ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.id DESC
     """,(sid,)).fetchall()
-
-    lock_map={}
-    for row in saved_rows:
-        lock_map[(int(row["exam_id"]),int(row["class_id"]),int(row["subject_id"]))] = _academic_lock(
-            cur,sid,int(row["exam_id"]),int(row["class_id"]),int(row["subject_id"])
-        )
 
     con.close()
 
@@ -5800,8 +5800,7 @@ def marks_correction_requests(request: Request):
     marks_rows=""
     for r in saved_rows:
         key=(int(r["exam_id"]),int(r["class_id"]),int(r["subject_id"]))
-        locked_row=lock_map.get(key)
-        locked=str(locked_row["status"] or "").lower()=="finalized" if locked_row else False
+        locked=str(r["lock_status"] or "").lower()=="finalized"
         status_html = "<span style='font-weight:900;color:#b91c1c'>🔒 Locked / Submitted</span>" if locked else "<span style='font-weight:900;color:#176B3A'>🟢 Saved / Unlocked</span>"
         if locked:
             action=(f"<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'>"
@@ -5850,7 +5849,7 @@ def marks_correction_requests(request: Request):
 <div class='muted'>Select the examination, class, subject, year and term, then click <b>Load</b> to display the saved subject marks for that selection.</div>
 <div class='card section'>
 <h2>Load Saved & Submitted Subject Marks</h2>
-<form method='post' action='/app/academics/marks-corrections/load' class='marks-filter-form' data-native-post='1'>
+<form method='get' action='/app/academics/marks-corrections' class='marks-filter-form'>
 <div class='filter-grid'>
 <label>Examination<select name='exam_id' class='field'><option value=''>All Examinations</option>{exam_options}</select></label>
 <label>Class<select name='class_id' class='field'><option value=''>All Classes</option>{class_options}</select></label>
@@ -5859,7 +5858,7 @@ def marks_correction_requests(request: Request):
 <label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label>
 </div>
 <div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px'>
-<input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>🔎 Load Students</button>
+<input type='hidden' name='load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>Load Students</button>
 <a class='clear-btn' href='/app/academics/marks-corrections'>Clear</a>
 </div>
 </form>
@@ -5987,23 +5986,25 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
     try:
         _ensure_academic_locks_table(cur)
 
-        valid = (
-            cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
-            and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
-            and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-        )
+        valid = cur.execute("""
+            SELECT e.id
+            FROM exams e
+            JOIN classes c ON c.school_id=e.school_id AND c.id=?
+            JOIN subjects s ON s.school_id=e.school_id AND s.id=?
+            WHERE e.id=? AND e.school_id=?
+              AND EXISTS (
+                  SELECT 1 FROM marks m
+                  WHERE m.school_id=e.school_id
+                    AND m.exam_id=e.id
+                    AND m.class_id=?
+                    AND m.subject_id=?
+                    AND m.marks IS NOT NULL
+              )
+            LIMIT 1
+        """,(class_id,subject_id,exam_id,sid,class_id,subject_id)).fetchone()
         if not valid:
             con.close()
-            return HTMLResponse("Invalid academic selection.",400)
-
-        # Do not create a lock for a subject with no saved marks.
-        has_marks=cur.execute(
-            "SELECT 1 FROM marks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND marks IS NOT NULL LIMIT 1",
-            (sid,exam_id,class_id,subject_id)
-        ).fetchone()
-        if not has_marks:
-            con.close()
-            return HTMLResponse("No saved marks were found for this examination, class and subject.",400)
+            return HTMLResponse("Invalid academic selection or no saved marks were found for this subject.",400)
 
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         # Normalize any legacy/duplicate lock rows for this exact subject,
@@ -6024,14 +6025,6 @@ def lock_marks_from_corrections(request: Request, exam_id:int=Form(...), class_i
             print("DAVISCHOOL CORRECTIONS LOCK AUDIT WARNING:",repr(audit_exc),flush=True)
 
         con.commit()
-
-        verified=cur.execute(
-            "SELECT 1 FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=? AND status='finalized' LIMIT 1",
-            (sid,exam_id,class_id,subject_id)
-        ).fetchone()
-        if not verified:
-            con.close()
-            return HTMLResponse("Marks could not be locked.",500)
     except Exception as exc:
         try:
             con.rollback()
