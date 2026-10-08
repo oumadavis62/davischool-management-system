@@ -524,57 +524,314 @@ function setupDaviActionCells(){{
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupDaviActionCells);
 else setupDaviActionCells();
 }})();</script><script>(function(){{try{{if(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1')document.body.classList.add('sidebar-hidden');}}catch(e){{}}}})();function toggleSidebar(){{var hidden=document.body.classList.toggle('sidebar-hidden');var b=document.getElementById('sidebarToggle');if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}}}{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}</script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
-// Two-step browser history rule: Back #1 returns to the unfiltered display;
-// Back #2 returns to the page that opened it. Filter/detail changes replace
-// the single child entry and never create a history chain.
+// Two-step browser history rule for the school workspace.
+// Step 1: the real workspace display remains the Back destination.
+// Step 2: opening a record/detail/edit/history view creates the single
+// temporary entry. Back therefore returns directly to the exact workspace
+// display the user came from. Moving between multiple detail views replaces
+// the temporary entry instead of building a chain of detail pages.
+// This changes browser history only; it never changes database records.
 (function(){{
   try{{
-    var WORKSPACES=['/app','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/schools/manage','/super/global-control/dashboard','/account/change-password'];
-    var PREFIXES=['/app','/schools','/super','/account'];
-    function clean(p){{p=String(p||'/').split('?')[0].split('#')[0];return p.length>1?p.replace(/\\/+$/,''):p;}}
-    function isSystem(p){{p=clean(p);return PREFIXES.some(function(x){{return p===x||p.indexOf(x+'/')===0;}});}}
-    function root(p){{p=clean(p);var best='/';WORKSPACES.forEach(function(x){{if(p===x||(x!=='/app'&&p.indexOf(x+'/')===0)&&x.length>best.length)best=x;}});return best;}}
-    function internal(h){{try{{var u=new URL(h,window.location.href);return u.origin===window.location.origin&&isSystem(u.pathname)?u:null;}}catch(e){{return null;}}}}
-    function filtered(u){{return clean(u.pathname)!==root(u.pathname)||u.search.length>0;}}
-    var r=root(window.location.pathname), currentFiltered=filtered(window.location);
-    var state=(history.state&&typeof history.state==='object')?history.state:{{}};
-    history.replaceState(Object.assign({{}},state,{{daviStep:currentFiltered?'filtered':'main',daviRoot:r}}),'',window.location.href);
+    var WORKSPACES=[
+      '/app',
+      '/app/students',
+      '/app/staff',
+      '/app/classes',
+      '/app/subjects',
+      '/app/exams',
+      '/app/academics/marks-corrections',
+      '/app/academics/allocations',
+      '/app/academics/assessments',
+      '/app/academics/analysis',
+      '/app/academics',
+      '/app/report-cards',
+      '/app/attendance',
+      '/app/timetable',
+      '/app/finance',
+      '/app/accounting',
+      '/app/announcements',
+      '/app/users',
+      '/app/roles',
+      '/app/school-settings',
+      '/app/audit',
+      '/app/account',
+      '/app/teacher',
+      '/schools/manage',
+      '/super/global-control/dashboard',
+      '/account/change-password'
+    ];
+
+    var SYSTEM_PREFIXES=['/app','/schools','/super','/account'];
+    function isSystemPath(path){{
+      path=cleanPath(path);
+      return SYSTEM_PREFIXES.some(function(prefix){{return path===prefix || path.indexOf(prefix+'/')===0;}});
+    }}
+
+    function cleanPath(path){{
+      path=String(path||'/').split('?')[0].split('#')[0];
+      if(path.length>1)path=path.replace(/\\/+$/,'');
+      return path;
+    }}
+
+    function workspace(path){{
+      path=cleanPath(path);
+      var best='/';
+      for(var i=0;i<WORKSPACES.length;i++){{
+        var root=WORKSPACES[i];
+        if(path===root || (root!=='/app' && path.indexOf(root+'/')===0)){{
+          if(root.length>best.length)best=root;
+        }}
+      }}
+      return best;
+    }}
+
+    function internalUrl(value){{
+      try{{
+        var u=new URL(value,window.location.href);
+        if(u.origin!==window.location.origin)return null;
+        if(u.protocol!=='http:' && u.protocol!=='https:')return null;
+        return u;
+      }}catch(e){{return null;}}
+    }}
+
+    // Mark the current document as the user's stable workspace or temporary
+    // second-step detail. This is informational and also survives normal
+    // full-page navigation because it is stored in the history entry.
+    try{{
+      var currentRoot=workspace(window.location.pathname);
+      var currentPath=cleanPath(window.location.pathname);
+      var currentKind=(currentRoot!=='/' && currentPath!==currentRoot)?'detail':'workspace';
+      var oldState=(history.state && typeof history.state==='object')?history.state:{{}};
+      history.replaceState(Object.assign({{}},oldState,{{daviHistoryStep:currentKind,daviWorkspace:currentRoot}}),'',window.location.href);
+    }}catch(e){{}}
 
     document.addEventListener('click',function(event){{
-      var link=event.target.closest?event.target.closest('a'):null;
-      if(!link||event.defaultPrevented||link.target==='_blank'||link.hasAttribute('download')||link.hasAttribute('data-native-get')||link.hasAttribute('data-no-history-filter'))return;
-      if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
-      var target=internal(link.href);if(!target)return;
-      var cr=root(window.location.pathname),tr=root(target.pathname);if(cr==='/'||tr==='/'||cr!==tr)return;
-      var nowFiltered=filtered(window.location),nextFiltered=filtered(target);
-      if(!nowFiltered&&nextFiltered){{
-        event.preventDefault();
-        history.pushState({{daviStep:'unfiltered',daviRoot:cr}},'',window.location.pathname+window.location.search);
-        window.location.href=target.toString();
-      }}else if(nowFiltered&&nextFiltered){{
-        event.preventDefault();window.location.replace(target.toString());
+      var link=event.target.closest ? event.target.closest('a') : null;
+      if(!link || event.defaultPrevented)return;
+      if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
+      if(link.target==='_blank' || link.hasAttribute('download'))return;
+      if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+
+      var target=internalUrl(link.href);
+      if(!target || !isSystemPath(target.pathname))return;
+
+      var currentRoot=workspace(window.location.pathname);
+      var targetRoot=workspace(target.pathname);
+      if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
+
+      var currentPath=cleanPath(window.location.pathname);
+      var targetPath=cleanPath(target.pathname);
+      var currentIsDetail=currentPath!==currentRoot;
+      var targetIsDetail=targetPath!==targetRoot;
+
+      // Root/workspace -> detail is the one intentional push. The browser
+      // Back button will therefore return to the exact root/filter display.
+      if(!currentIsDetail && targetIsDetail){{
+        try{{
+          sessionStorage.setItem('davischool-two-step-origin:'+currentRoot,window.location.href);
+        }}catch(e){{}}
+        return;
       }}
-    }},true);
 
-    // Filter forms use the same two-entry model: main -> unfiltered -> filtered.
-    document.addEventListener('submit',function(event){{
-      var form=event.target;
-      if(!form||String(form.method||'get').toLowerCase()!=='get'||form.hasAttribute('data-native-get')||form.hasAttribute('data-no-history-filter'))return;
-      try{{
-        var action=form.getAttribute('action')||window.location.href, url=new URL(action,window.location.href);
-        if(url.origin!==window.location.origin||!isSystem(url.pathname))return;
-        var data=new FormData(form), params=new URLSearchParams();data.forEach(function(v,k){{params.append(k,v);}});url.search=params.toString();
+      // Detail -> another detail stays within step 2. Replace the current
+      // entry so Back never walks through a chain of records.
+      if(currentIsDetail && targetIsDetail){{
         event.preventDefault();
-        if(!filtered(window.location)){{history.pushState({{daviStep:'unfiltered',daviRoot:root(window.location.pathname)}},'',window.location.href);window.location.href=url.toString();}}
-        else window.location.replace(url.toString());
-      }}catch(e){{form.submit();}}
+        window.location.replace(target.toString());
+        return;
+      }}
+
+      // Detail -> workspace is an intentional return to step 1. Keep it as a
+      // normal navigation so the browser's Back/Forward semantics remain
+      // predictable and the workspace display is preserved.
     }},true);
 
-    window.addEventListener('popstate',function(){{
-      try{{sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);sessionStorage.removeItem('davischool-post-filter:'+window.location.pathname);sessionStorage.removeItem('davischool-marksheet-filter-started');}}catch(e){{}}
+    window.addEventListener('pageshow',function(){{
+      // A new detail view begins a fresh second step; the marker is cleared
+      // only when the user has actually returned to its workspace.
+      try{{
+        var root=workspace(window.location.pathname);
+        if(root!=='/' && cleanPath(window.location.pathname)===root){{
+          sessionStorage.removeItem('davischool-two-step-origin:'+root);
+        }}
+      }}catch(e){{}}
     }});
+
+    // Do not manufacture extra entries when a browser Back/Forward traversal
+    // occurs. The browser itself remains the source of truth for navigation.
   }}catch(e){{}}
 }})();
+// Marks Corrections POST filters use an explicit, deterministic two-step history rule.
+// Do not rely on sessionStorage to decide whether the first filter has happened.
+// The URL itself is the source of truth:
+//   unfiltered workspace -> duplicate unfiltered history entry -> filtered page
+// Therefore Back #1 always returns to the unfiltered workspace and Back #2 to
+// the page that opened Marks Corrections. Further filters replace the current
+// filtered entry instead of creating a chain.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  if(!form.matches('.marks-filter-form'))return;
+  if(form.hasAttribute('data-no-history-filter'))return;
+  try{{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin || !isSystemPath(url.pathname))return;
+
+    var current=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    current.searchParams.forEach(function(value,key){{
+      if(key!=='ds_tab')hasRealCurrentQuery=true;
+    }});
+
+    event.preventDefault();
+    var data=new FormData(form);
+
+    fetch(url.toString(),{{
+      method:'POST',
+      body:data,
+      credentials:'same-origin',
+      redirect:'follow',
+      cache:'no-store'
+    }}).then(function(response){{
+      var finalUrl=response.url || url.toString();
+
+      if(!hasRealCurrentQuery){{
+        // We are on the real, unfiltered Marks Corrections workspace.
+        // First create a second copy of THIS exact workspace entry. Then
+        // perform a normal navigation to the filtered result. The browser
+        // history becomes:
+        //   Academics -> Marks Corrections (default) -> Marks Corrections (filtered)
+        // so Back is guaranteed to take two steps.
+        history.pushState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterWorkspace:true}},'',window.location.href);
+        window.location.href=finalUrl;
+      }}else{{
+        // Already filtered: changing filters must not add another Back step.
+        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
+        window.location.reload();
+      }}
+    }}).catch(function(){{form.submit();}});
+  }}catch(e){{form.submit();}}
+}},true);
+
+// GET filter/search forms use a two-stage history rule across the system.
+// The first filter/search action creates ONE history entry so the original
+// unfiltered page remains the Back destination. Further filter/search changes
+// replace that filtered entry, preventing a chain of intermediate displays.
+// Ordinary links to records/pages are intentionally left as normal navigation.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='get')return;
+  if(form.hasAttribute('data-native-get'))return;
+  if(form.hasAttribute('data-no-history-filter'))return;
+  try{{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin){{form.submit();return;}}
+    if(url.pathname.indexOf('/app')!==0){{form.submit();return;}}
+    var data=new FormData(form);
+    var params=new URLSearchParams();
+    data.forEach(function(value,key){{params.append(key,value);}});
+    url.search=params.toString();
+    var pathKey='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasRealCurrentQuery=true;}});
+    var started=false;
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(pathKey);
+      started=sessionStorage.getItem(pathKey)==='1';
+    }}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(pathKey,'1');}}catch(e){{}}
+      window.location.href=url.toString();
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{form.submit();}}
+}},true);
+
+// When the user returns with Back, the next filter cycle must start from the
+// unfiltered page again. Clear filter-history markers for the current page.
+window.addEventListener('popstate',function(){{
+  try{{
+    sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-post-filter:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-marksheet-filter-started');
+  }}catch(e){{}}
+}});
+// Query-string links on the same page are treated as filter/display changes.
+// The first such link preserves the unfiltered page; subsequent changes replace
+// the current filtered display instead of creating additional Back entries.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a') : null;
+  if(!link || event.defaultPrevented)return;
+  if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
+  if(link.target==='_blank' || link.hasAttribute('download'))return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin!==window.location.origin || url.pathname!==window.location.pathname || !url.search)return;
+    if(!isSystemPath(url.pathname))return;
+    var key='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,keyName){{if(keyName!=='ds_tab')hasRealCurrentQuery=true;}});
+    var started=false;
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(key);
+      started=sessionStorage.getItem(key)==='1';
+    }}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
+      window.location.href=url.toString();
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{}}
+}},true);
+
+// MarkSheet pagination changes the displayed page within the same workspace.
+// Replace that navigation entry so Back does not replay every MarkSheet page
+// visited while browsing the student list.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a.marksheet-page-nav') : null;
+  if(!link || event.defaultPrevented)return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin===window.location.origin){{event.preventDefault();window.location.replace(url.toString());}}
+  }}catch(e){{}}
+}},true);
+// Keep routine school data-entry saves from filling the phone/browser Back stack.
+// A successful POST is followed by a normal page load, but replace that entry
+// so repeated saves on the same workspace do not require dozens of Back presses.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  if(form.hasAttribute('data-native-post'))return;
+  var submitter=event.submitter;
+  var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
+  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
+  try{{
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin)return;
+    if(!isSystemPath(url.pathname))return;
+    var path=url.pathname.toLowerCase();
+    if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add')return;
+    if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
+    event.preventDefault();
+    var data=new FormData(form);
+    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
+    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+      .then(function(response){{
+        if(!response.ok){{window.location.href=response.url||url.toString();return;}}
+        window.location.replace(response.url||url.toString());
+      }})
+      .catch(function(){{window.location.href=url.toString();}});
+  }}catch(e){{}}
+}},true);
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
