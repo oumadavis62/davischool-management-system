@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
-from fastapi.middleware.gzip import GZipMiddleware
 from html import escape
 from urllib.parse import quote
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -217,9 +216,6 @@ async def idle_session_timeout(request: Request, call_next):
 
 app.add_middleware(DaviSchoolTabSessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
-# Compress the large server-rendered DaviSchool HTML shell before it is sent to the browser.
-# This reduces transfer time without changing authentication, navigation, or page content.
-app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=4)
 
 @app.get("/healthz")
 def healthz():
