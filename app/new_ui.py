@@ -556,8 +556,17 @@ else setupDaviActionCells();
       '/app/school-settings',
       '/app/audit',
       '/app/account',
-      '/app/teacher'
+      '/app/teacher',
+      '/schools/manage',
+      '/super/global-control/dashboard',
+      '/account/change-password'
     ];
+
+    var SYSTEM_PREFIXES=['/app','/schools','/super','/account'];
+    function isSystemPath(path){{
+      path=cleanPath(path);
+      return SYSTEM_PREFIXES.some(function(prefix){{return path===prefix || path.indexOf(prefix+'/')===0;}});
+    }}
 
     function cleanPath(path){{
       path=String(path||'/').split('?')[0].split('#')[0];
@@ -605,7 +614,7 @@ else setupDaviActionCells();
       if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
 
       var target=internalUrl(link.href);
-      if(!target || target.pathname.indexOf('/app')!==0)return;
+      if(!target || !isSystemPath(target.pathname))return;
 
       var currentRoot=workspace(window.location.pathname);
       var targetRoot=workspace(target.pathname);
@@ -668,7 +677,7 @@ document.addEventListener('submit',function(event){{
   try{{
     var action=form.getAttribute('action') || window.location.href;
     var url=new URL(action,window.location.href);
-    if(url.origin!==window.location.origin || url.pathname.indexOf('/app')!==0)return;
+    if(url.origin!==window.location.origin || !isSystemPath(url.pathname))return;
 
     var current=new URL(window.location.href);
     var hasRealCurrentQuery=false;
@@ -764,7 +773,7 @@ document.addEventListener('click',function(event){{
   try{{
     var url=new URL(link.href,window.location.href);
     if(url.origin!==window.location.origin || url.pathname!==window.location.pathname || !url.search)return;
-    if(url.pathname.indexOf('/app')!==0)return;
+    if(!isSystemPath(url.pathname))return;
     var key='davischool-filter-started:'+window.location.pathname;
     var currentUrl=new URL(window.location.href);
     var hasRealCurrentQuery=false;
@@ -808,6 +817,7 @@ document.addEventListener('submit',function(event){{
   try{{
     var url=new URL(action,window.location.href);
     if(url.origin!==window.location.origin)return;
+    if(!isSystemPath(url.pathname))return;
     var path=url.pathname.toLowerCase();
     if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add')return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
