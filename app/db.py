@@ -6,6 +6,8 @@ Development falls back to the existing SQLite database.
 from __future__ import annotations
 
 import re
+import os
+import threading
 import psycopg
 from psycopg_pool import ConnectionPool
 
@@ -157,6 +159,58 @@ class CompatCursor:
 
 
 _pools = {}
+_database_guard_lock = threading.Lock()
+_database_guard_checked = set()
+
+
+def _allow_empty_database() -> bool:
+    return os.environ.get("DAVISCHOOL_ALLOW_EMPTY_DATABASE", "0").strip().lower() in {"1", "true", "yes"}
+
+
+def _verify_database_persistence(conn, database_url: str) -> None:
+    """Refuse to run against an empty/uninitialized production database by accident.
+
+    A deployment must never silently switch to a new empty PostgreSQL database.
+    Existing DaviSchool databases contain the core tables and at least one account
+    or school. A genuinely new database can still be initialized explicitly by
+    setting DAVISCHOOL_ALLOW_EMPTY_DATABASE=1 for that deployment.
+    """
+    key = database_url.strip()
+    if key in _database_guard_checked:
+        return
+    with _database_guard_lock:
+        if key in _database_guard_checked:
+            return
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """SELECT table_name
+                   FROM information_schema.tables
+                   WHERE table_schema='public'
+                     AND table_name IN ('users','schools','students','teachers')"""
+            )
+            tables = {str(row[0]) for row in cur.fetchall()}
+            required = {"users", "schools", "students", "teachers"}
+            if required.issubset(tables):
+                cur.execute("SELECT COUNT(*) FROM users")
+                user_count = int(cur.fetchone()[0] or 0)
+                cur.execute("SELECT COUNT(*) FROM schools")
+                school_count = int(cur.fetchone()[0] or 0)
+                if user_count > 0 or school_count > 0:
+                    _database_guard_checked.add(key)
+                    return
+            if _allow_empty_database():
+                _database_guard_checked.add(key)
+                return
+            raise RuntimeError(
+                "DaviSchool database persistence guard blocked startup: the configured PostgreSQL database "
+                "does not contain the expected existing DaviSchool data. Refusing to initialize a possibly "
+                "wrong or empty database. Set DAVISCHOOL_ALLOW_EMPTY_DATABASE=1 only when intentionally "
+                "provisioning a brand-new DaviSchool database."
+            )
+        finally:
+            cur.close()
+
 
 def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
     """Return one process-local PostgreSQL connection pool."""
@@ -183,6 +237,12 @@ class CompatConnection:
         connect_timeout = int(kwargs.pop("connect_timeout", 10))
         self._pool = _get_pool(database_url, connect_timeout=connect_timeout)
         self._conn = self._pool.getconn(timeout=connect_timeout)
+        try:
+            _verify_database_persistence(self._conn, database_url)
+        except Exception:
+            self._pool.putconn(self._conn)
+            self._conn = None
+            raise
         self._row_factory = None
         self._returned = False
 
