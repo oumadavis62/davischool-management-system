@@ -442,15 +442,10 @@ def init_db():
         else:
             cur.execute("INSERT INTO users (email,password,role,full_name,school_id) VALUES (?,?,?,?,?)",
                         (SUPER_ADMIN,hash_password(admin_password),"super_admin","Davis Ouma",0))
-    # Remove the obsolete legacy super-admin account once the current
-    # configured super-admin has been established. This keeps the platform
-    # user list from showing a stale duplicate admin account.
-    if SUPER_ADMIN.lower() != "oumadavis62@gmail.com".lower():
-        cur.execute("DELETE FROM users WHERE lower(email)=lower(?) AND lower(email)<>lower(?)",
-                    ("oumadavis62@gmail.com", SUPER_ADMIN))
-    # Remove the obsolete legacy "admin" account. The current platform
-    # administrator is represented by the configured super_admin account.
-    cur.execute("DELETE FROM users WHERE lower(role)=lower(?)", ("admin",))
+    # IMPORTANT: Database initialization must be additive only.
+    # Never delete user accounts during application startup or deployment.
+    # Legacy/duplicate accounts must be handled explicitly from an authenticated
+    # management action, never as a side effect of a code deployment.
     con.commit(); con.close()
 def init_extended_db():
     con = get_db(); cur = con.cursor()
