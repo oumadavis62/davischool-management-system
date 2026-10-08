@@ -8925,24 +8925,24 @@ def roles_page(request: Request, role_filter: str = "", permission_category: str
     ]
 
     # The first School Admin/Registrar to access this page becomes the controller.
-    # Give that controller a complete set of enabled access features immediately.
+    # On that first access only, give the controller every access feature enabled
+    # by default. Later visits do not overwrite any permission choices.
     if controller_role in ("school_admin","registrar"):
-        for permission in allowed_permissions:
-            existing=cur.execute(
-                "SELECT id FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
-                (sid,controller_role,permission)
-            ).fetchone()
-            if existing:
-                cur.execute("UPDATE roles_permissions SET enabled=1 WHERE id=? AND school_id=?",
-                            (existing["id"],sid))
-            else:
-                cur.execute("INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,1)",
-                            (sid,controller_role,permission))
-        try:
-            con.commit()
-        except Exception:
-            try: con.rollback()
-            except Exception: pass
+        configured_count=cur.execute(
+            "SELECT COUNT(*) AS c FROM roles_permissions WHERE school_id=? AND role=?",
+            (sid,controller_role)
+        ).fetchone()
+        if not configured_count or int(configured_count["c"] or 0)==0:
+            for permission in allowed_permissions:
+                cur.execute(
+                    "INSERT INTO roles_permissions(school_id,role,permission,enabled) VALUES(?,?,?,1)",
+                    (sid,controller_role,permission)
+                )
+            try:
+                con.commit()
+            except Exception:
+                try: con.rollback()
+                except Exception: pass
 
     if role not in ("school_admin","registrar") and not _require_permission(request,sid,"settings.manage"):
         con.close()
