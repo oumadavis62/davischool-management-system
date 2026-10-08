@@ -625,12 +625,15 @@ else setupDaviActionCells();
       var currentIsDetail=currentPath!==currentRoot;
       var targetIsDetail=targetPath!==targetRoot;
 
-      // Root/workspace -> detail is the one intentional push. The browser
-      // Back button will therefore return to the exact root/filter display.
+      // Main -> filtered/detail must create an explicit unfiltered copy.
+      // This guarantees Back #1 = unfiltered display and Back #2 = parent page.
       if(!currentIsDetail && targetIsDetail){{
+        event.preventDefault();
         try{{
           sessionStorage.setItem('davischool-two-step-origin:'+currentRoot,window.location.href);
         }}catch(e){{}}
+        history.pushState({{daviHistoryStep:'unfiltered',daviWorkspace:currentRoot}},'',window.location.href);
+        window.location.href=target.toString();
         return;
       }}
 
@@ -746,6 +749,8 @@ document.addEventListener('submit',function(event){{
     event.preventDefault();
     if(!started){{
       try{{sessionStorage.setItem(pathKey,'1');}}catch(e){{}}
+      // Preserve the unfiltered display as an explicit history step.
+      history.pushState({{daviHistoryStep:'unfiltered',daviWorkspace:window.location.pathname}},'',window.location.href);
       window.location.href=url.toString();
     }}else{{
       window.location.replace(url.toString());
