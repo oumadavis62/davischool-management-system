@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Form
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse, FileResponse
 from html import escape
 from urllib.parse import quote
@@ -22,6 +23,8 @@ from cryptography.fernet import Fernet, InvalidToken
 BUILD_COMMIT = "students-save-role-fix-2026-10-04"
 
 app = FastAPI()
+# Compress larger responses to reduce transfer time on mobile connections.
+app.add_middleware(GZipMiddleware, minimum_size=700)
 
 # Render/Uvicorn must be able to bind the HTTP port even when PostgreSQL
 # migrations take time. Database initialization therefore runs in a background
