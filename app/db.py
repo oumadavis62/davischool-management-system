@@ -212,23 +212,39 @@ def _verify_database_persistence(conn, database_url: str) -> None:
             cur.close()
 
 
+def _pool_size(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read safe connection-pool sizing from the hosting environment."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
 def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
-    """Return one process-local PostgreSQL connection pool."""
+    """Return one process-local PostgreSQL connection pool.
+
+    Keep a few connections warm for quick page loads and allow additional
+    concurrent requests to obtain a connection without queuing behind a
+    small fixed pool. The limits are configurable for hosts with tighter
+    database connection quotas.
+    """
     key = database_url.strip()
-    pool = _pools.get(key)
-    if pool is None:
-        pool = ConnectionPool(
-            conninfo=key,
-            # Keep two PostgreSQL connections warm so the first page request
-            # does not have to wait for a brand-new database connection.
-            min_size=2,
-            max_size=10,
-            timeout=connect_timeout,
-            max_idle=300,
-            kwargs={"row_factory": _row_factory, "connect_timeout": connect_timeout},
-            open=True,
-        )
-        _pools[key] = pool
+    with _database_guard_lock:
+        pool = _pools.get(key)
+        if pool is None:
+            min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 2, 1, 5)
+            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 15, min_size, 30)
+            pool = ConnectionPool(
+                conninfo=key,
+                min_size=min_size,
+                max_size=max_size,
+                timeout=connect_timeout,
+                max_idle=300,
+                kwargs={"row_factory": _row_factory, "connect_timeout": connect_timeout},
+                open=True,
+            )
+            _pools[key] = pool
     return pool
 
 
