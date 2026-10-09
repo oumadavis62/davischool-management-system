@@ -5090,7 +5090,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     lock_action = ""
     if locked:
         if role in ("school_admin","registrar"):
-            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form> <a class='btnlink' href='/app/academics/marks-corrections'>Correction Requests</a>"%(eid,cid,subid)
+            mark_actions = "<form method='post' action='/app/academics/marks/unfinalize" + tab_q + "' style='display:inline'><input type='hidden' name='exam_id' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><button class='btn' type='submit'>🔓 Reopen Marks</button></form>"%(eid,cid,subid)
         elif role == "teacher":
             # Once the School Admin finalizes these marks, the teacher side is
             # strictly read-only. Correction workflow is intentionally disabled
