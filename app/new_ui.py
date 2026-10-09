@@ -544,7 +544,7 @@ else setupDaviActionCells();
     }}
   }}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initSidebar);else initSidebar();
-}})();</script>{"function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});" if teacher_locked else ""}<script>(function(){{
+}})();</script>{"<script>function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});</script>" if teacher_locked else ""}<script>(function(){{
   // Warm the exact browser Back destinations in the HTTP cache while the
   // current page is being viewed. This keeps the existing two-step history
   // rule intact but makes Back return much faster.
