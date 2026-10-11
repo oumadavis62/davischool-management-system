@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 import os
 import threading
+import atexit
 import psycopg
 from psycopg_pool import ConnectionPool
 
@@ -313,6 +314,28 @@ class CompatConnection:
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
+
+def close_pools() -> None:
+    """Close process-local PostgreSQL pools before interpreter finalization."""
+    with _database_guard_lock:
+        pools = list(_pools.values())
+        _pools.clear()
+    for pool in pools:
+        try:
+            # Explicit close stops the pool's worker threads while Python can
+            # still join them, avoiding ConnectionPool.__del__ at finalization.
+            pool.close(timeout=5.0)
+        except TypeError:
+            try:
+                pool.close()
+            except Exception as exc:
+                print("DAVISCHOOL_DB_POOL_CLOSE_WARNING:", repr(exc), flush=True)
+        except Exception as exc:
+            print("DAVISCHOOL_DB_POOL_CLOSE_WARNING:", repr(exc), flush=True)
+
+
+atexit.register(close_pools)
+
 
 def connect(database_url: str, **kwargs) -> CompatConnection:
     return CompatConnection(database_url, **kwargs)
