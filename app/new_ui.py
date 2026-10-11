@@ -6975,6 +6975,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         grading_rules = _load_grading_rules(cur,sid)
         overall_rules = _load_overall_grading_rules(cur,sid)
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        bulk_results = _bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
         exam_names = ", ".join(str(e["name"] or "") for e in exams if int(e["id"]) in set(selected_exam_ids))
         styles = _pdf_styles()
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -6983,7 +6984,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         from reportlab.lib.units import mm
         story = []
         for index, st in enumerate(students):
-            result = _student_result_for_assessments(cur, sid, int(st["id"]), selected_exam_ids, grading_rules, overall_rules)
+            result = bulk_results.get(int(st["id"])) or {"details":[],"total":0.0,"average":0.0,"points":0.0,"overall_grade":"—","count":0}
             story += _pdf_school_header(school, styles, "Student Report Card",
                                         f"{st['name']} · Admission {st['admission_no'] or ''} · {exam_names}")
             story.append(Paragraph(f"Class: {escape(str(cls['name'] or ''))} {escape(str(cls['stream'] or ''))}", styles["normal"]))
@@ -7126,6 +7127,28 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         _ensure_report_card_fields(cur); _ensure_overall_grading_table(cur)
         grading_rules=_load_grading_rules(cur,sid)
         overall_rules=_load_overall_grading_rules(cur,sid)
+        # Batch selected marks and subject comments to avoid hundreds of database round trips.
+        bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
+        bulk_comment_map={}
+        student_ids=[int(x["id"]) for x in students]
+        if student_ids:
+            student_ph=",".join("?" for _ in student_ids)
+            exam_ph=",".join("?" for _ in selected_exam_ids)
+            try:
+                comment_rows=cur.execute(
+                    "SELECT student_id,exam_id,subject_id,comment FROM subject_performance_comments "
+                    "WHERE school_id=? AND student_id IN ("+student_ph+") AND exam_id IN ("+exam_ph+")",
+                    [sid]+student_ids+selected_exam_ids
+                ).fetchall()
+                for comment_row in comment_rows:
+                    key=(int(comment_row["student_id"]),int(comment_row["subject_id"]))
+                    value=str(comment_row["comment"] or "").strip()
+                    if value and key not in bulk_comment_map:
+                        bulk_comment_map[key]=value
+            except Exception as comment_exc:
+                print("DAVISCHOOL BULK REPORT COMMENT BATCH FALLBACK:",repr(comment_exc),flush=True)
+                try: con.rollback()
+                except Exception: pass
         class_teacher_name,principal_name=_report_signatories(cur,sid,cid)
         school_name=escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
         postal=escape("P.O. Box %s" % str(school["postal_address"] or "")) if school and "postal_address" in school.keys() and school["postal_address"] else ""
@@ -7150,7 +7173,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         footer_html="<div class='print-footer'><i>DaviSchool Management System</i> · Generated: %s</div>" % generated_at
         for st in students:
             try:
-                result=_student_result_for_assessments(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+                result=bulk_results.get(int(st["id"])) or {"details":[],"total":0.0,"average":0.0,"points":0.0,"overall_grade":"—","count":0}
             except Exception as exc:
                 import traceback
                 print("DAVISCHOOL BULK REPORT STUDENT RESULT ERROR: id=%s name=%s error=%r" %
@@ -7167,23 +7190,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
             details=[]
             ordered_details=sorted(result["details"], key=lambda x: (_report_card_subject_position(x[0]["name"]), str(x[0]["name"] or "").casefold()))
             for rr,mark,grade,points in ordered_details:
-                saved_comment=""
-                # Comments are stored per student + subject + assessment.
-                # Check every selected assessment so a saved comment is not
-                # missed merely because it belongs to a different selected exam.
-                for comment_exam_id in selected_exam_ids:
-                    try:
-                        sc=cur.execute("SELECT comment FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=? LIMIT 1",
-                                       (sid,st["id"],int(comment_exam_id),rr["subject_id"])).fetchone()
-                    except Exception as exc:
-                        print("DAVISCHOOL BULK REPORT SUBJECT COMMENT FALLBACK:", repr(exc), flush=True)
-                        try: cur.connection.rollback()
-                        except Exception: pass
-                        sc=None
-                    candidate=str(sc["comment"] or "").strip() if sc else ""
-                    if candidate:
-                        saved_comment=candidate
-                        break
+                saved_comment=bulk_comment_map.get((int(st["id"]),int(rr["subject_id"])),"")
                 # If a saved subject comment is missing, derive it from the same
                 # subject grading rule used for the displayed mark/grade.
                 if not saved_comment:
