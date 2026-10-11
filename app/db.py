@@ -233,8 +233,12 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
     with _database_guard_lock:
         pool = _pools.get(key)
         if pool is None:
-            min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 2, 1, 5)
-            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 15, min_size, 30)
+            # Supabase session-mode poolers commonly expose only 15 client
+            # connections to the whole project. This pool is per process, so
+            # a large per-process default can exhaust that shared limit when
+            # the host runs multiple workers or instances.
+            min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 1, 1, 2)
+            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 3, min_size, 5)
             pool = ConnectionPool(
                 conninfo=key,
                 min_size=min_size,
