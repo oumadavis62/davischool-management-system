@@ -598,13 +598,9 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       return;
     }}
     form.dataset.daviSubmitting='1';
-    var buttons=form.querySelectorAll('button[type="submit"],input[type="submit"],button:not([type])');
-    Array.prototype.forEach.call(buttons,function(button){{
-      if(button.disabled)return;
-      button.dataset.daviWasEnabled='1';
-      button.disabled=true;
-      button.setAttribute('aria-busy','true');
-    }});
+    // Do not disable submit controls before native submission: their name/value
+    // may be part of the action payload. The guard blocks only a second submit.
+    form.setAttribute('aria-busy','true');
   }},true);
   window.addEventListener('pageshow',function(){{
     document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
