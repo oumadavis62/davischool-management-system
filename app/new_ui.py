@@ -191,7 +191,7 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
             ok = True
             legacy = True
     if not ok:
-        return RedirectResponse("/?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
+        return RedirectResponse("/login?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
     if user["role"] == "school_admin":
         con = _db()
         try:
