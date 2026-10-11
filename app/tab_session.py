@@ -38,10 +38,24 @@ class DaviSchoolTabSessionMiddleware:
 
     @staticmethod
     def _tab_id(scope):
+        # Prefer the explicit query parameter. Some mobile browsers or form
+        # handlers can submit a POST without preserving the query string, so
+        # for same-tab form submissions fall back to the Referer URL's tab ID.
         query = scope.get("query_string", b"").decode("utf-8", "ignore")
         values = parse_qs(query, keep_blank_values=True).get(_TAB_PARAM, [])
         value = values[0] if values else ""
-        return value if _TAB_RE.fullmatch(value or "") else ""
+        if not _TAB_RE.fullmatch(value or ""):
+            value = ""
+            if scope.get("type") == "http" and scope.get("method", "GET").upper() == "POST":
+                headers = {k.lower(): v for k, v in scope.get("headers", [])}
+                referer = headers.get(b"referer", b"").decode("utf-8", "ignore")
+                if referer:
+                    referer_query = urlsplit(referer).query
+                    referer_values = parse_qs(referer_query, keep_blank_values=True).get(_TAB_PARAM, [])
+                    candidate = referer_values[0] if referer_values else ""
+                    if _TAB_RE.fullmatch(candidate or ""):
+                        value = candidate
+        return value
 
     @staticmethod
     def _cookie_name(tab_id):
