@@ -332,6 +332,32 @@ class DaviSchoolTabSessionMiddleware:
             (value.decode("latin-1", "ignore") for name, value in scope.get("headers", []) if name.lower() == b"cookie"),
             "",
         )
+
+        # Backward compatibility: sessions created before tab isolation used
+        # the ordinary "session" cookie. If a browser arrives with a ds_tab ID
+        # but has not yet received that tab's cookie, seed the selected tab
+        # cookie from the legacy cookie for this request. SessionMiddleware
+        # will then issue the tab-specific cookie on its next session write.
+        # Never overwrite an existing tab-specific cookie.
+        cookie_parts = [
+            part.strip() for part in cookie_header.split(";")
+            if part.strip() and "=" in part
+        ]
+        cookie_names = {part.split("=", 1)[0].strip() for part in cookie_parts}
+        if tab_id and session_cookie not in cookie_names and "session" in cookie_names:
+            legacy_cookie = next(
+                (part for part in cookie_parts if part.split("=", 1)[0].strip() == "session"),
+                None,
+            )
+            if legacy_cookie:
+                cookie_header = (cookie_header + "; " + session_cookie + "=" + legacy_cookie.split("=", 1)[1]).strip("; ")
+                scope["headers"] = [
+                    (name, cookie_header.encode("latin-1", "ignore") if name.lower() == b"cookie" else value)
+                    for name, value in scope.get("headers", [])
+                ]
+                if not any(name.lower() == b"cookie" for name, _ in scope.get("headers", [])):
+                    scope["headers"].append((b"cookie", cookie_header.encode("latin-1", "ignore")))
+
         selected_cookie_present = any(
             part.strip().split("=", 1)[0] == session_cookie
             for part in cookie_header.split(";")
