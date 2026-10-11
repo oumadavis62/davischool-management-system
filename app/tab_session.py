@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import secrets
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from starlette.datastructures import MutableHeaders
@@ -321,39 +320,6 @@ class DaviSchoolTabSessionMiddleware:
 
         tab_id = self._tab_id(scope)
 
-        # Establish the tab ID on the server before rendering an HTML page.
-        # Relying only on the injected browser script creates a race: the first
-        # login/form request may use the legacy "session" cookie, while later
-        # requests use a tab-specific cookie and appear logged out. Redirect
-        # browser document GETs to a URL with a stable ID before selecting the
-        # session cookie. Non-document requests and the controller script are
-        # left untouched.
-        if scope.get("type") == "http" and scope.get("method", "GET").upper() == "GET" and not tab_id:
-            headers_in = {k.lower(): v for k, v in scope.get("headers", [])}
-            accept = headers_in.get(b"accept", b"").decode("latin-1", "ignore").lower()
-            path = scope.get("path", "/")
-            excluded_paths = {
-                "/app/tab-session.js", "/healthz", "/robots.txt", "/sitemap.xml",
-                "/favicon.ico",
-            }
-            if "text/html" in accept and path not in excluded_paths and not path.startswith("/static/"):
-                new_id = secrets.token_hex(16)
-                query = scope.get("query_string", b"").decode("utf-8", "ignore")
-                params = parse_qs(query, keep_blank_values=True)
-                params[_TAB_PARAM] = [new_id]
-                new_query = urlencode(params, doseq=True)
-                location = path + ("?" + new_query if new_query else "")
-                await send({
-                    "type": "http.response.start",
-                    "status": 303,
-                    "headers": [
-                        (b"location", location.encode("utf-8")),
-                        (b"cache-control", b"no-store"),
-                        (b"content-length", b"0"),
-                    ],
-                })
-                await send({"type": "http.response.body", "body": b""})
-                return
         scope["davischool_tab_id"] = tab_id
 
         session_cookie = self._cookie_name(tab_id) if tab_id else "session"
