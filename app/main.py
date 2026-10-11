@@ -2441,6 +2441,63 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
 .grid-2{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}.grid-3{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.badge{{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:800}}.search{{max-width:280px}}
 @media(max-width:900px){{.kpis{{grid-template-columns:repeat(2,1fr)}}.grid-2,.grid-3{{grid-template-columns:1fr}}.mod{{padding:14px}}table{{display:block;overflow-x:auto;white-space:nowrap}}}}@media(max-width:600px){{.kpis{{grid-template-columns:1fr 1fr}}h1{{font-size:21px}}.search{{max-width:100%}}}}@media print{{@page{{size:A4;margin:8mm 10mm 12mm}}body{{background:#fff!important;color:#172033!important}}header,.side,.top,.no-print,.page-head,.mod>div:first-child{{}}.btn,.toolbar form,form,button{{display:none!important}}.mod{{padding:0!important;max-width:none!important}}.card{{border:0!important;box-shadow:none!important;border-radius:0!important}}th{{background:#0b3d91!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
 </style></head><body>{header}<div class='mod'><div class='page-head'><div><div class='eyebrow'>DaviSchool Management System</div><h1>{title}</h1><p>Manage, analyse and act on your school's data from one workspace.</p></div><div style='display:flex;gap:8px'><a class='btn secondary' href='/school/dashboard'>← Dashboard</a><a class='btn' href='/school/my-profile'>👤 Profile</a></div></div>{body}</div></div></div>
+<script>(function(){{
+  // Two-step Back behavior for legacy school and platform module pages:
+  // filtered display -> default display -> the page that opened this module.
+  var path=window.location.pathname;
+  var key='davischool-filter-started:'+path;
+  var pendingKey='davischool-filter-pending:'+path;
+  function filtered(url){{var u=url instanceof URL?url:new URL(url,window.location.href);return Array.from(u.searchParams.keys()).some(function(k){{return k!=='ds_tab';}});}}
+  function clean(url){{var u=new URL(url,window.location.href);var tab=u.searchParams.get('ds_tab');u.search='';if(tab!==null)u.searchParams.set('ds_tab',tab);return u.toString();}}
+  function read(keyName){{try{{return sessionStorage.getItem(keyName)==='1';}}catch(e){{return false;}}}}
+  function write(keyName,value){{try{{if(value)sessionStorage.setItem(keyName,'1');else sessionStorage.removeItem(keyName);}}catch(e){{}}}}
+  var started=read(key),pending=read(pendingKey),state=(history.state&&typeof history.state==='object')?history.state:{{}};
+  if(filtered(window.location.href)){{
+    var current=window.location.href;
+    if(pending||(!started&&state.daviHistoryStep!=='filtered')){{
+      history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:path}},'',clean(current));
+      history.pushState({{daviHistoryStep:'filtered',daviWorkspace:path}},'',current);
+    }}else history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:path}},'',current);
+    write(pendingKey,false);write(key,true);
+  }}else{{
+    history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:path}},'',window.location.href);
+    write(pendingKey,false);write(key,false);
+  }}
+  function eligible(url){{return url.origin===window.location.origin&&url.pathname===window.location.pathname;}}
+  document.addEventListener('submit',function(event){{
+    var form=event.target;
+    if(!form||String(form.method||'get').toLowerCase()!=='get'||form.hasAttribute('data-native-get')||form.hasAttribute('data-no-history-filter'))return;
+    try{{
+      var action=new URL(form.getAttribute('action')||window.location.href,window.location.href);
+      if(!eligible(action))return;
+      var params=new URLSearchParams();
+      new FormData(form).forEach(function(value,name){{params.append(name,value);}});
+      if(event.submitter&&event.submitter.name)params.append(event.submitter.name,event.submitter.value||'');
+      action.search=params.toString();
+      if(!action.search)return;
+      if(!read(key)){{
+        write(key,true);write(pendingKey,true);
+        return;
+      }}
+      event.preventDefault();
+      window.location.replace(action.toString());
+    }}catch(e){{}}
+  }},true);
+  document.addEventListener('click',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!link||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    try{{
+      var url=new URL(link.href,window.location.href);
+      if(!eligible(url)||!url.search||!filtered(url)||link.hasAttribute('data-native-get')||link.hasAttribute('data-no-history-filter'))return;
+      event.preventDefault();
+      if(!read(key)){{write(key,true);write(pendingKey,true);window.location.href=url.toString();}}
+      else window.location.replace(url.toString());
+    }}catch(e){{}}
+  }},true);
+  window.addEventListener('pageshow',function(){{
+    if(!filtered(window.location.href)){{write(key,false);write(pendingKey,false);}}
+  }});
+}})();</script>
 <script>(function(){{function initDaviSpeed(){{document.querySelectorAll('table').forEach(function(t){{if(t.parentNode&&t.parentNode.classList&&t.parentNode.classList.contains('ds-table-scroll'))return;var w=document.createElement('div');w.className='ds-table-scroll';w.style.overflowX='auto';w.style.maxWidth='100%';t.parentNode.insertBefore(w,t);w.appendChild(t);}});document.querySelectorAll('form').forEach(function(form){{if(form.dataset.dsSubmitGuard)return;form.dataset.dsSubmitGuard='1';form.addEventListener('submit',function(e){{if(form.dataset.dsSubmitting==='1'){{e.preventDefault();return;}}if(typeof form.checkValidity==='function'&&!form.checkValidity())return;form.dataset.dsSubmitting='1';var btn=e.submitter;if(btn&&btn.tagName==='BUTTON'){{btn.setAttribute('aria-busy','true');btn.classList.add('ds-processing');var label=(btn.textContent||'').trim();if(label&&!btn.dataset.dsOriginalLabel)btn.dataset.dsOriginalLabel=label;if(label&&!/processing|saving|loading/i.test(label))btn.textContent=label+'…';}}}});}});document.querySelectorAll('a[href]').forEach(function(a){{if(a.dataset.dsPrefetchBound)return;a.dataset.dsPrefetchBound='1';var timer=null;function prefetch(){{if(timer)return;var url;try{{url=new URL(a.href,location.href);}}catch(_){{return;}}if(url.origin!==location.origin||url.pathname==='/logout'||a.target==='_blank'||a.hasAttribute('download')||a.getAttribute('href').charAt(0)==='#')return;timer=setTimeout(function(){{var link=document.createElement('link');link.rel='prefetch';link.href=url.href;document.head.appendChild(link);}},90);}}a.addEventListener('pointerenter',prefetch,{{passive:true}});a.addEventListener('focus',prefetch);a.addEventListener('pointerleave',function(){{if(timer){{clearTimeout(timer);timer=null;}}}},{{passive:true}});}});}}function resetSubmissions(){{document.querySelectorAll('form[data-ds-submitting="1"]').forEach(function(form){{delete form.dataset.dsSubmitting;form.querySelectorAll('button[aria-busy="true"]').forEach(function(btn){{btn.removeAttribute('aria-busy');btn.classList.remove('ds-processing');if(btn.dataset.dsOriginalLabel)btn.textContent=btn.dataset.dsOriginalLabel;}});}});}}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initDaviSpeed,{{once:true}});else initDaviSpeed();window.addEventListener('pageshow',resetSubmissions);}})();document.querySelectorAll('input[type=search]').forEach(function(input){{input.addEventListener('input',function(){{var q=this.value.toLowerCase();var table=this.closest('.card')?.querySelector('table')||document.querySelector('table');if(!table)return;table.querySelectorAll('tr').forEach(function(r,i){{if(i===0)return;r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';}})}})}});</script><style>.ds-processing{{opacity:.8;cursor:progress!important}}a,button{{touch-action:manipulation}}</style></body></html>""")
 
 def sid(request):
