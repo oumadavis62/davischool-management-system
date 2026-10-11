@@ -815,9 +815,8 @@ document.addEventListener('submit',function(event){{
         // history becomes:
         //   Academics -> Marks Corrections (default) -> Marks Corrections (filtered)
         // so Back is guaranteed to take two steps.
-        history.pushState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterWorkspace:true}},'',window.location.href);
         try{{sessionStorage.setItem('davischool-filter-started:'+window.location.pathname,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
-        window.location.href=finalUrl;
+        window.location.replace(finalUrl);
       }}else{{
         // Already filtered: changing filters must not add another Back step.
         history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
@@ -859,7 +858,7 @@ document.addEventListener('submit',function(event){{
     event.preventDefault();
     if(!started){{
       try{{sessionStorage.setItem(pathKey,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
-      window.location.href=url.toString();
+      window.location.replace(url.toString());
     }}else{{
       window.location.replace(url.toString());
     }}
@@ -899,7 +898,7 @@ document.addEventListener('click',function(event){{
     event.preventDefault();
     if(!started){{
       try{{sessionStorage.setItem(key,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
-      window.location.href=url.toString();
+      window.location.replace(url.toString());
     }}else{{
       window.location.replace(url.toString());
     }}
