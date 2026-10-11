@@ -727,6 +727,11 @@ else setupDaviActionCells();
     }});
   }}catch(e){{}}
 }})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
+// Shared route classifier used by every filter-history handler in this page.
+function isSystemPath(path){{
+  path=String(path||'/').split('#')[0].replace(/\\/+$/,'')||'/';
+  return path==='/app'||path.indexOf('/app/')===0||path==='/school'||path.indexOf('/school/')===0||path==='/schools'||path.indexOf('/schools/')===0||path==='/super'||path.indexOf('/super/')===0||path==='/portal'||path.indexOf('/portal/')===0||path==='/dashboard'||path.indexOf('/dashboard/')===0||path==='/teacher'||path.indexOf('/teacher/')===0||path==='/student'||path.indexOf('/student/')===0||path==='/parent'||path.indexOf('/parent/')===0||path==='/account'||path.indexOf('/account/')===0;
+}}
 // Two-step browser history rule for the school workspace.
 (function(){{
   try{{
@@ -893,7 +898,7 @@ document.addEventListener('click',function(event){{
     }}catch(e){{}}
     event.preventDefault();
     if(!started){{
-      try{{sessionStorage.setItem(key,'1');}}catch(e){{}}
+      try{{sessionStorage.setItem(key,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
       window.location.href=url.toString();
     }}else{{
       window.location.replace(url.toString());
