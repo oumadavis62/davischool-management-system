@@ -1038,6 +1038,21 @@ def students_page(request: Request):
 
 @router.post("/app/students/add")
 def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
+    # Diagnose production-only login redirects without logging credentials or
+    # session-cookie contents. This distinguishes a missing tab ID from a
+    # session that exists but lacks the school-role fields.
+    try:
+        _diag_role = str(request.session.get("role", ""))
+        _diag_school_id = int(request.session.get("school_id") or 0)
+        print(
+            "DAVISCHOOL_STUDENT_SAVE_AUTH_DIAG "
+            f"email_present={'email' in request.session} "
+            f"role={_diag_role or 'missing'} "
+            f"school_id_present={bool(_diag_school_id)}",
+            flush=True,
+        )
+    except Exception as _diag_exc:
+        print("DAVISCHOOL_STUDENT_SAVE_AUTH_DIAG session_read_error=" + type(_diag_exc).__name__, flush=True)
     sid=_school_session(request)
     if not sid: return RedirectResponse("/",303)
     if not _require_permission(request, sid, "students.create"):
