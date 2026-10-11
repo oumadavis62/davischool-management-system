@@ -80,6 +80,84 @@ def _average_selected_assessments(cur, school_id, student_id, exam_ids, term="",
 
 
 @router.get("/", response_class=HTMLResponse)
+def davischool_public_homepage(request: Request):
+    """Public, indexable product homepage; authenticated users keep their normal dashboard flow."""
+    if request.session.get("email"):
+        return RedirectResponse("/app", status_code=303)
+    return HTMLResponse("""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DaviSchool Management System | School Operations Platform</title>
+<meta name="description" content="DaviSchool Management System helps schools manage students, teachers, academic assessments, marks, and school operations in one secure platform.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://davischool-management-system.onrender.com/">
+<meta name="theme-color" content="#08783f">
+<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#163525;background:#fff;line-height:1.6}.wrap{width:min(1120px,92%);margin:auto}.nav{height:78px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;font-size:20px;color:#07552f;text-decoration:none}.logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#08783f;color:#fff;font-size:27px;font-weight:900;box-shadow:0 5px 14px #08783f30}.nav-cta,.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:800;border-radius:11px;padding:11px 20px}.nav-cta{color:#08783f;border:1px solid #b9dfc7}.hero{padding:74px 0 82px;background:radial-gradient(ellipse at 85% 20%,#dff5e7 0,transparent 40%),linear-gradient(130deg,#f4fbf6,#fff 65%)}.hero-grid{display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:54px}.eyebrow{display:inline-block;padding:6px 12px;border-radius:999px;background:#e0f4e7;color:#086338;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.hero h1{font-size:clamp(36px,5vw,58px);line-height:1.08;letter-spacing:-.04em;margin:20px 0;color:#103b25}.hero h1 span{color:#0a8548}.hero p{font-size:18px;color:#52675a;max-width:610px;margin:0 0 28px}.actions{display:flex;flex-wrap:wrap;gap:12px}.btn-primary{background:#08783f;color:#fff;box-shadow:0 8px 20px #08783f26}.btn-secondary{color:#155d37;border:1px solid #c7e3d0;background:#fff}.visual{border:1px solid #d9eadf;background:#fff;border-radius:24px;padding:22px;box-shadow:0 24px 70px #12472a14;transform:rotate(1deg)}.visual-top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e9f0eb;padding-bottom:17px;margin-bottom:18px}.visual-title{font-weight:900;font-size:16px}.status{font-size:11px;font-weight:800;color:#08783f;background:#e5f6eb;border-radius:99px;padding:5px 9px}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.stat{border:1px solid #e5eee8;border-radius:14px;padding:16px;background:#fbfefc}.stat-icon{font-size:20px}.stat strong{display:block;font-size:15px;margin:8px 0 2px;color:#173d29}.stat small{font-size:12px;color:#708176}.visual-note{margin-top:13px;border-radius:12px;background:#f0faf3;padding:12px 14px;color:#37634a;font-size:12px}.section{padding:68px 0}.section h2{text-align:center;font-size:clamp(27px,3.4vw,38px);line-height:1.2;margin:0 0 12px;color:#123d27}.section-intro{text-align:center;color:#607267;max-width:650px;margin:0 auto 34px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.feature{padding:25px;border:1px solid #e1ece5;border-radius:17px;background:#fff}.feature-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:13px;background:#e8f7ed;font-size:23px}.feature h3{font-size:17px;margin:15px 0 7px;color:#17462d}.feature p{margin:0;color:#627468;font-size:14px}.trust{background:#f5fbf7}.trust-inner{max-width:850px;margin:auto;text-align:center}.trust-inner p{color:#5b7062;margin:0}.bottom-cta{padding:58px 20px;text-align:center;background:#07552f;color:#fff}.bottom-cta h2{color:#fff;margin:0 0 10px}.bottom-cta p{color:#d4eddd;margin:0 auto 23px;max-width:620px}.bottom-cta .btn{background:#fff;color:#07552f}.footer{padding:23px 0;color:#718277;font-size:12px}.footer-inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.footer a{color:#236b43;text-decoration:none}@media(max-width:760px){.nav{height:68px}.brand{font-size:17px}.hero{padding:47px 0 55px}.hero-grid{grid-template-columns:1fr;gap:34px}.hero p{font-size:16px}.visual{transform:none}.features{grid-template-columns:1fr}.section{padding:52px 0}.hero h1{font-size:41px}.nav-cta{padding:9px 13px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header class="wrap nav">
+<a class="brand" href="/" aria-label="DaviSchool home"><span class="logo">D</span><span>DaviSchool</span></a>
+<a class="nav-cta" href="/login">Sign In <span aria-hidden="true">&nbsp;→</span></a>
+</header>
+<main>
+<section class="hero">
+<div class="wrap hero-grid">
+<div>
+<span class="eyebrow">School management, made clearer</span>
+<h1>More focus on learning.<br><span>Less admin stress.</span></h1>
+<p>DaviSchool Management System brings everyday school operations into one organised platform — from student and teacher records to academic assessments, marks, and reports.</p>
+<div class="actions"><a class="btn btn-primary" href="/login">Sign In to DaviSchool&nbsp; →</a><a class="btn btn-secondary" href="#features">Explore features</a></div>
+</div>
+<div class="visual" aria-label="Illustration of school management features">
+<div class="visual-top"><span class="visual-title">School operations</span><span class="status">One organised platform</span></div>
+<div class="stats">
+<div class="stat"><span class="stat-icon" aria-hidden="true">🎓</span><strong>Student records</strong><small>Keep learner information organised</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📚</span><strong>Academic management</strong><small>Support classes and subjects</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📝</span><strong>Marks and assessments</strong><small>Record and review performance</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📊</span><strong>Reports</strong><small>Present academic progress clearly</small></div>
+</div>
+<div class="visual-note">Designed to bring key school workflows together while keeping authorised areas behind sign-in.</div>
+</div>
+</div>
+</section>
+<section class="section wrap" id="features">
+<h2>Tools for everyday school work</h2>
+<p class="section-intro">A single management platform to help school teams keep essential records and academic workflows in order.</p>
+<div class="features">
+<article class="feature"><div class="feature-icon" aria-hidden="true">👩‍🎓</div><h3>Student and staff records</h3><p>Manage student, teacher, and staff information in a central place for day-to-day school administration.</p></article>
+<article class="feature"><div class="feature-icon" aria-hidden="true">📘</div><h3>Academic workflows</h3><p>Organise classes, subjects, assessments, marks, and related academic tasks.</p></article>
+<article class="feature"><div class="feature-icon" aria-hidden="true">📄</div><h3>Performance reporting</h3><p>Prepare academic summaries and report cards to help communicate student progress.</p></article>
+</div>
+</section>
+<section class="section trust"><div class="wrap trust-inner"><h2>Built around secure access</h2><p>DaviSchool keeps its management workspace behind sign-in. This public page explains the platform; school records and administrative tools remain within the authenticated application.</p></div></section>
+<section class="bottom-cta"><h2>Ready to continue?</h2><p>Sign in to access your authorised DaviSchool workspace.</p><a class="btn" href="/login">Open DaviSchool Sign In&nbsp; →</a></section>
+</main>
+<footer class="footer"><div class="wrap footer-inner"><span>© DaviSchool Management System</span><span>School operations, organised.</span></div></footer>
+</body>
+</html>""")
+
+
+@router.get("/robots.txt", include_in_schema=False)
+def davischool_robots_txt():
+    return Response(
+        content="User-agent: *\\nAllow: /\\nDisallow: /app\\nDisallow: /logout\\nSitemap: https://davischool-management-system.onrender.com/sitemap.xml\\n",
+        media_type="text/plain",
+    )
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def davischool_sitemap_xml():
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?>\\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://davischool-management-system.onrender.com/</loc></url></urlset>',
+        media_type="application/xml",
+    )
+
+
+@router.get("/login", response_class=HTMLResponse)
 def davischool_login_page(request: Request):
     if request.session.get("email"):
         return RedirectResponse("/app", status_code=303)
@@ -88,7 +166,7 @@ def davischool_login_page(request: Request):
     error = "<div class='err'><span class='err-icon'>!</span><div><strong>Sign-in failed.</strong><br>Incorrect username or password. Please check your details and try again.</div></div>" if failed_login else ("<div class='err'><span class='err-icon'>!</span><div>This school account is suspended. Please contact the DaviSchool administrator.</div></div>" if suspended_login else "")
     saved_username = escape(request.query_params.get("username", ""), quote=True)
     login_focus = " autofocus" if failed_login else ""
-    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Login</title><style>*{{box-sizing:border-box}}html,body{{margin:0;width:100%;min-height:100%;height:auto;overscroll-behavior-y:none;overflow-y:auto;overflow-x:hidden}}body{{font-family:Arial,sans-serif;background:linear-gradient(135deg,#043b22 0%,#08783f 52%,#0b9a52 100%);display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pan-y}}.login-shell{{width:min(760px,92vw);max-height:calc(100dvh - 48px);display:grid;grid-template-columns:1fr 1fr;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 24px 70px rgba(2,55,31,.25)}}.brand-panel{{background:linear-gradient(145deg,#07552f,#0b7a42);color:#fff;padding:48px 42px;display:flex;flex-direction:column;justify-content:center;position:relative;min-height:520px;overflow:hidden}}.brand-panel:after{{content:'';position:absolute;width:230px;height:230px;border:1px solid rgba(255,255,255,.12);border-radius:50%;right:-75px;top:-65px}}.brand-icon{{width:68px;height:68px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 10px 24px rgba(0,0,0,.12)}}.davi-mark{{position:relative;width:42px;height:42px;border:6px solid #176B3A;border-left-width:8px;border-radius:8px 22px 22px 8px;background:#176B3A;overflow:hidden}}.davi-mark .d-letter{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:25px;line-height:1;font-weight:900;color:#fff;z-index:2}}.davi-mark:after{{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;background:#2E8B57;transform:skewX(-18deg);transform-origin:left bottom}}.brand-title{{font-size:31px;font-weight:900;line-height:1.15;margin-bottom:12px}}.brand-text{{font-size:15px;line-height:1.7;color:#d9f3e4;max-width:330px}}.brand-line{{width:58px;height:4px;border-radius:10px;background:#b9efcf;margin:22px 0}}.login-panel{{padding:48px 42px;display:flex;flex-direction:column;justify-content:center}}.login-title{{font-size:28px;font-weight:900;color:#123c27;margin:0 0 7px}}.sub{{color:#64766c;margin-bottom:28px;font-size:14px}}label{{display:block;font-size:13px;font-weight:800;color:#284637;margin:15px 0 7px}}input{{width:100%;padding:13px 14px;text-align:center;border:1px solid #cfe0d5;border-radius:11px;font-size:15px;background:#fbfefc;outline:none;transition:.18s}}input:focus{{border-color:#16834a;box-shadow:0 0 0 3px rgba(22,131,74,.12);background:#fff}}.password-wrap{{position:relative;width:100%}}.password-wrap input{{padding-right:64px}}.password-toggle{{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:auto!important;margin:0!important;padding:5px 7px!important;border:0!important;background:transparent!important;color:#176B3A!important;box-shadow:none!important;font-size:12px!important;font-weight:800!important;cursor:pointer}}.password-toggle:hover{{transform:translateY(-50%)!important;box-shadow:none!important}}button{{width:100%;margin-top:22px;padding:14px;border:0;border-radius:11px;background:linear-gradient(135deg,#07552f,#16834a);color:#fff;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 18px rgba(7,85,47,.22);transition:.18s}}button:hover{{transform:translateY(-1px);box-shadow:0 11px 22px rgba(7,85,47,.28)}}.err{{display:flex;gap:9px;align-items:flex-start;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;padding:11px;border-radius:10px;margin-bottom:15px;font-size:13px;line-height:1.4}}.err-icon{{width:20px;height:20px;min-width:20px;border-radius:50%;background:#dc2626;color:#fff;text-align:center;font-weight:900;line-height:20px}}@media(max-width:700px){{body{{height:auto;min-height:100dvh;align-items:flex-start;padding:16px 14px 24px;background:#f1faf4;overflow-y:auto;-webkit-overflow-scrolling:touch}}.login-shell{{display:block;width:100%;max-height:none;border-radius:20px}}.brand-panel{{min-height:auto;padding:30px 26px}}.brand-title{{font-size:25px}}.brand-text{{font-size:14px}}.login-panel{{padding:30px 26px 34px}}}}</style></head><body><main class='login-shell'><section class='brand-panel'><div class='brand-icon' aria-label='DaviSchool logo'><span class='davi-mark'></span></div><div class='brand-title'>DaviSchool<br>Management System</div><div class='brand-line'></div><div class='brand-text'>A modern school management platform for managing academics, students, teachers and school operations securely.</div></section><section class='login-panel'><h1 class='login-title'>Welcome back</h1><div class='sub'>Sign in to continue.</div>{error}<form method='post' action='/login'><label>Username</label><input name='email' type='text' value='{saved_username}' autocomplete='username' required><label>Password</label><div class='password-wrap'><input id='login-password' name='password' type='password' autocomplete='current-password' required{login_focus}><button type='button' class='password-toggle' aria-label='Show password' onclick="var i=document.getElementById('login-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Show':'Hide';this.setAttribute('aria-label',i.type==='password'?'Show password':'Hide password');i.focus();">Show</button></div><button type='submit'>Sign In</button></form></section></main></body></html>""")
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Sign In | DaviSchool Management System</title><meta name="robots" content="noindex,nofollow"><meta name="description" content="Sign in to your DaviSchool Management System account."><style>*{{box-sizing:border-box}}html,body{{margin:0;width:100%;min-height:100%;height:auto;overscroll-behavior-y:none;overflow-y:auto;overflow-x:hidden}}body{{font-family:Arial,sans-serif;background:linear-gradient(135deg,#043b22 0%,#08783f 52%,#0b9a52 100%);display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pan-y}}.login-shell{{width:min(760px,92vw);max-height:calc(100dvh - 48px);display:grid;grid-template-columns:1fr 1fr;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 24px 70px rgba(2,55,31,.25)}}.brand-panel{{background:linear-gradient(145deg,#07552f,#0b7a42);color:#fff;padding:48px 42px;display:flex;flex-direction:column;justify-content:center;position:relative;min-height:520px;overflow:hidden}}.brand-panel:after{{content:'';position:absolute;width:230px;height:230px;border:1px solid rgba(255,255,255,.12);border-radius:50%;right:-75px;top:-65px}}.brand-icon{{width:68px;height:68px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 10px 24px rgba(0,0,0,.12)}}.davi-mark{{position:relative;width:42px;height:42px;border:6px solid #176B3A;border-left-width:8px;border-radius:8px 22px 22px 8px;background:#176B3A;overflow:hidden}}.davi-mark .d-letter{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:25px;line-height:1;font-weight:900;color:#fff;z-index:2}}.davi-mark:after{{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;background:#2E8B57;transform:skewX(-18deg);transform-origin:left bottom}}.brand-title{{font-size:31px;font-weight:900;line-height:1.15;margin-bottom:12px}}.brand-text{{font-size:15px;line-height:1.7;color:#d9f3e4;max-width:330px}}.brand-line{{width:58px;height:4px;border-radius:10px;background:#b9efcf;margin:22px 0}}.login-panel{{padding:48px 42px;display:flex;flex-direction:column;justify-content:center}}.login-title{{font-size:28px;font-weight:900;color:#123c27;margin:0 0 7px}}.sub{{color:#64766c;margin-bottom:28px;font-size:14px}}label{{display:block;font-size:13px;font-weight:800;color:#284637;margin:15px 0 7px}}input{{width:100%;padding:13px 14px;text-align:center;border:1px solid #cfe0d5;border-radius:11px;font-size:15px;background:#fbfefc;outline:none;transition:.18s}}input:focus{{border-color:#16834a;box-shadow:0 0 0 3px rgba(22,131,74,.12);background:#fff}}.password-wrap{{position:relative;width:100%}}.password-wrap input{{padding-right:64px}}.password-toggle{{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:auto!important;margin:0!important;padding:5px 7px!important;border:0!important;background:transparent!important;color:#176B3A!important;box-shadow:none!important;font-size:12px!important;font-weight:800!important;cursor:pointer}}.password-toggle:hover{{transform:translateY(-50%)!important;box-shadow:none!important}}button{{width:100%;margin-top:22px;padding:14px;border:0;border-radius:11px;background:linear-gradient(135deg,#07552f,#16834a);color:#fff;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 18px rgba(7,85,47,.22);transition:.18s}}button:hover{{transform:translateY(-1px);box-shadow:0 11px 22px rgba(7,85,47,.28)}}.err{{display:flex;gap:9px;align-items:flex-start;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;padding:11px;border-radius:10px;margin-bottom:15px;font-size:13px;line-height:1.4}}.err-icon{{width:20px;height:20px;min-width:20px;border-radius:50%;background:#dc2626;color:#fff;text-align:center;font-weight:900;line-height:20px}}@media(max-width:700px){{body{{height:auto;min-height:100dvh;align-items:flex-start;padding:16px 14px 24px;background:#f1faf4;overflow-y:auto;-webkit-overflow-scrolling:touch}}.login-shell{{display:block;width:100%;max-height:none;border-radius:20px}}.brand-panel{{min-height:auto;padding:30px 26px}}.brand-title{{font-size:25px}}.brand-text{{font-size:14px}}.login-panel{{padding:30px 26px 34px}}}}</style></head><body><main class='login-shell'><section class='brand-panel'><div class='brand-icon' aria-label='DaviSchool logo'><span class='davi-mark'></span></div><div class='brand-title'>DaviSchool<br>Management System</div><div class='brand-line'></div><div class='brand-text'>A modern school management platform for managing academics, students, teachers and school operations securely.</div></section><section class='login-panel'><h1 class='login-title'>Welcome back</h1><div class='sub'>Sign in to continue.</div>{error}<form method='post' action='/login'><label>Username</label><input name='email' type='text' value='{saved_username}' autocomplete='username' required><label>Password</label><div class='password-wrap'><input id='login-password' name='password' type='password' autocomplete='current-password' required{login_focus}><button type='button' class='password-toggle' aria-label='Show password' onclick="var i=document.getElementById('login-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Show':'Hide';this.setAttribute('aria-label',i.type==='password'?'Show password':'Hide password');i.focus();">Show</button></div><button type='submit'>Sign In</button></form></section></main></body></html>""")
 
 @router.post("/login")
 def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
@@ -101,7 +179,7 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     finally:
         con.close()
     if not user:
-        return RedirectResponse("/?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
+        return RedirectResponse("/login?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
     ok, legacy = verify_password(password, user["password"] or "")
     # Generated teacher accounts keep the initial password in temporary_password.
     # Accept that credential as a safe fallback and immediately replace the
@@ -122,7 +200,7 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
             con.close()
         status = str(school["status"] or "active").strip().lower() if school else "suspended"
         if status not in ("active", "enabled"):
-            return RedirectResponse("/?suspended=1", status_code=303)
+            return RedirectResponse("/login?suspended=1", status_code=303)
     request.session["email"] = user["email"]
     request.session["role"] = user["role"]
     request.session["school_id"] = user["school_id"]
