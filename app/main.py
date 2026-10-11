@@ -2475,12 +2475,11 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
       if(event.submitter&&event.submitter.name)params.append(event.submitter.name,event.submitter.value||'');
       action.search=params.toString();
       if(!action.search)return;
+      event.preventDefault();
       if(!read(key)){{
         write(key,true);write(pendingKey,true);
-        return;
-      }}
-      event.preventDefault();
-      window.location.replace(action.toString());
+        window.location.replace(action.toString());
+      }}else window.location.replace(action.toString());
     }}catch(e){{}}
   }},true);
   document.addEventListener('click',function(event){{
@@ -2490,7 +2489,7 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
       var url=new URL(link.href,window.location.href);
       if(!eligible(url)||!url.search||!filtered(url)||link.hasAttribute('data-native-get')||link.hasAttribute('data-no-history-filter'))return;
       event.preventDefault();
-      if(!read(key)){{write(key,true);write(pendingKey,true);window.location.href=url.toString();}}
+      if(!read(key)){{write(key,true);write(pendingKey,true);window.location.replace(url.toString());}}
       else window.location.replace(url.toString());
     }}catch(e){{}}
   }},true);
