@@ -1007,6 +1007,13 @@ def students_page(request: Request):
     if not sid: return RedirectResponse("/")
     if not _require_permission(request, sid, "students.view"):
         return HTMLResponse("You do not have permission to view students.", 403)
+    # Keep the active browser-tab session on the student-create POST URL.
+    # Middleware chooses the authentication cookie from the ds_tab query value;
+    # a JavaScript-only injection can fail and fall back to the generic cookie.
+    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
+        tab_id = ""
+    tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
     students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
@@ -1019,7 +1026,7 @@ def students_page(request: Request):
       <td><a class='action' href='/app/students/edit/{s["id"]}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}'>History</a></td></tr>""" for s in students)
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     body=f"""<div class='page'><h1>Students</h1><div class='muted'>Student register, admissions, transfers and academic-history management.</div>
-<div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add{tab_q}' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
 <input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
 <select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
 <button class='btn'>Save Student</button></form></div>
