@@ -605,11 +605,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
   window.addEventListener('pageshow',function(){{
     document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
       delete form.dataset.daviSubmitting;
-    }});
-    document.querySelectorAll('[data-davi-was-enabled="1"]').forEach(function(button){{
-      button.disabled=false;
-      button.removeAttribute('aria-busy');
-      delete button.dataset.daviWasEnabled;
+      form.removeAttribute('aria-busy');
     }});
   }});
 }})();
