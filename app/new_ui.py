@@ -12,6 +12,14 @@ from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
+# Google Search Console HTML-file ownership verification.
+@router.get("/google0dd64183cf2d3d1b.html", include_in_schema=False)
+def google_search_console_verification():
+    return Response(
+        content="google-site-verification: google0dd64183cf2d3d1b.html",
+        media_type="text/html",
+    )
+
 _USER_ACCOUNT_COLUMNS_READY = False
 
 def _pdf_route_error(request, route_name, exc):
