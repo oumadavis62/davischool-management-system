@@ -144,7 +144,7 @@ def davischool_public_homepage(request: Request):
 @router.get("/robots.txt", include_in_schema=False)
 def davischool_robots_txt():
     return Response(
-        content="User-agent: *\\nAllow: /\\nDisallow: /app\\nDisallow: /logout\\nSitemap: https://davischool-management-system.onrender.com/sitemap.xml\\n",
+        content="User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /logout\nSitemap: https://davischool-management-system.onrender.com/sitemap.xml\n",
         media_type="text/plain",
     )
 
@@ -152,7 +152,7 @@ def davischool_robots_txt():
 @router.get("/sitemap.xml", include_in_schema=False)
 def davischool_sitemap_xml():
     return Response(
-        content='<?xml version="1.0" encoding="UTF-8"?>\\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://davischool-management-system.onrender.com/</loc></url></urlset>',
+        content='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://davischool-management-system.onrender.com/</loc></url></urlset>',
         media_type="application/xml",
     )
 
