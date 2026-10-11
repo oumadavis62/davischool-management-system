@@ -6998,7 +6998,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
             story.append(Paragraph(
                 f"Subjects: {result.get('count',0)} · Total: {float(result.get('total',0)):.1f} · Average: {float(result.get('average',0)):.1f}% · Points: {float(result.get('points',0)):.1f} · Overall Grade: {escape(str(result.get('overall_grade','—')))}",
                 styles["normal"]))
-            trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            trend=_report_card_selected_exam_trend(cur,sid,int(st["id"]),selected_exam_ids)
             _report_card_line_graph(story,trend,styles)
             if index < len(students)-1:
                 story.append(PageBreak())
@@ -7009,6 +7009,20 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
     finally:
         con.close()
 
+
+def _report_card_selected_exam_trend(cur, school_id, student_id, selected_exam_ids):
+    """Fast trend for bulk report cards: aggregate only selected exams in one query."""
+    ids=_parse_assessment_ids(",".join(str(x) for x in (selected_exam_ids or [])))
+    if not ids:
+        return []
+    rows=cur.execute(
+        "SELECT e.id,e.name,AVG(m.marks) average FROM exams e "
+        "JOIN marks m ON m.exam_id=e.id AND m.school_id=? AND m.student_id=? "
+        "WHERE e.school_id=? AND e.id IN (%s) AND m.marks IS NOT NULL "
+        "GROUP BY e.id,e.name ORDER BY e.id ASC" % ",".join("?" for _ in ids),
+        [school_id,student_id,school_id]+ids
+    ).fetchall()
+    return [(str(r["name"] or "Assessment"),max(0.0,min(100.0,float(r["average"] or 0))),int(r["id"])) for r in rows]
 
 def _report_card_exam_trend(cur, school_id, student_id, selected_exam_ids, grading_rules=None, overall_rules=None):
     """Return chronological exam means using the same result engine as report cards."""
@@ -7182,7 +7196,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
                         saved_comment = ""
                 details.append("<tr><td>%s</td><td>%.1f</td><td>%s</td><td>%.1f</td><td>%s</td></tr>" %
                                (escape(str(rr["name"])),float(mark),escape(str(grade)),float(points),escape(str(saved_comment))))
-            trend=_report_card_exam_trend(cur,sid,int(st["id"]),selected_exam_ids,grading_rules,overall_rules)
+            trend=_report_card_selected_exam_trend(cur,sid,int(st["id"]),selected_exam_ids)
             trend_html=_report_card_line_graph_html(trend)
             try:
                 grade_rule=cur.execute("SELECT class_teacher_comment,principal_comment FROM overall_grading_rules WHERE school_id=? AND grade=? ORDER BY id DESC LIMIT 1",
