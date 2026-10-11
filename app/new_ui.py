@@ -7246,7 +7246,11 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     cid=int(class_id) if class_id.isdigit() else 0
-    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
+    # HTML checkbox groups submit one repeated exam_ids query parameter per
+    # selected examination. FastAPI's scalar str argument can expose only one
+    # value, so read the full query list and also support comma-separated links.
+    submitted_exam_ids = request.query_params.getlist("exam_ids")
+    selected_exam_ids=_parse_assessment_ids(",".join(submitted_exam_ids) or exam_ids, exam_id)
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
