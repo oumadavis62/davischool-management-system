@@ -552,6 +552,71 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 @media(max-width:600px){{.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
 </style></head><body class='{"sidebar-hidden" if teacher_locked else ""}{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button>"}<div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+// Shared workspace performance helpers: warm likely navigation targets on intent,
+// and prevent accidental double-submits without changing form payloads or routes.
+(function(){{
+  var warmed=Object.create(null);
+  function eligible(link){{
+    if(!link || !link.href || link.target==='_blank' || link.hasAttribute('download'))return false;
+    var raw=link.getAttribute('href')||'';
+    if(!raw || raw.charAt(0)==='#' || /^javascript:/i.test(raw))return false;
+    try{{
+      var u=new URL(link.href,window.location.href);
+      if(u.origin!==window.location.origin || (u.protocol!=='http:'&&u.protocol!=='https:'))return false;
+      if(/\/(logout|login)(\/|$)/i.test(u.pathname))return false;
+      if(/\.(pdf|csv|xlsx?|zip)(?:$)/i.test(u.pathname))return false;
+      if(u.search && u.searchParams.has('download'))return false;
+      return true;
+    }}catch(e){{return false;}}
+  }}
+  function warm(link){{
+    if(!eligible(link))return;
+    var url=link.href;
+    if(warmed[url])return;
+    warmed[url]=true;
+    try{{
+      var hint=document.createElement('link');
+      hint.rel='prefetch';hint.href=url;hint.as='document';
+      document.head.appendChild(hint);
+    }}catch(e){{}}
+  }}
+  document.addEventListener('pointerover',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(link && (!event.relatedTarget || !link.contains(event.relatedTarget)))warm(link);
+  }},{{passive:true}});
+  document.addEventListener('focusin',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(link)warm(link);
+  }});
+  document.addEventListener('submit',function(event){{
+    var form=event.target;
+    if(!form || !form.tagName || form.tagName.toLowerCase()!=='form')return;
+    if(form.matches('.marks-filter-form,[data-allow-repeat-submit="true"]'))return;
+    if(form.dataset.daviSubmitting==='1'){{
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }}
+    form.dataset.daviSubmitting='1';
+    var buttons=form.querySelectorAll('button[type="submit"],input[type="submit"],button:not([type])');
+    Array.prototype.forEach.call(buttons,function(button){{
+      if(button.disabled)return;
+      button.dataset.daviWasEnabled='1';
+      button.disabled=true;
+      button.setAttribute('aria-busy','true');
+    }});
+  }},true);
+  window.addEventListener('pageshow',function(){{
+    document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
+      delete form.dataset.daviSubmitting;
+    }});
+    document.querySelectorAll('[data-davi-was-enabled="1"]').forEach(function(button){{
+      button.disabled=false;
+      button.removeAttribute('aria-busy');
+      delete button.dataset.daviWasEnabled;
+    }});
+  }});
+}})();
 window.selectCorrectionSubject=function(row,event){{
   if(!row)return;
   if(event&&event.target&&event.target.closest&&event.target.closest('a,button,input,select,textarea,form'))return;
