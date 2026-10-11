@@ -750,7 +750,7 @@ function isSystemPath(path){{
     if(isSystemPath(window.location.pathname) && isFiltered(window.location.href)){{
       var currentUrl=window.location.href;
       if(filterPending || (!filterStarted && (state.daviHistoryStep!=='filtered' || state.daviWorkspace!==root))){{
-        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',unfilteredUrl(currentUrl));
+        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root,daviFilterDefault:true}},'',unfilteredUrl(currentUrl));
         history.pushState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
       }}else{{
         history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
@@ -867,12 +867,20 @@ document.addEventListener('submit',function(event){{
 
 // When the user returns with Back, the next filter cycle must start from the
 // unfiltered page again. Clear filter-history markers for the current page.
-window.addEventListener('popstate',function(){{
+window.addEventListener('popstate',function(event){{
   try{{
     sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-filter-pending:'+window.location.pathname);
     sessionStorage.removeItem('davischool-post-filter:'+window.location.pathname);
     sessionStorage.removeItem('davischool-marksheet-filter-started');
   }}catch(e){{}}
+  // pushState entries share the rendered document. Reload when Back reaches the
+  // synthetic default entry so the server renders the genuinely unfiltered data.
+  if(event && event.state && event.state.daviFilterDefault){{
+    var hasFilter=false;
+    try{{new URL(window.location.href).searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasFilter=true;}});}}catch(e){{}}
+    if(!hasFilter)window.location.reload();
+  }}
 }});
 // Query-string links on the same page are treated as filter/display changes.
 // The first such link preserves the unfiltered page; subsequent changes replace
