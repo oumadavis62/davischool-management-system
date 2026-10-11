@@ -322,6 +322,35 @@ class DaviSchoolTabSessionMiddleware:
         scope["davischool_tab_id"] = tab_id
 
         session_cookie = self._cookie_name(tab_id) if tab_id else "session"
+        is_student_save = (
+            scope.get("type") == "http"
+            and scope.get("method", "GET").upper() == "POST"
+            and scope.get("path") == "/app/students/add"
+        )
+        cookie_header = next(
+            (value.decode("latin-1", "ignore") for name, value in scope.get("headers", []) if name.lower() == b"cookie"),
+            "",
+        )
+        selected_cookie_present = any(
+            part.strip().split("=", 1)[0] == session_cookie
+            for part in cookie_header.split(";")
+            if "=" in part
+        )
+        if is_student_save:
+            query = scope.get("query_string", b"").decode("utf-8", "ignore")
+            referer = next(
+                (value.decode("utf-8", "ignore") for name, value in scope.get("headers", []) if name.lower() == b"referer"),
+                "",
+            )
+            print(
+                "DAVISCHOOL_STUDENT_SAVE_SESSION_DIAG "
+                f"tab_id_present={bool(tab_id)} "
+                f"query_has_tab={_TAB_PARAM + '=' in query} "
+                f"referer_has_tab={_TAB_PARAM + '=' in referer} "
+                f"selected_cookie_present={selected_cookie_present}",
+                flush=True,
+            )
+
         session_app = SessionMiddleware(
             self.app,
             secret_key=self.secret_key,
@@ -361,6 +390,13 @@ class DaviSchoolTabSessionMiddleware:
         async def capture_send(message):
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
+                if is_student_save:
+                    print(
+                        "DAVISCHOOL_STUDENT_SAVE_RESPONSE_DIAG "
+                        f"status={message.get('status')} "
+                        f"redirect_to_home={urlsplit(headers.get('location') or '').path == '/'}",
+                        flush=True,
+                    )
                 content_type = (headers.get("content-type") or "").lower()
                 html_response["value"] = "text/html" in content_type
                 location = headers.get("location")
