@@ -735,14 +735,25 @@ else setupDaviActionCells();
     function workspace(path){{path=cleanPath(path);var best='/';WORKSPACES.forEach(function(root){{if(path===root || (root!=='/app' && path.indexOf(root+'/')===0) || (root==='/app' && path.indexOf('/app/')===0)){{if(root.length>best.length)best=root;}}}});return best;}}
     function isFiltered(url){{var u=url instanceof URL?url:new URL(url,window.location.href);return Array.from(u.searchParams.keys()).some(function(k){{return k!=='ds_tab';}});}}
     function unfilteredUrl(url){{var u=new URL(url,window.location.href);var keep=u.searchParams.get('ds_tab');u.search='';if(keep!==null)u.searchParams.set('ds_tab',keep);return u.toString();}}
+    function isSystemPath(path){{path=cleanPath(path);return path==='/app'||path.indexOf('/app/')===0||path==='/school'||path.indexOf('/school/')===0||path==='/schools'||path.indexOf('/schools/')===0||path==='/super'||path.indexOf('/super/')===0||path==='/portal'||path.indexOf('/portal/')===0||path==='/dashboard'||path.indexOf('/dashboard/')===0||path==='/teacher'||path.indexOf('/teacher/')===0||path==='/student'||path.indexOf('/student/')===0||path==='/parent'||path.indexOf('/parent/')===0||path==='/account'||path.indexOf('/account/')===0;}}
     var root=workspace(window.location.pathname);
-    if(root!=='/' && isFiltered(window.location.href)){{
+    var filterPathKey='davischool-filter-started:'+cleanPath(window.location.pathname);
+    var filterPendingKey='davischool-filter-pending:'+cleanPath(window.location.pathname);
+    var state=(history.state && typeof history.state==='object')?history.state:{{}};
+    var filterStarted=false,filterPending=false;
+    try{{filterStarted=sessionStorage.getItem(filterPathKey)==='1';filterPending=sessionStorage.getItem(filterPendingKey)==='1';}}catch(e){{}}
+    if(isSystemPath(window.location.pathname) && isFiltered(window.location.href)){{
       var currentUrl=window.location.href;
-      var state=(history.state && typeof history.state==='object')?history.state:{{}};
-      if(state.daviHistoryStep!=='filtered' || state.daviWorkspace!==root){{history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',unfilteredUrl(currentUrl));history.pushState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);}}
-    }}else if(root!=='/' && cleanPath(window.location.pathname)===root){{
-      var state=(history.state && typeof history.state==='object')?history.state:{{}};
+      if(filterPending || (!filterStarted && (state.daviHistoryStep!=='filtered' || state.daviWorkspace!==root))){{
+        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',unfilteredUrl(currentUrl));
+        history.pushState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
+      }}else{{
+        history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
+      }}
+      try{{sessionStorage.removeItem(filterPendingKey);sessionStorage.setItem(filterPathKey,'1');}}catch(e){{}}
+    }}else if(isSystemPath(window.location.pathname)){{
       if(state.daviHistoryStep!=='workspace' || state.daviWorkspace!==root){{history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',window.location.href);}}
+      try{{sessionStorage.removeItem(filterPendingKey);sessionStorage.removeItem(filterPathKey);}}catch(e){{}}
     }}
     document.addEventListener('click',function(event){{
       var link=event.target.closest?event.target.closest('a'):null;
@@ -800,10 +811,12 @@ document.addEventListener('submit',function(event){{
         //   Academics -> Marks Corrections (default) -> Marks Corrections (filtered)
         // so Back is guaranteed to take two steps.
         history.pushState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterWorkspace:true}},'',window.location.href);
+        try{{sessionStorage.setItem('davischool-filter-started:'+window.location.pathname,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
         window.location.href=finalUrl;
       }}else{{
         // Already filtered: changing filters must not add another Back step.
-        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
+        history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
+        try{{sessionStorage.setItem('davischool-filter-started:'+window.location.pathname,'1');sessionStorage.removeItem('davischool-filter-pending:'+window.location.pathname);}}catch(e){{}}
         window.location.reload();
       }}
     }}).catch(function(){{form.submit();}});
@@ -823,8 +836,8 @@ document.addEventListener('submit',function(event){{
   try{{
     var action=form.getAttribute('action') || window.location.href;
     var url=new URL(action,window.location.href);
-    if(url.origin!==window.location.origin){{form.submit();return;}}
-    if(url.pathname.indexOf('/app')!==0){{form.submit();return;}}
+    if(url.origin!==window.location.origin || !isSystemPath(url.pathname)){{form.submit();return;}}
+    if(url.pathname!==window.location.pathname){{form.submit();return;}}
     var data=new FormData(form);
     var params=new URLSearchParams();
     data.forEach(function(value,key){{params.append(key,value);}});
@@ -840,7 +853,7 @@ document.addEventListener('submit',function(event){{
     }}catch(e){{}}
     event.preventDefault();
     if(!started){{
-      try{{sessionStorage.setItem(pathKey,'1');}}catch(e){{}}
+      try{{sessionStorage.setItem(pathKey,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
       window.location.href=url.toString();
     }}else{{
       window.location.replace(url.toString());
