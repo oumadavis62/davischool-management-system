@@ -3306,7 +3306,7 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 @app.post("/app/students")
 def main_app_students_post(request: Request, admission_no: str = Form(...), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
     role = str(request.session.get("role", ""))
-    if not request.session.get("email") or role not in {"school_admin", "teacher"}:
+    if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}:
         return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school:
@@ -3347,7 +3347,7 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
 @app.post("/app/students/add")
 def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
     role = str(request.session.get("role", ""))
-    if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
+    if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school: return RedirectResponse("/", 303)
     if not _role_permission(request, "students.create"): return HTMLResponse("You do not have permission to create students.", 403)
@@ -3382,7 +3382,7 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
 @app.post("/app/students/edit/{student_id}")
 def main_app_student_edit(request: Request, student_id: int, admission_no: str = Form(...), name: str = Form(...), assessment_no: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), status: str = Form("active")):
     role = str(request.session.get("role", ""))
-    if not request.session.get("email") or role not in {"school_admin", "teacher"}: return RedirectResponse("/", 303)
+    if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school: return RedirectResponse("/", 303)
     if not _role_permission(request, "students.edit"): return HTMLResponse("You do not have permission to edit students.", 403)
