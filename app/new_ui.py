@@ -723,7 +723,7 @@ else setupDaviActionCells();
       link.href=url;
       link.as='document';
       document.head.appendChild(link);
-      fetch(url,{{credentials:'same-origin',cache:'force-cache',priority:'low',headers:{{'X-DaviSchool-Prefetch':'1'}}}}).catch(function(){{}});
+      // Native prefetch is low priority; do not issue a duplicate fetch for the same page.
     }});
   }}catch(e){{}}
 }})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
