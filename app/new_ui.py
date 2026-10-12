@@ -598,16 +598,39 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       return;
     }}
     form.dataset.daviSubmitting='1';
-    // Do not disable submit controls before native submission: their name/value
-    // may be part of the action payload. The guard blocks only a second submit.
+    // Give immediate feedback without disabling controls or changing submitted values.
     form.setAttribute('aria-busy','true');
+    var submitter=event.submitter;
+    if(submitter && submitter.tagName==='BUTTON'){{
+      submitter.setAttribute('aria-busy','true');
+      submitter.classList.add('ds-processing');
+      var label=(submitter.textContent||'').trim();
+      if(label && !submitter.dataset.daviOriginalLabel){{
+        submitter.dataset.daviOriginalLabel=label;
+        if(!/loading|saving|processing/i.test(label))submitter.textContent=label+'…';
+      }}
+    }}
   }},true);
   window.addEventListener('pageshow',function(){{
     document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
       delete form.dataset.daviSubmitting;
       form.removeAttribute('aria-busy');
     }});
+    document.querySelectorAll('button.ds-processing').forEach(function(button){{
+      button.classList.remove('ds-processing');
+      button.removeAttribute('aria-busy');
+      if(button.dataset.daviOriginalLabel){{
+        button.textContent=button.dataset.daviOriginalLabel;
+        delete button.dataset.daviOriginalLabel;
+      }}
+    }});
   }});
+  if(!document.getElementById('davi-submit-feedback-style')){{
+    var style=document.createElement('style');
+    style.id='davi-submit-feedback-style';
+    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}';
+    document.head.appendChild(style);
+  }}
 }})();
 window.selectCorrectionSubject=function(row,event){{
   if(!row)return;
