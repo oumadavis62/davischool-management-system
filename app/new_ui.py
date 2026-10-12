@@ -588,6 +588,15 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
     if(link)warm(link);
   }});
+  // Give immediate feedback for every in-app link, including Academic Manager
+  // tiles, sidebar navigation, dashboard cards and ordinary page links.
+  document.addEventListener('click',function(event){{
+    if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!eligible(link))return;
+    link.setAttribute('aria-busy','true');
+    link.classList.add('ds-navigating');
+  }},true);
   document.addEventListener('submit',function(event){{
     var form=event.target;
     if(!form || !form.tagName || form.tagName.toLowerCase()!=='form')return;
@@ -615,13 +624,16 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     document.querySelectorAll('button.ds-processing').forEach(function(button){{
       button.classList.remove('ds-processing');
       button.removeAttribute('aria-busy');
-
+    }});
+    document.querySelectorAll('a.ds-navigating').forEach(function(link){{
+      link.classList.remove('ds-navigating');
+      link.removeAttribute('aria-busy');
     }});
   }});
   if(!document.getElementById('davi-submit-feedback-style')){{
     var style=document.createElement('style');
     style.id='davi-submit-feedback-style';
-    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}button.ds-processing::after{{content:" …"}}';
+    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}button.ds-processing::after{{content:" …"}}.ds-navigating{{cursor:progress!important;opacity:.76;transition:opacity .08s ease}}a.ds-navigating{{pointer-events:none}}';
     document.head.appendChild(style);
   }}
 }})();
