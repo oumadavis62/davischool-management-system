@@ -624,7 +624,10 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     document.querySelectorAll('button.ds-processing').forEach(function(button){{
       button.classList.remove('ds-processing');
       button.removeAttribute('aria-busy');
-
+    }});
+    document.querySelectorAll('a.ds-navigating').forEach(function(link){{
+      link.classList.remove('ds-navigating');
+      link.removeAttribute('aria-busy');
     }});
   }});
   if(!document.getElementById('davi-submit-feedback-style')){{
