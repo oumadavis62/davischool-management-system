@@ -7409,7 +7409,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
             tv=str(e["term"] or "").strip()
             if tv and tv not in term_values: term_values.append(tv)
         term_text=", ".join(escape(x) for x in term_values)
-        report_dates=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,selected_exam_ids[0])).fetchone()
+        report_dates=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY CASE WHEN COALESCE(opening_date,'')<>'' OR COALESCE(closing_date,'')<>'' THEN 0 ELSE 1 END,id DESC LIMIT 1",(sid,selected_exam_ids[0])).fetchone()
         opening_text=escape(_format_report_card_date(report_dates["opening_date"])) if report_dates else ""
         closing_text=escape(_format_report_card_date(report_dates["closing_date"])) if report_dates else ""
         cards=[]
@@ -7581,7 +7581,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
                 except Exception as exc:
                     print("DAVISCHOOL REPORT GRADE COMMENT FALLBACK:",repr(exc),flush=True)
             subject_comments[int(sr["subject_id"])]=saved_comment
-        rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY id DESC LIMIT 1",(sid,eid)).fetchone()
+        rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY CASE WHEN COALESCE(opening_date,'')<>'' OR COALESCE(closing_date,'')<>'' THEN 0 ELSE 1 END,id DESC LIMIT 1",(sid,eid)).fetchone()
         if rs:
             opening_date=rs["opening_date"] or ""
             closing_date=rs["closing_date"] or ""
