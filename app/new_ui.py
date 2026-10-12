@@ -939,7 +939,7 @@ document.addEventListener('submit',function(event){{
     if(url.origin!==window.location.origin)return;
     if(!isSystemPath(url.pathname))return;
     var path=url.pathname.toLowerCase();
-    if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add' || path==='/app/students/add')return;
+    if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path==='/app/academics/allocations/add' || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add' || path==='/app/students/add' || path.indexOf('/app/students/edit/')===0)return;
     if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
     event.preventDefault();
     var data=new FormData(form);
@@ -1159,6 +1159,11 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
 def student_edit_page(request: Request,student_id:int):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
+    # Preserve the per-tab authenticated session on the edit form's POST.
+    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
+        tab_id = ""
+    tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
     if not _require_permission(request, sid, "students.edit"):
         return HTMLResponse("You do not have permission to edit students.", 403)
     con=_db();cur=con.cursor()
@@ -1167,7 +1172,7 @@ def student_edit_page(request: Request,student_id:int):
     con.close()
     if not st:return HTMLResponse("Student not found.",404)
     opts="".join(f"<option value='{c['id']}' {'selected' if st['class_id'] and int(st['class_id'])==int(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' action='/app/students/edit/{student_id}{tab_q}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <label>Admission number<input name='admission_no' value='{escape(str(st['admission_no'] or ''))}' required class='field'></label>
 <label>Full name<input name='name' value='{escape(str(st['name'] or ''))}' required class='field'></label>
 <label>Assessment number<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''))}' class='field'></label>
