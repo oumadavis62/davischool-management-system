@@ -598,16 +598,32 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       return;
     }}
     form.dataset.daviSubmitting='1';
-    // Do not disable submit controls before native submission: their name/value
-    // may be part of the action payload. The guard blocks only a second submit.
+    // Give immediate feedback without disabling controls or changing submitted values.
     form.setAttribute('aria-busy','true');
+    var submitter=event.submitter;
+    if(submitter && submitter.tagName==='BUTTON'){{
+      submitter.setAttribute('aria-busy','true');
+      submitter.classList.add('ds-processing');
+
+    }}
   }},true);
   window.addEventListener('pageshow',function(){{
     document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
       delete form.dataset.daviSubmitting;
       form.removeAttribute('aria-busy');
     }});
+    document.querySelectorAll('button.ds-processing').forEach(function(button){{
+      button.classList.remove('ds-processing');
+      button.removeAttribute('aria-busy');
+
+    }});
   }});
+  if(!document.getElementById('davi-submit-feedback-style')){{
+    var style=document.createElement('style');
+    style.id='davi-submit-feedback-style';
+    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}button.ds-processing::after{{content:" …"}}';
+    document.head.appendChild(style);
+  }}
 }})();
 window.selectCorrectionSubject=function(row,event){{
   if(!row)return;
@@ -723,7 +739,7 @@ else setupDaviActionCells();
       link.href=url;
       link.as='document';
       document.head.appendChild(link);
-      fetch(url,{{credentials:'same-origin',cache:'force-cache',priority:'low',headers:{{'X-DaviSchool-Prefetch':'1'}}}}).catch(function(){{}});
+      // Native prefetch is low priority; do not issue a duplicate fetch for the same page.
     }});
   }}catch(e){{}}
 }})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
