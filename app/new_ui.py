@@ -604,11 +604,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     if(submitter && submitter.tagName==='BUTTON'){{
       submitter.setAttribute('aria-busy','true');
       submitter.classList.add('ds-processing');
-      var label=(submitter.textContent||'').trim();
-      if(label && !submitter.dataset.daviOriginalLabel){{
-        submitter.dataset.daviOriginalLabel=label;
-        if(!/loading|saving|processing/i.test(label))submitter.textContent=label+'…';
-      }}
+
     }}
   }},true);
   window.addEventListener('pageshow',function(){{
@@ -619,16 +615,13 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     document.querySelectorAll('button.ds-processing').forEach(function(button){{
       button.classList.remove('ds-processing');
       button.removeAttribute('aria-busy');
-      if(button.dataset.daviOriginalLabel){{
-        button.textContent=button.dataset.daviOriginalLabel;
-        delete button.dataset.daviOriginalLabel;
-      }}
+
     }});
   }});
   if(!document.getElementById('davi-submit-feedback-style')){{
     var style=document.createElement('style');
     style.id='davi-submit-feedback-style';
-    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}';
+    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}button.ds-processing::after{{content:" …"}}';
     document.head.appendChild(style);
   }}
 }})();
