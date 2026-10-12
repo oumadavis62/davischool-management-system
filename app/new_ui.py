@@ -7235,18 +7235,28 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
 
 
 def _report_card_selected_exam_trend(cur, school_id, student_id, selected_exam_ids):
-    """Fast trend for bulk report cards: aggregate only selected exams in one query."""
+    """Fast trend for bulk report cards; a missing trend must not block the reports."""
     ids=_parse_assessment_ids(",".join(str(x) for x in (selected_exam_ids or [])))
     if not ids:
         return []
-    rows=cur.execute(
-        "SELECT e.id,e.name,AVG(m.marks) average FROM exams e "
-        "JOIN marks m ON m.exam_id=e.id AND m.school_id=? AND m.student_id=? "
-        "WHERE e.school_id=? AND e.id IN (%s) AND m.marks IS NOT NULL "
-        "GROUP BY e.id,e.name ORDER BY e.id ASC" % ",".join("?" for _ in ids),
-        [school_id,student_id,school_id]+ids
-    ).fetchall()
-    return [(str(r["name"] or "Assessment"),max(0.0,min(100.0,float(r["average"] or 0))),int(r["id"])) for r in rows]
+    try:
+        rows=cur.execute(
+            "SELECT e.id,e.name,AVG(m.marks) average FROM exams e "
+            "JOIN marks m ON m.exam_id=e.id AND m.school_id=? AND m.student_id=? "
+            "WHERE e.school_id=? AND e.id IN (%s) AND m.marks IS NOT NULL "
+            "GROUP BY e.id,e.name ORDER BY e.id ASC" % ",".join("?" for _ in ids),
+            [school_id,student_id,school_id]+ids
+        ).fetchall()
+        return [(str(r["name"] or "Assessment"),max(0.0,min(100.0,float(r["average"] or 0))),int(r["id"])) for r in rows]
+    except Exception as exc:
+        # The trend is supplementary; legacy marks/exam schemas must not
+        # turn an otherwise valid whole-class report into HTTP 500.
+        print("DAVISCHOOL BULK REPORT TREND FALLBACK:", repr(exc), flush=True)
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
+        return []
 
 def _report_card_exam_trend(cur, school_id, student_id, selected_exam_ids, grading_rules=None, overall_rules=None):
     """Return chronological exam means using the same result engine as report cards."""
@@ -7309,6 +7319,7 @@ def _format_report_card_date(value):
         return raw
 
 def _report_attendance_summary(cur, sid, student_id, opening_date="", closing_date=""):
+    """Return attendance totals without letting optional/legacy attendance data break report cards."""
     where = "school_id=? AND student_id=?"
     params = [sid, student_id]
     if opening_date:
@@ -7317,7 +7328,17 @@ def _report_attendance_summary(cur, sid, student_id, opening_date="", closing_da
     if closing_date:
         where += " AND date<=?"
         params.append(str(closing_date))
-    rows = cur.execute("SELECT date,status FROM attendance WHERE %s ORDER BY date" % where, params).fetchall()
+    try:
+        rows = cur.execute("SELECT date,status FROM attendance WHERE %s ORDER BY date" % where, params).fetchall()
+    except Exception as exc:
+        # Some older school databases have no attendance table or an older
+        # attendance schema. Reports should still generate with empty totals.
+        print("DAVISCHOOL REPORT ATTENDANCE FALLBACK:", repr(exc), flush=True)
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
+        return {"open":0,"present":0,"absent":0}
     days = {str(x["date"]) for x in rows if str(x["date"] or "").strip()}
     present = sum(1 for x in rows if str(x["status"] or "").strip().lower() in ("present","p","1"))
     absent = sum(1 for x in rows if str(x["status"] or "").strip().lower() in ("absent","a","0"))
