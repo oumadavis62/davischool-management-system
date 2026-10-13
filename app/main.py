@@ -2548,7 +2548,7 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
       var prefetch=document.createElement('link');
       prefetch.rel='prefetch';prefetch.href=defaultUrl;prefetch.as='document';
       document.head.appendChild(prefetch);
-    }
+    }}
   }}catch(e){{}}
   window.addEventListener('pageshow',function(){{
     if(!filtered(window.location.href)){{write(key,false);write(pendingKey,false);}}
