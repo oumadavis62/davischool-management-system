@@ -299,6 +299,23 @@ class CompatConnection:
             self._pool.putconn(self._conn)
         return None
 
+    def __del__(self):
+        # Fallback for legacy routes that forget to call close(). A checked-out
+        # connection must be returned to psycopg_pool, not left checked out
+        # until the pool times out subsequent requests (including login).
+        try:
+            if getattr(self, "_returned", True):
+                return
+            if getattr(self, "_conn", None) is None or getattr(self, "_pool", None) is None:
+                return
+            self.close()
+        except Exception as exc:
+            # Finalizers must never raise, especially during interpreter shutdown.
+            try:
+                print("DAVISCHOOL_DB_CONNECTION_FINALIZER_WARNING:", repr(exc), flush=True)
+            except Exception:
+                pass
+
     def __enter__(self):
         return self
 
