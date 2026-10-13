@@ -4292,8 +4292,8 @@ function toggleTeacherTile(event, tile){{
 .overview-class-icon{{color:#176B3A;margin-bottom:6px}}
 .overview-class-count{{font-size:32px;font-weight:900;color:#172033;line-height:1}}
 .overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}
-.overview-charts .class-size-bar-column{{flex:0 0 56px;flex-basis:56px;width:56px;min-width:56px;height:148px}}
-.overview-charts .class-size-bar-track{{height:106px}}
+.overview-charts .class-size-bar-column{{flex:0 0 56px;flex-basis:56px;width:56px;min-width:56px;height:133px}}
+.overview-charts .class-size-bar-track{{height:95px}}
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
 @media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
