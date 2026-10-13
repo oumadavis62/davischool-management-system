@@ -5410,9 +5410,14 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         teacher_id=int(request.session.get("teacher_id") or 0)
         if not teacher_id or not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
             con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
-        valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-        if not valid:
-            con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+        exam=cur.execute("""SELECT e.year,e.term FROM exams e
+            JOIN classes c ON c.id=? AND c.school_id=?
+            JOIN subjects s ON s.id=? AND s.school_id=?
+            WHERE e.id=? AND e.school_id=?""",
+            (class_id,sid,subject_id,sid,exam_id,sid)).fetchone()
+        if not exam:
+            con.close()
+            return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
         if _academic_lock(cur,sid,exam_id,class_id,subject_id):
             con.close(); return HTMLResponse("These marks are already submitted and locked. <a href='/app/academics/marks'>Back</a>",403)
         form=await request.form()
@@ -5420,7 +5425,6 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
-        exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
         # Load grading rules once per save, not once per student. Re-querying
         # the entire rules table inside the student loop caused a major delay.
         try:
@@ -5577,12 +5581,17 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close()
         return HTMLResponse("You are not allocated to this class and subject.", 403)
-    valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
-    if not valid: con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    exam=cur.execute("""SELECT e.year,e.term FROM exams e
+        JOIN classes c ON c.id=? AND c.school_id=?
+        JOIN subjects s ON s.id=? AND s.school_id=?
+        WHERE e.id=? AND e.school_id=?""",
+        (class_id,sid,subject_id,sid,exam_id,sid)).fetchone()
+    if not exam:
+        con.close()
+        return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
         con.close()
         return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
-    exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
