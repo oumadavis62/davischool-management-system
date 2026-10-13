@@ -904,51 +904,52 @@ document.addEventListener('submit',function(event){{
   }}catch(e){{form.submit();}}
 }},true);
 
-// Repair Back destinations when a tile's navigation has lost its originating workspace entry.
+// Enforce the two-step Back rule without mistaking filter history for leaving the tile.
 (function(){{
   var originKey='davischool-two-step-origin-url';
-  var activeKey='davischool-two-step-active-path';
+  var activeKey='davischool-two-step-active-url';
   function isSystem(path){{
     path=String(path||'/').split('#')[0].replace(/\/+$/,'')||'/';
     return /^\/(app|school|schools|super|portal|dashboard|teacher|student|parent|account)(\/|$)/.test(path);
+  }}
+  function normalizedUrl(value){{
+    var u=new URL(value,window.location.href);
+    u.hash='';
+    return u.toString();
   }}
   document.addEventListener('click',function(event){{
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
     if(!link||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
     try{{
       var target=new URL(link.href,window.location.href);
-      if(target.origin!==window.location.origin||!isSystem(target.pathname)||target.pathname===window.location.pathname)return;
-      sessionStorage.setItem(originKey,window.location.href);
-      sessionStorage.setItem(activeKey,target.pathname);
+      if(target.origin!==window.location.origin||!isSystem(target.pathname)||normalizedUrl(target.href)===normalizedUrl(window.location.href))return;
+      sessionStorage.setItem(originKey,normalizedUrl(window.location.href));
+      sessionStorage.setItem(activeKey,normalizedUrl(target.href));
     }}catch(e){{}}
   }},true);
-  function repairBackDestination(isBackTraversal){{
-    if(!isBackTraversal)return;
+  window.addEventListener('popstate',function(event){{
     try{{
+      // This is the first Back: the filter helper's synthetic default entry.
+      // Keep the originating tile marker so the next Back can return to its parent.
+      if(event&&event.state&&event.state.daviFilterDefault)return;
       var active=sessionStorage.getItem(activeKey);
       var origin=sessionStorage.getItem(originKey);
       if(!active||!origin)return;
-      var destination=new URL(origin,window.location.href);
-      var current=window.location.pathname.replace(/\/+$/,'')||'/';
-      var expected=destination.pathname.replace(/\/+$/,'')||'/';
-      if(current===active)return;
-      if(current===expected){{
-        sessionStorage.removeItem(activeKey);sessionStorage.removeItem(originKey);
+      var current=normalizedUrl(window.location.href);
+      var activeUrl=new URL(active,window.location.href);
+      var currentUrl=new URL(current,window.location.href);
+      if(currentUrl.pathname===activeUrl.pathname)return;
+      if(current===origin){{
+        sessionStorage.removeItem(activeKey);
+        sessionStorage.removeItem(originKey);
         return;
       }}
-      // Consume the marker before replacing, preventing a redirect loop.
-      sessionStorage.removeItem(activeKey);sessionStorage.removeItem(originKey);
-      window.location.replace(destination.toString());
+      // Back left the tile page instead of its originating workspace. Restore
+      // the exact parent URL (including its tab/session query parameters).
+      sessionStorage.removeItem(activeKey);
+      sessionStorage.removeItem(originKey);
+      window.location.replace(origin);
     }}catch(e){{}}
-  }}
-  window.addEventListener('popstate',function(){{repairBackDestination(true);}});
-  window.addEventListener('pageshow',function(event){{
-    var back=!!(event&&event.persisted);
-    try{{
-      var entries=performance.getEntriesByType&&performance.getEntriesByType('navigation');
-      if(entries&&entries.length&&entries[0].type==='back_forward')back=true;
-    }}catch(e){{}}
-    repairBackDestination(back);
   }});
 }})();
 // Warm the server-rendered default view while the filtered view is open.
