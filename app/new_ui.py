@@ -3982,8 +3982,11 @@ def app_home(request: Request):
             ]
             tile_html=""
             for title,icon,value,detail in hover_tiles:
+                # The Record Marks tile is a real navigation link and must open on
+                # the first tap. Only informational tiles should consume clicks to flip.
                 href=" href='/app/academics/marks'" if title=="Record Marks" else ""
-                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href} onclick='toggleTeacherTile(event,this)' aria-pressed='false' style='text-decoration:none;color:inherit'>
+                tile_click=" onclick='toggleTeacherTile(event,this)'" if not href else ""
+                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href}{tile_click} aria-pressed='false' style='text-decoration:none;color:inherit'>
 <div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
 <div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
 
