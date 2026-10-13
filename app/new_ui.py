@@ -744,10 +744,16 @@ else setupDaviActionCells();
     var root='/app';
     roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
     var u=new URL(window.location.href);
-    var unfiltered=new URL(u.toString());
-    unfiltered.pathname=root;
-    Array.from(unfiltered.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfiltered.searchParams.delete(k);}});
-    addTarget(unfiltered.toString());
+    // Warm the exact same-page unfiltered URL as well as the workspace root.
+    // Back from a filtered display restores this URL and currently reloads it
+    // to render the default data; prefetching only the root missed that request.
+    var unfilteredCurrent=new URL(u.toString());
+    Array.from(unfilteredCurrent.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfilteredCurrent.searchParams.delete(k);}});
+    if(unfilteredCurrent.pathname===path && u.searchParams.size>0)addTarget(unfilteredCurrent.toString());
+    var unfilteredRoot=new URL(u.toString());
+    unfilteredRoot.pathname=root;
+    Array.from(unfilteredRoot.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfilteredRoot.searchParams.delete(k);}});
+    addTarget(unfilteredRoot.toString());
     var originKey='davischool-two-step-origin:'+root;
     try{{addTarget(sessionStorage.getItem(originKey));}}catch(e){{}}
     targets.slice(0,3).forEach(function(url){{
