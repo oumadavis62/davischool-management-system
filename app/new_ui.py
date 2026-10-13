@@ -904,6 +904,53 @@ document.addEventListener('submit',function(event){{
   }}catch(e){{form.submit();}}
 }},true);
 
+// Repair Back destinations when a tile's navigation has lost its originating workspace entry.
+(function(){{
+  var originKey='davischool-two-step-origin-url';
+  var activeKey='davischool-two-step-active-path';
+  function isSystem(path){{
+    path=String(path||'/').split('#')[0].replace(/\/+$/,'')||'/';
+    return /^\/(app|school|schools|super|portal|dashboard|teacher|student|parent|account)(\/|$)/.test(path);
+  }}
+  document.addEventListener('click',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!link||event.defaultPrevented||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    try{{
+      var target=new URL(link.href,window.location.href);
+      if(target.origin!==window.location.origin||!isSystem(target.pathname)||target.pathname===window.location.pathname)return;
+      sessionStorage.setItem(originKey,window.location.href);
+      sessionStorage.setItem(activeKey,target.pathname);
+    }}catch(e){{}}
+  }},true);
+  function repairBackDestination(isBackTraversal){{
+    if(!isBackTraversal)return;
+    try{{
+      var active=sessionStorage.getItem(activeKey);
+      var origin=sessionStorage.getItem(originKey);
+      if(!active||!origin)return;
+      var destination=new URL(origin,window.location.href);
+      var current=window.location.pathname.replace(/\/+$/,'')||'/';
+      var expected=destination.pathname.replace(/\/+$/,'')||'/';
+      if(current===active)return;
+      if(current===expected){{
+        sessionStorage.removeItem(activeKey);sessionStorage.removeItem(originKey);
+        return;
+      }}
+      // Consume the marker before replacing, preventing a redirect loop.
+      sessionStorage.removeItem(activeKey);sessionStorage.removeItem(originKey);
+      window.location.replace(destination.toString());
+    }}catch(e){{}}
+  }}
+  window.addEventListener('popstate',function(){{repairBackDestination(true);}});
+  window.addEventListener('pageshow',function(event){{
+    var back=!!(event&&event.persisted);
+    try{{
+      var entries=performance.getEntriesByType&&performance.getEntriesByType('navigation');
+      if(entries&&entries.length&&entries[0].type==='back_forward')back=true;
+    }}catch(e){{}}
+    repairBackDestination(back);
+  }});
+}})();
 // Warm the server-rendered default view while the filtered view is open.
 // Back can then reuse the browser's prefetched response instead of starting cold.
 try{{
