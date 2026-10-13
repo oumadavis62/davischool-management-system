@@ -564,7 +564,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
       var u=new URL(link.href,window.location.href);
       if(u.origin!==window.location.origin || (u.protocol!=='http:'&&u.protocol!=='https:'))return false;
       if(/\\/(logout|login)(\\/|$)/i.test(u.pathname))return false;
-      if(/\.(pdf|csv|xlsx?|zip)(?:$)/i.test(u.pathname))return false;
+      if(/\\.(pdf|csv|xlsx?|zip)(?:$)/i.test(u.pathname))return false;
       if(u.search && u.searchParams.has('download'))return false;
       return true;
     }}catch(e){{return false;}}
