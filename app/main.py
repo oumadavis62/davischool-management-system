@@ -2493,6 +2493,16 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
       else window.location.replace(url.toString());
     }}catch(e){{}}
   }},true);
+  // Prefetch the unfiltered workspace while the filtered page is displayed.
+  // Keep the reload fallback below so the first Back always shows real default data.
+  try{{
+    if(filtered(window.location.href)){{
+      var defaultUrl=clean(window.location.href);
+      var prefetch=document.createElement('link');
+      prefetch.rel='prefetch';prefetch.href=defaultUrl;prefetch.as='document';
+      document.head.appendChild(prefetch);
+    }
+  }}catch(e){{}}
   window.addEventListener('pageshow',function(){{
     if(!filtered(window.location.href)){{write(key,false);write(pendingKey,false);}}
   }});
