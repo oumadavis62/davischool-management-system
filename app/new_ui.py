@@ -21,6 +21,11 @@ def google_search_console_verification():
     )
 
 _USER_ACCOUNT_COLUMNS_READY = False
+# Schema compatibility work is expensive on PostgreSQL because each ALTER
+# check/savepoint is a database round trip. Run these additive migrations once
+# per worker process, not on every Save Marks request.
+_REPORT_CARD_FIELDS_READY = False
+_TEACHER_MARK_DRAFTS_SCHEMA_READY = False
 
 def _pdf_route_error(request, route_name, exc):
     import traceback
@@ -4273,6 +4278,9 @@ def _ensure_student_history_table(cur):
     )""")
 
 def _ensure_report_card_fields(cur):
+    global _REPORT_CARD_FIELDS_READY
+    if _REPORT_CARD_FIELDS_READY:
+        return
     cur.execute("""CREATE TABLE IF NOT EXISTS report_card_settings(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
@@ -4333,6 +4341,7 @@ def _ensure_report_card_fields(cur):
                 msg=str(exc).lower()
                 if "already exists" not in msg and "duplicate column" not in msg:
                     print("DAVISCHOOL REPORT FIELD SCHEMA WARNING:",repr(exc),flush=True)
+    _REPORT_CARD_FIELDS_READY = True
 
 def _ensure_academic_locks_table(cur):
     global ACADEMIC_LOCKS_SCHEMA_READY
@@ -5030,6 +5039,9 @@ def grading_delete(request: Request, rule_id: int, subject_id: str = ""):
 
 def _ensure_teacher_mark_drafts_table(cur):
     """Create the private teacher draft store without touching published marks."""
+    global _TEACHER_MARK_DRAFTS_SCHEMA_READY
+    if _TEACHER_MARK_DRAFTS_SCHEMA_READY:
+        return
     cur.execute("""CREATE TABLE IF NOT EXISTS teacher_mark_drafts (
         school_id INTEGER NOT NULL,
         teacher_id INTEGER NOT NULL,
@@ -5043,6 +5055,7 @@ def _ensure_teacher_mark_drafts_table(cur):
     )""")
     cur.execute("""CREATE UNIQUE INDEX IF NOT EXISTS uq_teacher_mark_draft
         ON teacher_mark_drafts(school_id,teacher_id,exam_id,class_id,subject_id,student_id)""")
+    _TEACHER_MARK_DRAFTS_SCHEMA_READY = True
 
 def _ensure_marks_correction_requests_table(cur):
     """Create/upgrade the teacher mark-correction request store without deleting existing requests."""
