@@ -7593,6 +7593,11 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         generated_at=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M:%S EAT")
         footer_html="<div class='print-footer'><i>DaviSchool Management System</i> · Generated: %s</div>" % generated_at
         for st in students:
+            # Use a gender-matched placeholder in the report-card photo frame
+            # until an actual student photograph is available in the record.
+            gender_value = str(st["gender"] or "").strip().casefold() if "gender" in st.keys() else ""
+            gender_placeholder = "👦" if gender_value in ("male", "m", "boy") else ("👧" if gender_value in ("female", "f", "girl") else "👤")
+            student_brand = brand.replace("👤", gender_placeholder)
             try:
                 result=bulk_results.get(int(st["id"])) or {"details":[],"total":0.0,"average":0.0,"points":0.0,"overall_grade":"—","count":0}
             except Exception as exc:
@@ -7646,7 +7651,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
               <div class='sign'><div class='report-signatory'><b>Class Teacher:</b> <span class='signatory-name'>%s</span><hr>Signature</div><div class='report-signatory'><b>Principal:</b> <span class='signatory-name'>%s</span><hr>Signature</div></div>
               <div class='report-dates'><b>The School Officially Closes on <u>%s</u> and Officially Opens on <u>%s</u>.</b></div>
               %s
-            </section>""" % (brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
+            </section>""" % (student_brand,escape(str(st["name"])),escape(str(st["admission_no"] or "")),
                               escape(str(cls["name"] or "")),escape(str(cls["stream"] or "")),
                               term_text,exam_text,"".join(details),float(result["total"]),float(result["average"]),float(result["points"]),
                               escape(str(result["overall_grade"])),trend_html,escape(str((grade_rule["class_teacher_comment"] if grade_rule else "") or "")),
