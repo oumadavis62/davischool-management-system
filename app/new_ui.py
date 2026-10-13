@@ -7431,6 +7431,28 @@ def _report_card_line_graph_html(trend):
         bars.append("<rect x='%.1f' y='%.1f' width='%.1f' height='%.1f' rx='0.5'></rect><text x='%.1f' y='%.1f' class='trend-value'>%.1f</text><text x='%.1f' y='108' class='trend-label'>%s</text>"%(x,top,width,96-top,x+width/2,max(10,top-3),value,x+width/2,escape(label[:16])))
     return "<div class='report-trend'><div class='report-graph-title'>Performance Trend</div><div class='trend-chart'><div class='trend-y'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><svg viewBox='0 0 100 112' preserveAspectRatio='none' aria-label='Performance trend'><g class='trend-grid'><line x1='5' y1='20' x2='95' y2='20'></line><line x1='5' y1='39' x2='95' y2='39'></line><line x1='5' y1='58' x2='95' y2='58'></line><line x1='5' y1='77' x2='95' y2='77'></line><line x1='5' y1='96' x2='95' y2='96'></line></g><g class='trend-bars'>%s</g></svg></div></div>"%bars
 
+def _get_report_card_dates(cur, school_id, exam_id):
+    """Resolve each configured report-card date across legacy duplicate rows."""
+    try:
+        rows = cur.execute(
+            "SELECT opening_date,closing_date FROM report_card_settings "
+            "WHERE school_id=? AND exam_id=? ORDER BY id DESC",
+            (school_id, exam_id)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL REPORT DATE LOOKUP FALLBACK:", repr(exc), flush=True)
+        return {"opening_date": "", "closing_date": ""}
+    result = {"opening_date": "", "closing_date": ""}
+    for row in rows:
+        for field in ("opening_date", "closing_date"):
+            value = str(row[field] or "").strip()
+            if value and not result[field]:
+                result[field] = value
+        if result["opening_date"] and result["closing_date"]:
+            break
+    return result
+
+
 def _format_report_card_date(value):
     """Display stored report-card dates as day/month/year without changing storage."""
     raw = str(value or "").strip()
@@ -7532,9 +7554,9 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
             tv=str(e["term"] or "").strip()
             if tv and tv not in term_values: term_values.append(tv)
         term_text=", ".join(escape(x) for x in term_values)
-        report_dates=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY CASE WHEN COALESCE(opening_date,'')<>'' OR COALESCE(closing_date,'')<>'' THEN 0 ELSE 1 END,id DESC LIMIT 1",(sid,selected_exam_ids[0])).fetchone()
-        opening_text=escape(_format_report_card_date(report_dates["opening_date"])) if report_dates else ""
-        closing_text=escape(_format_report_card_date(report_dates["closing_date"])) if report_dates else ""
+        report_dates=_get_report_card_dates(cur,sid,selected_exam_ids[0])
+        opening_text=escape(_format_report_card_date(report_dates["opening_date"]))
+        closing_text=escape(_format_report_card_date(report_dates["closing_date"]))
         cards=[]
         generated_at=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M:%S EAT")
         footer_html="<div class='print-footer'><i>DaviSchool Management System</i> · Generated: %s</div>" % generated_at
@@ -7704,10 +7726,9 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
                 except Exception as exc:
                     print("DAVISCHOOL REPORT GRADE COMMENT FALLBACK:",repr(exc),flush=True)
             subject_comments[int(sr["subject_id"])]=saved_comment
-        rs=cur.execute("SELECT opening_date,closing_date FROM report_card_settings WHERE school_id=? AND exam_id=? ORDER BY CASE WHEN COALESCE(opening_date,'')<>'' OR COALESCE(closing_date,'')<>'' THEN 0 ELSE 1 END,id DESC LIMIT 1",(sid,eid)).fetchone()
-        if rs:
-            opening_date=rs["opening_date"] or ""
-            closing_date=rs["closing_date"] or ""
+        rs=_get_report_card_dates(cur,sid,eid)
+        opening_date=rs["opening_date"]
+        closing_date=rs["closing_date"]
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
     copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))}{(' · '+escape(str(c['stream'] or ''))) if c['stream'] else ''}</option>" for c in classes)
     sopts="".join(f"<option value='{s['id']}' {'selected' if s['id']==stid else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
