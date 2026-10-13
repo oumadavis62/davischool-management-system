@@ -5582,14 +5582,30 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
     students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
     # Prepare the performance-comment table once per save request, not once per
-    # student. Re-running schema checks inside the student loop makes Save Marks
-    # increasingly slow as the class size grows.
+    # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
     try:
         grading_rules=_load_grading_rules(cur,sid)
     except Exception as exc:
         print("DAVISCHOOL MARKS SAVE GRADING FALLBACK:",repr(exc),flush=True)
         grading_rules={}
+    # Preload existing marks/comments in two queries instead of issuing SELECTs
+    # for every student. On a full class this removes hundreds of DB round trips.
+    student_ids=[int(st["id"]) for st in students]
+    existing_marks_by_student={}
+    existing_comments_by_student={}
+    if student_ids:
+        placeholders=",".join("?" for _ in student_ids)
+        for row in cur.execute(
+            "SELECT id,student_id FROM marks WHERE school_id=? AND subject_id=? AND exam_id=? AND student_id IN ("+placeholders+")",
+            [sid,subject_id,exam_id]+student_ids
+        ).fetchall():
+            existing_marks_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
+        for row in cur.execute(
+            "SELECT id,student_id FROM subject_performance_comments WHERE school_id=? AND subject_id=? AND exam_id=? AND student_id IN ("+placeholders+")",
+            [sid,subject_id,exam_id]+student_ids
+        ).fetchall():
+            existing_comments_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
     for st in students:
         raw=form.get(f"mark_{st['id']}")
         if raw is None or str(raw).strip()=="":
@@ -5616,12 +5632,12 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
         except Exception: continue
         if mark<0 or mark>out_of: continue
-        old_rows=cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",(sid,st["id"],subject_id,exam_id)).fetchall()
-        if old_rows:
+        old_ids=existing_marks_by_student.get(int(st["id"]),[])
+        if old_ids:
             # Update all legacy duplicate rows so an older duplicate cannot
             # make a newly saved mark appear to revert on the next page load.
-            for old in old_rows:
-                cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old["id"],sid))
+            for old_id in old_ids:
+                cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old_id,sid))
         else:
             cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
         # Performance comments are controlled by the subject grading rules.
@@ -5633,15 +5649,12 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         except Exception as exc:
             print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
             comment=""
-        existing_comments=cur.execute(
-            "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
-            (sid,st["id"],exam_id,subject_id)
-        ).fetchall()
-        if existing_comments:
-            for existing_comment in existing_comments:
+        existing_comment_ids=existing_comments_by_student.get(int(st["id"]),[])
+        if existing_comment_ids:
+            for existing_comment_id in existing_comment_ids:
                 cur.execute(
                     "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
-                    (comment,now,existing_comment["id"],sid)
+                    (comment,now,existing_comment_id,sid)
                 )
         else:
             cur.execute(
