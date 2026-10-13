@@ -5421,6 +5421,13 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+        # Load grading rules once per save, not once per student. Re-querying
+        # the entire rules table inside the student loop caused a major delay.
+        try:
+            grading_rules=_load_grading_rules(cur,sid)
+        except Exception as grading_exc:
+            print("DAVISCHOOL MARKS DRAFT GRADING FALLBACK:",repr(grading_exc),flush=True)
+            grading_rules={}
         # Load the existing per-student state in batches, rather than doing
         # several SELECTs for every learner in a class.
         student_ids=[int(st["id"]) for st in students]
@@ -5527,7 +5534,6 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             # Refresh the shared performance comment from the current grading
             # rule so both sides show the same comment.
             try:
-                grading_rules=_load_grading_rules(cur,sid)
                 _,_,shared_comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
             except Exception:
                 shared_comment=""
@@ -5619,61 +5625,76 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             [sid,subject_id,exam_id]+student_ids
         ).fetchall():
             existing_comments_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
+    # Queue all writes and send them in batches. PostgreSQL round-trip latency
+    # makes one UPDATE/INSERT per learner noticeably slow for a whole class.
+    blank_mark_params=[]
+    blank_comment_params=[]
+    mark_update_params=[]
+    mark_insert_params=[]
+    comment_update_params=[]
+    comment_insert_params=[]
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     for st in students:
-        raw=form.get(f"mark_{st['id']}")
+        student_id=int(st["id"])
+        raw=form.get(f"mark_{student_id}")
         if raw is None or str(raw).strip()=="":
-            # Blank means the mark was intentionally cleared. Remove only the
-            # published row for this exact school/student/exam/subject/class.
-            cur.execute(
-                """DELETE FROM marks
-                   WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
-                (sid,st["id"],subject_id,exam_id,class_id)
-            )
-            # A blank mark also means there is no performance comment for this
-            # student/subject/assessment. Otherwise the old comment remains in
-            # subject_performance_comments and is shown again even though the
-            # mark has been cleared.
-            try:
-                cur.execute(
-                    """DELETE FROM subject_performance_comments
-                       WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
-                    (sid,st["id"],exam_id,subject_id)
-                )
-            except Exception as exc:
-                print("DAVISCHOOL BLANK MARK COMMENT CLEAR WARNING:",repr(exc),flush=True)
+            blank_mark_params.append((sid,student_id,subject_id,exam_id,class_id))
+            blank_comment_params.append((sid,student_id,exam_id,subject_id))
             continue
-        try: mark=float(raw); mark_int=int(mark) if mark.is_integer() else mark
-        except Exception: continue
-        if mark<0 or mark>out_of: continue
-        old_ids=existing_marks_by_student.get(int(st["id"]),[])
-        if old_ids:
-            # Update all legacy duplicate rows so an older duplicate cannot
-            # make a newly saved mark appear to revert on the next page load.
-            for old_id in old_ids:
-                cur.execute("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",(mark_int,class_id,exam["year"],exam["term"],old_id,sid))
-        else:
-            cur.execute("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",(sid,st["id"],subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
-        # Performance comments are controlled by the subject grading rules.
-        # Recalculate them on every mark save so changing a student's mark also
-        # replaces any stale comment from the previous grade band.
-        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         try:
-            _, _, comment = _subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
+            mark=float(raw)
+            mark_int=int(mark) if mark.is_integer() else mark
+        except Exception:
+            continue
+        if mark<0 or mark>out_of:
+            continue
+        old_ids=existing_marks_by_student.get(student_id,[])
+        if old_ids:
+            for old_id in old_ids:
+                mark_update_params.append((mark_int,class_id,exam["year"],exam["term"],old_id,sid))
+        else:
+            mark_insert_params.append((sid,student_id,subject_id,exam_id,class_id,mark_int,exam["year"],exam["term"]))
+        try:
+            _,_,comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
         except Exception as exc:
             print("DAVISCHOOL MARKS COMMENT DEFAULT FALLBACK:",repr(exc),flush=True)
             comment=""
-        existing_comment_ids=existing_comments_by_student.get(int(st["id"]),[])
+        existing_comment_ids=existing_comments_by_student.get(student_id,[])
         if existing_comment_ids:
             for existing_comment_id in existing_comment_ids:
-                cur.execute(
-                    "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
-                    (comment,now,existing_comment_id,sid)
-                )
+                comment_update_params.append((comment,now,existing_comment_id,sid))
         else:
-            cur.execute(
-                "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
-                (sid,st["id"],exam_id,subject_id,comment,now)
-            )
+            comment_insert_params.append((sid,student_id,exam_id,subject_id,comment,now))
+    if blank_mark_params:
+        cur.executemany(
+            "DELETE FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?",
+            blank_mark_params
+        )
+    if blank_comment_params:
+        cur.executemany(
+            "DELETE FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
+            blank_comment_params
+        )
+    if mark_update_params:
+        cur.executemany(
+            "UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",
+            mark_update_params
+        )
+    if mark_insert_params:
+        cur.executemany(
+            "INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",
+            mark_insert_params
+        )
+    if comment_update_params:
+        cur.executemany(
+            "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
+            comment_update_params
+        )
+    if comment_insert_params:
+        cur.executemany(
+            "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
+            comment_insert_params
+        )
     # Saving marks must not be rolled back by an optional audit-trail
     # schema problem. The marks themselves are the primary transaction.
     # Audit logging is optional and must never invalidate the actual marks save.
