@@ -2503,7 +2503,7 @@ table{{width:100%;border-collapse:collapse;overflow:hidden}}th{{background:#0b3d
   }}
   document.addEventListener('click',function(event){{
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
-    if(!link||event.defaultPrevented||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    if(!link||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
     try{{
       var target=new URL(link.href,window.location.href);
       if(target.origin!==window.location.origin||!isSystem(target.pathname)||target.pathname===window.location.pathname)return;
