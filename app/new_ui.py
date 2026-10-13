@@ -5452,6 +5452,17 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                 [sid,subject_id,exam_id]+student_ids
             ).fetchall():
                 comments_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
+        blank_mark_params=[]
+        blank_draft_update_params=[]
+        blank_draft_insert_params=[]
+        blank_comment_delete_params=[]
+        mark_update_params=[]
+        mark_insert_params=[]
+        draft_update_params=[]
+        draft_insert_params=[]
+        comment_update_params=[]
+        comment_insert_params=[]
+        comment_now=now
         for st in students:
             student_id=int(st["id"])
             raw=form.get(f"mark_{student_id}")
@@ -5460,35 +5471,12 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             existing_drafts=student_id in draft_students
 
             if raw is None or str(raw).strip()=="":
-                # A blank saved by the teacher is also a blank in the shared
-                # marks record, so the School Admin sees the same state.
-                cur.execute(
-                    """DELETE FROM marks
-                       WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?""",
-                    (sid,student_id,subject_id,exam_id,class_id)
-                )
+                blank_mark_params.append((sid,student_id,subject_id,exam_id,class_id))
                 if existing_drafts:
-                    cur.execute(
-                        """UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?
-                           WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                             AND subject_id=? AND student_id=?""",
-                        (now,)+draft_key
-                    )
+                    blank_draft_update_params.append((now,)+draft_key)
                 else:
-                    cur.execute(
-                        """INSERT INTO teacher_mark_drafts
-                           (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
-                           VALUES(?,?,?,?,?,?,?,?,?)""",
-                        (sid,teacher_id,exam_id,class_id,subject_id,student_id,'','',now)
-                    )
-                try:
-                    cur.execute(
-                        """DELETE FROM subject_performance_comments
-                           WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?""",
-                        (sid,student_id,exam_id,subject_id)
-                    )
-                except Exception:
-                    pass
+                    blank_draft_insert_params.append((sid,teacher_id,exam_id,class_id,subject_id,student_id,'','',now))
+                blank_comment_delete_params.append((sid,student_id,exam_id,subject_id))
                 continue
 
             try:
@@ -5499,57 +5487,55 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                 continue
             mark_value=int(mark) if mark.is_integer() else mark
 
-            # Shared published marks record: both School Admin and Teacher
-            # pages read this same value.
             old_ids=marks_by_student.get(student_id,[])
             if old_ids:
                 for old_id in old_ids:
-                    cur.execute(
-                        "UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",
-                        (mark_value,class_id,exam["year"],exam["term"],old_id,sid)
-                    )
+                    mark_update_params.append((mark_value,class_id,exam["year"],exam["term"],old_id,sid))
             else:
-                cur.execute(
-                    "INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",
-                    (sid,student_id,subject_id,exam_id,class_id,mark_value,exam["year"],exam["term"])
-                )
+                mark_insert_params.append((sid,student_id,subject_id,exam_id,class_id,mark_value,exam["year"],exam["term"]))
 
-            # Keep the teacher draft mirror so the teacher can resume after
-            # logging out, but it is no longer a separate source of truth.
             if existing_drafts:
-                cur.execute(
-                    """UPDATE teacher_mark_drafts SET marks=?,comment=?,updated_at=?
-                       WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                         AND subject_id=? AND student_id=?""",
-                    (str(mark_value),comment,now)+draft_key
-                )
+                draft_update_params.append((str(mark_value),comment,now)+draft_key)
             else:
-                cur.execute(
-                    """INSERT INTO teacher_mark_drafts
-                       (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
-                       VALUES(?,?,?,?,?,?,?,?,?)""",
-                    (sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now)
-                )
+                draft_insert_params.append((sid,teacher_id,exam_id,class_id,subject_id,student_id,str(mark_value),comment,now))
 
-            # Refresh the shared performance comment from the current grading
-            # rule so both sides show the same comment.
             try:
                 _,_,shared_comment=_subject_grade_details(cur,sid,subject_id,mark,grading_rules,out_of)
             except Exception:
                 shared_comment=""
-            now_comment=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             existing_comment_ids=comments_by_student.get(student_id,[])
             if existing_comment_ids:
                 for existing_comment_id in existing_comment_ids:
-                    cur.execute(
-                        "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
-                        (shared_comment,now_comment,existing_comment_id,sid)
-                    )
+                    comment_update_params.append((shared_comment,comment_now,existing_comment_id,sid))
             else:
-                cur.execute(
-                    "INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",
-                    (sid,student_id,exam_id,subject_id,shared_comment,now_comment)
-                )
+                comment_insert_params.append((sid,student_id,exam_id,subject_id,shared_comment,comment_now))
+
+        if blank_mark_params:
+            cur.executemany("DELETE FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? AND class_id=?",blank_mark_params)
+        if blank_draft_update_params:
+            cur.executemany("""UPDATE teacher_mark_drafts SET marks='',comment='',updated_at=?
+                WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?""",blank_draft_update_params)
+        if blank_draft_insert_params:
+            cur.executemany("""INSERT INTO teacher_mark_drafts
+                (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""",blank_draft_insert_params)
+        if blank_comment_delete_params:
+            cur.executemany("DELETE FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",blank_comment_delete_params)
+        if mark_update_params:
+            cur.executemany("UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",mark_update_params)
+        if mark_insert_params:
+            cur.executemany("INSERT INTO marks(school_id,student_id,subject_id,exam_id,class_id,marks,year,term) VALUES(?,?,?,?,?,?,?,?)",mark_insert_params)
+        if draft_update_params:
+            cur.executemany("""UPDATE teacher_mark_drafts SET marks=?,comment=?,updated_at=?
+                WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=? AND subject_id=? AND student_id=?""",draft_update_params)
+        if draft_insert_params:
+            cur.executemany("""INSERT INTO teacher_mark_drafts
+                (school_id,teacher_id,exam_id,class_id,subject_id,student_id,marks,comment,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""",draft_insert_params)
+        if comment_update_params:
+            cur.executemany("UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",comment_update_params)
+        if comment_insert_params:
+            cur.executemany("INSERT INTO subject_performance_comments(school_id,student_id,exam_id,subject_id,comment,updated_at) VALUES(?,?,?,?,?,?)",comment_insert_params)
         # Draft data must be saved even if the optional audit trail has a schema problem.
         # Keep an audit-table/schema failure from aborting the marks transaction.
         # PostgreSQL marks the whole transaction failed after a statement error,
