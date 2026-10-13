@@ -4720,7 +4720,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<div class='page'><h1>Subject Grading & Points</h1>"
         "<div class='muted'>Set the grade band and points for each subject. "
         "These rules are applied automatically when marks are entered and when class marksheets are generated.</div>"
-        "<div class='card section'><form method='get' action='/app/academics/grading" + current_ds_tab_q + "' style='display:grid;grid-template-columns:1fr auto;gap:10px'>"
+        "<div class='card section'><form method='get' data-native-get='1' action='/app/academics/grading" + current_ds_tab_q + "' style='display:grid;grid-template-columns:1fr auto;gap:10px'>"
         "<select name='subject_id' class='field' required><option value=''>Select subject</option>"
         + sopts +
         "</select><button class='btn'>Load Subject</button></form></div>"
