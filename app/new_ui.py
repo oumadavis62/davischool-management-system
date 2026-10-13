@@ -904,6 +904,16 @@ document.addEventListener('submit',function(event){{
   }}catch(e){{form.submit();}}
 }},true);
 
+// Warm the server-rendered default view while the filtered view is open.
+// Back can then reuse the browser's prefetched response instead of starting cold.
+try{{
+  if(isSystemPath(window.location.pathname) && isFiltered(window.location.href)){{
+    var defaultUrl=unfilteredUrl(window.location.href);
+    var prefetch=document.createElement('link');
+    prefetch.rel='prefetch';prefetch.href=defaultUrl;prefetch.as='document';
+    document.head.appendChild(prefetch);
+  }}
+}}catch(e){{}}
 // When the user returns with Back, the next filter cycle must start from the
 // unfiltered page again. Clear filter-history markers for the current page.
 window.addEventListener('popstate',function(event){{
