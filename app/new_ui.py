@@ -5420,17 +5420,37 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+        exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
+        # Load the existing per-student state in batches, rather than doing
+        # several SELECTs for every learner in a class.
+        student_ids=[int(st["id"]) for st in students]
+        draft_students=set()
+        marks_by_student={}
+        comments_by_student={}
+        if student_ids:
+            placeholders=",".join("?" for _ in student_ids)
+            draft_students={int(row["student_id"]) for row in cur.execute(
+                """SELECT student_id FROM teacher_mark_drafts
+                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
+                     AND subject_id=? AND student_id IN ("""+placeholders+")",
+                [sid,teacher_id,exam_id,class_id,subject_id]+student_ids
+            ).fetchall()}
+            for row in cur.execute(
+                "SELECT id,student_id FROM marks WHERE school_id=? AND subject_id=? AND exam_id=? AND student_id IN ("+placeholders+")",
+                [sid,subject_id,exam_id]+student_ids
+            ).fetchall():
+                marks_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
+            for row in cur.execute(
+                "SELECT id,student_id FROM subject_performance_comments WHERE school_id=? AND subject_id=? AND exam_id=? AND student_id IN ("+placeholders+")",
+                [sid,subject_id,exam_id]+student_ids
+            ).fetchall():
+                comments_by_student.setdefault(int(row["student_id"]),[]).append(int(row["id"]))
         for st in students:
             student_id=int(st["id"])
             raw=form.get(f"mark_{student_id}")
             comment=str(form.get(f"comment_{student_id}") or "").strip()
             draft_key=(sid,teacher_id,exam_id,class_id,subject_id,student_id)
-            existing_drafts=cur.execute(
-                """SELECT 1 FROM teacher_mark_drafts
-                   WHERE school_id=? AND teacher_id=? AND exam_id=? AND class_id=?
-                     AND subject_id=? AND student_id=?""",
-                draft_key
-            ).fetchone()
+            existing_drafts=student_id in draft_students
 
             if raw is None or str(raw).strip()=="":
                 # A blank saved by the teacher is also a blank in the shared
@@ -5474,16 +5494,12 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
 
             # Shared published marks record: both School Admin and Teacher
             # pages read this same value.
-            exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
-            old_rows=cur.execute(
-                "SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=?",
-                (sid,student_id,subject_id,exam_id)
-            ).fetchall()
-            if old_rows:
-                for old in old_rows:
+            old_ids=marks_by_student.get(student_id,[])
+            if old_ids:
+                for old_id in old_ids:
                     cur.execute(
                         "UPDATE marks SET marks=?,class_id=?,year=?,term=? WHERE id=? AND school_id=?",
-                        (mark_value,class_id,exam["year"],exam["term"],old["id"],sid)
+                        (mark_value,class_id,exam["year"],exam["term"],old_id,sid)
                     )
             else:
                 cur.execute(
@@ -5516,15 +5532,12 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             except Exception:
                 shared_comment=""
             now_comment=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-            existing_comments=cur.execute(
-                "SELECT id FROM subject_performance_comments WHERE school_id=? AND student_id=? AND exam_id=? AND subject_id=?",
-                (sid,student_id,exam_id,subject_id)
-            ).fetchall()
-            if existing_comments:
-                for ec in existing_comments:
+            existing_comment_ids=comments_by_student.get(student_id,[])
+            if existing_comment_ids:
+                for existing_comment_id in existing_comment_ids:
                     cur.execute(
                         "UPDATE subject_performance_comments SET comment=?,updated_at=? WHERE id=? AND school_id=?",
-                        (shared_comment,now_comment,ec["id"],sid)
+                        (shared_comment,now_comment,existing_comment_id,sid)
                     )
             else:
                 cur.execute(
