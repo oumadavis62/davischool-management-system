@@ -7073,7 +7073,7 @@ def report_card_settings(request: Request, exam_id:int=0, saved:int=0):
     con.close()
     options="".join(f"<option value='{e['id']}' {'selected' if int(e['id'])==exam_id else ''}>{escape(str(e['name']))}</option>" for e in exams)
     notice="<div style='margin:10px 0;padding:10px;border-radius:8px;background:#ecfdf5;color:#166534;font-weight:700'>Report card dates saved successfully.</div>" if saved else ""
-    return _school_page(request,"Report Card Settings",f"""<div class='card section'><h2>Report Card Dates</h2><p class='muted'>Set the opening and closing dates for each examination/reporting period.</p>{notice}<form id='report-card-dates-form' method='post' action='/app/report-card-settings' autocomplete='off'><select id='report-card-exam' name='exam_id' class='field report-exam-field' required><option value='' disabled>Select examination</option>{options}</select><label>Date of Opening</label><input type='date' name='opening_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["opening_date"] if selected else ""))}'><label>Date of Closing</label><input type='date' name='closing_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["closing_date"] if selected else ""))}'><button type='submit' name='save_dates' value='1' class='btn report-save-btn'>Save Dates</button></form><style>.report-exam-field{{width:100%;min-height:58px;font-size:18px;padding:14px 16px;box-sizing:border-box}}.report-date-field{{min-height:58px!important;font-size:18px!important}}.report-save-btn{{margin-top:12px;min-height:52px;padding:13px 22px;font-size:16px;cursor:pointer}}</style></div>""")
+    return _school_page(request,"Report Card Settings",f"""<div class='card section'><h2>Report Card Dates</h2><p class='muted'>Set the opening and closing dates for each examination/reporting period.</p>{notice}<form id='report-card-dates-form' method='post' action='/app/report-card-settings' autocomplete='off'><select id='report-card-exam' name='exam_id' class='field report-exam-field' required onchange="window.location.href='/app/report-card-settings?exam_id='+encodeURIComponent(this.value)"><option value='' disabled>Select examination</option>{options}</select><label>Date of Opening</label><input type='date' name='opening_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["opening_date"] if selected else ""))}'><label>Date of Closing</label><input type='date' name='closing_date' class='field report-date-field' style='width:100%;min-height:52px;font-size:17px;padding:12px 14px;box-sizing:border-box' value='{escape(str(selected["closing_date"] if selected else ""))}'><button type='submit' name='save_dates' value='1' class='btn report-save-btn'>Save Dates</button></form><style>.report-exam-field{{width:100%;min-height:58px;font-size:18px;padding:14px 16px;box-sizing:border-box}}.report-date-field{{min-height:58px!important;font-size:18px!important}}.report-save-btn{{margin-top:12px;min-height:52px;padding:13px 22px;font-size:16px;cursor:pointer}}</style></div>""")
 
 @router.post("/app/report-card-settings")
 def save_report_card_settings(request: Request, exam_id:int=Form(...), opening_date:str=Form(""), closing_date:str=Form("")):
@@ -7291,6 +7291,13 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
             styles["normal"])]
         trend=_report_card_exam_trend(cur,sid,stid,selected_exam_ids,grading_rules,overall_rules)
         _report_card_line_graph(story,trend,styles)
+        report_dates=_get_report_card_dates(cur,sid,selected_exam_ids[0])
+        opening_text=escape(_format_report_card_date(report_dates["opening_date"]))
+        closing_text=escape(_format_report_card_date(report_dates["closing_date"]))
+        story.append(Spacer(1,5))
+        story.append(Paragraph(
+            f"Date of closing: {closing_text or '—'}    Date of opening: {opening_text or '—'}",
+            styles["normal"]))
         return _pdf_response(_pdf_build(story,A4,"Student Report Card"),f"report_card_{st['name']}.pdf")
     except Exception as exc:
         return _pdf_route_error(request, "report-cards/pdf", exc)
@@ -7322,6 +7329,9 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         overall_rules = _load_overall_grading_rules(cur,sid)
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         bulk_results = _bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
+        report_dates = _get_report_card_dates(cur,sid,selected_exam_ids[0])
+        opening_text = escape(_format_report_card_date(report_dates["opening_date"]))
+        closing_text = escape(_format_report_card_date(report_dates["closing_date"]))
         exam_names = ", ".join(str(e["name"] or "") for e in exams if int(e["id"]) in set(selected_exam_ids))
         styles = _pdf_styles()
         from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -7347,6 +7357,10 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
                 styles["normal"]))
             trend=_report_card_selected_exam_trend(cur,sid,int(st["id"]),selected_exam_ids)
             _report_card_line_graph(story,trend,styles)
+            story.append(Spacer(1,5))
+            story.append(Paragraph(
+                f"Date of closing: {closing_text or '—'}    Date of opening: {opening_text or '—'}",
+                styles["normal"]))
             if index < len(students)-1:
                 story.append(PageBreak())
         from reportlab.lib.pagesizes import A4
@@ -7432,24 +7446,42 @@ def _report_card_line_graph_html(trend):
     return "<div class='report-trend'><div class='report-graph-title'>Performance Trend</div><div class='trend-chart'><div class='trend-y'><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><svg viewBox='0 0 100 112' preserveAspectRatio='none' aria-label='Performance trend'><g class='trend-grid'><line x1='5' y1='20' x2='95' y2='20'></line><line x1='5' y1='39' x2='95' y2='39'></line><line x1='5' y1='58' x2='95' y2='58'></line><line x1='5' y1='77' x2='95' y2='77'></line><line x1='5' y1='96' x2='95' y2='96'></line></g><g class='trend-bars'>%s</g></svg></div></div>"%bars
 
 def _get_report_card_dates(cur, school_id, exam_id):
-    """Resolve each configured report-card date across legacy duplicate rows."""
+    """Prefer selected-exam dates; fall back to latest valid school date set."""
+    result = {"opening_date": "", "closing_date": ""}
     try:
         rows = cur.execute(
             "SELECT opening_date,closing_date FROM report_card_settings "
             "WHERE school_id=? AND exam_id=? ORDER BY id DESC",
             (school_id, exam_id)
         ).fetchall()
+        for row in rows:
+            for field in ("opening_date", "closing_date"):
+                value = str(row[field] or "").strip()
+                if value and not result[field]:
+                    result[field] = value
+            if result["opening_date"] and result["closing_date"]:
+                return result
+        # Schools sometimes configure dates once before creating a new assessment.
+        # Reuse the latest saved dates if this assessment has no dates of its own,
+        # but ignore settings belonging to deleted examinations.
+        if not result["opening_date"] or not result["closing_date"]:
+            fallback_rows = cur.execute(
+                "SELECT r.opening_date,r.closing_date FROM report_card_settings r "
+                "JOIN exams e ON e.id=r.exam_id AND e.school_id=r.school_id "
+                "WHERE r.school_id=? AND r.exam_id<>? "
+                "AND (COALESCE(r.opening_date,'')<>'' OR COALESCE(r.closing_date,'')<>'') "
+                "ORDER BY r.id DESC",
+                (school_id, exam_id)
+            ).fetchall()
+            for row in fallback_rows:
+                for field in ("opening_date", "closing_date"):
+                    value = str(row[field] or "").strip()
+                    if value and not result[field]:
+                        result[field] = value
+                if result["opening_date"] and result["closing_date"]:
+                    break
     except Exception as exc:
         print("DAVISCHOOL REPORT DATE LOOKUP FALLBACK:", repr(exc), flush=True)
-        return {"opening_date": "", "closing_date": ""}
-    result = {"opening_date": "", "closing_date": ""}
-    for row in rows:
-        for field in ("opening_date", "closing_date"):
-            value = str(row[field] or "").strip()
-            if value and not result[field]:
-                result[field] = value
-        if result["opening_date"] and result["closing_date"]:
-            break
     return result
 
 
