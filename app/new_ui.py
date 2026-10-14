@@ -6876,7 +6876,7 @@ def teacher_allocations_page(request: Request):
 <div class='allocation-cap'><span>Remaining</span><b>{allocation_remaining}</b></div>
 
 </div>
-<div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'>
+<div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form' data-native-post='1'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
 <select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
