@@ -6863,13 +6863,6 @@ def teacher_allocations_page(request: Request):
             % (len(classes), len(subjects), allocation_max)
         )
     saved_notice = ""
-    if request.query_params.get("allocation_saved") == "1":
-        saved_notice = (
-            "<div role='status' style='margin-top:14px;background:#ecfdf3;"
-            "border:1px solid #86efac;color:#166534;border-radius:10px;"
-            "padding:12px 14px;font-weight:700'>Allocation saved successfully. "
-            "The current allocations table has been refreshed.</div>"
-        )
     con.close()
     tops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in teachers)
     cops="".join("<option value='%s'>%s%s</option>"%(x["id"],escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
@@ -6877,14 +6870,14 @@ def teacher_allocations_page(request: Request):
     current_ds_tab_q=("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""
     trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit' formaction='/app/academics/allocations/delete/%s%s' formmethod='post'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"],current_ds_tab_q,x["id"],current_ds_tab_q) for x in rows)
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
-{limit_notice}{saved_notice}
+{limit_notice}
 <div class='card section'><div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>
 <div class='allocation-cap'><span>Maximum Allocations</span><b>{allocation_max}</b></div>
 <div class='allocation-cap'><span>Current Allocations</span><b>{allocation_current}</b></div>
 <div class='allocation-cap'><span>Remaining</span><b>{allocation_remaining}</b></div>
 
 </div>
-<div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form' data-native-post='1'>
+<div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'>
 <select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
 <select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
@@ -6978,7 +6971,7 @@ def teacher_allocations_add(request: Request,teacher_id:int=Form(...),class_id:i
     # from being reused after a POST/redirect, while preserving the active tab.
     tab_value=str(request.query_params.get("ds_tab") or "").strip()
     refresh_token=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S%f")
-    params=["allocation_saved=1","refresh="+refresh_token]
+    params=["refresh="+refresh_token]
     if tab_value:
         params.append("ds_tab="+quote(tab_value,safe=""))
     redirect_response = RedirectResponse("/app/academics/allocations?"+"&".join(params),303)
