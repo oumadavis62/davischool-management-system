@@ -361,6 +361,7 @@ class DaviSchoolTabSessionMiddleware:
 
         if replay_messages:
             replay_index = 0
+            original_receive = receive
 
             async def replay_receive():
                 nonlocal replay_index
@@ -368,7 +369,7 @@ class DaviSchoolTabSessionMiddleware:
                     message = replay_messages[replay_index]
                     replay_index += 1
                     return message
-                return await receive()
+                return await original_receive()
 
             receive = replay_receive
 
