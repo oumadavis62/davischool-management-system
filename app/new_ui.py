@@ -1330,6 +1330,14 @@ def student_history(request: Request,student_id:int):
 def staff_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
+    # Preserve the isolated browser-tab session on form POSTs. Some mobile
+    # browsers omit Referer on form submissions, and the tab-session middleware
+    # then cannot select the authenticated tab cookie unless ds_tab is in the
+    # form action URL itself.
+    staff_tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", staff_tab_id):
+        staff_tab_id = ""
+    staff_add_action = "/app/staff/add" + (("?ds_tab=" + quote(staff_tab_id, safe="")) if staff_tab_id else "")
     if not _require_permission(request, sid, "staff.view"):
         return HTMLResponse("You do not have permission to view staff records.", 403)
     con=_db(); cur=con.cursor()
@@ -1340,7 +1348,7 @@ def staff_page(request: Request):
         except Exception: return default
     rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'email'))}</td><td>{escape(val(t,'phone'))}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{t["id"]}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={t["id"]}'>Teaching</a></td></tr>""" for t in staff)
     body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory, employment status, teacher profiles and academic responsibilities.</div>
-<div class='card section'><h2>Add staff member</h2><form method='post' action='/app/staff/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+<div class='card section'><h2>Add staff member</h2><form method='post' action='{staff_add_action}' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
 <input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'>
 <select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select>
 <select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select>
