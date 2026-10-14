@@ -227,7 +227,12 @@ def ensure_schema_compatibility(con):
             "details": "TEXT",
             "timestamp": "TEXT",
         },
-        "teachers": {"status": "TEXT", "department": "TEXT"},
+        "teachers": {
+            "school_id": "INTEGER", "name": "TEXT", "email": "TEXT",
+            "phone": "TEXT", "tsc_no": "TEXT", "gender": "TEXT",
+            "id_no": "TEXT", "role": "TEXT", "employment_type": "TEXT",
+            "status": "TEXT", "department": "TEXT",
+        },
         "teacher_allocations": {"responsibility": "TEXT"},
     }
 
