@@ -4809,7 +4809,7 @@ def grading_setup(request: Request, subject_id: str = ""):
         "<button type='submit' formaction='/app/academics/grading/add' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
         "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
         "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
-        "<form method='post' action='/app/academics/grading/copy' onsubmit='return confirmCopyGrading()'>"
+        "<form method='post' action='/app/academics/grading/copy" + current_ds_tab_q + "' data-native-post='1' onsubmit='return confirm(\"Copy this grading scale to the selected subjects? Existing scales will be preserved unless Replace is checked.\")'>"
         "<input type='hidden' name='source_subject_id' value='" + str(subid) + "'>"
         "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:9px'>"
         + target_subject_options +
@@ -4982,7 +4982,7 @@ async def grading_copy(request: Request):
         con.commit()
     finally:
         con.close()
-    return RedirectResponse("/app/academics/grading?subject_id=%s&copied=%s" % (source_subject_id, copied), 303)
+    return RedirectResponse("/app/academics/grading?subject_id=%s&copied=%s%s" % (source_subject_id, copied, ("&ds_tab=" + quote(request.query_params.get("ds_tab"), safe="")) if request.query_params.get("ds_tab") else ""), 303)
 
 @router.get("/app/academics/grading/edit/{rule_id}", response_class=HTMLResponse)
 def grading_edit_page(request: Request, rule_id: int, subject_id: str = ""):
