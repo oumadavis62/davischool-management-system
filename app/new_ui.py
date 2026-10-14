@@ -1359,6 +1359,9 @@ def staff_page(request: Request):
 <style>.staff-table-scroll{{width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-width:thin}}.staff-table-scroll table{{min-width:900px}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
     return _school_page(request,"Staff & Teachers",body)
 
+# Compatibility endpoint for older FastAPI Cloud pages that submit to /app/staff.
+# Keep the canonical form action at /app/staff/add; both paths use the same save handler.
+@router.post("/app/staff")
 @router.post("/app/staff/add")
 def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
     sid=_school_session(request)
