@@ -909,8 +909,8 @@ document.addEventListener('submit',function(event){{
   var originKey='davischool-two-step-origin-url';
   var activeKey='davischool-two-step-active-url';
   function isSystem(path){{
-    path=String(path||'/').split('#')[0].replace(/\/+$/,'')||'/';
-    return /^\/(app|school|schools|super|portal|dashboard|teacher|student|parent|account)(\/|$)/.test(path);
+    path=String(path||'/').split('#')[0].replace(/\\/+$/,'')||'/';
+    return /^\\/(app|school|schools|super|portal|dashboard|teacher|student|parent|account)(\\/|$)/.test(path);
   }}
   function normalizedUrl(value){{
     var u=new URL(value,window.location.href);
