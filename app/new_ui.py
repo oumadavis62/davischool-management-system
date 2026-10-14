@@ -6862,6 +6862,14 @@ def teacher_allocations_page(request: Request):
             "</div>"
             % (len(classes), len(subjects), allocation_max)
         )
+    saved_notice = ""
+    if request.query_params.get("allocation_saved") == "1":
+        saved_notice = (
+            "<div role='status' style='margin-top:14px;background:#ecfdf3;"
+            "border:1px solid #86efac;color:#166534;border-radius:10px;"
+            "padding:12px 14px;font-weight:700'>Allocation saved successfully. "
+            "The current allocations table has been refreshed.</div>"
+        )
     con.close()
     tops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in teachers)
     cops="".join("<option value='%s'>%s%s</option>"%(x["id"],escape(str(x["name"] or "")),(" — "+escape(str(x["stream"]))) if x["stream"] else "") for x in classes)
@@ -6869,7 +6877,7 @@ def teacher_allocations_page(request: Request):
     current_ds_tab_q=("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""
     trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit' formaction='/app/academics/allocations/delete/%s%s' formmethod='post'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"],current_ds_tab_q,x["id"],current_ds_tab_q) for x in rows)
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
-{limit_notice}
+{limit_notice}{saved_notice}
 <div class='card section'><div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>
 <div class='allocation-cap'><span>Maximum Allocations</span><b>{allocation_max}</b></div>
 <div class='allocation-cap'><span>Current Allocations</span><b>{allocation_current}</b></div>
@@ -6890,30 +6898,69 @@ def teacher_allocations_add(request: Request,teacher_id:int=Form(...),class_id:i
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.edit"):return HTMLResponse("You do not have permission to manage teacher allocations.",403)
-    con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
-    if not (cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()):
-        con.close();return HTMLResponse("Invalid selection. <a href='/app/academics/allocations'>Back</a>",400)
-    existing=cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",(sid,teacher_id,class_id,subject_id)).fetchone()
-    if not existing:
-        # Enforce the calculated school-wide ceiling at the write boundary.
-        # This prevents the limit from being bypassed by another request,
-        # even if the allocation page was opened before the last allocation.
-        class_count = int(cur.execute("SELECT COUNT(*) AS n FROM classes WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
-        subject_count = int(cur.execute("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
-        allocation_max = class_count * subject_count
-        allocation_current = int(cur.execute("SELECT COUNT(*) AS n FROM teacher_allocations WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
-        if allocation_current >= allocation_max:
-            con.close()
-            tab_value=str(request.query_params.get("ds_tab") or "").strip()
-            params=["allocation_limit=1"]
-            if tab_value:
-                params.append("ds_tab="+quote(tab_value,safe=""))
-            return RedirectResponse("/app/academics/allocations?"+"&".join(params),303)
-        cur.execute("INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",(sid,teacher_id,class_id,subject_id))
-        _audit(cur,sid,request,"TEACHER_ALLOCATION","Teacher %s / Class %s / Subject %s"%(teacher_id,class_id,subject_id))
-    con.commit();con.close()
+
+    # Commit the allocation independently of the optional audit record. A failure
+    # in audit logging must never leave a successful-looking save uncommitted.
+    con=_db()
+    allocation_created=False
+    try:
+        cur=con.cursor()
+        _ensure_teacher_allocations_table(cur)
+        if not (
+            cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+            and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+            and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
+        ):
+            return HTMLResponse("Invalid selection. <a href='/app/academics/allocations'>Back</a>",400)
+
+        existing=cur.execute(
+            "SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+            (sid,teacher_id,class_id,subject_id)
+        ).fetchone()
+
+        if not existing:
+            class_count=int(cur.execute("SELECT COUNT(*) AS n FROM classes WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+            subject_count=int(cur.execute("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+            allocation_max=class_count*subject_count
+            allocation_current=int(cur.execute("SELECT COUNT(*) AS n FROM teacher_allocations WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+            if allocation_current >= allocation_max:
+                tab_value=str(request.query_params.get("ds_tab") or "").strip()
+                params=["allocation_limit=1"]
+                if tab_value:
+                    params.append("ds_tab="+quote(tab_value,safe=""))
+                return RedirectResponse("/app/academics/allocations?"+"&".join(params),303)
+
+            cur.execute(
+                "INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
+                (sid,teacher_id,class_id,subject_id)
+            )
+            con.commit()
+            allocation_created=True
+    finally:
+        con.close()
+
+    if allocation_created:
+        try:
+            audit_con=_db()
+            try:
+                _audit(
+                    audit_con.cursor(),sid,request,"TEACHER_ALLOCATION",
+                    "Teacher %s / Class %s / Subject %s"%(teacher_id,class_id,subject_id)
+                )
+                audit_con.commit()
+            finally:
+                audit_con.close()
+        except Exception as audit_exc:
+            print("DAVISCHOOL TEACHER ALLOCATION AUDIT WARNING: %r"%(audit_exc,),flush=True)
+
+    # A unique refresh parameter prevents a previously rendered allocation page
+    # from being reused after a POST/redirect, while preserving the active tab.
     tab_value=str(request.query_params.get("ds_tab") or "").strip()
-    return RedirectResponse("/app/academics/allocations" + (("?ds_tab="+quote(tab_value,safe="")) if tab_value else ""),303)
+    refresh_token=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S%f")
+    params=["allocation_saved=1","refresh="+refresh_token]
+    if tab_value:
+        params.append("ds_tab="+quote(tab_value,safe=""))
+    return RedirectResponse("/app/academics/allocations?"+"&".join(params),303)
 
 @router.get("/app/academics/allocations/edit/{allocation_id}", response_class=HTMLResponse)
 def teacher_allocations_edit_page(request: Request, allocation_id:int):
