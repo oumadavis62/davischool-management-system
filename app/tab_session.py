@@ -318,7 +318,59 @@ class DaviSchoolTabSessionMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Form handlers in older deployed templates may carry ds_tab only as a
+        # hidden URL-encoded form field, not in the action query or Referer.
+        # Resolve that field before choosing the per-tab session cookie, while
+        # replaying the exact ASGI body messages so FastAPI can parse the form
+        # normally afterward.
         tab_id = self._tab_id(scope)
+        replay_messages = []
+        if (
+            not tab_id
+            and scope.get("type") == "http"
+            and scope.get("method", "GET").upper() == "POST"
+            and any(
+                name.lower() == b"content-type"
+                and value.lower().split(b";", 1)[0].strip() == b"application/x-www-form-urlencoded"
+                for name, value in scope.get("headers", [])
+            )
+        ):
+            body_parts = []
+            body_size = 0
+            while True:
+                message = await receive()
+                replay_messages.append(message)
+                if message.get("type") == "http.request":
+                    part = message.get("body", b"")
+                    body_size += len(part)
+                    if body_size <= 1024 * 1024:
+                        body_parts.append(part)
+                    if not message.get("more_body", False):
+                        break
+                elif message.get("type") == "http.disconnect":
+                    break
+            if body_size <= 1024 * 1024:
+                form_values = parse_qs(
+                    b"".join(body_parts).decode("utf-8", "ignore"),
+                    keep_blank_values=True,
+                )
+                candidates = form_values.get(_TAB_PARAM, [])
+                candidate = candidates[0] if candidates else ""
+                if _TAB_RE.fullmatch(candidate or ""):
+                    tab_id = candidate
+
+        if replay_messages:
+            replay_index = 0
+
+            async def replay_receive():
+                nonlocal replay_index
+                if replay_index < len(replay_messages):
+                    message = replay_messages[replay_index]
+                    replay_index += 1
+                    return message
+                return await receive()
+
+            receive = replay_receive
 
         scope["davischool_tab_id"] = tab_id
 
