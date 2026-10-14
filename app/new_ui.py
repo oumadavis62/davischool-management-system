@@ -1354,21 +1354,82 @@ def staff_page(request: Request):
 @router.post("/app/staff/add")
 def staff_add(request: Request,name:str=Form(...),email:str=Form(""),phone:str=Form(""),tsc_no:str=Form(""),id_no:str=Form(""),role:str=Form("Teacher"),gender:str=Form(""),employment_type:str=Form("Permanent"),status:str=Form("active"),department:str=Form("")):
     sid=_school_session(request)
-    if not sid:return RedirectResponse("/",303)
+    if not sid:
+        return RedirectResponse("/",303)
     if not _require_permission(request, sid, "staff.create"):
         return HTMLResponse("You do not have permission to add staff.", 403)
+
     allowed_status=("active","inactive","on_leave","left")
     new_status=status.strip().lower() if status.strip().lower() in allowed_status else "active"
-    con=_db();cur=con.cursor(); email_v=email.strip(); tsc_v=tsc_no.strip(); id_v=id_no.strip()
-    if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?)",(sid,email_v)).fetchone():
-        con.close(); return HTMLResponse("A staff member with that email already exists. <a href='/app/staff'>Back</a>",400)
-    if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?)",(sid,tsc_v)).fetchone():
-        con.close(); return HTMLResponse("That TSC number already exists. <a href='/app/staff'>Back</a>",400)
-    if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?)",(sid,id_v)).fetchone():
-        con.close(); return HTMLResponse("That ID number already exists. <a href='/app/staff'>Back</a>",400)
-    cur.execute("INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,status,department) VALUES(?,?,?,?,?,?,?,?,?,?,?)",(sid,name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip()))
-    _audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}")
-    con.commit();con.close();return RedirectResponse("/app/staff",303)
+    email_v=email.strip()
+    tsc_v=tsc_no.strip()
+    id_v=id_no.strip()
+    con=None
+    try:
+        con=_db()
+        cur=con.cursor()
+
+        # Repair older teachers tables on the actual connection used by this
+        # save request. Startup migrations can run before a hosted database is
+        # reachable, so do not assume optional columns already exist here.
+        teacher_columns={
+            "school_id":"INTEGER", "name":"TEXT", "email":"TEXT", "phone":"TEXT",
+            "tsc_no":"TEXT", "gender":"TEXT", "id_no":"TEXT", "role":"TEXT",
+            "employment_type":"TEXT", "status":"TEXT", "department":"TEXT"
+        }
+        cur.execute("SELECT * FROM teachers LIMIT 0")
+        existing={str(col.name if hasattr(col,"name") else col[0]).lower() for col in (cur.description or [])}
+        for column,definition in teacher_columns.items():
+            if column in existing:
+                continue
+            try:
+                cur.execute(f"ALTER TABLE teachers ADD COLUMN IF NOT EXISTS {column} {definition}")
+            except Exception:
+                try:
+                    con.rollback()
+                except Exception:
+                    pass
+                cur.execute(f"ALTER TABLE teachers ADD COLUMN {column} {definition}")
+            existing.add(column)
+        con.commit()
+
+        if email_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?)",(sid,email_v)).fetchone():
+            con.close()
+            return HTMLResponse("A staff member with that email already exists. <a href='/app/staff'>Back</a>",400)
+        if tsc_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(tsc_no)=lower(?)",(sid,tsc_v)).fetchone():
+            con.close()
+            return HTMLResponse("That TSC number already exists. <a href='/app/staff'>Back</a>",400)
+        if id_v and cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(id_no)=lower(?)",(sid,id_v)).fetchone():
+            con.close()
+            return HTMLResponse("That ID number already exists. <a href='/app/staff'>Back</a>",400)
+
+        cur.execute(
+            "INSERT INTO teachers(school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,status,department) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (sid,name.strip(),email_v,phone.strip(),tsc_v,gender.strip(),id_v,role.strip(),employment_type.strip(),new_status,department.strip())
+        )
+        _audit(cur,sid,request,"STAFF_CREATE",f"Created staff member {name.strip()}")
+        con.commit()
+    except Exception as exc:
+        import traceback
+        try:
+            if con is not None:
+                con.rollback()
+        except Exception:
+            pass
+        print(f"DAVISCHOOL STAFF SAVE ERROR school_id={sid} error={exc!r}",flush=True)
+        traceback.print_exc()
+        return HTMLResponse(
+            "<h2>Staff was not saved</h2><p>The database rejected this save. "
+            "Please retry once after the latest deployment.</p><p>Reference: STAFF-SAVE-01</p>"
+            "<a href='/app/staff'>Back to Staff & Teachers</a>",500
+        )
+    finally:
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
+    return RedirectResponse("/app/staff",303)
 
 @router.get("/app/staff/edit/{teacher_id}",response_class=HTMLResponse)
 def staff_edit_page(request: Request,teacher_id:int):
