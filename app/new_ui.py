@@ -10330,6 +10330,81 @@ def class_marksheet_analysis(
         con.close()
 
 
+def _msa_subject_performance_matrix(cur, school_id, rows, data):
+    """Build class/stream subject grade counts, means and within-subject positions for exports."""
+    subjects = {}
+    groups = {}
+    student_subject_rows = {}
+    for row in rows:
+        subject_id = int(row["subject_id"])
+        subjects[subject_id] = str(row["subject_name"] or "")
+        group_key = (str(row["class_name"] or "Unassigned"), str(row["stream"] or "No stream"))
+        groups[group_key] = True
+        key = (group_key, int(row["student_id"]), subject_id)
+        student_subject_rows.setdefault(key, []).append(row)
+
+    per_group_subject = {}
+    all_grades = set()
+    for (group_key, student_id, subject_id), attempts in student_subject_rows.items():
+        percentages = [float(x["percentage"]) for x in attempts]
+        percentage = sum(percentages) / len(percentages) if percentages else 0.0
+        grade, _, _ = _subject_grade_details(
+            cur, school_id, subject_id, percentage, data["grading_rules"], 100
+        )
+        grade = str(grade or "—")
+        all_grades.add(grade)
+        stats = per_group_subject.setdefault((group_key, subject_id), {"grades": {}, "values": []})
+        stats["grades"][grade] = stats["grades"].get(grade, 0) + 1
+        stats["values"].append(percentage)
+
+    grade_order = []
+    for subject_id in subjects:
+        for rule in data["grading_rules"].get(subject_id, []):
+            grade = str(rule["grade"] or "—")
+            if grade in all_grades and grade not in grade_order:
+                grade_order.append(grade)
+    grade_order.extend(sorted(all_grades - set(grade_order), key=str.casefold))
+
+    subject_means = {}
+    positions = {}
+    for subject_id in subjects:
+        means = []
+        group_means = []
+        for group_key in sorted(groups, key=lambda x: (x[0].casefold(), x[1].casefold())):
+            stats = per_group_subject.get((group_key, subject_id))
+            mean = sum(stats["values"]) / len(stats["values"]) if stats and stats["values"] else None
+            group_means.append((group_key, mean))
+            if mean is not None:
+                means.append(mean)
+        subject_means[subject_id] = sum(means) / len(means) if means else 0.0
+        ranked = sorted(
+            [(group_key, mean) for group_key, mean in group_means if mean is not None],
+            key=lambda x: (-x[1], x[0][0].casefold(), x[0][1].casefold())
+        )
+        previous = None
+        position = 0
+        for index, (group_key, mean) in enumerate(ranked, 1):
+            if previous is None or abs(mean - previous) > 0.000001:
+                position = index
+            positions[(group_key, subject_id)] = position
+            previous = mean
+
+    subject_order = sorted(subjects, key=lambda sid: (-subject_means[sid], subjects[sid].casefold()))
+    group_order = sorted(groups, key=lambda x: (x[0].casefold(), x[1].casefold()))
+    matrix_rows = []
+    for group_key in group_order:
+        values = [group_key[0], group_key[1]]
+        for subject_id in subject_order:
+            stats = per_group_subject.get((group_key, subject_id), {"grades": {}, "values": []})
+            values.extend(stats["grades"].get(grade, 0) for grade in grade_order)
+            entries = len(stats["values"])
+            mean = sum(stats["values"]) / entries if entries else None
+            values.extend([entries, ("%.2f%%" % mean) if mean is not None else "—",
+                           positions.get((group_key, subject_id), "—")])
+        matrix_rows.append(values)
+    return subject_order, [subjects[sid] for sid in subject_order], grade_order, matrix_rows
+
+
 @router.get("/app/academics/marksheet-analysis/csv")
 def class_marksheet_analysis_csv(
     request: Request, exam_ids: str = "", year: str = "", term: str = "",
@@ -10368,9 +10443,18 @@ def class_marksheet_analysis_csv(
         writer.writerow(["School", str(school["name"] or "DaviSchool") if school else "DaviSchool"])
         writer.writerow(["Selected examination IDs", ",".join(str(x) for x in ids)])
         writer.writerow([])
-        writer.writerow(["SUBJECT PERFORMANCE"])
-        writer.writerow(["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"])
-        writer.writerows(data["subject_rows"])
+        subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
+        writer.writerow(["SUBJECT PERFORMANCE BY CLASS AND STREAM"])
+        group_header = ["Class", "Stream"]
+        detail_header = ["", ""]
+        for subject_name in subject_names:
+            group_header.extend([subject_name] + [""] * (len(grade_labels) + 2))
+            detail_header.extend(
+                ["Grade %s count" % grade for grade in grade_labels] + ["Entries", "Mean %", "Position"]
+            )
+        writer.writerow(group_header)
+        writer.writerow(detail_header)
+        writer.writerows(performance_rows)
         writer.writerow([])
         writer.writerow(["TOP FIVE STUDENTS PER SUBJECT - COMBINED CLASS"])
         writer.writerow(["Each subject has its own section; ranks are based on percentage."])
@@ -10545,7 +10629,60 @@ def class_marksheet_analysis_pdf(
         summary_low_total = min((x["total"] for x in eligible_summaries), default=0.0)
         summary_points = sum(x["average_points"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
         pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner total", "Lowest learner total", "Average grade points"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.1f" % summary_high_total, "%.1f" % summary_low_total, "%.2f" % summary_points]])
-        pdf_table("Subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
+        subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
+        story.append(Paragraph("Subject performance by class and stream", styles["MSASection"]))
+        story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
+        grades_per_subject = len(grade_labels)
+        subject_width = grades_per_subject + 3
+        for chunk_start in range(0, len(subject_order), 2):
+            chunk_ids = subject_order[chunk_start:chunk_start + 2]
+            chunk_names = subject_names[chunk_start:chunk_start + 2]
+            first_header = [
+                Paragraph("<b>Class</b>", styles["MSACell"]),
+                Paragraph("<b>Stream</b>", styles["MSACell"]),
+            ]
+            second_header = ["", ""]
+            for subject_name in chunk_names:
+                first_header.extend([Paragraph("<b>%s</b>" % escape(subject_name), styles["MSACell"])] + [""] * (subject_width - 1))
+                second_header.extend(
+                    [Paragraph("<b>%s</b>" % escape("Grade %s" % grade), styles["MSACell"]) for grade in grade_labels]
+                    + [Paragraph("<b>Entries</b>", styles["MSACell"]),
+                       Paragraph("<b>Mean</b>", styles["MSACell"]),
+                       Paragraph("<b>Pos.</b>", styles["MSACell"])]
+                )
+            table_data = [first_header, second_header]
+            for matrix_row in performance_rows:
+                out_row = [Paragraph(escape(str(matrix_row[0])), styles["MSACell"]),
+                           Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
+                for subject_id in chunk_ids:
+                    subject_index = subject_order.index(subject_id)
+                    start = 2 + subject_index * subject_width
+                    out_row.extend(Paragraph(escape(str(v)), styles["MSACell"]) for v in matrix_row[start:start + subject_width])
+                table_data.append(out_row)
+            col_widths = [35*mm, 22*mm]
+            for _subject_id in chunk_ids:
+                col_widths.extend([5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm])
+            matrix_table = Table(table_data, colWidths=col_widths, repeatRows=2, hAlign="LEFT")
+            matrix_style = [
+                ("BACKGROUND", (0,0), (-1,1), colors.HexColor("#176b3a")),
+                ("TEXTCOLOR", (0,0), (-1,1), colors.white),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("ALIGN", (2,2), (-1,-1), "CENTER"),
+                ("FONTSIZE", (0,0), (-1,-1), 5.5),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("SPAN", (0,0), (0,1)),
+                ("SPAN", (1,0), (1,1)),
+            ]
+            for group_index in range(len(chunk_ids)):
+                col_start = 2 + group_index * subject_width
+                matrix_style.append(("SPAN", (col_start,0), (col_start + subject_width - 1,0)))
+            matrix_table.setStyle(TableStyle(matrix_style))
+            story.append(matrix_table)
+            story.append(Spacer(1, 3*mm))
         combined_by_subject = {}
         for entry in data["top_combined"]:
             combined_by_subject.setdefault(entry[0], []).append(entry)
