@@ -10362,6 +10362,34 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
 
     per_group_subject = {}
     all_grades = set()
+    # The "-" column represents students without a numeric mark for that
+    # subject. Load enrolled students for the class/stream groups in scope so
+    # learners with a dash (including learners with no numeric marks at all)
+    # are included in the distribution.
+    group_students = {group_key: set() for group_key in groups}
+    if groups:
+        enrolled_rows = cur.execute(
+            """SELECT st.id AS student_id, c.name AS class_name, c.stream
+               FROM students st
+               JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
+               WHERE st.school_id=?""",
+            (school_id,)
+        ).fetchall()
+        for enrolled in enrolled_rows:
+            group_key = (
+                str(enrolled["class_name"] or "Unassigned"),
+                str(enrolled["stream"] or "No stream"),
+            )
+            if group_key in group_students:
+                group_students[group_key].add(int(enrolled["student_id"]))
+    for student_id, info in data["students"].items():
+        group_key = (
+            str(info.get("class_name") or "Unassigned"),
+            str(info.get("stream") or "No stream"),
+        )
+        if group_key in group_students:
+            group_students[group_key].add(int(student_id))
+    all_grades.add("-")
     for subject_rules in data["grading_rules"].values():
         for rule in subject_rules:
             all_grades.add(str(rule["grade"] or "—"))
@@ -10376,6 +10404,17 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
         stats = per_group_subject.setdefault((group_key, subject_id), {"grades": {}, "values": []})
         stats["grades"][grade] = stats["grades"].get(grade, 0) + 1
         stats["values"].append(percentage)
+
+    # Count each enrolled learner with no numeric entry for a subject in the
+    # explicit dash column. A real grade is counted only once per student.
+    for group_key, student_ids in group_students.items():
+        for subject_id in subjects:
+            stats = per_group_subject.setdefault(
+                (group_key, subject_id), {"grades": {}, "values": []}
+            )
+            for student_id in student_ids:
+                if (group_key, student_id, subject_id) not in student_subject_rows:
+                    stats["grades"]["-"] = stats["grades"].get("-", 0) + 1
 
     grade_order = []
     for subject_id in subjects:
