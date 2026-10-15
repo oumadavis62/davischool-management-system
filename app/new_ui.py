@@ -10448,16 +10448,15 @@ def class_marksheet_analysis_csv(
         writer.writerow([])
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         writer.writerow(["SUBJECT PERFORMANCE BY CLASS AND STREAM"])
-        group_header = ["Class", "Stream"]
-        detail_header = ["", ""]
-        for subject_name in subject_names:
-            group_header.extend([subject_name] + [""] * (len(grade_labels) + 2))
-            detail_header.extend(
-                ["Grade %s count" % grade for grade in grade_labels] + ["Entries", "Mean %", "Position"]
-            )
-        writer.writerow(group_header)
-        writer.writerow(detail_header)
-        writer.writerows(performance_rows)
+        subject_width = len(grade_labels) + 3
+        for subject_index, subject_id in enumerate(subject_order):
+            subject_name = subject_names[subject_index]
+            writer.writerow([])
+            writer.writerow(["SUBJECT: " + subject_name])
+            writer.writerow(["Class", "Stream"] + list(grade_labels) + ["Entries", "Mean %", "Position"])
+            start = 2 + subject_index * subject_width
+            for matrix_row in performance_rows:
+                writer.writerow(matrix_row[:2] + matrix_row[start:start + subject_width])
         writer.writerow([])
         writer.writerow(["TOP FIVE STUDENTS PER SUBJECT - COMBINED CLASS"])
         writer.writerow(["Each subject has its own section; ranks are based on percentage."])
@@ -10638,53 +10637,38 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
         grades_per_subject = len(grade_labels)
         subject_width = grades_per_subject + 3
-        for chunk_start in range(0, len(subject_order), 2):
-            chunk_ids = subject_order[chunk_start:chunk_start + 2]
-            chunk_names = subject_names[chunk_start:chunk_start + 2]
-            first_header = [
+        for subject_index, subject_id in enumerate(subject_order):
+            subject_name = subject_names[subject_index]
+            story.append(Paragraph(escape(subject_name), styles["Heading3"]))
+            table_data = [[
                 Paragraph("<b>Class</b>", styles["MSAMatrixHeader"]),
                 Paragraph("<b>Stream</b>", styles["MSAMatrixHeader"]),
-            ]
-            second_header = ["", ""]
-            for subject_name in chunk_names:
-                first_header.extend([Paragraph("<b>%s</b>" % escape(subject_name), styles["MSAMatrixHeader"])] + [""] * (subject_width - 1))
-                second_header.extend(
-                    [Paragraph("<b>%s</b>" % escape("Grade %s" % grade), styles["MSAMatrixHeader"]) for grade in grade_labels]
-                    + [Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
-                       Paragraph("<b>Mean</b>", styles["MSAMatrixHeader"]),
-                       Paragraph("<b>Pos.</b>", styles["MSAMatrixHeader"])]
-                )
-            table_data = [first_header, second_header]
+            ] + [Paragraph("<b>%s</b>" % escape(str(grade)), styles["MSAMatrixHeader"]) for grade in grade_labels]
+              + [Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
+                 Paragraph("<b>Mean</b>", styles["MSAMatrixHeader"]),
+                 Paragraph("<b>Pos.</b>", styles["MSAMatrixHeader"])]]
+            start = 2 + subject_index * subject_width
             for matrix_row in performance_rows:
-                out_row = [Paragraph(escape(str(matrix_row[0])), styles["MSACell"]),
-                           Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
-                for subject_id in chunk_ids:
-                    subject_index = subject_order.index(subject_id)
-                    start = 2 + subject_index * subject_width
-                    out_row.extend(Paragraph(escape(str(v)), styles["MSACell"]) for v in matrix_row[start:start + subject_width])
-                table_data.append(out_row)
-            col_widths = [35*mm, 22*mm]
-            for _subject_id in chunk_ids:
-                col_widths.extend([5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm])
-            matrix_table = Table(table_data, colWidths=col_widths, repeatRows=2, hAlign="LEFT")
-            matrix_style = [
-                ("BACKGROUND", (0,0), (-1,1), colors.HexColor("#176b3a")),
-                ("TEXTCOLOR", (0,0), (-1,1), colors.white),
+                subject_values = matrix_row[start:start + subject_width]
+                table_data.append(
+                    [Paragraph(escape(str(matrix_row[0])), styles["MSACell"]),
+                     Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
+                    + [Paragraph(escape(str(v)), styles["MSACell"]) for v in subject_values]
+                )
+            col_widths = [35*mm, 22*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
+            matrix_table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            matrix_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("ALIGN", (2,2), (-1,-1), "CENTER"),
+                ("ALIGN", (2,1), (-1,-1), "CENTER"),
                 ("FONTSIZE", (0,0), (-1,-1), 5.5),
                 ("LEFTPADDING", (0,0), (-1,-1), 2),
                 ("RIGHTPADDING", (0,0), (-1,-1), 2),
                 ("TOPPADDING", (0,0), (-1,-1), 2),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-                ("SPAN", (0,0), (0,1)),
-                ("SPAN", (1,0), (1,1)),
-            ]
-            for group_index in range(len(chunk_ids)):
-                col_start = 2 + group_index * subject_width
-                matrix_style.append(("SPAN", (col_start,0), (col_start + subject_width - 1,0)))
-            matrix_table.setStyle(TableStyle(matrix_style))
+            ]))
             story.append(matrix_table)
             story.append(Spacer(1, 3*mm))
         combined_by_subject = {}
