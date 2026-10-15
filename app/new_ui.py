@@ -10905,7 +10905,7 @@ def class_marksheet_analysis_pdf(
                     ])
                 compact_table = Table(
                     compact_data,
-                    colWidths=[9*mm, doc.width / 2 - 6*mm - 9*mm - 22*mm - 13*mm, 11*mm, 13*mm],
+                    colWidths=[9*mm, doc.width / 2 - 3*mm - 9*mm - 11*mm - 13*mm, 11*mm, 13*mm],
                     repeatRows=1, hAlign="LEFT"
                 )
                 compact_table.setStyle(TableStyle([
