@@ -10462,6 +10462,67 @@ def class_marksheet_analysis_csv(
         school = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
         writer.writerow(["School", str(school["name"] or "DaviSchool") if school else "DaviSchool"])
         writer.writerow(["Selected examination IDs", ",".join(str(x) for x in ids)])
+        writer.writerow(["Class", class_name or "All classes", "Stream", stream or "All streams"])
+        writer.writerow([])
+        # Mirror the MarkSheet's Grade Distribution Analysis at the beginning
+        # of the export, using the selected class/stream and selected exams.
+        msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
+        def _msa_export_grade(value):
+            raw = str(value or "").strip().upper()
+            compact = re.sub(r"[^A-Z0-9]+", "", raw)
+            return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
+        msa_subject_counts = {int(subject_id): {grade: 0 for grade in msa_grade_order} for subject_id in data["subjects"]}
+        msa_subject_totals = {int(subject_id): 0.0 for subject_id in data["subjects"]}
+        msa_subject_entries = {int(subject_id): 0 for subject_id in data["subjects"]}
+        msa_overall_counts = {grade: 0 for grade in msa_grade_order}
+        for student_id, summary in data["summaries"].items():
+            overall_grade = _msa_export_grade(summary.get("overall_grade"))
+            if overall_grade:
+                msa_overall_counts[overall_grade] += 1
+        for subject_id in data["subjects"]:
+            subject_id = int(subject_id)
+            for student_id in data["students"]:
+                item = data["aggregated"].get((int(student_id), subject_id))
+                if item is None:
+                    msa_subject_counts[subject_id]["X"] += 1
+                    continue
+                try:
+                    grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["percentage"], data["grading_rules"], 100)
+                except Exception:
+                    grade, _ = _default_grade_points(float(item["percentage"]))
+                normalized_grade = _msa_export_grade(grade)
+                if normalized_grade:
+                    msa_subject_counts[subject_id][normalized_grade] += 1
+                msa_subject_totals[subject_id] += float(item["percentage"])
+                msa_subject_entries[subject_id] += 1
+        msa_subject_ranking = sorted(
+            [(int(subject_id), msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)])
+             for subject_id in data["subjects"] if msa_subject_entries[int(subject_id)]],
+            key=lambda item: (-item[1], str(data["subjects"][item[0]]).casefold())
+        )
+        msa_subject_positions = {}
+        prev_mean = None
+        prev_position = 0
+        for index, (subject_id, mean) in enumerate(msa_subject_ranking, 1):
+            if prev_mean is None or abs(mean - prev_mean) > 0.000001:
+                prev_position = index
+                prev_mean = mean
+            msa_subject_positions[subject_id] = prev_position
+        msa_overall_values = [x["average"] for x in data["summaries"].values() if int(x.get("subject_count") or 0) > 0]
+        writer.writerow(["GRADE DISTRIBUTION ANALYSIS"])
+        writer.writerow(["OVERALL GRADE DISTRIBUTION"])
+        writer.writerow(msa_grade_order + ["Entries", "Class Mean %"])
+        writer.writerow([msa_overall_counts[g] for g in msa_grade_order] + [sum(msa_overall_counts.values()), "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"])
+        writer.writerow([])
+        writer.writerow(["PER-SUBJECT GRADE DISTRIBUTION"])
+        writer.writerow(["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"])
+        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
+            mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
+            writer.writerow([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
+                sum(msa_subject_counts[int(subject_id)].values()),
+                "%.2f" % mean if mean is not None else "—",
+                msa_subject_positions.get(int(subject_id), "—")
+            ])
         writer.writerow([])
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         writer.writerow(["SUBJECT PERFORMANCE BY CLASS AND STREAM"])
@@ -10658,6 +10719,66 @@ def class_marksheet_analysis_pdf(
         summary_low_total = min((x["total"] for x in eligible_summaries), default=0.0)
         summary_points = sum(x["average_points"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
         pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner total", "Lowest learner total", "Average grade points"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.1f" % summary_high_total, "%.1f" % summary_low_total, "%.2f" % summary_points]])
+        # Duplicate the MarkSheet Grade Distribution Analysis near the start of
+        # the PDF so both the overall and per-subject distributions are on page 1.
+        msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
+        def _msa_pdf_grade(value):
+            raw = str(value or "").strip().upper()
+            compact = re.sub(r"[^A-Z0-9]+", "", raw)
+            return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
+        msa_subject_counts = {int(subject_id): {grade: 0 for grade in msa_grade_order} for subject_id in data["subjects"]}
+        msa_subject_totals = {int(subject_id): 0.0 for subject_id in data["subjects"]}
+        msa_subject_entries = {int(subject_id): 0 for subject_id in data["subjects"]}
+        msa_overall_counts = {grade: 0 for grade in msa_grade_order}
+        for summary in data["summaries"].values():
+            normalized_grade = _msa_pdf_grade(summary.get("overall_grade"))
+            if normalized_grade:
+                msa_overall_counts[normalized_grade] += 1
+        for subject_id in data["subjects"]:
+            subject_id = int(subject_id)
+            for student_id in data["students"]:
+                item = data["aggregated"].get((int(student_id), subject_id))
+                if item is None:
+                    msa_subject_counts[subject_id]["X"] += 1
+                    continue
+                try:
+                    grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["percentage"], data["grading_rules"], 100)
+                except Exception:
+                    grade, _ = _default_grade_points(float(item["percentage"]))
+                normalized_grade = _msa_pdf_grade(grade)
+                if normalized_grade:
+                    msa_subject_counts[subject_id][normalized_grade] += 1
+                msa_subject_totals[subject_id] += float(item["percentage"])
+                msa_subject_entries[subject_id] += 1
+        msa_subject_ranking = sorted(
+            [(int(subject_id), msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)])
+             for subject_id in data["subjects"] if msa_subject_entries[int(subject_id)]],
+            key=lambda item: (-item[1], str(data["subjects"][item[0]]).casefold())
+        )
+        msa_subject_positions = {}
+        prev_mean = None
+        prev_position = 0
+        for index, (subject_id, mean) in enumerate(msa_subject_ranking, 1):
+            if prev_mean is None or abs(mean - prev_mean) > 0.000001:
+                prev_position = index
+                prev_mean = mean
+            msa_subject_positions[subject_id] = prev_position
+        msa_overall_values = [x["average"] for x in data["summaries"].values() if int(x.get("subject_count") or 0) > 0]
+        overall_distribution_headers = msa_grade_order + ["Entries", "Class Mean %"]
+        overall_distribution_values = [[msa_overall_counts[g] for g in msa_grade_order] + [
+            sum(msa_overall_counts.values()),
+            "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"
+        ]]
+        pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
+        per_subject_distribution_rows = []
+        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
+            mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
+            per_subject_distribution_rows.append([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
+                sum(msa_subject_counts[int(subject_id)].values()),
+                "%.2f" % mean if mean is not None else "—",
+                msa_subject_positions.get(int(subject_id), "—")
+            ])
+        pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         story.append(Paragraph("Subject performance by class and stream", styles["MSASection"]))
         story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
