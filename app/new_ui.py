@@ -10372,13 +10372,37 @@ def class_marksheet_analysis_csv(
         writer.writerow(["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"])
         writer.writerows(data["subject_rows"])
         writer.writerow([])
-        writer.writerow(["TOP FIVE STUDENTS - COMBINED CLASS"])
-        writer.writerow(["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"])
-        writer.writerows(data["top_combined"])
+        writer.writerow(["TOP FIVE STUDENTS PER SUBJECT - COMBINED CLASS"])
+        writer.writerow(["Each subject has its own section; ranks are based on percentage."])
+        combined_by_subject = {}
+        for entry in data["top_combined"]:
+            combined_by_subject.setdefault(entry[0], []).append(entry)
+        for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+            writer.writerow([])
+            writer.writerow(["SUBJECT: " + subject_name])
+            writer.writerow(["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"])
+            for entry in combined_by_subject.get(subject_name, []):
+                writer.writerow(entry[2:])
         writer.writerow([])
-        writer.writerow(["TOP FIVE STUDENTS - STREAM-WISE"])
-        writer.writerow(["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"])
-        writer.writerows(data["top_stream"])
+        writer.writerow(["TOP FIVE STUDENTS PER SUBJECT - STREAM-WISE"])
+        stream_by_subject = {}
+        for entry in data["top_stream"]:
+            stream_by_subject.setdefault(entry[0], []).append(entry)
+        for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+            writer.writerow([])
+            writer.writerow(["SUBJECT: " + subject_name])
+            subject_entries = stream_by_subject.get(subject_name, [])
+            if not subject_entries:
+                writer.writerow(["No eligible students"])
+                continue
+            current_group = None
+            for entry in subject_entries:
+                if entry[1] != current_group:
+                    current_group = entry[1]
+                    writer.writerow([])
+                    writer.writerow(["STREAM: " + str(current_group)])
+                    writer.writerow(["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"])
+                writer.writerow(entry[2:])
         writer.writerow([])
         writer.writerow(["GRADE DISTRIBUTION"])
         writer.writerow(["Subject / overall", "Grade", "Students"])
@@ -10553,8 +10577,34 @@ def class_marksheet_analysis_pdf(
         summary_points = sum(x["average_points"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
         pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner total", "Lowest learner total", "Average grade points"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.1f" % summary_high_total, "%.1f" % summary_low_total, "%.2f" % summary_points]])
         pdf_table("Subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
-        pdf_table("Top five students per subject — combined class", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_combined"])
-        pdf_table("Top five students per subject — stream-wise", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_stream"])
+        combined_by_subject = {}
+        for entry in data["top_combined"]:
+            combined_by_subject.setdefault(entry[0], []).append(entry)
+        story.append(Paragraph("Top five students per subject — combined class", styles["MSASection"]))
+        for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+            subject_entries = combined_by_subject.get(subject_name, [])
+            pdf_table(subject_name, ["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"], [entry[2:] for entry in subject_entries])
+        stream_by_subject = {}
+        for entry in data["top_stream"]:
+            stream_by_subject.setdefault(entry[0], []).append(entry)
+        story.append(Paragraph("Top five students per subject — stream-wise", styles["MSASection"]))
+        for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+            subject_entries = stream_by_subject.get(subject_name, [])
+            story.append(Paragraph(escape(subject_name), styles["Heading3"]))
+            if not subject_entries:
+                pdf_table("No eligible students", ["Status"], [["No students sat this subject"]])
+                continue
+            current_group = None
+            group_rows = []
+            for entry in subject_entries:
+                if entry[1] != current_group:
+                    if current_group is not None:
+                        pdf_table("Stream: " + str(current_group), ["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"], group_rows)
+                    current_group = entry[1]
+                    group_rows = []
+                group_rows.append(entry[2:])
+            if current_group is not None:
+                pdf_table("Stream: " + str(current_group), ["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"], group_rows)
         pdf_table("Grade distributions", ["Subject / overall", "Grade", "Students"], data["grade_distribution"])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
