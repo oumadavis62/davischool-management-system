@@ -10512,9 +10512,9 @@ def class_marksheet_analysis_csv(
                     current_group = group_key
                     writer.writerow([])
                     writer.writerow(["CLASS: " + class_label + " | STREAM: " + group_key[1]])
-                    writer.writerow(["Rank", "Student", "Class", "Stream", "Mark", "Grade"])
+                    writer.writerow(["Rank", "Student", "Mark", "Grade"])
                 row_values = entry[2:]
-                writer.writerow([row_values[0], row_values[1], class_label, row_values[3], row_values[4], row_values[6]])
+                writer.writerow([row_values[0], row_values[1], row_values[4], row_values[6]])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
@@ -10757,16 +10757,16 @@ def class_marksheet_analysis_pdf(
                 if group_key != current_group:
                     if current_group is not None:
                         pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                                  ["Rank", "Student", "Class", "Stream", "Mark", "Grade"],
-                                  [[row[0], row[1], row[3], row[4], row[5], row[7]] for row in group_rows])
+                                  ["Rank", "Student", "Mark", "Grade"],
+                                  [[row[0], row[1], row[5], row[7]] for row in group_rows])
                     current_group = group_key
                     group_rows = []
                 row_values = entry[2:]
                 group_rows.append(row_values[:3] + [class_label] + row_values[3:])
             if current_group is not None:
                 pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                          ["Rank", "Student", "Class", "Stream", "Mark", "Grade"],
-                          [[row[0], row[1], row[3], row[4], row[5], row[7]] for row in group_rows])
+                          ["Rank", "Student", "Mark", "Grade"],
+                          [[row[0], row[1], row[5], row[7]] for row in group_rows])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
