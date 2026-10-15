@@ -10864,30 +10864,102 @@ def class_marksheet_analysis_pdf(
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
         story.append(Paragraph("Top five students per subject — stream-wise", styles["MSASection"]))
+        stream_top_tables = []
+        # Use compact columns and pair stream tables horizontally, matching
+        # the side-by-side layout used for Subject Performance tables.
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
             subject_entries = stream_by_subject.get(subject_name, [])
-            story.append(Paragraph(escape(subject_name), styles["Heading3"]))
             if not subject_entries:
-                pdf_table("No eligible students", ["Status"], [["No students sat this subject"]])
+                empty_table = Table(
+                    [[Paragraph("<b>Status</b>", styles["MSAMatrixHeader"])],
+                     [Paragraph("No students sat this subject", styles["MSACell"])]],
+                    colWidths=[doc.width / 2 - 6*mm], hAlign="LEFT"
+                )
+                empty_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                    ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
+                    ("FONTSIZE", (0,0), (-1,-1), 6),
+                    ("LEFTPADDING", (0,0), (-1,-1), 2),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                    ("TOPPADDING", (0,0), (-1,-1), 2),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ]))
+                stream_top_tables.append((subject_name + " — no eligible students", empty_table))
                 continue
             current_group = None
             group_rows = []
+            def _append_stream_top_table(group_key, rows_for_group):
+                title = "Class: " + group_key[0] + " — Stream: " + group_key[1]
+                compact_data = [[
+                    Paragraph("<b>Rank</b>", styles["MSAMatrixHeader"]),
+                    Paragraph("<b>Student</b>", styles["MSAMatrixHeader"]),
+                    Paragraph("<b>Mark</b>", styles["MSAMatrixHeader"]),
+                    Paragraph("<b>Grade</b>", styles["MSAMatrixHeader"]),
+                ]]
+                for row in rows_for_group:
+                    compact_data.append([
+                        Paragraph(escape(str(row[0])), styles["MSACell"]),
+                        Paragraph(escape(str(row[1])), styles["MSACell"]),
+                        Paragraph(escape(str(row[5])), styles["MSACell"]),
+                        Paragraph(escape(str(row[7])), styles["MSACell"]),
+                    ])
+                compact_table = Table(
+                    compact_data,
+                    colWidths=[9*mm, doc.width / 2 - 6*mm - 9*mm - 22*mm - 13*mm, 11*mm, 13*mm],
+                    repeatRows=1, hAlign="LEFT"
+                )
+                compact_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                    ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("ALIGN", (0,1), (0,-1), "CENTER"),
+                    ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                    ("FONTSIZE", (0,0), (-1,-1), 5.5),
+                    ("LEFTPADDING", (0,0), (-1,-1), 2),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                    ("TOPPADDING", (0,0), (-1,-1), 2),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ]))
+                stream_top_tables.append((title, compact_table))
             for entry in subject_entries:
                 class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
                 group_key = (class_label, str(entry[5] or "No stream"))
                 if group_key != current_group:
                     if current_group is not None:
-                        pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                                  ["Rank", "Student", "Mark", "Grade"],
-                                  [[row[0], row[1], row[5], row[7]] for row in group_rows])
+                        _append_stream_top_table(current_group, group_rows)
                     current_group = group_key
                     group_rows = []
                 row_values = entry[2:]
                 group_rows.append(row_values[:3] + [class_label] + row_values[3:])
             if current_group is not None:
-                pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                          ["Rank", "Student", "Mark", "Grade"],
-                          [[row[0], row[1], row[5], row[7]] for row in group_rows])
+                _append_stream_top_table(current_group, group_rows)
+        for pair_start in range(0, len(stream_top_tables), 2):
+            left_name, left_table = stream_top_tables[pair_start]
+            half_width = doc.width / 2 - 3*mm
+            left_stack = Table(
+                [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
+                colWidths=[half_width], hAlign="LEFT"
+            )
+            if pair_start + 1 < len(stream_top_tables):
+                right_name, right_table = stream_top_tables[pair_start + 1]
+                right_stack = Table(
+                    [[Paragraph(escape(right_name), styles["MSACell"])], [right_table]],
+                    colWidths=[half_width], hAlign="LEFT"
+                )
+                paired_table = Table([[left_stack, right_stack]],
+                                     colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
+                paired_table.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(paired_table)
+            else:
+                story.append(left_stack)
+            story.append(Spacer(1, 3*mm))
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
