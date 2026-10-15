@@ -10928,7 +10928,9 @@ def class_marksheet_analysis_pdf(
             current_group = None
             group_rows = []
             def _append_stream_top_table(group_key, rows_for_group):
-                title = "Class: " + group_key[0] + " — Stream: " + group_key[1]
+                # Keep the subject visible on every compact table, even when
+                # tables for different subjects are paired side-by-side.
+                title = "Subject: " + subject_name + " | Class: " + group_key[0] + " — Stream: " + group_key[1]
                 compact_data = [[
                     Paragraph("<b>Rank</b>", styles["MSAMatrixHeader"]),
                     Paragraph("<b>Student</b>", styles["MSAMatrixHeader"]),
