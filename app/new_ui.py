@@ -7976,7 +7976,13 @@ function printReportCard(){
   var footer='<div class="print-footer"><i>DaviSchool Management System</i> · Generated: '+generatedAt+'</div>';
   var previewBar='<div class="report-preview-bar no-print"><div><b>🖨️ Student Report Card Preview</b><span>Review the complete report card before printing.</span></div><div><button type="button" onclick="window.print()">🖨️ Print Report Card</button><button type="button" onclick="window.close()">✕ Close Preview</button></div></div>';
   var previewCss='.report-preview-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;margin:0 0 14px;background:#172033;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:Arial,sans-serif}.report-preview-bar span{display:block;font-size:12px;font-weight:400;margin-top:3px;opacity:.85}.report-preview-bar button{border:0;border-radius:8px;padding:10px 14px;margin-left:7px;font-weight:800;cursor:pointer;background:#fff;color:#172033}.report-preview-bar button:first-child{background:#176B3A;color:#fff}@media print{.report-preview-bar{display:none!important}}';
-  var html='<!doctype html><html><head><meta charset="utf-8"><title></title><style>'+css+previewCss+'</style></head><body>'+previewBar+doc.outerHTML.replace('id="report"','class="report-document"')+footer+'</body></html>';
+  var printDoc=doc.cloneNode(true);
+  printDoc.removeAttribute('id');
+  printDoc.classList.add('report-document');
+  printDoc.style.setProperty('border-left','2px solid #176B3A','important');
+  printDoc.style.setProperty('border-right','2px solid #176B3A','important');
+  printDoc.style.setProperty('box-sizing','border-box','important');
+  var html='<!doctype html><html><head><meta charset="utf-8"><title></title><style>'+css+previewCss+'</style></head><body>'+previewBar+printDoc.outerHTML+footer+'</body></html>';
   w.document.open();w.document.write(html);w.document.close();w.focus();
 }
 </script>""";
