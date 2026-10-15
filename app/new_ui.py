@@ -9695,6 +9695,298 @@ def accounting_expense(request: Request,category:str=Form(...),description:str=F
     if not sid:return RedirectResponse("/",303)
 
 # ---------------------------------------------------------------------------
+# Class MarkSheet Analysis
+# Read-only analysis built on saved marks. It does not modify marks, grading
+# settings, student records, or the existing MarkSheet workflow.
+# ---------------------------------------------------------------------------
+def _msa_require_school_admin(request, school_id):
+    return (
+        int(school_id or 0) > 0
+        and str(request.session.get("role", "")) == "school_admin"
+        and int(request.session.get("school_id") or 0) == int(school_id)
+    )
+
+
+def _msa_exam_ids(request, available_exam_ids):
+    raw_values = request.query_params.getlist("exam_ids")
+    if not raw_values:
+        raw_values = [request.query_params.get("exam_ids", "")]
+    ids = []
+    allowed = {int(x) for x in available_exam_ids}
+    for raw in raw_values:
+        for part in str(raw or "").split(","):
+            try:
+                value = int(part.strip())
+            except (TypeError, ValueError):
+                continue
+            if value in allowed and value not in ids:
+                ids.append(value)
+    if not ids and available_exam_ids:
+        ids = [int(available_exam_ids[0])]
+    return ids
+
+
+def _msa_load_rows(cur, school_id, exam_ids):
+    if not exam_ids:
+        return []
+    placeholders = ",".join("?" for _ in exam_ids)
+    sql = """
+        SELECT m.student_id, m.subject_id, m.exam_id, m.marks,
+               st.name AS student_name, st.admission_no,
+               c.id AS class_id, c.name AS class_name, c.stream,
+               sub.name AS subject_name, e.name AS exam_name,
+               e.year AS exam_year, e.term AS exam_term,
+               (SELECT cfg.out_of FROM set_marks_config cfg
+                WHERE cfg.school_id=m.school_id AND cfg.exam_id=m.exam_id
+                  AND cfg.subject_id=m.subject_id
+                ORDER BY cfg.id DESC LIMIT 1) AS configured_out_of
+        FROM marks m
+        JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+        JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
+        JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
+        JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+        WHERE m.school_id=? AND m.exam_id IN (""" + placeholders + """)
+          AND m.marks IS NOT NULL
+        ORDER BY c.name, c.stream, st.name, sub.name, e.id
+    """
+    raw_rows = cur.execute(sql, [school_id] + [int(x) for x in exam_ids]).fetchall()
+    result = []
+    for row in raw_rows:
+        try:
+            mark = float(row["marks"])
+            out_of = float(row["configured_out_of"] or 100)
+            if out_of <= 0:
+                out_of = 100.0
+            percentage = max(0.0, min(100.0, (mark / out_of) * 100.0))
+            result.append({
+                "student_id": int(row["student_id"]),
+                "student_name": str(row["student_name"] or ""),
+                "admission_no": str(row["admission_no"] or ""),
+                "subject_id": int(row["subject_id"]),
+                "subject_name": str(row["subject_name"] or ""),
+                "exam_id": int(row["exam_id"]),
+                "exam_name": str(row["exam_name"] or ""),
+                "exam_year": str(row["exam_year"] or ""),
+                "exam_term": str(row["exam_term"] or ""),
+                "mark": mark,
+                "out_of": out_of,
+                "percentage": percentage,
+                "class_id": int(row["class_id"]),
+                "class_name": str(row["class_name"] or "Unassigned"),
+                "stream": str(row["stream"] or ""),
+            })
+        except (TypeError, ValueError, KeyError):
+            continue
+    return result
+
+
+def _msa_aggregate(rows):
+    """Average multiple selected examinations per student/subject, ignoring absent marks."""
+    subjects = {}
+    students = {}
+    values = {}
+    exams = {}
+    for row in rows:
+        subjects[row["subject_id"]] = row["subject_name"]
+        students[row["student_id"]] = {
+            "id": row["student_id"], "name": row["student_name"],
+            "admission_no": row["admission_no"], "class_id": row["class_id"],
+            "class_name": row["class_name"], "stream": row["stream"],
+        }
+        exams[row["exam_id"]] = {
+            "id": row["exam_id"], "name": row["exam_name"],
+            "year": row["exam_year"], "term": row["exam_term"],
+        }
+        key = (row["student_id"], row["subject_id"])
+        values.setdefault(key, []).append(row)
+    aggregated = {}
+    for key, entries in values.items():
+        aggregated[key] = {
+            "student_id": key[0], "subject_id": key[1],
+            "subject_name": entries[0]["subject_name"],
+            "percentage": sum(x["percentage"] for x in entries) / len(entries),
+            "mark": sum(x["mark"] for x in entries) / len(entries),
+            "out_of": sum(x["out_of"] for x in entries) / len(entries),
+            "exam_count": len(entries),
+        }
+    return subjects, students, exams, aggregated
+
+
+def _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id):
+    by_student = {}
+    for (student_id, subject_id), item in aggregated.items():
+        by_student.setdefault(student_id, []).append(item)
+    summaries = {}
+    for student_id, items in by_student.items():
+        average = sum(x["percentage"] for x in items) / len(items) if items else 0.0
+        points = []
+        for item in items:
+            _, point_value, _ = _subject_grade_details(
+                cur, school_id, item["subject_id"], item["percentage"],
+                grading_rules, 100
+            )
+            try:
+                points.append(float(point_value or 0))
+            except (TypeError, ValueError):
+                points.append(0.0)
+        grade = _marksheet_overall_grade(cur, school_id, average, len(items), overall_rules)
+        summaries[student_id] = {
+            "average": average,
+            "total": sum(x["percentage"] for x in items),
+            "subject_count": len(items),
+            "average_points": sum(points) / len(points) if points else 0.0,
+            "overall_grade": grade,
+            "items": items,
+        }
+    return summaries
+
+
+def _msa_ranked_rows(rows, aggregated, grading_rules, overall_rules, cur, school_id):
+    subjects, students, exams, _ = _msa_aggregate(rows)
+    summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
+    grouped = {}
+    for student_id, info in students.items():
+        if student_id not in summaries:
+            continue
+        grouped.setdefault(info["class_name"], []).append((info, summaries[student_id]))
+    class_subjects = {}
+    for class_name, learners in grouped.items():
+        class_subjects[class_name] = {
+            subject_id for subject_id in subjects
+            if any((info["id"], subject_id) in aggregated for info, _ in learners)
+        }
+    common_subjects = set.intersection(*class_subjects.values()) if class_subjects else set()
+    # Ranking classes on the same set of subjects avoids a longer subject list
+    # unfairly increasing a class's mean. Partial attempts still use only
+    # subjects the learner actually sat.
+    ranking = []
+    for class_name, learners in grouped.items():
+        per_learner = []
+        points = []
+        assessed = 0
+        used_subjects = common_subjects or class_subjects.get(class_name, set())
+        for info, summary in learners:
+            learner_values = [
+                aggregated[(info["id"], subject_id)]["percentage"]
+                for subject_id in used_subjects
+                if (info["id"], subject_id) in aggregated
+            ]
+            if not learner_values:
+                continue
+            per_learner.append(sum(learner_values) / len(learner_values))
+            points.append(summary["average_points"])
+            assessed += 1
+        if per_learner:
+            mean = sum(per_learner) / len(per_learner)
+            ranking.append({
+                "class_name": class_name, "mean": mean,
+                "average_points": sum(points) / len(points) if points else 0.0,
+                "students": assessed, "subject_ids": sorted(used_subjects),
+            })
+    ranking.sort(key=lambda x: (-x["mean"], x["class_name"].casefold()))
+    previous = None
+    position = 0
+    for index, item in enumerate(ranking, 1):
+        if previous is None or abs(item["mean"] - previous) > 0.000001:
+            position = index
+        item["rank"] = position
+        previous = item["mean"]
+        item["subject_means"] = {}
+        for subject_id in item["subject_ids"]:
+            vals = [
+                aggregated[(info["id"], subject_id)]["percentage"]
+                for info, _ in grouped[item["class_name"]]
+                if (info["id"], subject_id) in aggregated
+            ]
+            item["subject_means"][subject_id] = sum(vals) / len(vals) if vals else 0.0
+    return ranking, common_subjects, grouped, summaries, students, subjects, exams
+
+
+def _msa_html_table(headers, rows, empty_text="No saved marks match these filters."):
+    header_html = "".join("<th>%s</th>" % escape(str(x)) for x in headers)
+    body_rows = []
+    for row in rows:
+        body_rows.append("<tr>" + "".join("<td>%s</td>" % escape(str(value)) for value in row) + "</tr>")
+    if not body_rows:
+        body_rows = ["<tr><td colspan='%d'>%s</td></tr>" % (max(1, len(headers)), escape(empty_text))]
+    return "<div class='msa-table-wrap' tabindex='0'><table class='msa-table'><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>" % (
+        header_html, "".join(body_rows)
+    )
+
+
+def _msa_load_overall_rules_readonly(cur, school_id):
+    """Read configured overall grades without creating or changing grading rules."""
+    try:
+        return cur.execute(
+            "SELECT min_total,max_total,grade FROM overall_grading_rules WHERE school_id=? "
+            "ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,id DESC",
+            (school_id,)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS OVERALL RULES READ WARNING:", repr(exc), flush=True)
+        return []
+
+
+def _msa_report_data(cur, school_id, rows):
+    grading_rules = _load_grading_rules(cur, school_id)
+    overall_rules = _msa_load_overall_rules_readonly(cur, school_id)
+    subjects, students, exams, aggregated = _msa_aggregate(rows)
+    summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
+    subject_rows = []
+    top_combined = []
+    top_stream = []
+    grade_distribution = []
+    for subject_id, subject_name in sorted(subjects.items(), key=lambda x: x[1].casefold()):
+        entries = []
+        for student_id, info in students.items():
+            item = aggregated.get((student_id, subject_id))
+            if item:
+                grade, points, _ = _subject_grade_details(cur, school_id, subject_id, item["percentage"], grading_rules, 100)
+                entries.append((info, item, str(grade or "—"), float(points or 0)))
+        percentages = [x[1]["percentage"] for x in entries]
+        subject_rows.append([
+            subject_name, len(entries),
+            "%.2f%%" % (sum(percentages) / len(percentages) if percentages else 0),
+            "%.2f%%" % (max(percentages) if percentages else 0),
+            "%.2f%%" % (min(percentages) if percentages else 0),
+        ])
+        entries.sort(key=lambda x: (-x[1]["percentage"], x[0]["name"].casefold()))
+        for stream_name, stream_entries in [("All streams", entries)] + [
+            (stream, [x for x in entries if x[0]["stream"] == stream])
+            for stream in sorted({x[0]["stream"] for x in entries if x[0]["stream"]})
+        ]:
+            previous_pct = None
+            rank = 0
+            for index, (info, item, grade, points) in enumerate(stream_entries[:5], 1):
+                if previous_pct is None or abs(item["percentage"] - previous_pct) > 0.000001:
+                    rank = index
+                target = top_combined if stream_name == "All streams" else top_stream
+                target.append([
+                    subject_name, stream_name, rank, info["name"], info["admission_no"],
+                    info["stream"], "%.1f" % item["mark"], "%.2f%%" % item["percentage"], grade
+                ])
+                previous_pct = item["percentage"]
+        grade_counts = {}
+        for info, item, grade, points in entries:
+            grade_counts[grade] = grade_counts.get(grade, 0) + 1
+        for grade, count in sorted(grade_counts.items(), key=lambda x: x[0]):
+            grade_distribution.append([subject_name, grade, count])
+    overall_counts = {}
+    for student_id, summary in summaries.items():
+        grade = str(summary["overall_grade"] or "—")
+        overall_counts[grade] = overall_counts.get(grade, 0) + 1
+    for grade, count in sorted(overall_counts.items()):
+        grade_distribution.append(["Overall grade", grade, count])
+    return {
+        "grading_rules": grading_rules, "overall_rules": overall_rules,
+        "subjects": subjects, "students": students, "exams": exams,
+        "aggregated": aggregated, "summaries": summaries,
+        "subject_rows": subject_rows, "top_combined": top_combined,
+        "top_stream": top_stream, "grade_distribution": grade_distribution,
+    }
+
+
+@router.get("/app/academics/marksheet-analysis", response_class=HTMLResponse)
 def class_marksheet_analysis(
     request: Request, exam_ids: str = "", year: str = "", term: str = "",
     class_name: str = "", stream: str = "", student_id: str = "", view: str = "summary"
