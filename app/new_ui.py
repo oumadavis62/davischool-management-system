@@ -9914,6 +9914,26 @@ def _msa_html_table(headers, rows, empty_text="No saved marks match these filter
     )
 
 
+def _msa_load_grading_rules_readonly(cur, school_id):
+    """Read existing subject grade bands without creating or changing grading settings."""
+    try:
+        rows = cur.execute(
+            "SELECT subject_id,min_mark,max_mark,grade,points,performance_comment "
+            "FROM subject_grading_rules WHERE school_id=? ORDER BY subject_id,min_mark DESC,id DESC",
+            (school_id,)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS SUBJECT RULES READ WARNING:", repr(exc), flush=True)
+        return {}
+    result = {}
+    for row in rows:
+        try:
+            result.setdefault(int(row["subject_id"]), []).append(row)
+        except (TypeError, ValueError, KeyError):
+            continue
+    return result
+
+
 def _msa_load_overall_rules_readonly(cur, school_id):
     """Read configured overall grades without creating or changing grading rules."""
     try:
@@ -9928,7 +9948,7 @@ def _msa_load_overall_rules_readonly(cur, school_id):
 
 
 def _msa_report_data(cur, school_id, rows):
-    grading_rules = _load_grading_rules(cur, school_id)
+    grading_rules = _msa_load_grading_rules_readonly(cur, school_id)
     overall_rules = _msa_load_overall_rules_readonly(cur, school_id)
     subjects, students, exams, aggregated = _msa_aggregate(rows)
     summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
