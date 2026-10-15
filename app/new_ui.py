@@ -10387,8 +10387,8 @@ def class_marksheet_analysis_pdf(
                 continue
         if not ids and allowed:
             ids = [allowed[0]]
-        rows = _msa_load_rows(cur, sid, ids)
-        rows = [r for r in rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
+        all_rows = _msa_load_rows(cur, sid, ids)
+        rows = [r for r in all_rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
         data = _msa_report_data(cur, sid, rows)
         school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
         from io import BytesIO
