@@ -10750,14 +10750,32 @@ def class_marksheet_analysis_pdf(
             ]))
             story.append(tbl)
             story.append(Spacer(1, 3*mm))
-        eligible_summaries = list(data["summaries"].values())
-        summary_mean = sum(x["average"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
-        summary_high = max((x["average"] for x in eligible_summaries), default=0.0)
-        summary_low = min((x["average"] for x in eligible_summaries), default=0.0)
-        summary_high_total = max((x["total"] for x in eligible_summaries), default=0.0)
-        summary_low_total = min((x["total"] for x in eligible_summaries), default=0.0)
-        summary_points = sum(x["average_points"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
-        pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner total", "Lowest learner total", "Average grade points"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.1f" % summary_high_total, "%.1f" % summary_low_total, "%.2f" % summary_points]])
+        # Show one summary row per selected examination so assessment counts
+        # and Grade X counts are specific to that exam, not blended together.
+        summary_rows = []
+        exam_lookup = {int(e["id"]): e for e in all_exams}
+        for exam_id in ids:
+            exam_entry = exam_lookup.get(int(exam_id))
+            exam_label = (
+                (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")).strip()
+                if exam_entry else str(exam_id)
+            )
+            exam_rows = [row for row in rows if int(row["exam_id"]) == int(exam_id)]
+            exam_data = _msa_report_data(cur, sid, exam_rows)
+            exam_summaries = list(exam_data["summaries"].values())
+            learners_assessed = sum(
+                1 for item in exam_summaries if int(item.get("subject_count") or 0) > 0
+            )
+            learners_not_assessed = sum(
+                1 for item in exam_summaries
+                if _msa_pdf_grade(item.get("overall_grade")) == "X"
+            )
+            summary_rows.append([exam_label, learners_assessed, learners_not_assessed])
+        pdf_table(
+            "Summary",
+            ["Examination", "Learners assessed", "Learners not assessed"],
+            summary_rows
+        )
         # Duplicate the MarkSheet Grade Distribution Analysis near the start of
         # the PDF so both the overall and per-subject distributions are on page 1.
         msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
