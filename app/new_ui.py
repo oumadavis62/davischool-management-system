@@ -10419,11 +10419,8 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % (min(vals) if vals else 0),
             ])
         writer.writerow([])
-        writer.writerow(["SUBJECT AVERAGES BY EXAMINATION"])
-        writer.writerow(["Examination", "Subject", "Entries", "Mean percentage"])
-        writer.writerow([])
-        writer.writerow(["GRADE DISTRIBUTIONS BY EXAMINATION"])
-        writer.writerow(["Examination", "Subject", "Grade", "Students"])
+        subject_trend_rows = []
+        grade_trend_rows = []
         for exam_id in ids:
             exam = cur.execute("SELECT name,year FROM exams WHERE school_id=? AND id=?", (sid, exam_id)).fetchone()
             exam_label = (str(exam["name"] or "") + " " + str(exam["year"] or "")) if exam else str(exam_id)
@@ -10437,9 +10434,17 @@ def class_marksheet_analysis_csv(
                 grade_key = (trend_mark["subject_id"], str(grade or "—"))
                 grade_counts[grade_key] = grade_counts.get(grade_key, 0) + 1
             for subject_id, vals in per_subject.items():
-                writer.writerow([exam_label, data["subjects"].get(subject_id, str(subject_id)), len(vals), "%.2f%%" % (sum(vals)/len(vals) if vals else 0)])
+                subject_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), len(vals), "%.2f%%" % (sum(vals)/len(vals) if vals else 0)])
             for (subject_id, grade), count in grade_counts.items():
-                writer.writerow([exam_label, data["subjects"].get(subject_id, str(subject_id)), grade, count])
+                grade_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), grade, count])
+        writer.writerow([])
+        writer.writerow(["SUBJECT AVERAGES BY EXAMINATION"])
+        writer.writerow(["Examination", "Subject", "Entries", "Mean percentage"])
+        writer.writerows(subject_trend_rows)
+        writer.writerow([])
+        writer.writerow(["GRADE DISTRIBUTIONS BY EXAMINATION"])
+        writer.writerow(["Examination", "Subject", "Grade", "Students"])
+        writer.writerows(grade_trend_rows)
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.csv"'
         return response
