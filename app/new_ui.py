@@ -10165,6 +10165,7 @@ def class_marksheet_analysis(
                 "%.2f%%" % (min(exam_marks) if exam_marks else 0),
             ])
         individual_rows = []
+        individual_trend_rows = []
         selected_student = int(student_id) if str(student_id).isdigit() else 0
         if not selected_student and view_data["students"]:
             selected_student = sorted(view_data["students"].keys(), key=lambda x: view_data["students"][x]["name"].casefold())[0]
@@ -10177,6 +10178,18 @@ def class_marksheet_analysis(
                     item["subject_name"], "%.1f" % item["mark"], "%.2f%%" % item["percentage"],
                     grade, "%.1f" % float(points or 0), comment or ""
                 ])
+            for exam_id in selected_exam_ids:
+                per_subject = {}
+                for mark_row in view_rows:
+                    if mark_row["student_id"] == selected_student and mark_row["exam_id"] == exam_id:
+                        per_subject.setdefault(mark_row["subject_id"], []).append(mark_row["percentage"])
+                subject_means = [sum(vals) / len(vals) for vals in per_subject.values() if vals]
+                exam = next((item for item in filtered_exams if int(item["id"]) == exam_id), None)
+                if subject_means:
+                    individual_trend_rows.append([
+                        (str(exam["name"] or "") + " " + str(exam["year"] or "")) if exam else str(exam_id),
+                        len(subject_means), "%.2f%%" % (sum(subject_means) / len(subject_means))
+                    ])
             classmates = [
                 (view_data["students"].get(other_id, {}), other_summary)
                 for other_id, other_summary in view_data["summaries"].items()
@@ -10214,7 +10227,9 @@ def class_marksheet_analysis(
                         "<input type='hidden' name='year' value='%s'><input type='hidden' name='term' value='%s'>" % (escape(year), escape(term)) +
                         "<input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'>" % (escape(class_name), escape(stream)) +
                         "<label>Student<select name='student_id'>%s</select></label><button class='msa-button'>View student</button></form>" % "".join(student_options) +
-                        individual_head + _msa_html_table(["Subject", "Mean mark", "Percentage", "Grade", "Points", "Performance comment"], individual_rows),
+                        individual_head + _msa_html_table(["Subject", "Mean mark", "Percentage", "Grade", "Points", "Performance comment"], individual_rows) +
+                        "<h3>Progress across selected examinations</h3>" +
+                        _msa_html_table(["Examination", "Subjects sat", "Average percentage"], individual_trend_rows),
             "streams": "<h2>Stream Comparison</h2>" + _msa_html_table(["Class", "Stream", "Students assessed", "Mean", "Highest learner mean"], stream_rows),
             "rankings": "<h2>School-wide Class Rankings</h2><p>Classes use the subjects common to the compared classes; partial attempts use only recorded subjects. Equal means share rank.</p>" + ranking_table,
             "trends": "<h2>Examination Trends</h2>" + _msa_html_table(["Examination", "Learners with marks", "Mean recorded mark %", "Highest mark %", "Lowest mark %"], trend_rows),
