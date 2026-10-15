@@ -10698,17 +10698,18 @@ def class_marksheet_analysis_pdf(
             subject_matrix_tables.append((subject_name, matrix_table))
         for pair_start in range(0, len(subject_matrix_tables), 2):
             left_name, left_table = subject_matrix_tables[pair_start]
-            pair_cells = [
-                [Paragraph(escape(left_name), styles["Heading3"]), left_table]
-            ]
+            left_stack = Table(
+                [[Paragraph(escape(left_name), styles["Heading3"])], [left_table]],
+                colWidths=[doc.width / 2 - 3*mm], hAlign="LEFT"
+            )
             if pair_start + 1 < len(subject_matrix_tables):
                 right_name, right_table = subject_matrix_tables[pair_start + 1]
-                pair_cells[0].extend([Paragraph(escape(right_name), styles["Heading3"]), right_table])
-                pair_widths = [doc.width / 2, 4*mm, doc.width / 2 - 4*mm]
-                paired_data = [[pair_cells[0][0], pair_cells[0][1], pair_cells[0][2], pair_cells[0][3]]]
-                paired_table = Table([[pair_cells[0][0], left_table, pair_cells[0][2], right_table]],
-                                     colWidths=[doc.width/2 - 2*mm, 2*mm, doc.width/2 - 2*mm, 2*mm],
-                                     hAlign="LEFT")
+                right_stack = Table(
+                    [[Paragraph(escape(right_name), styles["Heading3"])], [right_table]],
+                    colWidths=[doc.width / 2 - 3*mm], hAlign="LEFT"
+                )
+                paired_table = Table([[left_stack, right_stack]],
+                                     colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
                 paired_table.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
                     ("LEFTPADDING", (0,0), (-1,-1), 0),
@@ -10718,8 +10719,7 @@ def class_marksheet_analysis_pdf(
                 ]))
                 story.append(paired_table)
             else:
-                story.append(pair_cells[0][0])
-                story.append(left_table)
+                story.append(left_stack)
             story.append(Spacer(1, 3*mm))
         combined_by_subject = {}
         for entry in data["top_combined"]:
