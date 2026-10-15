@@ -10110,12 +10110,16 @@ def class_marksheet_analysis(
         overall_mean = sum(x["average"] for x in eligible) / len(eligible) if eligible else 0.0
         best = max((x["average"] for x in eligible), default=0.0)
         worst = min((x["average"] for x in eligible), default=0.0)
+        highest_total = max((x["total"] for x in eligible), default=0.0)
+        lowest_total = min((x["total"] for x in eligible), default=0.0)
+        average_grade_points = sum(x["average_points"] for x in eligible) / len(eligible) if eligible else 0.0
         summary_cards = (
-            "<div class='msa-kpis'><div><small>Class / selection mean</small><strong>%.2f%%</strong></div>"
-            "<div><small>Highest learner average</small><strong>%.2f%%</strong></div>"
-            "<div><small>Lowest learner average</small><strong>%.2f%%</strong></div>"
-            "<div><small>Learners assessed</small><strong>%d</strong></div></div>"
-        ) % (overall_mean, best, worst, len(eligible))
+            "<div class='msa-kpis'><div><small>Overall class mean</small><strong>%.2f%%</strong></div>"
+            "<div><small>Highest learner total</small><strong>%.1f</strong></div>"
+            "<div><small>Lowest learner total</small><strong>%.1f</strong></div>"
+            "<div><small>Learners assessed</small><strong>%d</strong></div>"
+            "<div><small>Average grade points</small><strong>%.2f</strong></div></div>"
+        ) % (overall_mean, highest_total, lowest_total, len(eligible), average_grade_points)
         subject_rows = view_data["subject_rows"]
         class_summary = []
         for name in sorted({r["class_name"] for r in view_rows}, key=str.casefold):
@@ -10465,7 +10469,10 @@ def class_marksheet_analysis_pdf(
         summary_mean = sum(x["average"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
         summary_high = max((x["average"] for x in eligible_summaries), default=0.0)
         summary_low = min((x["average"] for x in eligible_summaries), default=0.0)
-        pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner mean %", "Lowest learner mean %"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.2f%%" % summary_high, "%.2f%%" % summary_low]])
+        summary_high_total = max((x["total"] for x in eligible_summaries), default=0.0)
+        summary_low_total = min((x["total"] for x in eligible_summaries), default=0.0)
+        summary_points = sum(x["average_points"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
+        pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner total", "Lowest learner total", "Average grade points"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.1f" % summary_high_total, "%.1f" % summary_low_total, "%.2f" % summary_points]])
         pdf_table("Subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
         pdf_table("Top five students per subject — combined class", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_combined"])
         pdf_table("Top five students per subject — stream-wise", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_stream"])
