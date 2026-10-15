@@ -1556,6 +1556,8 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     actions=[("/app/academics/marks",_modern_icon("marks"),"Marks Entry","Enter and update learner marks"),("/app/academics/marksheets",_modern_icon("report"),"Class Marksheets","View class marks"),("/app/academics/subject-analysis",_modern_icon("analysis"),"Subject Analysis","Analyse subjects"),("/app/academics/student-analysis",_modern_icon("students"),"Student Analysis","Analyse a learner"),("/app/academics/class-analysis",_modern_icon("school"),"Class Analysis","Analyse a class"),("/app/academics/analysis",_modern_icon("analysis"),"Academic Analysis","View overall academic analysis"),("/app/academics/assessments",_modern_icon("exam"),"SBA / CBA","Continuous assessment"),("/app/academics/grading",_modern_icon("grading"),"Grade & Points","Set subject grading rules"),("/app/academics/allocations",_modern_icon("allocation"),"Teacher Allocation","Assign teachers"),("/app/exams",_modern_icon("exam"),"Examinations","Manage examinations"),("/app/report-cards",_modern_icon("report"),"Report Cards","Generate reports"),("/app/subjects",_modern_icon("subject"),"Subjects","Manage subjects"),("/app/classes",_modern_icon("school"),"Classes & Streams","Manage classes")]
     if role in ("school_admin","registrar"):
         actions.append(("/app/academics/marks-corrections",_modern_icon("correction"),"Marks Corrections","Review teacher correction requests"))
+    if role == "school_admin":
+        actions.append(("/app/academics/marksheet-analysis",_modern_icon("analysis"),"Class MarkSheet Analysis","Full class performance analysis and rankings"))
     # Preserve the current isolated browser-tab session when opening an Academic Manager tile.
     # The explicit query parameter prevents the tile navigation from falling back to the
     # generic login session even if the browser-side tab script has not run yet.
@@ -9691,3 +9693,734 @@ def accounting_page(request: Request):
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+
+# ---------------------------------------------------------------------------
+# Class MarkSheet Analysis
+# Read-only analysis built on saved marks. It does not modify marks, grading
+# settings, student records, or the existing MarkSheet workflow.
+# ---------------------------------------------------------------------------
+def _msa_require_school_admin(request, school_id):
+    return (
+        int(school_id or 0) > 0
+        and str(request.session.get("role", "")) == "school_admin"
+        and int(request.session.get("school_id") or 0) == int(school_id)
+    )
+
+
+def _msa_exam_ids(request, available_exam_ids):
+    raw_values = request.query_params.getlist("exam_ids")
+    if not raw_values:
+        raw_values = [request.query_params.get("exam_ids", "")]
+    ids = []
+    allowed = {int(x) for x in available_exam_ids}
+    for raw in raw_values:
+        for part in str(raw or "").split(","):
+            try:
+                value = int(part.strip())
+            except (TypeError, ValueError):
+                continue
+            if value in allowed and value not in ids:
+                ids.append(value)
+    if not ids and available_exam_ids:
+        ids = [int(available_exam_ids[0])]
+    return ids
+
+
+def _msa_load_rows(cur, school_id, exam_ids):
+    if not exam_ids:
+        return []
+    placeholders = ",".join("?" for _ in exam_ids)
+    sql = """
+        SELECT m.student_id, m.subject_id, m.exam_id, m.marks,
+               st.name AS student_name, st.admission_no,
+               c.id AS class_id, c.name AS class_name, c.stream,
+               sub.name AS subject_name, e.name AS exam_name,
+               e.year AS exam_year, e.term AS exam_term,
+               (SELECT cfg.out_of FROM set_marks_config cfg
+                WHERE cfg.school_id=m.school_id AND cfg.exam_id=m.exam_id
+                  AND cfg.subject_id=m.subject_id
+                ORDER BY cfg.id DESC LIMIT 1) AS configured_out_of
+        FROM marks m
+        JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+        JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
+        JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
+        JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+        WHERE m.school_id=? AND m.exam_id IN (""" + placeholders + """)
+          AND m.marks IS NOT NULL
+        ORDER BY c.name, c.stream, st.name, sub.name, e.id
+    """
+    raw_rows = cur.execute(sql, [school_id] + [int(x) for x in exam_ids]).fetchall()
+    result = []
+    for row in raw_rows:
+        try:
+            mark = float(row["marks"])
+            out_of = float(row["configured_out_of"] or 100)
+            if out_of <= 0:
+                out_of = 100.0
+            percentage = max(0.0, min(100.0, (mark / out_of) * 100.0))
+            result.append({
+                "student_id": int(row["student_id"]),
+                "student_name": str(row["student_name"] or ""),
+                "admission_no": str(row["admission_no"] or ""),
+                "subject_id": int(row["subject_id"]),
+                "subject_name": str(row["subject_name"] or ""),
+                "exam_id": int(row["exam_id"]),
+                "exam_name": str(row["exam_name"] or ""),
+                "exam_year": str(row["exam_year"] or ""),
+                "exam_term": str(row["exam_term"] or ""),
+                "mark": mark,
+                "out_of": out_of,
+                "percentage": percentage,
+                "class_id": int(row["class_id"]),
+                "class_name": str(row["class_name"] or "Unassigned"),
+                "stream": str(row["stream"] or ""),
+            })
+        except (TypeError, ValueError, KeyError):
+            continue
+    return result
+
+
+def _msa_aggregate(rows):
+    """Average multiple selected examinations per student/subject, ignoring absent marks."""
+    subjects = {}
+    students = {}
+    values = {}
+    exams = {}
+    for row in rows:
+        subjects[row["subject_id"]] = row["subject_name"]
+        students[row["student_id"]] = {
+            "id": row["student_id"], "name": row["student_name"],
+            "admission_no": row["admission_no"], "class_id": row["class_id"],
+            "class_name": row["class_name"], "stream": row["stream"],
+        }
+        exams[row["exam_id"]] = {
+            "id": row["exam_id"], "name": row["exam_name"],
+            "year": row["exam_year"], "term": row["exam_term"],
+        }
+        key = (row["student_id"], row["subject_id"])
+        values.setdefault(key, []).append(row)
+    aggregated = {}
+    for key, entries in values.items():
+        aggregated[key] = {
+            "student_id": key[0], "subject_id": key[1],
+            "subject_name": entries[0]["subject_name"],
+            "percentage": sum(x["percentage"] for x in entries) / len(entries),
+            "mark": sum(x["mark"] for x in entries) / len(entries),
+            "out_of": sum(x["out_of"] for x in entries) / len(entries),
+            "exam_count": len(entries),
+        }
+    return subjects, students, exams, aggregated
+
+
+def _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id):
+    by_student = {}
+    for (student_id, subject_id), item in aggregated.items():
+        by_student.setdefault(student_id, []).append(item)
+    summaries = {}
+    for student_id, items in by_student.items():
+        average = sum(x["percentage"] for x in items) / len(items) if items else 0.0
+        points = []
+        for item in items:
+            _, point_value, _ = _subject_grade_details(
+                cur, school_id, item["subject_id"], item["percentage"],
+                grading_rules, 100
+            )
+            try:
+                points.append(float(point_value or 0))
+            except (TypeError, ValueError):
+                points.append(0.0)
+        grade = _marksheet_overall_grade(cur, school_id, average, len(items), overall_rules)
+        summaries[student_id] = {
+            "average": average,
+            "total": sum(x["percentage"] for x in items),
+            "subject_count": len(items),
+            "average_points": sum(points) / len(points) if points else 0.0,
+            "overall_grade": grade,
+            "items": items,
+        }
+    return summaries
+
+
+def _msa_ranked_rows(rows, aggregated, grading_rules, overall_rules, cur, school_id):
+    subjects, students, exams, _ = _msa_aggregate(rows)
+    summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
+    grouped = {}
+    for student_id, info in students.items():
+        if student_id not in summaries:
+            continue
+        grouped.setdefault(info["class_name"], []).append((info, summaries[student_id]))
+    class_subjects = {}
+    for class_name, learners in grouped.items():
+        class_subjects[class_name] = {
+            subject_id for subject_id in subjects
+            if any((info["id"], subject_id) in aggregated for info, _ in learners)
+        }
+    common_subjects = set.intersection(*class_subjects.values()) if class_subjects else set()
+    # Ranking classes on the same set of subjects avoids a longer subject list
+    # unfairly increasing a class's mean. Partial attempts still use only
+    # subjects the learner actually sat.
+    ranking = []
+    for class_name, learners in grouped.items():
+        per_learner = []
+        points = []
+        assessed = 0
+        used_subjects = common_subjects or class_subjects.get(class_name, set())
+        for info, summary in learners:
+            learner_values = [
+                aggregated[(info["id"], subject_id)]["percentage"]
+                for subject_id in used_subjects
+                if (info["id"], subject_id) in aggregated
+            ]
+            if not learner_values:
+                continue
+            per_learner.append(sum(learner_values) / len(learner_values))
+            points.append(summary["average_points"])
+            assessed += 1
+        if per_learner:
+            mean = sum(per_learner) / len(per_learner)
+            ranking.append({
+                "class_name": class_name, "mean": mean,
+                "average_points": sum(points) / len(points) if points else 0.0,
+                "students": assessed, "subject_ids": sorted(used_subjects),
+            })
+    ranking.sort(key=lambda x: (-x["mean"], x["class_name"].casefold()))
+    previous = None
+    position = 0
+    for index, item in enumerate(ranking, 1):
+        if previous is None or abs(item["mean"] - previous) > 0.000001:
+            position = index
+        item["rank"] = position
+        previous = item["mean"]
+        item["subject_means"] = {}
+        for subject_id in item["subject_ids"]:
+            vals = [
+                aggregated[(info["id"], subject_id)]["percentage"]
+                for info, _ in grouped[item["class_name"]]
+                if (info["id"], subject_id) in aggregated
+            ]
+            item["subject_means"][subject_id] = sum(vals) / len(vals) if vals else 0.0
+    return ranking, common_subjects, grouped, summaries, students, subjects, exams
+
+
+def _msa_html_table(headers, rows, empty_text="No saved marks match these filters."):
+    header_html = "".join("<th>%s</th>" % escape(str(x)) for x in headers)
+    body_rows = []
+    for row in rows:
+        body_rows.append("<tr>" + "".join("<td>%s</td>" % escape(str(value)) for value in row) + "</tr>")
+    if not body_rows:
+        body_rows = ["<tr><td colspan='%d'>%s</td></tr>" % (max(1, len(headers)), escape(empty_text))]
+    return "<div class='msa-table-wrap' tabindex='0'><table class='msa-table'><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>" % (
+        header_html, "".join(body_rows)
+    )
+
+
+def _msa_report_data(cur, school_id, rows):
+    grading_rules = _load_grading_rules(cur, school_id)
+    overall_rules = _load_overall_grading_rules(cur, school_id)
+    subjects, students, exams, aggregated = _msa_aggregate(rows)
+    summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
+    subject_rows = []
+    top_combined = []
+    top_stream = []
+    grade_distribution = []
+    for subject_id, subject_name in sorted(subjects.items(), key=lambda x: x[1].casefold()):
+        entries = []
+        for student_id, info in students.items():
+            item = aggregated.get((student_id, subject_id))
+            if item:
+                grade, points, _ = _subject_grade_details(cur, school_id, subject_id, item["percentage"], grading_rules, 100)
+                entries.append((info, item, str(grade or "—"), float(points or 0)))
+        percentages = [x[1]["percentage"] for x in entries]
+        subject_rows.append([
+            subject_name, len(entries),
+            "%.2f%%" % (sum(percentages) / len(percentages) if percentages else 0),
+            "%.2f%%" % (max(percentages) if percentages else 0),
+            "%.2f%%" % (min(percentages) if percentages else 0),
+        ])
+        entries.sort(key=lambda x: (-x[1]["percentage"], x[0]["name"].casefold()))
+        for stream_name, stream_entries in [("All streams", entries)] + [
+            (stream, [x for x in entries if x[0]["stream"] == stream])
+            for stream in sorted({x[0]["stream"] for x in entries if x[0]["stream"]})
+        ]:
+            previous_pct = None
+            rank = 0
+            for index, (info, item, grade, points) in enumerate(stream_entries[:5], 1):
+                if previous_pct is None or abs(item["percentage"] - previous_pct) > 0.000001:
+                    rank = index
+                target = top_combined if stream_name == "All streams" else top_stream
+                target.append([
+                    subject_name, stream_name, rank, info["name"], info["admission_no"],
+                    info["stream"], "%.1f" % item["mark"], "%.2f%%" % item["percentage"], grade
+                ])
+                previous_pct = item["percentage"]
+        grade_counts = {}
+        for info, item, grade, points in entries:
+            grade_counts[grade] = grade_counts.get(grade, 0) + 1
+        for grade, count in sorted(grade_counts.items(), key=lambda x: x[0]):
+            grade_distribution.append([subject_name, grade, count])
+    overall_counts = {}
+    for student_id, summary in summaries.items():
+        grade = str(summary["overall_grade"] or "—")
+        overall_counts[grade] = overall_counts.get(grade, 0) + 1
+    for grade, count in sorted(overall_counts.items()):
+        grade_distribution.append(["Overall grade", grade, count])
+    return {
+        "grading_rules": grading_rules, "overall_rules": overall_rules,
+        "subjects": subjects, "students": students, "exams": exams,
+        "aggregated": aggregated, "summaries": summaries,
+        "subject_rows": subject_rows, "top_combined": top_combined,
+        "top_stream": top_stream, "grade_distribution": grade_distribution,
+    }
+
+
+@router.get("/app/academics/marksheet-analysis", response_class=HTMLResponse)
+def class_marksheet_analysis(
+    request: Request, exam_ids: str = "", year: str = "", term: str = "",
+    class_name: str = "", stream: str = "", student_id: str = "", view: str = "summary"
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("Class MarkSheet Analysis is available to the School Admin only.", status_code=403)
+    con = _db()
+    cur = con.cursor()
+    try:
+        all_exams = cur.execute(
+            "SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)
+        ).fetchall()
+        filtered_exams = [
+            e for e in all_exams
+            if (not year or str(e["year"] or "") == year)
+            and (not term or str(e["term"] or "") == term)
+        ]
+        selected_exam_ids = _msa_exam_ids(request, [int(e["id"]) for e in filtered_exams])
+        if exam_ids and not request.query_params.getlist("exam_ids"):
+            selected_exam_ids = _msa_exam_ids(
+                type("Q", (), {"query_params": type("P", (), {"getlist": lambda self, key: [exam_ids], "get": lambda self, key, default="": default})()})(),
+                [int(e["id"]) for e in filtered_exams]
+            )
+        selected_exam_ids = [x for x in selected_exam_ids if x in {int(e["id"]) for e in filtered_exams}]
+        if not selected_exam_ids and filtered_exams:
+            selected_exam_ids = [int(filtered_exams[0]["id"])]
+        rows = _msa_load_rows(cur, sid, selected_exam_ids)
+        data = _msa_report_data(cur, sid, rows)
+        view_rows = [
+            r for r in rows
+            if (not class_name or r["class_name"] == class_name)
+            and (not stream or r["stream"] == stream)
+        ]
+        view_data = _msa_report_data(cur, sid, view_rows)
+        ranking, common_subjects, grouped, summaries, students, subjects, selected_exams = _msa_ranked_rows(
+            rows, data["aggregated"], data["grading_rules"], data["overall_rules"], cur, sid
+        )
+        school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+        classes = cur.execute(
+            "SELECT DISTINCT name FROM classes WHERE school_id=? ORDER BY name", (sid,)
+        ).fetchall()
+        streams = cur.execute(
+            "SELECT DISTINCT stream FROM classes WHERE school_id=? AND COALESCE(stream,'')<>'' ORDER BY stream", (sid,)
+        ).fetchall()
+        student_options = []
+        for student in sorted(view_data["students"].values(), key=lambda x: x["name"].casefold()):
+            student_options.append(
+                "<option value='%s' %s>%s (%s) · %s</option>" % (
+                    student["id"], "selected" if str(student["id"]) == str(student_id) else "",
+                    escape(student["name"]), escape(student["admission_no"]),
+                    escape(student["class_name"] + ((" · " + student["stream"]) if student["stream"] else ""))
+                )
+            )
+        exam_options = "".join(
+            "<option value='%s' %s>%s · %s · %s</option>" % (
+                e["id"], "selected" if int(e["id"]) in selected_exam_ids else "",
+                escape(str(e["name"] or "")), escape(str(e["year"] or "")), escape(str(e["term"] or ""))
+            ) for e in filtered_exams
+        )
+        year_values = sorted({str(e["year"] or "") for e in all_exams if str(e["year"] or "")}, reverse=True)
+        term_values = sorted({str(e["term"] or "") for e in all_exams if str(e["term"] or "")})
+        class_options = "".join(
+            "<option value='%s' %s>%s</option>" % (
+                escape(str(c["name"])), "selected" if str(c["name"]) == class_name else "", escape(str(c["name"]))
+            ) for c in classes
+        )
+        stream_options = "".join(
+            "<option value='%s' %s>%s</option>" % (
+                escape(str(s["stream"])), "selected" if str(s["stream"]) == stream else "", escape(str(s["stream"]))
+            ) for s in streams
+        )
+        year_options = "<option value=''>All years</option>" + "".join(
+            "<option value='%s' %s>%s</option>" % (escape(y), "selected" if y == year else "", escape(y))
+            for y in year_values
+        )
+        term_options = "<option value=''>All terms</option>" + "".join(
+            "<option value='%s' %s>%s</option>" % (escape(t), "selected" if t == term else "", escape(t))
+            for t in term_values
+        )
+        school_name = escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+        school_email = escape(str(school["email"] or "")) if school else ""
+        school_phone = escape(str(school["phone"] or "")) if school else ""
+        school_postal = escape(str(school["postal_address"] or "")) if school and "postal_address" in school.keys() else ""
+        school_code = escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() else ""
+        school_logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+        report_brand = "<div class='msa-brand'>" + (
+            "<img src='%s' alt='School logo'>" % escape(school_logo) if school_logo else ""
+        ) + "<div><h2>%s</h2><p>%s %s</p><p>%s · %s</p></div></div>" % (
+            school_name, school_postal, school_code, school_email, school_phone
+        )
+        filter_query = "&".join(
+            "%s=%s" % (key, quote(str(value), safe=""))
+            for key, value in [
+                ("exam_ids", ",".join(str(x) for x in selected_exam_ids)),
+                ("year", year), ("term", term), ("class_name", class_name), ("stream", stream),
+                ("student_id", student_id),
+            ] if value
+        )
+        base = "/app/academics/marksheet-analysis"
+        nav = "".join(
+            "<a class='msa-nav %s' href='%s?view=%s%s'>%s</a>" % (
+                "active" if view == key else "", base, key, ("&" + filter_query) if filter_query else "", label
+            ) for key, label in [
+                ("summary", "Summary"), ("subjects", "Subject Analysis"), ("students", "Student Analysis"),
+                ("streams", "Stream Comparison"), ("rankings", "School-wide Rankings"),
+                ("trends", "Examination Trends"), ("grades", "Grade Distributions"),
+                ("top", "Top Students"),
+            ]
+        )
+        form = (
+            "<form class='msa-filters' method='get' action='%s'>"
+            "<label>Examinations (select multiple)<select name='exam_ids' multiple size='3'>%s</select></label>"
+            "<label>Academic year<select name='year'>%s</select></label>"
+            "<label>Term<select name='term'>%s</select></label>"
+            "<label>Class<select name='class_name'><option value=''>All classes</option>%s</select></label>"
+            "<label>Stream<select name='stream'><option value=''>All streams</option>%s</select></label>"
+            "<input type='hidden' name='view' value='%s'><button class='msa-button' type='submit'>Apply filters</button></form>"
+        ) % (base, exam_options, year_options, term_options, class_options, stream_options, escape(view))
+        # Summary cards use only learners with at least one recorded subject mark.
+        eligible = list(view_data["summaries"].values())
+        overall_mean = sum(x["average"] for x in eligible) / len(eligible) if eligible else 0.0
+        best = max((x["average"] for x in eligible), default=0.0)
+        worst = min((x["average"] for x in eligible), default=0.0)
+        summary_cards = (
+            "<div class='msa-kpis'><div><small>Class / selection mean</small><strong>%.2f%%</strong></div>"
+            "<div><small>Highest learner average</small><strong>%.2f%%</strong></div>"
+            "<div><small>Lowest learner average</small><strong>%.2f%%</strong></div>"
+            "<div><small>Learners assessed</small><strong>%d</strong></div></div>"
+        ) % (overall_mean, best, worst, len(eligible))
+        subject_rows = view_data["subject_rows"]
+        class_summary = []
+        for name in sorted({r["class_name"] for r in view_rows}, key=str.casefold):
+            vals = [x["average"] for sid2, x in view_data["summaries"].items() if view_data["students"].get(sid2, {}).get("class_name") == name]
+            class_summary.append([name, "%.2f%%" % (sum(vals) / len(vals) if vals else 0), len(vals)])
+        subject_table = _msa_html_table(["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], subject_rows)
+        grade_table = _msa_html_table(["Subject / overall", "Grade", "Students"], view_data["grade_distribution"])
+        top_table = _msa_html_table(
+            ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"],
+            view_data["top_combined"] + view_data["top_stream"]
+        )
+        ranking_rows = []
+        for item in ranking:
+            ranking_rows.append([
+                item["rank"], item["class_name"], "%.2f%%" % item["mean"],
+                "%.2f" % item["average_points"], item["students"],
+                "; ".join("%s %.1f%%" % (subjects.get(sid2, str(sid2)), item["subject_means"].get(sid2, 0)) for sid2 in item["subject_ids"])
+            ])
+        ranking_table = _msa_html_table(
+            ["Rank", "Class", "Overall mean", "Average grade points", "Students assessed", "Subject means (open detail)"],
+            ranking_rows, "No eligible class results are available for the selected examinations."
+        )
+        stream_groups = {}
+        for row in rows:
+            if class_name and row["class_name"] != class_name:
+                continue
+            key = (row["class_name"], row["stream"] or "No stream")
+            stream_groups.setdefault(key, {}).setdefault(row["student_id"], [])
+            stream_groups[key][row["student_id"]].append(row["percentage"])
+        stream_rows = []
+        for (group_name, stream_name), learners in sorted(stream_groups.items()):
+            averages = [sum(v) / len(v) for v in learners.values() if v]
+            stream_rows.append([
+                group_name, stream_name, len(averages),
+                "%.2f%%" % (sum(averages) / len(averages) if averages else 0),
+                "%.2f%%" % (max(averages) if averages else 0),
+            ])
+        trend_rows = []
+        for exam_id in selected_exam_ids:
+            exam_entry = next((e for e in filtered_exams if int(e["id"]) == exam_id), None)
+            exam_marks = [r["percentage"] for r in view_rows if r["exam_id"] == exam_id]
+            trend_rows.append([
+                (str(exam_entry["name"]) + " " + str(exam_entry["year"])) if exam_entry else str(exam_id),
+                len({r["student_id"] for r in view_rows if r["exam_id"] == exam_id}),
+                "%.2f%%" % (sum(exam_marks) / len(exam_marks) if exam_marks else 0),
+                "%.2f%%" % (max(exam_marks) if exam_marks else 0),
+                "%.2f%%" % (min(exam_marks) if exam_marks else 0),
+            ])
+        individual_rows = []
+        selected_student = int(student_id) if str(student_id).isdigit() else 0
+        if not selected_student and view_data["students"]:
+            selected_student = sorted(view_data["students"].keys(), key=lambda x: view_data["students"][x]["name"].casefold())[0]
+        if selected_student in view_data["students"]:
+            selected_info = view_data["students"][selected_student]
+            selected_summary = view_data["summaries"].get(selected_student, {})
+            for item in sorted(selected_summary.get("items", []), key=lambda x: x["subject_name"].casefold()):
+                grade, points, comment = _subject_grade_details(cur, sid, item["subject_id"], item["percentage"], view_data["grading_rules"], 100)
+                individual_rows.append([
+                    item["subject_name"], "%.1f" % item["mark"], "%.2f%%" % item["percentage"],
+                    grade, "%.1f" % float(points or 0), comment or ""
+                ])
+            individual_head = "<div class='msa-student-head'><h3>%s</h3><p>%s · %s · %s</p><strong>Average: %.2f%% · Total points: %.1f · Overall grade: %s</strong></div>" % (
+                escape(selected_info["name"]), escape(selected_info["admission_no"]),
+                escape(selected_info["class_name"]), escape(selected_info["stream"]),
+                float(selected_summary.get("average", 0)), float(selected_summary.get("average_points", 0)),
+                escape(str(selected_summary.get("overall_grade", "—")))
+            )
+        else:
+            individual_head = "<p>Select a learner with recorded marks to see subject strengths and weaknesses.</p>"
+        content_by_view = {
+            "summary": "<h2>Class Performance Summary</h2>" + summary_cards +
+                       "<h3>Class averages</h3>" + _msa_html_table(["Class", "Mean percentage", "Learners assessed"], class_summary),
+            "subjects": "<h2>Subject Performance Analysis</h2>" + subject_table,
+            "students": "<h2>Individual Student Performance</h2>" +
+                        "<form class='msa-student-select' method='get'><input type='hidden' name='view' value='students'>" +
+                        "".join("<input type='hidden' name='exam_ids' value='%s'>" % x for x in selected_exam_ids) +
+                        "<input type='hidden' name='year' value='%s'><input type='hidden' name='term' value='%s'>" % (escape(year), escape(term)) +
+                        "<input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'>" % (escape(class_name), escape(stream)) +
+                        "<label>Student<select name='student_id'>%s</select></label><button class='msa-button'>View student</button></form>" % "".join(student_options) +
+                        individual_head + _msa_html_table(["Subject", "Mean mark", "Percentage", "Grade", "Points", "Performance comment"], individual_rows),
+            "streams": "<h2>Stream Comparison</h2>" + _msa_html_table(["Class", "Stream", "Students assessed", "Mean", "Highest learner mean"], stream_rows),
+            "rankings": "<h2>School-wide Class Rankings</h2><p>Classes use the subjects common to the compared classes; partial attempts use only recorded subjects. Equal means share rank.</p>" + ranking_table,
+            "trends": "<h2>Examination Trends</h2>" + _msa_html_table(["Examination", "Learners with marks", "Mean recorded mark %", "Highest mark %", "Lowest mark %"], trend_rows),
+            "grades": "<h2>Grade Distributions</h2>" + grade_table,
+            "top": "<h2>Top Five Students per Subject</h2><p>Percentages are ranked highest first. Tied percentages share rank and the next rank is skipped.</p>" + top_table,
+        }
+        if view not in content_by_view:
+            view = "summary"
+        export_query = "&".join(
+            "%s=%s" % (k, quote(str(v), safe=""))
+            for k, v in [
+                ("exam_ids", ",".join(str(x) for x in selected_exam_ids)), ("year", year),
+                ("term", term), ("class_name", class_name), ("stream", stream)
+            ] if v
+        )
+        export_links = (
+            "<div class='msa-export'><a href='/app/academics/marksheet-analysis/csv?%s'>Download CSV</a>"
+            "<a href='/app/academics/marksheet-analysis/pdf?%s'>Download PDF</a>"
+            "<button type='button' onclick='window.print()'>Print report</button></div>"
+        ) % (export_query, export_query)
+        body = (
+            "<div class='page msa-page'><h1>Class MarkSheet Analysis</h1>"
+            "<p class='muted'>Read-only academic analysis based on saved marks. These reports do not change marks or grading settings.</p>"
+            + report_brand + form + "<nav class='msa-nav'>" + nav + "</nav>"
+            + export_links + content_by_view[view] + "</div>"
+            + """<style>
+.msa-page{max-width:1400px;margin:0 auto}.msa-brand{display:flex;align-items:center;justify-content:center;gap:18px;text-align:center;padding:14px;border:1px solid #dbe7df;border-radius:12px;background:#fff;margin:12px 0}.msa-brand img{max-width:88px;max-height:76px;object-fit:contain}.msa-brand h2{margin:0;color:#176b3a}.msa-brand p{margin:3px;color:#52665a;font-size:12px}.msa-filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:10px;padding:14px;background:#f7fbf8;border:1px solid #dbe7df;border-radius:12px;margin:12px 0}.msa-filters label,.msa-student-select label{font-size:12px;font-weight:800;display:flex;flex-direction:column;gap:5px}.msa-filters select,.msa-student-select select{min-width:0;width:100%;padding:9px;border:1px solid #ccd9d0;border-radius:8px;background:#fff}.msa-button{align-self:end;background:#176b3a;color:#fff;border:0;border-radius:8px;padding:11px 15px;font-weight:800;cursor:pointer}.msa-nav{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.msa-nav a,.msa-export a,.msa-export button{padding:9px 12px;border:1px solid #d4e1d8;border-radius:8px;background:#fff;color:#176b3a;text-decoration:none;font-weight:800;font-size:12px}.msa-nav a.active{background:#176b3a;color:#fff}.msa-export{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0 18px}.msa-export button{cursor:pointer}.msa-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.msa-kpis>div{padding:16px;border:1px solid #dce8df;border-radius:12px;background:#fff}.msa-kpis small{display:block;color:#627568}.msa-kpis strong{display:block;font-size:24px;color:#176b3a;margin-top:5px}.msa-table-wrap{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch;margin:10px 0 20px}.msa-table{border-collapse:collapse;width:100%;min-width:650px;background:#fff}.msa-table th{background:#176b3a;color:#fff;text-align:left}.msa-table th,.msa-table td{padding:9px;border:1px solid #dbe4de;font-size:12px;vertical-align:top}.msa-student-head{padding:12px;background:#f4fbf6;border-radius:10px;margin:12px 0}.msa-student-head h3{margin:0}.msa-student-head p{margin:4px 0}.msa-student-select{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.msa-student-select label{min-width:230px;flex:1}@media(max-width:900px){.msa-filters{grid-template-columns:1fr 1fr}.msa-filters label:first-child{grid-column:1/-1}.msa-kpis{grid-template-columns:1fr 1fr}}@media(max-width:520px){.msa-filters{grid-template-columns:1fr}.msa-kpis{grid-template-columns:1fr 1fr}.msa-brand{flex-direction:column}.msa-kpis strong{font-size:20px}}@media print{.side,.top,.msa-filters,.msa-nav,.msa-export,.page>h1,.page>.muted{display:none!important}.main{margin:0!important;padding:0!important}.msa-page{max-width:none}.msa-table{min-width:0}.msa-table th,.msa-table td{font-size:8px;padding:4px}}
+</style>"""
+        )
+        return _school_page(request, "Class MarkSheet Analysis", body)
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS FAILED:", repr(exc), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        return HTMLResponse(
+            "Class MarkSheet Analysis could not be loaded. Technical detail: " + escape(str(exc))[:400],
+            status_code=500
+        )
+    finally:
+        con.close()
+
+
+@router.get("/app/academics/marksheet-analysis/csv")
+def class_marksheet_analysis_csv(
+    request: Request, exam_ids: str = "", year: str = "", term: str = "",
+    class_name: str = "", stream: str = ""
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("Class MarkSheet Analysis exports are available to the School Admin only.", status_code=403)
+    con = _db()
+    try:
+        cur = con.cursor()
+        all_exams = cur.execute("SELECT id,year,term FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        allowed = [
+            int(e["id"]) for e in all_exams
+            if (not year or str(e["year"] or "") == year) and (not term or str(e["term"] or "") == term)
+        ]
+        ids = []
+        for part in str(exam_ids or "").split(","):
+            try:
+                value = int(part.strip())
+                if value in allowed and value not in ids:
+                    ids.append(value)
+            except (TypeError, ValueError):
+                continue
+        if not ids and allowed:
+            ids = [allowed[0]]
+        rows = _msa_load_rows(cur, sid, ids)
+        rows = [r for r in rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
+        data = _msa_report_data(cur, sid, rows)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["DaviSchool Class MarkSheet Analysis"])
+        school = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
+        writer.writerow(["School", str(school["name"] or "DaviSchool") if school else "DaviSchool"])
+        writer.writerow(["Selected examination IDs", ",".join(str(x) for x in ids)])
+        writer.writerow([])
+        writer.writerow(["SUBJECT PERFORMANCE"])
+        writer.writerow(["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"])
+        writer.writerows(data["subject_rows"])
+        writer.writerow([])
+        writer.writerow(["TOP FIVE STUDENTS - COMBINED CLASS"])
+        writer.writerow(["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"])
+        writer.writerows(data["top_combined"])
+        writer.writerow([])
+        writer.writerow(["TOP FIVE STUDENTS - STREAM-WISE"])
+        writer.writerow(["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"])
+        writer.writerows(data["top_stream"])
+        writer.writerow([])
+        writer.writerow(["GRADE DISTRIBUTION"])
+        writer.writerow(["Subject / overall", "Grade", "Students"])
+        writer.writerows(data["grade_distribution"])
+        response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
+        response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.csv"'
+        return response
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS CSV FAILED:", repr(exc), flush=True)
+        return HTMLResponse("Unable to export analysis CSV: " + escape(str(exc))[:300], status_code=500)
+    finally:
+        con.close()
+
+
+@router.get("/app/academics/marksheet-analysis/pdf")
+def class_marksheet_analysis_pdf(
+    request: Request, exam_ids: str = "", year: str = "", term: str = "",
+    class_name: str = "", stream: str = ""
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("Class MarkSheet Analysis exports are available to the School Admin only.", status_code=403)
+    con = _db()
+    try:
+        cur = con.cursor()
+        all_exams = cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        allowed = [
+            int(e["id"]) for e in all_exams
+            if (not year or str(e["year"] or "") == year) and (not term or str(e["term"] or "") == term)
+        ]
+        ids = []
+        for part in str(exam_ids or "").split(","):
+            try:
+                value = int(part.strip())
+                if value in allowed and value not in ids:
+                    ids.append(value)
+            except (TypeError, ValueError):
+                continue
+        if not ids and allowed:
+            ids = [allowed[0]]
+        rows = _msa_load_rows(cur, sid, ids)
+        rows = [r for r in rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
+        data = _msa_report_data(cur, sid, rows)
+        school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+        from io import BytesIO
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=12*mm)
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name="MSASection", parent=styles["Heading2"], textColor=colors.HexColor("#176b3a"), spaceBefore=8, spaceAfter=5))
+        styles.add(ParagraphStyle(name="MSACell", parent=styles["BodyText"], fontSize=7, leading=8))
+        story = []
+        school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
+        story.append(Paragraph(escape(school_name), styles["Title"]))
+        if school:
+            details = " · ".join(str(school[k] or "") for k in ("postal_address", "postal_code", "email", "phone") if k in school.keys() and school[k])
+            if details:
+                story.append(Paragraph(escape(details), styles["Normal"]))
+        story.append(Paragraph("Class MarkSheet Analysis", styles["Heading1"]))
+        exam_names = [str(e["name"] or "") + " " + str(e["year"] or "") for e in all_exams if int(e["id"]) in ids]
+        story.append(Paragraph("Examinations: " + escape(", ".join(exam_names)), styles["Normal"]))
+        story.append(Paragraph("Class: " + escape(class_name or "All classes") + " · Stream: " + escape(stream or "All streams"), styles["Normal"]))
+        if school and school["logo_data"]:
+            try:
+                from reportlab.platypus import Image as ReportImage
+                from reportlab.lib.utils import ImageReader
+                import base64 as _msa_base64
+                logo = str(school["logo_data"])
+                if logo.startswith("data:") and "," in logo:
+                    raw_logo = _msa_base64.b64decode(logo.split(",", 1)[1])
+                    story.append(Spacer(1, 3*mm))
+                    story.append(ReportImage(BytesIO(raw_logo), width=24*mm, height=18*mm, kind="proportional"))
+            except Exception:
+                pass
+        def pdf_table(title, headers, values):
+            story.append(Paragraph(escape(title), styles["MSASection"]))
+            table_data = [[Paragraph("<b>%s</b>" % escape(str(h)), styles["MSACell"]) for h in headers]]
+            for row in values:
+                table_data.append([Paragraph(escape(str(v)), styles["MSACell"]) for v in row])
+            if len(table_data) == 1:
+                table_data.append([Paragraph("No results", styles["MSACell"]) for _ in headers])
+            widths = [None] * len(headers)
+            tbl = Table(table_data, repeatRows=1, colWidths=widths, hAlign="LEFT")
+            tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 4),
+                ("RIGHTPADDING", (0,0), (-1,-1), 4),
+                ("TOPPADDING", (0,0), (-1,-1), 3),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+            ]))
+            story.append(tbl)
+            story.append(Spacer(1, 3*mm))
+        pdf_table("Summary and subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
+        pdf_table("Top five students per subject — combined class", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_combined"])
+        pdf_table("Top five students per subject — stream-wise", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_stream"])
+        pdf_table("Grade distributions", ["Subject / overall", "Grade", "Students"], data["grade_distribution"])
+        ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
+            rows, data["aggregated"], data["grading_rules"], data["overall_rules"], cur, sid
+        )
+        pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
+            [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
+            for x in ranking
+        ])
+        stream_groups = {}
+        for row in rows:
+            stream_groups.setdefault((row["class_name"], row["stream"] or "No stream"), {}).setdefault(row["student_id"], []).append(row["percentage"])
+        stream_rows = []
+        for (cn, sn), learner_vals in sorted(stream_groups.items()):
+            avgs = [sum(v)/len(v) for v in learner_vals.values() if v]
+            stream_rows.append([cn, sn, len(avgs), "%.2f%%" % (sum(avgs)/len(avgs) if avgs else 0)])
+        pdf_table("Stream comparisons", ["Class", "Stream", "Students assessed", "Mean %"], stream_rows)
+        trend_rows = []
+        for exam_id in ids:
+            exam_entry = next((e for e in all_exams if int(e["id"]) == exam_id), None)
+            vals = [r["percentage"] for r in rows if r["exam_id"] == exam_id]
+            trend_rows.append([
+                (str(exam_entry["name"]) + " " + str(exam_entry["year"])) if exam_entry else str(exam_id),
+                len({r["student_id"] for r in rows if r["exam_id"] == exam_id}),
+                "%.2f%%" % (sum(vals)/len(vals) if vals else 0)
+            ])
+        pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows)
+        def add_footer(canvas, document):
+            canvas.saveState()
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor("#176b3a"))
+            canvas.drawCentredString(landscape(A4)[0]/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
+            canvas.restoreState()
+        doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
+        response = Response(content=buffer.getvalue(), media_type="application/pdf")
+        response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.pdf"'
+        return response
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS PDF FAILED:", repr(exc), flush=True)
+        return HTMLResponse("Unable to export analysis PDF: " + escape(str(exc))[:300], status_code=500)
+    finally:
+        con.close()
