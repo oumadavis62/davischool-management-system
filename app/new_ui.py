@@ -10487,11 +10487,11 @@ def class_marksheet_analysis_csv(
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
             writer.writerow([])
             writer.writerow(["SUBJECT: " + subject_name])
-            writer.writerow(["Rank", "Student", "Admission", "Class", "Stream", "Mark", "Percentage", "Grade"])
+            writer.writerow(["Rank", "Student", "Class", "Stream", "Mark", "Grade"])
             for entry in combined_by_subject.get(subject_name, []):
                 row_values = entry[2:]
                 class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
-                writer.writerow(row_values[:3] + [class_label] + row_values[3:])
+                writer.writerow([row_values[0], row_values[1], class_label, row_values[3], row_values[4], row_values[6]])
         writer.writerow([])
         writer.writerow(["TOP FIVE STUDENTS PER SUBJECT - STREAM-WISE"])
         stream_by_subject = {}
@@ -10512,9 +10512,9 @@ def class_marksheet_analysis_csv(
                     current_group = group_key
                     writer.writerow([])
                     writer.writerow(["CLASS: " + class_label + " | STREAM: " + group_key[1]])
-                    writer.writerow(["Rank", "Student", "Admission", "Class", "Stream", "Mark", "Percentage", "Grade"])
+                    writer.writerow(["Rank", "Student", "Class", "Stream", "Mark", "Grade"])
                 row_values = entry[2:]
-                writer.writerow(row_values[:3] + [class_label] + row_values[3:])
+                writer.writerow([row_values[0], row_values[1], class_label, row_values[3], row_values[4], row_values[6]])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
@@ -10663,9 +10663,10 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
         grades_per_subject = len(grade_labels)
         subject_width = grades_per_subject + 3
+        subject_matrix_tables = []
+        matrix_col_widths = [35*mm, 22*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
         for subject_index, subject_id in enumerate(subject_order):
             subject_name = subject_names[subject_index]
-            story.append(Paragraph(escape(subject_name), styles["Heading3"]))
             table_data = [[
                 Paragraph("<b>Class</b>", styles["MSAMatrixHeader"]),
                 Paragraph("<b>Stream</b>", styles["MSAMatrixHeader"]),
@@ -10681,8 +10682,7 @@ def class_marksheet_analysis_pdf(
                      Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
                     + [Paragraph(escape(str(v)), styles["MSACell"]) for v in subject_values]
                 )
-            col_widths = [35*mm, 22*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
-            matrix_table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="LEFT")
             matrix_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
@@ -10695,7 +10695,31 @@ def class_marksheet_analysis_pdf(
                 ("TOPPADDING", (0,0), (-1,-1), 2),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 2),
             ]))
-            story.append(matrix_table)
+            subject_matrix_tables.append((subject_name, matrix_table))
+        for pair_start in range(0, len(subject_matrix_tables), 2):
+            left_name, left_table = subject_matrix_tables[pair_start]
+            pair_cells = [
+                [Paragraph(escape(left_name), styles["Heading3"]), left_table]
+            ]
+            if pair_start + 1 < len(subject_matrix_tables):
+                right_name, right_table = subject_matrix_tables[pair_start + 1]
+                pair_cells[0].extend([Paragraph(escape(right_name), styles["Heading3"]), right_table])
+                pair_widths = [doc.width / 2, 4*mm, doc.width / 2 - 4*mm]
+                paired_data = [[pair_cells[0][0], pair_cells[0][1], pair_cells[0][2], pair_cells[0][3]]]
+                paired_table = Table([[pair_cells[0][0], left_table, pair_cells[0][2], right_table]],
+                                     colWidths=[doc.width/2 - 2*mm, 2*mm, doc.width/2 - 2*mm, 2*mm],
+                                     hAlign="LEFT")
+                paired_table.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(paired_table)
+            else:
+                story.append(pair_cells[0][0])
+                story.append(left_table)
             story.append(Spacer(1, 3*mm))
         combined_by_subject = {}
         for entry in data["top_combined"]:
@@ -10712,7 +10736,9 @@ def class_marksheet_analysis_pdf(
                 row_values = entry[2:]
                 class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
                 combined_rows.append(row_values[:3] + [class_label] + row_values[3:])
-            pdf_table(subject_name, ["Rank", "Student", "Admission", "Class", "Stream", "Mark", "Percentage", "Grade"], combined_rows)
+            pdf_table(subject_name, ["Rank", "Student", "Class", "Stream", "Mark", "Grade"], [
+                [row[0], row[1], row[3], row[4], row[5], row[7]] for row in combined_rows
+            ])
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
@@ -10731,14 +10757,16 @@ def class_marksheet_analysis_pdf(
                 if group_key != current_group:
                     if current_group is not None:
                         pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                                  ["Rank", "Student", "Admission", "Class", "Stream", "Mark", "Percentage", "Grade"], group_rows)
+                                  ["Rank", "Student", "Class", "Stream", "Mark", "Grade"],
+                                  [[row[0], row[1], row[3], row[4], row[5], row[7]] for row in group_rows])
                     current_group = group_key
                     group_rows = []
                 row_values = entry[2:]
                 group_rows.append(row_values[:3] + [class_label] + row_values[3:])
             if current_group is not None:
                 pdf_table("Class: " + current_group[0] + " — Stream: " + current_group[1],
-                          ["Rank", "Student", "Admission", "Class", "Stream", "Mark", "Percentage", "Grade"], group_rows)
+                          ["Rank", "Student", "Class", "Stream", "Mark", "Grade"],
+                          [[row[0], row[1], row[3], row[4], row[5], row[7]] for row in group_rows])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
