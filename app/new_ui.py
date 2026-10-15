@@ -9864,7 +9864,7 @@ def _msa_ranked_rows(rows, aggregated, grading_rules, overall_rules, cur, school
         per_learner = []
         points = []
         assessed = 0
-        used_subjects = common_subjects or class_subjects.get(class_name, set())
+        used_subjects = common_subjects
         for info, summary in learners:
             learner_values = [
                 aggregated[(info["id"], subject_id)]["percentage"]
@@ -10040,6 +10040,8 @@ def class_marksheet_analysis(
             and (not stream or r["stream"] == stream)
         ]
         view_data = _msa_report_data(cur, sid, view_rows)
+        top_rows = [r for r in all_rows if (not class_name or r["class_name"] == class_name)]
+        top_data = _msa_report_data(cur, sid, top_rows)
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected_exams = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
@@ -10149,7 +10151,7 @@ def class_marksheet_analysis(
         grade_table = _msa_html_table(["Subject / overall", "Grade", "Students"], view_data["grade_distribution"])
         top_table = _msa_html_table(
             ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"],
-            view_data["top_combined"] + view_data["top_stream"]
+            top_data["top_combined"] + top_data["top_stream"]
         )
         ranking_rows = []
         for item in ranking:
