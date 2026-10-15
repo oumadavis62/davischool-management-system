@@ -10188,6 +10188,31 @@ def class_marksheet_analysis(
                 "%.2f%%" % (max(exam_marks) if exam_marks else 0),
                 "%.2f%%" % (min(exam_marks) if exam_marks else 0),
             ])
+        exam_subject_trend_rows = []
+        exam_grade_trend_rows = []
+        for exam_id in selected_exam_ids:
+            exam_entry = next((e for e in filtered_exams if int(e["id"]) == exam_id), None)
+            exam_label = (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")) if exam_entry else str(exam_id)
+            per_subject = {}
+            per_subject_grades = {}
+            for trend_mark in view_rows:
+                if trend_mark["exam_id"] != exam_id:
+                    continue
+                per_subject.setdefault(trend_mark["subject_id"], []).append(trend_mark["percentage"])
+                grade, _, _ = _subject_grade_details(
+                    cur, sid, trend_mark["subject_id"], trend_mark["percentage"], view_data["grading_rules"], 100
+                )
+                grade_key = (trend_mark["subject_id"], str(grade or "—"))
+                per_subject_grades[grade_key] = per_subject_grades.get(grade_key, 0) + 1
+            for subject_id, vals in per_subject.items():
+                exam_subject_trend_rows.append([
+                    exam_label, subjects.get(subject_id, str(subject_id)), len(vals),
+                    "%.2f%%" % (sum(vals) / len(vals) if vals else 0)
+                ])
+            for (subject_id, grade), count in per_subject_grades.items():
+                exam_grade_trend_rows.append([
+                    exam_label, subjects.get(subject_id, str(subject_id)), grade, count
+                ])
         individual_rows = []
         individual_trend_rows = []
         selected_student = int(student_id) if str(student_id).isdigit() else 0
@@ -10256,7 +10281,12 @@ def class_marksheet_analysis(
                         _msa_html_table(["Examination", "Subjects sat", "Average percentage"], individual_trend_rows),
             "streams": "<h2>Stream Comparison</h2>" + _msa_html_table(["Class", "Stream", "Students assessed", "Mean", "Highest learner mean"], stream_rows),
             "rankings": "<h2>School-wide Class Rankings</h2><p>Classes use the subjects common to the compared classes; partial attempts use only recorded subjects. Equal means share rank.</p>" + ranking_table,
-            "trends": "<h2>Examination Trends</h2>" + _msa_html_table(["Examination", "Learners with marks", "Mean recorded mark %", "Highest mark %", "Lowest mark %"], trend_rows),
+            "trends": "<h2>Examination Trends</h2>" +
+                      _msa_html_table(["Examination", "Learners with marks", "Mean recorded mark %", "Highest mark %", "Lowest mark %"], trend_rows) +
+                      "<h3>Subject averages by examination</h3>" +
+                      _msa_html_table(["Examination", "Subject", "Entries", "Mean percentage"], exam_subject_trend_rows) +
+                      "<h3>Grade distributions by examination</h3>" +
+                      _msa_html_table(["Examination", "Subject", "Grade", "Students"], exam_grade_trend_rows),
             "grades": "<h2>Grade Distributions</h2>" + grade_table,
             "top": "<h2>Top Five Students per Subject</h2><p>Percentages are ranked highest first. Tied percentages share rank and the next rank is skipped.</p>" + top_table,
         }
