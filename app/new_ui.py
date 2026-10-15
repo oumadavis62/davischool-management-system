@@ -9874,7 +9874,18 @@ def _msa_ranked_rows(rows, aggregated, grading_rules, overall_rules, cur, school
             if not learner_values:
                 continue
             per_learner.append(sum(learner_values) / len(learner_values))
-            points.append(summary["average_points"])
+            learner_points = []
+            for subject_id in used_subjects:
+                subject_item = aggregated.get((info["id"], subject_id))
+                if subject_item:
+                    _, point_value, _ = _subject_grade_details(
+                        cur, school_id, subject_id, subject_item["percentage"], grading_rules, 100
+                    )
+                    try:
+                        learner_points.append(float(point_value or 0))
+                    except (TypeError, ValueError):
+                        learner_points.append(0.0)
+            points.append(sum(learner_points) / len(learner_points) if learner_points else 0.0)
             assessed += 1
         if per_learner:
             mean = sum(per_learner) / len(per_learner)
@@ -10008,11 +10019,6 @@ def class_marksheet_analysis(
             and (not term or str(e["term"] or "") == term)
         ]
         selected_exam_ids = _msa_exam_ids(request, [int(e["id"]) for e in filtered_exams])
-        if exam_ids and not request.query_params.getlist("exam_ids"):
-            selected_exam_ids = _msa_exam_ids(
-                type("Q", (), {"query_params": type("P", (), {"getlist": lambda self, key: [exam_ids], "get": lambda self, key, default="": default})()})(),
-                [int(e["id"]) for e in filtered_exams]
-            )
         selected_exam_ids = [x for x in selected_exam_ids if x in {int(e["id"]) for e in filtered_exams}]
         if not selected_exam_ids and filtered_exams:
             selected_exam_ids = [int(filtered_exams[0]["id"])]
@@ -10180,11 +10186,30 @@ def class_marksheet_analysis(
                     item["subject_name"], "%.1f" % item["mark"], "%.2f%%" % item["percentage"],
                     grade, "%.1f" % float(points or 0), comment or ""
                 ])
-            individual_head = "<div class='msa-student-head'><h3>%s</h3><p>%s · %s · %s</p><strong>Average: %.2f%% · Total points: %.1f · Overall grade: %s</strong></div>" % (
+            classmates = [
+                (view_data["students"].get(other_id, {}), other_summary)
+                for other_id, other_summary in view_data["summaries"].items()
+                if view_data["students"].get(other_id, {}).get("class_name") == selected_info["class_name"]
+            ]
+            classmates.sort(key=lambda pair: (-float(pair[1].get("average", 0)), str(pair[0].get("name", "")).casefold()))
+            student_rank = 0
+            previous_average = None
+            for index, (classmate, classmate_summary) in enumerate(classmates, 1):
+                if previous_average is None or abs(float(classmate_summary.get("average", 0)) - previous_average) > 0.000001:
+                    student_rank = index
+                if int(classmate.get("id") or 0) == selected_student:
+                    break
+                previous_average = float(classmate_summary.get("average", 0))
+            strengths = sorted(selected_summary.get("items", []), key=lambda x: (-x["percentage"], x["subject_name"].casefold()))
+            strongest = strengths[0]["subject_name"] if strengths else "—"
+            weakest = strengths[-1]["subject_name"] if strengths else "—"
+            individual_head = "<div class='msa-student-head'><h3>%s</h3><p>%s · %s · %s</p><strong>Class position: %s / %s · Average: %.2f%% · Average grade points: %.1f · Overall grade: %s</strong><p>Strongest subject: %s · Subject needing most improvement: %s</p></div>" % (
                 escape(selected_info["name"]), escape(selected_info["admission_no"]),
                 escape(selected_info["class_name"]), escape(selected_info["stream"]),
+                student_rank or "—", len(classmates),
                 float(selected_summary.get("average", 0)), float(selected_summary.get("average_points", 0)),
-                escape(str(selected_summary.get("overall_grade", "—")))
+                escape(str(selected_summary.get("overall_grade", "—"))),
+                escape(str(strongest)), escape(str(weakest))
             )
         else:
             individual_head = "<p>Select a learner with recorded marks to see subject strengths and weaknesses.</p>"
@@ -10271,8 +10296,8 @@ def class_marksheet_analysis_csv(
                 continue
         if not ids and allowed:
             ids = [allowed[0]]
-        rows = _msa_load_rows(cur, sid, ids)
-        rows = [r for r in rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
+        all_rows = _msa_load_rows(cur, sid, ids)
+        rows = [r for r in all_rows if (not class_name or r["class_name"] == class_name) and (not stream or r["stream"] == stream)]
         data = _msa_report_data(cur, sid, rows)
         output = io.StringIO()
         writer = csv.writer(output)
@@ -10296,8 +10321,9 @@ def class_marksheet_analysis_csv(
         writer.writerow(["GRADE DISTRIBUTION"])
         writer.writerow(["Subject / overall", "Grade", "Students"])
         writer.writerows(data["grade_distribution"])
+        ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
-            rows, data["aggregated"], data["grading_rules"], data["overall_rules"], cur, sid
+            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
         writer.writerow([])
         writer.writerow(["SCHOOL-WIDE CLASS RANKINGS"])
@@ -10309,7 +10335,9 @@ def class_marksheet_analysis_csv(
                 "; ".join("%s %.1f%%" % (subjects.get(sub_id, str(sub_id)), item["subject_means"].get(sub_id, 0)) for sub_id in item["subject_ids"])
             ])
         stream_groups = {}
-        for row in rows:
+        for row in all_rows:
+            if class_name and row["class_name"] != class_name:
+                continue
             stream_groups.setdefault((row["class_name"], row["stream"] or "No stream"), {}).setdefault(row["student_id"], []).append(row["percentage"])
         writer.writerow([])
         writer.writerow(["STREAM COMPARISONS"])
@@ -10414,7 +10442,7 @@ def class_marksheet_analysis_pdf(
             if len(table_data) == 1:
                 table_data.append([Paragraph("No results", styles["MSACell"]) for _ in headers])
             widths = [None] * len(headers)
-            tbl = Table(table_data, repeatRows=1, colWidths=widths, hAlign="LEFT")
+            tbl = Table(table_data, repeatRows=1, hAlign="LEFT")
             tbl.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
@@ -10427,12 +10455,18 @@ def class_marksheet_analysis_pdf(
             ]))
             story.append(tbl)
             story.append(Spacer(1, 3*mm))
-        pdf_table("Summary and subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
+        eligible_summaries = list(data["summaries"].values())
+        summary_mean = sum(x["average"] for x in eligible_summaries) / len(eligible_summaries) if eligible_summaries else 0.0
+        summary_high = max((x["average"] for x in eligible_summaries), default=0.0)
+        summary_low = min((x["average"] for x in eligible_summaries), default=0.0)
+        pdf_table("Summary", ["Learners assessed", "Class mean %", "Highest learner mean %", "Lowest learner mean %"], [[len(eligible_summaries), "%.2f%%" % summary_mean, "%.2f%%" % summary_high, "%.2f%%" % summary_low]])
+        pdf_table("Subject performance", ["Subject", "Students sat", "Mean %", "Highest %", "Lowest %"], data["subject_rows"])
         pdf_table("Top five students per subject — combined class", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_combined"])
         pdf_table("Top five students per subject — stream-wise", ["Subject", "Group", "Rank", "Student", "Admission", "Stream", "Mean mark", "Percentage", "Grade"], data["top_stream"])
         pdf_table("Grade distributions", ["Subject / overall", "Grade", "Students"], data["grade_distribution"])
+        ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
-            rows, data["aggregated"], data["grading_rules"], data["overall_rules"], cur, sid
+            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
         pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
             [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
