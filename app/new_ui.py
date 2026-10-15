@@ -10403,10 +10403,6 @@ def class_marksheet_analysis_csv(
                     writer.writerow(["STREAM: " + str(current_group)])
                     writer.writerow(["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"])
                 writer.writerow(entry[2:])
-        writer.writerow([])
-        writer.writerow(["GRADE DISTRIBUTION"])
-        writer.writerow(["Subject / overall", "Grade", "Students"])
-        writer.writerows(data["grade_distribution"])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
@@ -10444,33 +10440,6 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % (max(vals) if vals else 0),
                 "%.2f%%" % (min(vals) if vals else 0),
             ])
-        writer.writerow([])
-        subject_trend_rows = []
-        grade_trend_rows = []
-        for exam_id in ids:
-            exam = cur.execute("SELECT name,year FROM exams WHERE school_id=? AND id=?", (sid, exam_id)).fetchone()
-            exam_label = (str(exam["name"] or "") + " " + str(exam["year"] or "")) if exam else str(exam_id)
-            per_subject = {}
-            grade_counts = {}
-            for trend_mark in rows:
-                if trend_mark["exam_id"] != exam_id:
-                    continue
-                per_subject.setdefault(trend_mark["subject_id"], []).append(trend_mark["percentage"])
-                grade, _, _ = _subject_grade_details(cur, sid, trend_mark["subject_id"], trend_mark["percentage"], data["grading_rules"], 100)
-                grade_key = (trend_mark["subject_id"], str(grade or "—"))
-                grade_counts[grade_key] = grade_counts.get(grade_key, 0) + 1
-            for subject_id, vals in per_subject.items():
-                subject_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), len(vals), "%.2f%%" % (sum(vals)/len(vals) if vals else 0)])
-            for (subject_id, grade), count in grade_counts.items():
-                grade_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), grade, count])
-        writer.writerow([])
-        writer.writerow(["SUBJECT AVERAGES BY EXAMINATION"])
-        writer.writerow(["Examination", "Subject", "Entries", "Mean percentage"])
-        writer.writerows(subject_trend_rows)
-        writer.writerow([])
-        writer.writerow(["GRADE DISTRIBUTIONS BY EXAMINATION"])
-        writer.writerow(["Examination", "Subject", "Grade", "Students"])
-        writer.writerows(grade_trend_rows)
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.csv"'
         return response
@@ -10605,7 +10574,6 @@ def class_marksheet_analysis_pdf(
                 group_rows.append(entry[2:])
             if current_group is not None:
                 pdf_table("Stream: " + str(current_group), ["Rank", "Student", "Admission", "Stream", "Mark", "Percentage", "Grade"], group_rows)
-        pdf_table("Grade distributions", ["Subject / overall", "Grade", "Students"], data["grade_distribution"])
         ranking_data = _msa_report_data(cur, sid, all_rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
@@ -10634,26 +10602,6 @@ def class_marksheet_analysis_pdf(
                 "%.2f%%" % (sum(vals)/len(vals) if vals else 0)
             ])
         pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows)
-        subject_trend_rows = []
-        grade_trend_rows = []
-        for exam_id in ids:
-            exam_entry = next((e for e in all_exams if int(e["id"]) == exam_id), None)
-            exam_label = (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")) if exam_entry else str(exam_id)
-            per_subject = {}
-            grade_counts = {}
-            for trend_mark in rows:
-                if trend_mark["exam_id"] != exam_id:
-                    continue
-                per_subject.setdefault(trend_mark["subject_id"], []).append(trend_mark["percentage"])
-                grade, _, _ = _subject_grade_details(cur, sid, trend_mark["subject_id"], trend_mark["percentage"], data["grading_rules"], 100)
-                grade_key = (trend_mark["subject_id"], str(grade or "—"))
-                grade_counts[grade_key] = grade_counts.get(grade_key, 0) + 1
-            for subject_id, vals in per_subject.items():
-                subject_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), len(vals), "%.2f%%" % (sum(vals)/len(vals) if vals else 0)])
-            for (subject_id, grade), count in grade_counts.items():
-                grade_trend_rows.append([exam_label, data["subjects"].get(subject_id, str(subject_id)), grade, count])
-        pdf_table("Subject averages by examination", ["Examination", "Subject", "Entries", "Mean percentage"], subject_trend_rows)
-        pdf_table("Grade distributions by examination", ["Examination", "Subject", "Grade", "Students"], grade_trend_rows)
         def add_footer(canvas, document):
             canvas.saveState()
             canvas.setFont("Helvetica", 7)
