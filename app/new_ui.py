@@ -10577,6 +10577,7 @@ def class_marksheet_analysis_pdf(
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(name="MSASection", parent=styles["Heading2"], textColor=colors.HexColor("#176b3a"), spaceBefore=8, spaceAfter=5))
         styles.add(ParagraphStyle(name="MSACell", parent=styles["BodyText"], fontSize=7, leading=8))
+        styles.add(ParagraphStyle(name="MSAMatrixHeader", parent=styles["MSACell"], textColor=colors.white, fontSize=5.5, leading=6))
         story = []
         school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
         story.append(Paragraph(escape(school_name), styles["Title"]))
@@ -10638,17 +10639,17 @@ def class_marksheet_analysis_pdf(
             chunk_ids = subject_order[chunk_start:chunk_start + 2]
             chunk_names = subject_names[chunk_start:chunk_start + 2]
             first_header = [
-                Paragraph("<b>Class</b>", styles["MSACell"]),
-                Paragraph("<b>Stream</b>", styles["MSACell"]),
+                Paragraph("<b>Class</b>", styles["MSAMatrixHeader"]),
+                Paragraph("<b>Stream</b>", styles["MSAMatrixHeader"]),
             ]
             second_header = ["", ""]
             for subject_name in chunk_names:
-                first_header.extend([Paragraph("<b>%s</b>" % escape(subject_name), styles["MSACell"])] + [""] * (subject_width - 1))
+                first_header.extend([Paragraph("<b>%s</b>" % escape(subject_name), styles["MSAMatrixHeader"])] + [""] * (subject_width - 1))
                 second_header.extend(
-                    [Paragraph("<b>%s</b>" % escape("Grade %s" % grade), styles["MSACell"]) for grade in grade_labels]
-                    + [Paragraph("<b>Entries</b>", styles["MSACell"]),
-                       Paragraph("<b>Mean</b>", styles["MSACell"]),
-                       Paragraph("<b>Pos.</b>", styles["MSACell"])]
+                    [Paragraph("<b>%s</b>" % escape("Grade %s" % grade), styles["MSAMatrixHeader"]) for grade in grade_labels]
+                    + [Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
+                       Paragraph("<b>Mean</b>", styles["MSAMatrixHeader"]),
+                       Paragraph("<b>Pos.</b>", styles["MSAMatrixHeader"])]
                 )
             table_data = [first_header, second_header]
             for matrix_row in performance_rows:
