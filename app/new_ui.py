@@ -9914,9 +9914,22 @@ def _msa_html_table(headers, rows, empty_text="No saved marks match these filter
     )
 
 
+def _msa_load_overall_rules_readonly(cur, school_id):
+    """Read configured overall grades without creating or changing grading rules."""
+    try:
+        return cur.execute(
+            "SELECT min_total,max_total,grade FROM overall_grading_rules WHERE school_id=? "
+            "ORDER BY CASE WHEN upper(trim(grade))='X' THEN 0 ELSE 1 END,min_total DESC,id DESC",
+            (school_id,)
+        ).fetchall()
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS OVERALL RULES READ WARNING:", repr(exc), flush=True)
+        return []
+
+
 def _msa_report_data(cur, school_id, rows):
     grading_rules = _load_grading_rules(cur, school_id)
-    overall_rules = _load_overall_grading_rules(cur, school_id)
+    overall_rules = _msa_load_overall_rules_readonly(cur, school_id)
     subjects, students, exams, aggregated = _msa_aggregate(rows)
     summaries = _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, school_id)
     subject_rows = []
@@ -10283,6 +10296,40 @@ def class_marksheet_analysis_csv(
         writer.writerow(["GRADE DISTRIBUTION"])
         writer.writerow(["Subject / overall", "Grade", "Students"])
         writer.writerows(data["grade_distribution"])
+        ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
+            rows, data["aggregated"], data["grading_rules"], data["overall_rules"], cur, sid
+        )
+        writer.writerow([])
+        writer.writerow(["SCHOOL-WIDE CLASS RANKINGS"])
+        writer.writerow(["Rank", "Class", "Overall mean %", "Average grade points", "Students assessed", "Subject means"])
+        for item in ranking:
+            writer.writerow([
+                item["rank"], item["class_name"], "%.2f%%" % item["mean"],
+                "%.2f" % item["average_points"], item["students"],
+                "; ".join("%s %.1f%%" % (subjects.get(sub_id, str(sub_id)), item["subject_means"].get(sub_id, 0)) for sub_id in item["subject_ids"])
+            ])
+        stream_groups = {}
+        for row in rows:
+            stream_groups.setdefault((row["class_name"], row["stream"] or "No stream"), {}).setdefault(row["student_id"], []).append(row["percentage"])
+        writer.writerow([])
+        writer.writerow(["STREAM COMPARISONS"])
+        writer.writerow(["Class", "Stream", "Students assessed", "Mean %", "Highest learner mean %"])
+        for (cn, sn), learners in sorted(stream_groups.items()):
+            avgs = [sum(v) / len(v) for v in learners.values() if v]
+            writer.writerow([cn, sn, len(avgs), "%.2f%%" % (sum(avgs)/len(avgs) if avgs else 0), "%.2f%%" % (max(avgs) if avgs else 0)])
+        writer.writerow([])
+        writer.writerow(["EXAMINATION TRENDS"])
+        writer.writerow(["Examination", "Learners with marks", "Mean recorded mark %", "Highest %", "Lowest %"])
+        for exam_id in ids:
+            exam = cur.execute("SELECT name,year FROM exams WHERE school_id=? AND id=?", (sid, exam_id)).fetchone()
+            vals = [r["percentage"] for r in rows if r["exam_id"] == exam_id]
+            writer.writerow([
+                ((str(exam["name"] or "") + " " + str(exam["year"] or "")) if exam else str(exam_id)),
+                len({r["student_id"] for r in rows if r["exam_id"] == exam_id}),
+                "%.2f%%" % (sum(vals)/len(vals) if vals else 0),
+                "%.2f%%" % (max(vals) if vals else 0),
+                "%.2f%%" % (min(vals) if vals else 0),
+            ])
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.csv"'
         return response
