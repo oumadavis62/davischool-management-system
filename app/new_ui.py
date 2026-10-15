@@ -10345,6 +10345,9 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
 
     per_group_subject = {}
     all_grades = set()
+    for subject_rules in data["grading_rules"].values():
+        for rule in subject_rules:
+            all_grades.add(str(rule["grade"] or "—"))
     for (group_key, student_id, subject_id), attempts in student_subject_rows.items():
         percentages = [float(x["percentage"]) for x in attempts]
         percentage = sum(percentages) / len(percentages) if percentages else 0.0
@@ -10361,7 +10364,7 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
     for subject_id in subjects:
         for rule in data["grading_rules"].get(subject_id, []):
             grade = str(rule["grade"] or "—")
-            if grade in all_grades and grade not in grade_order:
+            if grade not in grade_order:
                 grade_order.append(grade)
     grade_order.extend(sorted(all_grades - set(grade_order), key=str.casefold))
 
