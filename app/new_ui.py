@@ -11358,7 +11358,7 @@ def class_marksheet_analysis_pdf(
         grades_per_subject = len(grade_labels)
         subject_width = grades_per_subject + 3
         subject_matrix_tables = []
-        matrix_col_widths = [35*mm, 22*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
+        matrix_col_widths = [21*mm, 13*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
         for subject_index, subject_id in enumerate(subject_order):
             subject_name = subject_names[subject_index]
             table_data = [[
