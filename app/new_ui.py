@@ -10995,7 +10995,7 @@ def class_marksheet_analysis_pdf(
                     _append_stream_top_table(current_group, group_rows)
 
             # A single subject heading labels all following class/stream tables.
-            story.append(Paragraph("Subject: " + escape(str(subject_name)), styles["MSASection"]))
+            story.append(Paragraph(escape(str(subject_name)), styles["MSASection"]))
             for pair_start in range(0, len(subject_stream_tables), 2):
                 left_name, left_table = subject_stream_tables[pair_start]
                 half_width = doc.width / 2 - 3*mm
