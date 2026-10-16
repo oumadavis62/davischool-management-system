@@ -10497,7 +10497,25 @@ def class_marksheet_analysis_csv(
         data = _msa_report_data(cur, sid, rows)
         output = io.StringIO()
         writer = csv.writer(output)
-        school = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
+        school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+        # Keep only the school identity/contact header in the CSV; do not add
+        # the analysis title, selected-exam line, or class/stream metadata.
+        if school:
+            writer.writerow([str(school["name"] or "DaviSchool")])
+            postal_address = str(school["postal_address"] or "") if "postal_address" in school.keys() else ""
+            postal_code = str(school["postal_code"] or "") if "postal_code" in school.keys() else ""
+            postal_line = " ".join(x for x in [
+                ("P.O. Box " + postal_address) if postal_address else "", postal_code
+            ] if x)
+            if postal_line:
+                writer.writerow([postal_line])
+            email = str(school["email"] or "") if "email" in school.keys() else ""
+            phone = str(school["phone"] or "") if "phone" in school.keys() else ""
+            if email:
+                writer.writerow([email])
+            if phone:
+                writer.writerow([phone])
+            writer.writerow([])
         # Mirror the MarkSheet's Grade Distribution Analysis at the beginning
         # of the export, using the selected class/stream and selected exams.
         msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
@@ -10736,19 +10754,56 @@ def class_marksheet_analysis_pdf(
         styles.add(ParagraphStyle(name="MSAMatrixHeader", parent=styles["MSACell"], textColor=colors.white, fontSize=5.5, leading=6))
         story = []
         school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
-        story.append(Paragraph(escape(school_name), styles["Title"]))
+        from reportlab.platypus import Image as ReportImage
+        from reportlab.lib.styles import ParagraphStyle
+        styles.add(ParagraphStyle(
+            name="MSASchoolName", parent=styles["Title"], alignment=1,
+            fontSize=15, leading=18, spaceAfter=2, textColor=colors.HexColor("#176b3a")
+        ))
+        styles.add(ParagraphStyle(
+            name="MSASchoolContact", parent=styles["Normal"], alignment=1,
+            fontSize=8, leading=10, spaceAfter=1
+        ))
+        school_contacts = []
+        if school:
+            postal_address = str(school["postal_address"] or "") if "postal_address" in school.keys() else ""
+            postal_code = str(school["postal_code"] or "") if "postal_code" in school.keys() else ""
+            postal_line = " ".join(x for x in [
+                ("P.O. Box " + postal_address) if postal_address else "", postal_code
+            ] if x)
+            if postal_line:
+                school_contacts.append(postal_line)
+            if "email" in school.keys() and school["email"]:
+                school_contacts.append(str(school["email"]))
+            if "phone" in school.keys() and school["phone"]:
+                school_contacts.append(str(school["phone"]))
+        logo_cell = ""
         if school and school["logo_data"]:
             try:
-                from reportlab.platypus import Image as ReportImage
-                from reportlab.lib.utils import ImageReader
                 import base64 as _msa_base64
                 logo = str(school["logo_data"])
                 if logo.startswith("data:") and "," in logo:
                     raw_logo = _msa_base64.b64decode(logo.split(",", 1)[1])
-                    story.append(Spacer(1, 3*mm))
-                    story.append(ReportImage(BytesIO(raw_logo), width=24*mm, height=18*mm, kind="proportional"))
+                    logo_cell = ReportImage(BytesIO(raw_logo), width=22*mm, height=18*mm, kind="proportional")
             except Exception:
-                pass
+                logo_cell = ""
+        school_block = [Paragraph(escape(school_name), styles["MSASchoolName"])]
+        school_block.extend(Paragraph(escape(line), styles["MSASchoolContact"]) for line in school_contacts)
+        header_table = Table(
+            [[logo_cell, school_block, ""]],
+            colWidths=[25*mm, doc.width - 50*mm, 25*mm],
+            hAlign="LEFT"
+        )
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("ALIGN", (1,0), (1,0), "CENTER"),
+            ("LEFTPADDING", (0,0), (-1,-1), 0),
+            ("RIGHTPADDING", (0,0), (-1,-1), 0),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 4*mm))
         def pdf_table(title, headers, values):
             story.append(Paragraph(escape(title), styles["MSASection"]))
             table_data = [[Paragraph("<b>%s</b>" % escape(str(h)), styles["MSACell"]) for h in headers]]
