@@ -11413,6 +11413,8 @@ def class_marksheet_analysis_pdf(
                 def _append_stream_top_table(group_key, rows_for_group):
                     title = "Class: " + group_key[0] + " — Stream: " + group_key[1]
                     compact_data = [[
+                        Paragraph("<b>" + escape(title) + "</b>", styles["MSACell"]), "", "", ""
+                    ], [
                         Paragraph("<b>Rank</b>", styles["MSAMatrixHeader"]),
                         Paragraph("<b>Student</b>", styles["MSAMatrixHeader"]),
                         Paragraph("<b>Mark</b>", styles["MSAMatrixHeader"]),
@@ -11430,15 +11432,16 @@ def class_marksheet_analysis_pdf(
                     compact_table = Table(
                         compact_data,
                         colWidths=[9*mm, student_col_width, 11*mm, 13*mm],
-                        repeatRows=1, hAlign="LEFT"
+                        repeatRows=2, hAlign="LEFT"
                     )
                     compact_table.setStyle(TableStyle([
-                        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                        ("SPAN", (0,0), (-1,0)),
+                        ("BACKGROUND", (0,1), (-1,1), colors.HexColor("#176b3a")),
+                        ("TEXTCOLOR", (0,1), (-1,1), colors.white),
                         ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("ALIGN", (0,1), (0,-1), "CENTER"),
-                        ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                        ("ALIGN", (0,2), (0,-1), "CENTER"),
+                        ("ALIGN", (2,2), (-1,-1), "CENTER"),
                         ("FONTSIZE", (0,0), (-1,-1), 5.5),
                         ("LEFTPADDING", (0,0), (-1,-1), 2),
                         ("RIGHTPADDING", (0,0), (-1,-1), 2),
@@ -11463,20 +11466,11 @@ def class_marksheet_analysis_pdf(
             story.append(Paragraph("<u>" + escape(str(subject_name)) + "</u>", styles["MSASection"]))
             for pair_start in range(0, len(subject_stream_tables), 2):
                 left_name, left_table = subject_stream_tables[pair_start]
-                half_width = doc.width / 2 - 3*mm
-                # Keep each class/stream heading attached to its own table so
-                # a page break cannot strand the heading at the bottom of a page.
-                left_stack = Table(
-                    [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
-                    colWidths=[half_width], hAlign="LEFT"
-                )
                 if pair_start + 1 < len(subject_stream_tables):
                     right_name, right_table = subject_stream_tables[pair_start + 1]
-                    right_stack = Table(
-                        [[Paragraph(escape(right_name), styles["MSACell"])], [right_table]],
-                        colWidths=[half_width], hAlign="LEFT"
-                    )
-                    paired_table = Table([[left_stack, right_stack]],
+                    # Each table contains its own class/stream heading row, so
+                    # the heading cannot be separated from the student rows.
+                    paired_table = Table([[left_table, right_table]],
                                          colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
                     paired_table.setStyle(TableStyle([
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
