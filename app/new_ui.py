@@ -11532,7 +11532,7 @@ def class_marksheet_analysis_pdf(
                         fontSize=5.5,
                         leading=6.2,
                         textColor=colors.black,
-                        alignment=1,
+                        alignment=0,
                     )
                     compact_data = [[
                         Paragraph("Rank", stream_header_style),
