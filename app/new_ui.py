@@ -10966,7 +10966,7 @@ def class_marksheet_analysis_pdf(
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(name="MSASection", parent=styles["Heading2"], textColor=colors.HexColor("#176b3a"), spaceBefore=8, spaceAfter=5, keepWithNext=1))
         styles.add(ParagraphStyle(name="MSACell", parent=styles["BodyText"], fontSize=7, leading=8))
-        styles.add(ParagraphStyle(name="MSAMatrixHeader", parent=styles["MSACell"], textColor=colors.white, fontSize=5.5, leading=6))
+        styles.add(ParagraphStyle(name="MSAMatrixHeader", parent=styles["MSACell"], fontName="Helvetica-Bold", textColor=colors.black, fontSize=5.5, leading=6))
         story = []
         school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
         from reportlab.platypus import Image as ReportImage
