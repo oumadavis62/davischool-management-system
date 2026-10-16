@@ -11693,7 +11693,7 @@ def class_marksheet_analysis_pdf(
         cell_style = ParagraphStyle(
             "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
         )
-        for subject_name in msa_subject_names_by_position:
+        for subject_name in sorted(data["subjects"].values(), key=str.casefold):
             subject_records = sorted(
                 [item for item in class_teacher_records if item["subject"] == subject_name],
                 key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
