@@ -10898,8 +10898,24 @@ def class_marksheet_analysis_pdf(
                 table_data.append([Paragraph(escape(str(v)), cell_style) for v in row])
             if len(table_data) == 1:
                 table_data.append([Paragraph("No results", cell_style) for _ in headers])
-            tbl = Table(table_data, repeatRows=1, hAlign="LEFT")
-            pad = 2 if compact else 4
+
+            # Keep the four first-page operational tables compact: use a table
+            # width 40% smaller than the available page width and controlled
+            # column proportions so long headers wrap instead of expanding it.
+            compact_profiles = {
+                "Summary": [0.50, 0.25, 0.25],
+                "Stream comparisons": [0.20, 0.16, 0.18, 0.20, 0.13, 0.13],
+                "Class rankings": [0.10, 0.25, 0.22, 0.25, 0.18],
+                "Examination trends": [0.40, 0.28, 0.32],
+            }
+            profile = compact_profiles.get(title)
+            if profile and len(profile) == len(headers):
+                target_width = doc.width * 0.60
+                col_widths = [target_width * weight / sum(profile) for weight in profile]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            else:
+                tbl = Table(table_data, repeatRows=1, hAlign="LEFT")
+            pad = 1 if title in compact_profiles else (2 if compact else 4)
             vert_pad = 1 if compact else 3
             tbl.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
@@ -10959,7 +10975,7 @@ def class_marksheet_analysis_pdf(
         pdf_table(
             "Summary",
             ["Examination", "Learners assessed", "Learners not assessed"],
-            summary_rows
+            summary_rows, compact=True
         )
         # Duplicate the MarkSheet Grade Distribution Analysis near the start of
         # the PDF so both the overall and per-subject distributions are on page 1.
@@ -11358,7 +11374,7 @@ def class_marksheet_analysis_pdf(
                 len({r["student_id"] for r in rows if r["exam_id"] == exam_id}),
                 "%.2f%%" % (sum(vals)/len(vals) if vals else 0)
             ])
-        pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows)
+        pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows, compact=True)
         def add_footer(canvas, document):
             canvas.saveState()
             canvas.setFont("Helvetica", 7)
