@@ -10771,7 +10771,7 @@ def class_marksheet_analysis_csv(
             for matrix_row in performance_rows:
                 writer.writerow(matrix_row[:2] + matrix_row[start:start + subject_width])
         writer.writerow([])
-        _msa_csv_heading("TOP FIVE STUDENTS PER SUBJECT - COMBINED CLASS")
+        _msa_csv_heading("TOP STUDENTS PER SUBJECT - COMBINED CLASS")
         writer.writerow(["Each subject has its own section; ranks are based on percentage."])
         combined_by_subject = {}
         for entry in data["top_combined"]:
@@ -10789,7 +10789,7 @@ def class_marksheet_analysis_csv(
                 class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
                 writer.writerow([row_values[0], row_values[1], class_label, row_values[3], row_values[4], row_values[6]])
         writer.writerow([])
-        _msa_csv_heading("TOP FIVE STUDENTS PER SUBJECT - STREAM-WISE")
+        _msa_csv_heading("TOP STUDENTS PER SUBJECT - STREAM-WISE")
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
@@ -11366,7 +11366,7 @@ def class_marksheet_analysis_pdf(
         combined_by_subject = {}
         for entry in data["top_combined"]:
             combined_by_subject.setdefault(entry[0], []).append(entry)
-        story.append(Paragraph("<u>Top five students per subject — combined class</u>", styles["MSASection"]))
+        story.append(Paragraph("<u>Top Students per Subject — combined class</u>", styles["MSASection"]))
         student_class_by_admission = {
             str(info.get("admission_no") or ""): str(info.get("class_name") or "Unassigned")
             for info in data["students"].values()
@@ -11384,7 +11384,7 @@ def class_marksheet_analysis_pdf(
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
-        story.append(Paragraph("<u>Top five students per subject — stream-wise</u>", styles["MSASection"]))
+        story.append(Paragraph("<u>Top Students per Subject — stream-wise</u>", styles["MSASection"]))
         # Organize the report by subject: one heading, followed by that
         # subject's class/stream tables. Never pair tables from different subjects.
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
