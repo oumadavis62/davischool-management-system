@@ -10542,6 +10542,19 @@ def class_marksheet_analysis_csv(
             enrolled_sql += " AND COALESCE(c.stream,'')=?"
             enrolled_params.append(stream)
         enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
+        # Only include classes/streams with at least one saved mark in the
+        # selected exam set. Entirely excluded groups must not inflate X or Entries.
+        active_group_keys = {
+            (str(row.get("class_name") or "Unassigned"), str(row.get("stream") or "No stream"))
+            for row in rows
+        }
+        enrolled_rows = [
+            enrolled for enrolled in enrolled_rows
+            if (
+                str(enrolled["class_name"] or "Unassigned"),
+                str(enrolled["stream"] or "No stream"),
+            ) in active_group_keys
+        ]
         enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
         enrolled_by_class_stream = {}
         for enrolled in enrolled_rows:
@@ -10702,9 +10715,9 @@ def class_marksheet_analysis_csv(
                     writer.writerow(["Rank", "Student", "Mark", "Grade"])
                 row_values = entry[2:]
                 writer.writerow([row_values[0], row_values[1], row_values[4], row_values[6]])
-        ranking_data = _msa_report_data(cur, sid, all_rows)
+        ranking_data = _msa_report_data(cur, sid, rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
-            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
+            rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
         writer.writerow([])
         writer.writerow(["SCHOOL-WIDE CLASS RANKINGS"])
@@ -10715,17 +10728,45 @@ def class_marksheet_analysis_csv(
                 "%.2f" % item["average_points"], item["students"],
                 "; ".join("%s %.1f%%" % (subjects.get(sub_id, str(sub_id)), item["subject_means"].get(sub_id, 0)) for sub_id in item["subject_ids"])
             ])
-        stream_groups = {}
-        for row in all_rows:
-            if class_name and row["class_name"] != class_name:
-                continue
-            stream_groups.setdefault((row["class_name"], row["stream"] or "No stream"), {}).setdefault(row["student_id"], []).append(row["percentage"])
+        stream_learner_values = {}
+        for row in rows:
+            group_key = (
+                str(row.get("class_name") or "Unassigned"),
+                str(row.get("stream") or "No stream"),
+            )
+            stream_learner_values.setdefault(group_key, {}).setdefault(int(row["student_id"]), []).append(
+                float(row.get("percentage") or 0)
+            )
+        stream_comparison_values = []
+        for group_key, learner_ids in enrolled_by_class_stream.items():
+            assessed_values = stream_learner_values.get(group_key, {})
+            learner_means = {
+                student_id: sum(values) / len(values)
+                for student_id, values in assessed_values.items() if values
+            }
+            mean = sum(learner_means.values()) / len(learner_means) if learner_means else None
+            not_assessed = max(0, len(learner_ids) - len(learner_means))
+            highest = max(learner_means.values()) if learner_means else None
+            stream_comparison_values.append((group_key, len(learner_means), not_assessed, mean, highest))
+        stream_comparison_values.sort(key=lambda item: (
+            item[3] is None, -(item[3] or 0), item[0][0].casefold(), item[0][1].casefold()
+        ))
         writer.writerow([])
         writer.writerow(["STREAM COMPARISONS"])
-        writer.writerow(["Class", "Stream", "Students assessed", "Mean %", "Highest learner mean %"])
-        for (cn, sn), learners in sorted(stream_groups.items()):
-            avgs = [sum(v) / len(v) for v in learners.values() if v]
-            writer.writerow([cn, sn, len(avgs), "%.2f%%" % (sum(avgs)/len(avgs) if avgs else 0), "%.2f%%" % (max(avgs) if avgs else 0)])
+        writer.writerow(["Class", "Stream", "Learners assessed", "Learners not assessed", "Mean %", "Highest learner mean %", "Rank"])
+        previous_stream_mean = None
+        stream_rank = 0
+        for index, (group_key, assessed_count, not_assessed_count, mean, highest) in enumerate(stream_comparison_values, 1):
+            if mean is not None:
+                if previous_stream_mean is None or abs(mean - previous_stream_mean) > 0.000001:
+                    stream_rank = index
+                    previous_stream_mean = mean
+            writer.writerow([
+                group_key[0], group_key[1], assessed_count, not_assessed_count,
+                "%.2f%%" % mean if mean is not None else "—",
+                "%.2f%%" % highest if highest is not None else "—",
+                stream_rank if mean is not None else "—",
+            ])
         writer.writerow([])
         writer.writerow(["EXAMINATION TRENDS"])
         writer.writerow(["Examination", "Learners with marks", "Mean recorded mark %", "Highest %", "Lowest %"])
@@ -10888,29 +10929,31 @@ def class_marksheet_analysis_pdf(
                 if exam_entry else str(exam_id)
             )
             exam_rows = [row for row in rows if int(row["exam_id"]) == int(exam_id)]
+            exam_group_keys = {
+                (str(row.get("class_name") or "Unassigned"), str(row.get("stream") or "No stream"))
+                for row in exam_rows
+            }
+            # Skip an exam with no participating class/stream in the current scope.
+            if not exam_group_keys:
+                continue
             exam_data = _msa_report_data(cur, sid, exam_rows)
             exam_summaries = list(exam_data["summaries"].values())
             learners_assessed = sum(
                 1 for item in exam_summaries if int(item.get("subject_count") or 0) > 0
             )
-            # The marks query only returns numeric marks, so learners with no
-            # recorded marks are absent from exam_summaries. Count enrolled
-            # learners in the selected class/stream scope, then subtract those
-            # assessed in this exam to include unassessed learners accurately.
-            enrollment_sql = (
-                "SELECT COUNT(DISTINCT st.id) AS total FROM students st "
+            exam_roster = cur.execute(
+                "SELECT st.id, c.name AS class_name, c.stream FROM students st "
                 "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
-                "WHERE st.school_id=?"
+                "WHERE st.school_id=?",
+                (sid,)
+            ).fetchall()
+            total_learners = sum(
+                1 for learner in exam_roster
+                if (str(learner["class_name"] or "Unassigned"),
+                    str(learner["stream"] or "No stream")) in exam_group_keys
+                and (not class_name or str(learner["class_name"] or "") == class_name)
+                and (not stream or str(learner["stream"] or "") == stream)
             )
-            enrollment_params = [sid]
-            if class_name:
-                enrollment_sql += " AND c.name=?"
-                enrollment_params.append(class_name)
-            if stream:
-                enrollment_sql += " AND COALESCE(c.stream,'')=?"
-                enrollment_params.append(stream)
-            enrollment_row = cur.execute(enrollment_sql, enrollment_params).fetchone()
-            total_learners = int(enrollment_row["total"] or 0) if enrollment_row else 0
             learners_not_assessed = max(0, total_learners - learners_assessed)
             summary_rows.append([exam_label, learners_assessed, learners_not_assessed])
         pdf_table(
