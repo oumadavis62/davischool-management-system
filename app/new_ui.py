@@ -11525,13 +11525,22 @@ def class_marksheet_analysis_pdf(
                 group_rows = []
                 def _append_stream_top_table(group_key, rows_for_group):
                     title = "Class: " + group_key[0] + " — Stream: " + group_key[1]
+                    stream_header_style = ParagraphStyle(
+                        "MSAStreamTopHeader",
+                        parent=styles["MSACell"],
+                        fontName="Helvetica-Bold",
+                        fontSize=5.5,
+                        leading=6.2,
+                        textColor=colors.black,
+                        alignment=1,
+                    )
                     compact_data = [[
                         Paragraph("<b>" + escape(title) + "</b>", styles["MSACell"]), "", "", ""
                     ], [
-                        Paragraph("<b>Rank</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Student</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Mark</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Grade</b>", styles["MSAMatrixHeader"]),
+                        Paragraph("Rank", stream_header_style),
+                        Paragraph("Student", stream_header_style),
+                        Paragraph("Mark", stream_header_style),
+                        Paragraph("Grade", stream_header_style),
                     ]]
                     for row in rows_for_group:
                         compact_data.append([
