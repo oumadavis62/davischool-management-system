@@ -10835,24 +10835,59 @@ def class_marksheet_analysis_pdf(
         msa_subject_counts = {int(subject_id): {grade: 0 for grade in msa_grade_order} for subject_id in data["subjects"]}
         msa_subject_totals = {int(subject_id): 0.0 for subject_id in data["subjects"]}
         msa_subject_entries = {int(subject_id): 0 for subject_id in data["subjects"]}
+
+        # Use the enrolled roster, not only learners present in marks rows, so X
+        # represents non-sitters and Entries can include those learners.
+        enrolled_sql = (
+            "SELECT st.id FROM students st "
+            "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
+            "WHERE st.school_id=?"
+        )
+        enrolled_params = [sid]
+        if class_name:
+            enrolled_sql += " AND c.name=?"
+            enrolled_params.append(class_name)
+        if stream:
+            enrolled_sql += " AND COALESCE(c.stream,'')=?"
+            enrolled_params.append(stream)
+        enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
+        enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
+        assessed_student_ids = {
+            int(row["student_id"]) for row in rows
+            if row.get("student_id") is not None
+        }
+
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
-        for summary in data["summaries"].values():
-            normalized_grade = _msa_pdf_grade(summary.get("overall_grade"))
-            if normalized_grade:
+        for student_id in enrolled_student_ids:
+            if student_id not in assessed_student_ids:
+                msa_overall_counts["X"] += 1
+                continue
+            summary = data["summaries"].get(student_id)
+            normalized_grade = _msa_pdf_grade(summary.get("overall_grade")) if summary else ""
+            # X in this table means no recorded marks for the selected exam(s).
+            if normalized_grade and normalized_grade != "X":
                 msa_overall_counts[normalized_grade] += 1
+
         for subject_id in data["subjects"]:
             subject_id = int(subject_id)
-            for student_id in data["students"]:
-                item = data["aggregated"].get((int(student_id), subject_id))
+            subject_assessed_ids = {
+                student_id for student_id in enrolled_student_ids
+                if (student_id, subject_id) in data["aggregated"]
+            }
+            msa_subject_counts[subject_id]["X"] = len(enrolled_student_ids - subject_assessed_ids)
+            for student_id in subject_assessed_ids:
+                item = data["aggregated"].get((student_id, subject_id))
                 if item is None:
-                    msa_subject_counts[subject_id]["X"] += 1
                     continue
                 try:
-                    grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["percentage"], data["grading_rules"], 100)
+                    grade, _, _ = _subject_grade_details(
+                        cur, sid, subject_id, item.get("mark", item["percentage"]),
+                        data["grading_rules"], item.get("out_of") or 100
+                    )
                 except Exception:
                     grade, _ = _default_grade_points(float(item["percentage"]))
                 normalized_grade = _msa_pdf_grade(grade)
-                if normalized_grade:
+                if normalized_grade and normalized_grade != "X":
                     msa_subject_counts[subject_id][normalized_grade] += 1
                 msa_subject_totals[subject_id] += float(item["percentage"])
                 msa_subject_entries[subject_id] += 1
