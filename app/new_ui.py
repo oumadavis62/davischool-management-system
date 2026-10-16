@@ -10907,7 +10907,7 @@ def class_marksheet_analysis_pdf(
         msa_overall_values = [x["average"] for x in data["summaries"].values() if int(x.get("subject_count") or 0) > 0]
         overall_distribution_headers = msa_grade_order + ["Entries", "Class Mean %"]
         overall_distribution_values = [[msa_overall_counts[g] for g in msa_grade_order] + [
-            sum(msa_overall_counts.values()),
+            len(enrolled_student_ids),
             "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"
         ]]
         pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
@@ -10915,7 +10915,7 @@ def class_marksheet_analysis_pdf(
         for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
             per_subject_distribution_rows.append([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
-                sum(msa_subject_counts[int(subject_id)].values()),
+                len(enrolled_student_ids),
                 "%.2f" % mean if mean is not None else "—",
                 msa_subject_positions.get(int(subject_id), "—")
             ])
