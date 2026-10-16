@@ -11030,8 +11030,15 @@ def class_marksheet_analysis_pdf(
                 "Examination trends": [0.40, 0.28, 0.32],
             }
             profile = compact_profiles.get(title)
+            target_width = doc.width * 0.60 if profile else doc.width
+            if title.startswith("Best 10 students"):
+                # Keep Rank, Class, Stream, Mean, Total and Grade at roughly
+                # 30% of an equal-share column, giving Student the saved width.
+                profile = [0.04, 0.44, 0.12, 0.10, 0.10, 0.10, 0.10]
+            elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
+                # Narrow the combined-teacher Rank column by about 70%.
+                profile = [0.06, 0.30, 0.38, 0.12, 0.14]
             if profile and len(profile) == len(headers):
-                target_width = doc.width * 0.60
                 col_widths = [target_width * weight / sum(profile) for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             else:
