@@ -10983,6 +10983,19 @@ def class_marksheet_analysis_pdf(
             enrolled_sql += " AND COALESCE(c.stream,'')=?"
             enrolled_params.append(stream)
         enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
+        # Only include classes/streams with at least one saved mark in the
+        # selected exam set. Entirely excluded groups must not inflate X or Entries.
+        active_group_keys = {
+            (str(row.get("class_name") or "Unassigned"), str(row.get("stream") or "No stream"))
+            for row in rows
+        }
+        enrolled_rows = [
+            enrolled for enrolled in enrolled_rows
+            if (
+                str(enrolled["class_name"] or "Unassigned"),
+                str(enrolled["stream"] or "No stream"),
+            ) in active_group_keys
+        ]
         enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
         enrolled_by_class_stream = {}
         for enrolled in enrolled_rows:
@@ -11039,9 +11052,9 @@ def class_marksheet_analysis_pdf(
             stream_rows, compact=True
         )
 
-        ranking_data = _msa_report_data(cur, sid, all_rows)
+        ranking_data = _msa_report_data(cur, sid, rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
-            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
+            rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
         pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
             [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
