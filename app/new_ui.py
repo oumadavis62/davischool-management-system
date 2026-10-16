@@ -2412,6 +2412,7 @@ def class_marksheets_csv(
     writer.writerow([csv_school_name])
     writer.writerow(["P.O. Box " + csv_postal if csv_postal else "", csv_code])
     writer.writerow(["Phone: " + csv_phone if csv_phone else "", "Email: " + csv_email if csv_email else ""])
+    writer.writerow(["BROAD-MARKSHEET ANALYSIS"])
     writer.writerow([])
 
     # CSV mirrors the same MarkSheet information hierarchy as Print Preview:
@@ -11005,6 +11006,11 @@ def class_marksheet_analysis_pdf(
             ("BOTTOMPADDING", (0,0), (-1,-1), 0),
         ]))
         story.append(header_table)
+        analysis_title_style = ParagraphStyle(
+            "MSAReportTitle", parent=styles["MSASection"], alignment=1,
+            fontSize=11, leading=13, spaceBefore=2, spaceAfter=3,
+        )
+        story.append(Paragraph("<b>BROAD-MARKSHEET ANALYSIS</b>", analysis_title_style))
         story.append(Spacer(1, 4*mm))
         def pdf_table(title, headers, values, compact=False):
             if title:
@@ -11039,11 +11045,11 @@ def class_marksheet_analysis_pdf(
                 col_widths = [base_width * weight for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
-                # Give the combined-class Teacher column enough room for names.
-                # Keep Rank narrow while using the full available table width.
+                # Keep Subject at its previous width and reduce the other
+                # combined-class columns by 70% to make the table more compact.
                 col_widths = [
-                    doc.width * 0.08, doc.width * 0.24, doc.width * 0.32,
-                    doc.width * 0.16, doc.width * 0.20,
+                    doc.width * 0.024, doc.width * 0.24, doc.width * 0.096,
+                    doc.width * 0.048, doc.width * 0.060,
                 ]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif profile and len(profile) == len(headers):
