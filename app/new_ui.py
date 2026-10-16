@@ -11039,9 +11039,9 @@ def class_marksheet_analysis_pdf(
                 col_widths = [base_width * weight for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
-                # Reduce Rank by 70%, restore Subject to a full base width,
-                # and keep Teacher at full width with compact Entries and Mean.
-                profile = [0.30, 1.0, 1.0, 0.30, 0.30]
+                # Reduce Rank and Teacher columns by 70%, retain a wider
+                # Subject column, and keep Entries and Mean compact.
+                profile = [0.30, 1.0, 0.30, 0.30, 0.30]
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * weight for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
