@@ -11060,8 +11060,9 @@ def class_marksheet_analysis_pdf(
             pad = 1 if title in compact_profiles else (2 if compact else 4)
             vert_pad = 1 if compact else 3
             tbl.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("LEFTPADDING", (0,0), (-1,-1), pad),
@@ -11346,8 +11347,9 @@ def class_marksheet_analysis_pdf(
                 )
             matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="LEFT")
             matrix_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("ALIGN", (2,1), (-1,-1), "CENTER"),
@@ -11417,8 +11419,9 @@ def class_marksheet_analysis_pdf(
                     colWidths=[doc.width / 2 - 6*mm], hAlign="LEFT"
                 )
                 empty_table.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                    ("BACKGROUND", (0,0), (-1,0), colors.white),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                     ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                     ("FONTSIZE", (0,0), (-1,-1), 6),
                     ("LEFTPADDING", (0,0), (-1,-1), 2),
@@ -11456,8 +11459,9 @@ def class_marksheet_analysis_pdf(
                     )
                     compact_table.setStyle(TableStyle([
                         ("SPAN", (0,0), (-1,0)),
-                        ("BACKGROUND", (0,1), (-1,1), colors.HexColor("#176b3a")),
-                        ("TEXTCOLOR", (0,1), (-1,1), colors.white),
+                        ("BACKGROUND", (0,1), (-1,1), colors.white),
+                        ("TEXTCOLOR", (0,1), (-1,1), colors.black),
+                        ("FONTNAME", (0,1), (-1,1), "Helvetica-Bold"),
                         ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
                         ("ALIGN", (0,2), (0,-1), "CENTER"),
@@ -11633,8 +11637,9 @@ def class_marksheet_analysis_pdf(
                 repeatRows=1, hAlign="LEFT"
             )
             class_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                 ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("ALIGN", (2,1), (-1,-1), "CENTER"),
