@@ -10541,7 +10541,9 @@ def class_marksheet_analysis_csv(
                 continue
             summary = data["summaries"].get(student_id)
             overall_grade = _msa_export_grade(summary.get("overall_grade")) if summary else ""
-            if overall_grade:
+            # In this distribution, X exclusively means the learner did not
+            # sit the selected examination(s), not a grade assigned to a mark.
+            if overall_grade and overall_grade != "X":
                 msa_overall_counts[overall_grade] += 1
         for subject_id in data["subjects"]:
             subject_id = int(subject_id)
@@ -10559,7 +10561,9 @@ def class_marksheet_analysis_csv(
                 except Exception:
                     grade, _ = _default_grade_points(float(item["percentage"]))
                 normalized_grade = _msa_export_grade(grade)
-                if normalized_grade:
+                # X is reserved for learners with no recorded mark in this
+                # subject; a grade attached to a recorded mark cannot inflate X.
+                if normalized_grade and normalized_grade != "X":
                     msa_subject_counts[subject_id][normalized_grade] += 1
                 msa_subject_totals[subject_id] += float(item["percentage"])
                 msa_subject_entries[subject_id] += 1
