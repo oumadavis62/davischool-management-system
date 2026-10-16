@@ -10874,8 +10874,10 @@ def class_marksheet_analysis_csv(
             ])
         teacher_performance = _msa_teacher_performance(cur, sid, data)
         teacher_columns = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
-        for key in ["combined", "class"]:
+        for key, heading in [("combined", "Combined classes"), ("class", "Class-wise")]:
             writer.writerow([])
+            writer.writerow(["BEST TEACHERS BY SUBJECT"])
+            writer.writerow([heading])
             writer.writerow(teacher_columns)
             for item in teacher_performance[key]:
                 writer.writerow([
@@ -11541,7 +11543,8 @@ def class_marksheet_analysis_pdf(
 
         teacher_performance = _msa_teacher_performance(cur, sid, data)
         story.append(PageBreak())
-        # Omit the separate teacher section heading; retain the tables.
+        story.append(Paragraph("Best Teachers by Subject", styles["MSASection"]))
+        story.append(Paragraph("Combined classes", styles["MSASection"]))
         teacher_headers = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
         combined_teacher_rows = [
             [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
@@ -11550,6 +11553,7 @@ def class_marksheet_analysis_pdf(
         ]
         pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
 
+        story.append(Paragraph("Class-wise", styles["MSASection"]))
         # Show one compact table per subject, with the best teacher for each class.
         # Pair subject tables horizontally to use the landscape page width efficiently.
         # Subject names remain as the individual table labels below.
