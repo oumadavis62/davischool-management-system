@@ -10845,27 +10845,33 @@ def class_marksheet_analysis_pdf(
         ]))
         story.append(header_table)
         story.append(Spacer(1, 4*mm))
-        def pdf_table(title, headers, values):
+        def pdf_table(title, headers, values, compact=False):
             story.append(Paragraph(escape(title), styles["MSASection"]))
-            table_data = [[Paragraph("<b>%s</b>" % escape(str(h)), styles["MSACell"]) for h in headers]]
+            cell_style = styles["MSACell"]
+            if compact:
+                cell_style = ParagraphStyle(
+                    "MSACompactCell", parent=styles["MSACell"], fontSize=6, leading=6.5
+                )
+            table_data = [[Paragraph("<b>%s</b>" % escape(str(h)), cell_style) for h in headers]]
             for row in values:
-                table_data.append([Paragraph(escape(str(v)), styles["MSACell"]) for v in row])
+                table_data.append([Paragraph(escape(str(v)), cell_style) for v in row])
             if len(table_data) == 1:
-                table_data.append([Paragraph("No results", styles["MSACell"]) for _ in headers])
-            widths = [None] * len(headers)
+                table_data.append([Paragraph("No results", cell_style) for _ in headers])
             tbl = Table(table_data, repeatRows=1, hAlign="LEFT")
+            pad = 2 if compact else 4
+            vert_pad = 1 if compact else 3
             tbl.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("LEFTPADDING", (0,0), (-1,-1), 4),
-                ("RIGHTPADDING", (0,0), (-1,-1), 4),
-                ("TOPPADDING", (0,0), (-1,-1), 3),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                ("LEFTPADDING", (0,0), (-1,-1), pad),
+                ("RIGHTPADDING", (0,0), (-1,-1), pad),
+                ("TOPPADDING", (0,0), (-1,-1), vert_pad),
+                ("BOTTOMPADDING", (0,0), (-1,-1), vert_pad),
             ]))
             story.append(tbl)
-            story.append(Spacer(1, 3*mm))
+            story.append(Spacer(1, 1.5*mm if compact else 3*mm))
         def _msa_pdf_grade(value):
             raw = str(value or "").strip().upper()
             compact = re.sub(r"[^A-Z0-9]+", "", raw)
@@ -10946,6 +10952,58 @@ def class_marksheet_analysis_pdf(
             int(row["student_id"]) for row in rows
             if row.get("student_id") is not None
         }
+
+        # Put stream comparisons and class rankings immediately after Summary.
+        # Include every enrolled learner in each stream, not only learners with marks.
+        stream_learner_values = {}
+        for row in rows:
+            group_key = (
+                str(row.get("class_name") or "Unassigned"),
+                str(row.get("stream") or "No stream"),
+            )
+            stream_learner_values.setdefault(group_key, {}).setdefault(int(row["student_id"]), []).append(
+                float(row.get("percentage") or 0)
+            )
+        stream_comparison_values = []
+        for group_key, learner_ids in enrolled_by_class_stream.items():
+            assessed_values = stream_learner_values.get(group_key, {})
+            learner_means = {
+                student_id: sum(values) / len(values)
+                for student_id, values in assessed_values.items() if values
+            }
+            mean = sum(learner_means.values()) / len(learner_means) if learner_means else None
+            not_assessed = max(0, len(learner_ids) - len(learner_means))
+            stream_comparison_values.append((group_key, len(learner_means), not_assessed, mean))
+        stream_comparison_values.sort(key=lambda item: (
+            item[3] is None, -(item[3] or 0), item[0][0].casefold(), item[0][1].casefold()
+        ))
+        stream_rows = []
+        previous_stream_mean = None
+        stream_rank = 0
+        for index, (group_key, assessed_count, not_assessed_count, mean) in enumerate(stream_comparison_values, 1):
+            if mean is not None:
+                if previous_stream_mean is None or abs(mean - previous_stream_mean) > 0.000001:
+                    stream_rank = index
+                    previous_stream_mean = mean
+            stream_rows.append([
+                group_key[0], group_key[1], assessed_count, not_assessed_count,
+                "%.2f%%" % mean if mean is not None else "—",
+                stream_rank if mean is not None else "—"
+            ])
+        pdf_table(
+            "Stream comparisons",
+            ["Class", "Stream", "Learners assessed", "Learners not assessed", "Mean %", "Rank"],
+            stream_rows, compact=True
+        )
+
+        ranking_data = _msa_report_data(cur, sid, all_rows)
+        ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
+            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
+        )
+        pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
+            [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
+            for x in ranking
+        ], compact=True)
 
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
         for student_id in enrolled_student_ids:
@@ -11234,24 +11292,7 @@ def class_marksheet_analysis_pdf(
                 else:
                     story.append(left_stack)
                 story.append(Spacer(1, 3*mm))
-        ranking_data = _msa_report_data(cur, sid, all_rows)
-        ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
-            all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
-        )
-        pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
-            [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
-            for x in ranking
-        ])
-        stream_groups = {}
-        for row in all_rows:
-            if class_name and row["class_name"] != class_name:
-                continue
-            stream_groups.setdefault((row["class_name"], row["stream"] or "No stream"), {}).setdefault(row["student_id"], []).append(row["percentage"])
-        stream_rows = []
-        for (cn, sn), learner_vals in sorted(stream_groups.items()):
-            avgs = [sum(v)/len(v) for v in learner_vals.values() if v]
-            stream_rows.append([cn, sn, len(avgs), "%.2f%%" % (sum(avgs)/len(avgs) if avgs else 0)])
-        pdf_table("Stream comparisons", ["Class", "Stream", "Students assessed", "Mean %"], stream_rows)
+        # Stream comparisons and class rankings are already placed below Summary on page one.
         trend_rows = []
         for exam_id in ids:
             exam_entry = next((e for e in all_exams if int(e["id"]) == exam_id), None)
