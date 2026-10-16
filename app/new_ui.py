@@ -11589,9 +11589,11 @@ def class_marksheet_analysis_pdf(
                     Paragraph("0", cell_style),
                     Paragraph("—", cell_style),
                 ])
+            # Keep these merged class-wise tables compact: each column is half
+            # its former width so the subject sections take less horizontal space.
             class_table = Table(
                 table_data,
-                colWidths=[doc.width * 0.22, doc.width * 0.48, doc.width * 0.13, doc.width * 0.17],
+                colWidths=[doc.width * 0.11, doc.width * 0.24, doc.width * 0.065, doc.width * 0.085],
                 repeatRows=1, hAlign="LEFT"
             )
             class_table.setStyle(TableStyle([
@@ -11600,11 +11602,11 @@ def class_marksheet_analysis_pdf(
                 ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("ALIGN", (2,1), (-1,-1), "CENTER"),
-                ("FONTSIZE", (0,0), (-1,-1), 6),
-                ("LEFTPADDING", (0,0), (-1,-1), 3),
-                ("RIGHTPADDING", (0,0), (-1,-1), 3),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("FONTSIZE", (0,0), (-1,-1), 5.5),
+                ("LEFTPADDING", (0,0), (-1,-1), 1.5),
+                ("RIGHTPADDING", (0,0), (-1,-1), 1.5),
+                ("TOPPADDING", (0,0), (-1,-1), 1),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 1),
             ]))
             story.append(class_table)
             story.append(Spacer(1, 3*mm))
