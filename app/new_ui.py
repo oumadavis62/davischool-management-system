@@ -11031,14 +11031,21 @@ def class_marksheet_analysis_pdf(
             }
             profile = compact_profiles.get(title)
             target_width = doc.width * 0.60 if profile else doc.width
-            if title.startswith("Best 10 students"):
-                # Keep Rank, Class, Stream, Mean, Total and Grade at roughly
-                # 30% of an equal-share column, giving Student the saved width.
-                profile = [0.04, 0.09, 0.20, 0.16, 0.14, 0.14, 0.10]
+            if title.startswith("Best 10 students") and len(headers) == 7:
+                # Preserve Rank and Student at a normal equal-share width;
+                # shrink Class, Stream, Mean, Total and Grade columns by 70%.
+                profile = [1.0, 1.0, 0.30, 0.30, 0.30, 0.30, 0.30]
+                base_width = doc.width / len(headers)
+                col_widths = [base_width * weight for weight in profile]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
-                # Narrow the combined-teacher Rank column by about 70%.
-                profile = [0.06, 0.48, 0.08, 0.20, 0.18]
-            if profile and len(profile) == len(headers):
+                # Preserve Rank and Teacher at a normal equal-share width;
+                # shrink Subject, Entries and Mean columns by 70%.
+                profile = [1.0, 0.30, 1.0, 0.30, 0.30]
+                base_width = doc.width / len(headers)
+                col_widths = [base_width * weight for weight in profile]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif profile and len(profile) == len(headers):
                 col_widths = [target_width * weight / sum(profile) for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             else:
