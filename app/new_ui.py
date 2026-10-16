@@ -11535,8 +11535,6 @@ def class_marksheet_analysis_pdf(
                         alignment=1,
                     )
                     compact_data = [[
-                        Paragraph("<b>" + escape(title) + "</b>", styles["MSACell"]), "", "", ""
-                    ], [
                         Paragraph("Rank", stream_header_style),
                         Paragraph("Student", stream_header_style),
                         Paragraph("Mark", stream_header_style),
@@ -11554,13 +11552,12 @@ def class_marksheet_analysis_pdf(
                     compact_table = Table(
                         compact_data,
                         colWidths=[9*mm, student_col_width, 11*mm, 13*mm],
-                        repeatRows=2, hAlign="LEFT"
+                        repeatRows=1, hAlign="LEFT"
                     )
                     compact_table.setStyle(TableStyle([
-                        ("SPAN", (0,0), (-1,0)),
-                        ("BACKGROUND", (0,1), (-1,1), colors.white),
-                        ("TEXTCOLOR", (0,1), (-1,1), colors.black),
-                        ("FONTNAME", (0,1), (-1,1), "Helvetica-Bold"),
+                        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef3f0")),
+                        ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                         ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
                         ("ALIGN", (0,2), (0,-1), "CENTER"),
@@ -11571,7 +11568,10 @@ def class_marksheet_analysis_pdf(
                         ("TOPPADDING", (0,0), (-1,-1), 2),
                         ("BOTTOMPADDING", (0,0), (-1,-1), 2),
                     ]))
-                    subject_stream_tables.append((title, compact_table))
+                    # Keep the class/stream title separate from the column-header
+                    # row so the table has no blank merged header cells.
+                    stream_title = Paragraph(escape(title), stream_header_style)
+                    subject_stream_tables.append((title, [stream_title, compact_table]))
                 for entry in subject_entries:
                     class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
                     group_key = (class_label, str(entry[5] or "No stream"))
@@ -11606,7 +11606,7 @@ def class_marksheet_analysis_pdf(
                 else:
                     # The stream table already contains its class/stream heading;
                     # append it directly to avoid a second wrapper and undefined width.
-                    story.append(left_table)
+                    story.extend(left_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
         trend_rows = []
