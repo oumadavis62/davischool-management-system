@@ -9961,7 +9961,7 @@ def _msa_report_data(cur, school_id, rows):
         for student_id, info in students.items():
             item = aggregated.get((student_id, subject_id))
             if item:
-                grade, points, _ = _subject_grade_details(cur, school_id, subject_id, item["percentage"], grading_rules, 100)
+                grade, points, _ = _subject_grade_details(cur, school_id, subject_id, item["mark"], grading_rules, item.get("out_of") or 100)
                 entries.append((info, item, str(grade or "—"), float(points or 0)))
         percentages = [x[1]["percentage"] for x in entries]
         subject_rows.append([
@@ -10771,10 +10771,25 @@ def class_marksheet_analysis_pdf(
             learners_assessed = sum(
                 1 for item in exam_summaries if int(item.get("subject_count") or 0) > 0
             )
-            learners_not_assessed = sum(
-                1 for item in exam_summaries
-                if _msa_pdf_grade(item.get("overall_grade")) == "X"
+            # The marks query only returns numeric marks, so learners with no
+            # recorded marks are absent from exam_summaries. Count enrolled
+            # learners in the selected class/stream scope, then subtract those
+            # assessed in this exam to include unassessed learners accurately.
+            enrollment_sql = (
+                "SELECT COUNT(DISTINCT st.id) AS total FROM students st "
+                "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
+                "WHERE st.school_id=?"
             )
+            enrollment_params = [sid]
+            if class_name:
+                enrollment_sql += " AND c.name=?"
+                enrollment_params.append(class_name)
+            if stream:
+                enrollment_sql += " AND COALESCE(c.stream,'')=?"
+                enrollment_params.append(stream)
+            enrollment_row = cur.execute(enrollment_sql, enrollment_params).fetchone()
+            total_learners = int(enrollment_row["total"] or 0) if enrollment_row else 0
+            learners_not_assessed = max(0, total_learners - learners_assessed)
             summary_rows.append([exam_label, learners_assessed, learners_not_assessed])
         pdf_table(
             "Summary",
