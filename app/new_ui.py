@@ -11481,6 +11481,10 @@ def class_marksheet_analysis_pdf(
                     ]))
                     story.append(paired_table)
                 else:
+                    left_stack = Table(
+                        [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
+                        colWidths=[half_width], hAlign="LEFT"
+                    )
                     story.append(left_stack)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
