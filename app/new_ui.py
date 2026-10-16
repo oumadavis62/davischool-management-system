@@ -10750,6 +10750,11 @@ def class_marksheet_analysis_pdf(
             ]))
             story.append(tbl)
             story.append(Spacer(1, 3*mm))
+        def _msa_pdf_grade(value):
+            raw = str(value or "").strip().upper()
+            compact = re.sub(r"[^A-Z0-9]+", "", raw)
+            return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
+
         # Show one summary row per selected examination so assessment counts
         # and Grade X counts are specific to that exam, not blended together.
         summary_rows = []
@@ -10779,10 +10784,6 @@ def class_marksheet_analysis_pdf(
         # Duplicate the MarkSheet Grade Distribution Analysis near the start of
         # the PDF so both the overall and per-subject distributions are on page 1.
         msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
-        def _msa_pdf_grade(value):
-            raw = str(value or "").strip().upper()
-            compact = re.sub(r"[^A-Z0-9]+", "", raw)
-            return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
         msa_subject_counts = {int(subject_id): {grade: 0 for grade in msa_grade_order} for subject_id in data["subjects"]}
         msa_subject_totals = {int(subject_id): 0.0 for subject_id in data["subjects"]}
         msa_subject_entries = {int(subject_id): 0 for subject_id in data["subjects"]}
