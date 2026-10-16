@@ -11323,7 +11323,6 @@ def class_marksheet_analysis_pdf(
         pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         story.append(Paragraph("<u>Subject performance by class and stream</u>", styles["MSASection"]))
-        story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
         grades_per_subject = len(grade_labels)
         subject_width = grades_per_subject + 3
         subject_matrix_tables = []
