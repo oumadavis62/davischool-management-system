@@ -10497,12 +10497,7 @@ def class_marksheet_analysis_csv(
         data = _msa_report_data(cur, sid, rows)
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["DaviSchool Class MarkSheet Analysis"])
         school = cur.execute("SELECT name FROM schools WHERE id=?", (sid,)).fetchone()
-        writer.writerow(["School", str(school["name"] or "DaviSchool") if school else "DaviSchool"])
-        writer.writerow(["Selected examination IDs", ",".join(str(x) for x in ids)])
-        writer.writerow(["Class", class_name or "All classes", "Stream", stream or "All streams"])
-        writer.writerow([])
         # Mirror the MarkSheet's Grade Distribution Analysis at the beginning
         # of the export, using the selected class/stream and selected exams.
         msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
@@ -10742,14 +10737,6 @@ def class_marksheet_analysis_pdf(
         story = []
         school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
         story.append(Paragraph(escape(school_name), styles["Title"]))
-        if school:
-            details = " · ".join(str(school[k] or "") for k in ("postal_address", "postal_code", "email", "phone") if k in school.keys() and school[k])
-            if details:
-                story.append(Paragraph(escape(details), styles["Normal"]))
-        story.append(Paragraph("Class MarkSheet Analysis", styles["Heading1"]))
-        exam_names = [str(e["name"] or "") + " " + str(e["year"] or "") for e in all_exams if int(e["id"]) in ids]
-        story.append(Paragraph("Examinations: " + escape(", ".join(exam_names)), styles["Normal"]))
-        story.append(Paragraph("Class: " + escape(class_name or "All classes") + " · Stream: " + escape(stream or "All streams"), styles["Normal"]))
         if school and school["logo_data"]:
             try:
                 from reportlab.platypus import Image as ReportImage
