@@ -11377,6 +11377,63 @@ def class_marksheet_analysis_pdf(
                 "%.2f%%" % (sum(vals)/len(vals) if vals else 0)
             ])
         pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows, compact=True)
+
+        # Continue on a dedicated page with the ten highest-performing learners
+        # in each class, followed by the ten highest-performing learners overall.
+        story.append(PageBreak())
+        story.append(Paragraph("Student rankings", styles["MSASection"]))
+        ranked_learners = []
+        for learner_id, learner_summary in data["summaries"].items():
+            learner_info = data["students"].get(learner_id, {})
+            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
+                continue
+            ranked_learners.append({
+                "id": int(learner_id),
+                "name": str(learner_info.get("name") or ""),
+                "admission": str(learner_info.get("admission_no") or ""),
+                "class_name": str(learner_info.get("class_name") or "Unassigned"),
+                "stream": str(learner_info.get("stream") or "No stream"),
+                "mean": float(learner_summary.get("average") or 0),
+                "total": float(learner_summary.get("total") or 0),
+                "points": float(learner_summary.get("average_points") or 0),
+                "grade": str(learner_summary.get("overall_grade") or "—"),
+            })
+
+        def _msa_rank_students(learners):
+            ordered = sorted(
+                learners,
+                key=lambda item: (-item["mean"], item["name"].casefold(), item["admission"].casefold())
+            )
+            result = []
+            previous_mean = None
+            rank_number = 0
+            for index, learner in enumerate(ordered, 1):
+                if previous_mean is None or abs(learner["mean"] - previous_mean) > 0.000001:
+                    rank_number = index
+                    previous_mean = learner["mean"]
+                result.append((rank_number, learner))
+            return result
+
+        ranking_headers = ["Rank", "Student", "Admission No.", "Class", "Stream", "Mean %", "Total %", "Grade"]
+        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
+        for ranked_class in class_names:
+            class_ranked = _msa_rank_students([
+                learner for learner in ranked_learners if learner["class_name"] == ranked_class
+            ])
+            class_top_ten = [
+                [rank, learner["name"], learner["admission"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in class_ranked[:10]
+            ]
+            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
+
+        overall_top_ten = [
+            [rank, learner["name"], learner["admission"], learner["class_name"],
+             learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+            for rank, learner in _msa_rank_students(ranked_learners)[:10]
+        ]
+        pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
+
         def add_footer(canvas, document):
             canvas.saveState()
             canvas.setFont("Helvetica", 7)
