@@ -10501,6 +10501,7 @@ def _msa_teacher_performance(cur, school_id, data):
             "teacher_id": teacher_id, "teacher": teacher_name,
             "subject_id": subject_id, "subject": subject_name,
             "class_id": class_id, "class": class_label,
+            "stream": str(allocation["class_stream"] or "No stream"),
         }
         combined.setdefault(
             (teacher_id, subject_id),
@@ -10508,7 +10509,7 @@ def _msa_teacher_performance(cur, school_id, data):
         )["scores"].extend(scores)
         by_class.setdefault(
             (teacher_id, subject_id, class_id),
-            {**base, "stream": "All streams", "scores": []}
+            {**base, "scores": []}
         )["scores"].extend(scores)
 
     def ranked(buckets, grouping):
@@ -10881,23 +10882,13 @@ def class_marksheet_analysis_csv(
             writer.writerow([])
             _msa_csv_heading("BEST TEACHERS BY SUBJECT")
             _msa_csv_heading(heading)
-            teacher_columns = (
-                ["Rank", "Subject", "Teacher", "Entries", "Mean %"]
-                if key == "combined"
-                else ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
-            )
+            teacher_columns = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
             writer.writerow(teacher_columns)
             for item in teacher_performance[key]:
-                if key == "combined":
-                    writer.writerow([
-                        item["rank"], item["subject"], item["teacher"],
-                        item["entries"], "%.2f%%" % item["mean"],
-                    ])
-                else:
-                    writer.writerow([
-                        item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
-                        item["entries"], "%.2f%%" % item["mean"],
-                    ])
+                writer.writerow([
+                    item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
+                    item["entries"], "%.2f%%" % item["mean"],
+                ])
             if not teacher_performance[key]:
                 writer.writerow(["", "No teacher performance data for the selected examination(s)"])
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
@@ -11574,10 +11565,10 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
-        # classes, so class and stream columns are not applicable here.
-        teacher_headers = ["Rank", "Subject", "Teacher", "Entries", "Mean %"]
+        # classes, labelled explicitly as covering all classes and streams.
+        teacher_headers = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
         combined_teacher_rows = [
-            [item["rank"], item["subject"], item["teacher"],
+            [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
              item["entries"], "%.2f%%" % item["mean"]]
             for item in teacher_performance["combined"]
         ]
@@ -11600,6 +11591,7 @@ def class_marksheet_analysis_pdf(
             )
             table_data = [[
                 Paragraph("<b>Class</b>", header_style),
+                Paragraph("<b>Stream</b>", header_style),
                 Paragraph("<b>Best Teacher</b>", header_style),
                 Paragraph("<b>Entries</b>", header_style),
                 Paragraph("<b>Mean %</b>", header_style),
@@ -11608,6 +11600,7 @@ def class_marksheet_analysis_pdf(
                 for item in subject_records:
                     table_data.append([
                         Paragraph(escape(str(item["class"])), cell_style),
+                        Paragraph(escape(str(item["stream"])), cell_style),
                         Paragraph(escape(str(item["teacher"])), cell_style),
                         Paragraph(escape(str(item["entries"])), cell_style),
                         Paragraph("%.2f%%" % item["mean"], cell_style),
@@ -11615,6 +11608,7 @@ def class_marksheet_analysis_pdf(
             else:
                 table_data.append([
                     Paragraph("No eligible class", cell_style),
+                    Paragraph("—", cell_style),
                     Paragraph("No teacher performance data", cell_style),
                     Paragraph("0", cell_style),
                     Paragraph("—", cell_style),
@@ -11623,7 +11617,7 @@ def class_marksheet_analysis_pdf(
             # to sit beside another subject table on landscape A4.
             class_table = Table(
                 table_data,
-                colWidths=[doc.width * 0.11, doc.width * 0.12, doc.width * 0.065, doc.width * 0.085],
+                colWidths=[doc.width * 0.085, doc.width * 0.075, doc.width * 0.105, doc.width * 0.055, doc.width * 0.06],
                 repeatRows=1, hAlign="LEFT"
             )
             class_table.setStyle(TableStyle([
