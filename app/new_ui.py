@@ -11560,7 +11560,7 @@ def class_marksheet_analysis_pdf(
                         ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
                         ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("ALIGN", (0,2), (0,-1), "CENTER"),
+                        ("ALIGN", (0,1), (0,-1), "CENTER"),
                         ("ALIGN", (2,2), (-1,-1), "CENTER"),
                         ("FONTSIZE", (0,0), (-1,-1), 5.5),
                         ("LEFTPADDING", (0,0), (-1,-1), 2),
