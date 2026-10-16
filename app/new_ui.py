@@ -10874,12 +10874,8 @@ def class_marksheet_analysis_csv(
             ])
         teacher_performance = _msa_teacher_performance(cur, sid, data)
         teacher_columns = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
-        for section_title, key in [
-            ("BEST TEACHERS PER SUBJECT — COMBINED CLASSES", "combined"),
-            ("BEST TEACHERS PER SUBJECT — CLASS-WISE", "class"),
-        ]:
+        for key in ["combined", "class"]:
             writer.writerow([])
-            writer.writerow([section_title])
             writer.writerow(teacher_columns)
             for item in teacher_performance[key]:
                 writer.writerow([
@@ -10995,7 +10991,8 @@ def class_marksheet_analysis_pdf(
         story.append(header_table)
         story.append(Spacer(1, 4*mm))
         def pdf_table(title, headers, values, compact=False):
-            story.append(Paragraph(escape(title), styles["MSASection"]))
+            if title:
+                story.append(Paragraph(escape(title), styles["MSASection"]))
             cell_style = styles["MSACell"]
             if compact:
                 cell_style = ParagraphStyle(
@@ -11544,18 +11541,18 @@ def class_marksheet_analysis_pdf(
 
         teacher_performance = _msa_teacher_performance(cur, sid, data)
         story.append(PageBreak())
-        story.append(Paragraph("Best teachers by subject", styles["MSASection"]))
+        # Omit the separate teacher section heading; retain the tables.
         teacher_headers = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
         combined_teacher_rows = [
             [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
              item["entries"], "%.2f%%" % item["mean"]]
             for item in teacher_performance["combined"]
         ]
-        pdf_table("Best teachers per subject — combined classes", teacher_headers, combined_teacher_rows, compact=True)
+        pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
 
         # Show one compact table per subject, with the best teacher for each class.
         # Pair subject tables horizontally to use the landscape page width efficiently.
-        story.append(Paragraph("Best teachers per subject — class-wise", styles["MSASection"]))
+        # Subject names remain as the individual table labels below.
         class_teacher_records = teacher_performance["class"]
         class_subject_tables = []
         header_style = styles["MSAMatrixHeader"]
