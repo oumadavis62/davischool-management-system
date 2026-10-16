@@ -11554,8 +11554,8 @@ def class_marksheet_analysis_pdf(
         ]
         pdf_table("Best teachers per subject — combined classes", teacher_headers, combined_teacher_rows, compact=True)
 
-        # Match the Top Five Students layout: one subject heading, with the
-        # class-specific leading-teacher tables grouped beneath it in pairs.
+        # Show one table per subject, with one leading teacher row for each class.
+        # This keeps the subject heading singular and makes class comparisons easy.
         story.append(Paragraph("Best teachers per subject — class-wise", styles["MSASection"]))
         class_teacher_records = teacher_performance["class"]
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
@@ -11564,87 +11564,50 @@ def class_marksheet_analysis_pdf(
                 key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
             )
             story.append(Paragraph(escape(str(subject_name)), styles["MSASection"]))
-            class_tables = []
-            if not subject_records:
-                no_data = Table(
-                    [[Paragraph("<b>Status</b>", styles["MSAMatrixHeader"])],
-                     [Paragraph("No teacher performance data", styles["MSACell"])]],
-                    colWidths=[doc.width / 2 - 3*mm], hAlign="LEFT"
-                )
-                no_data.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-                    ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
-                    ("FONTSIZE", (0,0), (-1,-1), 6),
-                    ("LEFTPADDING", (0,0), (-1,-1), 2),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                    ("TOPPADDING", (0,0), (-1,-1), 2),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-                ]))
-                class_tables.append(("No eligible class", no_data))
-            else:
+            header_style = styles["MSAMatrixHeader"]
+            cell_style = ParagraphStyle(
+                "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
+            )
+            table_data = [[
+                Paragraph("<b>Class</b>", header_style),
+                Paragraph("<b>Best Teacher</b>", header_style),
+                Paragraph("<b>Entries</b>", header_style),
+                Paragraph("<b>Mean %</b>", header_style),
+            ]]
+            if subject_records:
                 for item in subject_records:
-                    title = "Class: " + str(item["class"])
-                    cell_style = ParagraphStyle(
-                        "MSATeacherCompactCell", parent=styles["MSACell"], fontSize=5.5, leading=6
-                    )
-                    table_data = [[
-                        Paragraph("<b>Rank</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Teacher</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
-                        Paragraph("<b>Mean %</b>", styles["MSAMatrixHeader"]),
-                    ], [
-                        Paragraph(escape(str(item["rank"])), cell_style),
+                    table_data.append([
+                        Paragraph(escape(str(item["class"])), cell_style),
                         Paragraph(escape(str(item["teacher"])), cell_style),
                         Paragraph(escape(str(item["entries"])), cell_style),
                         Paragraph("%.2f%%" % item["mean"], cell_style),
-                    ]]
-                    table_width = doc.width / 2 - 3*mm
-                    teacher_width = table_width - 10*mm - 12*mm - 15*mm
-                    class_table = Table(
-                        table_data, colWidths=[10*mm, teacher_width, 12*mm, 15*mm],
-                        repeatRows=1, hAlign="LEFT"
-                    )
-                    class_table.setStyle(TableStyle([
-                        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-                        ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
-                        ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("ALIGN", (0,1), (0,-1), "CENTER"),
-                        ("ALIGN", (2,1), (-1,-1), "CENTER"),
-                        ("FONTSIZE", (0,0), (-1,-1), 5.5),
-                        ("LEFTPADDING", (0,0), (-1,-1), 2),
-                        ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                        ("TOPPADDING", (0,0), (-1,-1), 2),
-                        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-                    ]))
-                    class_tables.append((title, class_table))
-            for pair_start in range(0, len(class_tables), 2):
-                left_name, left_table = class_tables[pair_start]
-                half_width = doc.width / 2 - 3*mm
-                left_stack = Table(
-                    [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
-                    colWidths=[half_width], hAlign="LEFT"
-                )
-                if pair_start + 1 < len(class_tables):
-                    right_name, right_table = class_tables[pair_start + 1]
-                    right_stack = Table(
-                        [[Paragraph(escape(right_name), styles["MSACell"])], [right_table]],
-                        colWidths=[half_width], hAlign="LEFT"
-                    )
-                    paired = Table([[left_stack, right_stack]],
-                                   colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
-                    paired.setStyle(TableStyle([
-                        ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("LEFTPADDING", (0,0), (-1,-1), 0),
-                        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                        ("TOPPADDING", (0,0), (-1,-1), 0),
-                        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-                    ]))
-                    story.append(paired)
-                else:
-                    story.append(left_stack)
-                story.append(Spacer(1, 3*mm))
+                    ])
+            else:
+                table_data.append([
+                    Paragraph("No eligible class", cell_style),
+                    Paragraph("No teacher performance data", cell_style),
+                    Paragraph("0", cell_style),
+                    Paragraph("—", cell_style),
+                ])
+            class_table = Table(
+                table_data,
+                colWidths=[doc.width * 0.22, doc.width * 0.48, doc.width * 0.13, doc.width * 0.17],
+                repeatRows=1, hAlign="LEFT"
+            )
+            class_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                ("FONTSIZE", (0,0), (-1,-1), 6),
+                ("LEFTPADDING", (0,0), (-1,-1), 3),
+                ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            story.append(class_table)
+            story.append(Spacer(1, 3*mm))
 
         stream_teacher_rows = [
             [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
