@@ -11593,7 +11593,7 @@ def class_marksheet_analysis_pdf(
             # to sit beside another subject table on landscape A4.
             class_table = Table(
                 table_data,
-                colWidths=[doc.width * 0.11, doc.width * 0.24, doc.width * 0.065, doc.width * 0.085],
+                colWidths=[doc.width * 0.11, doc.width * 0.12, doc.width * 0.065, doc.width * 0.085],
                 repeatRows=1, hAlign="LEFT"
             )
             class_table.setStyle(TableStyle([
