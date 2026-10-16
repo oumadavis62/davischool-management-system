@@ -10513,17 +10513,46 @@ def class_marksheet_analysis_csv(
         msa_subject_counts = {int(subject_id): {grade: 0 for grade in msa_grade_order} for subject_id in data["subjects"]}
         msa_subject_totals = {int(subject_id): 0.0 for subject_id in data["subjects"]}
         msa_subject_entries = {int(subject_id): 0 for subject_id in data["subjects"]}
+
+        # Include every enrolled learner in the selected report scope, including
+        # learners who have no marks row at all for the selected examination(s).
+        enrolled_sql = (
+            "SELECT st.id FROM students st "
+            "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
+            "WHERE st.school_id=?"
+        )
+        enrolled_params = [sid]
+        if class_name:
+            enrolled_sql += " AND c.name=?"
+            enrolled_params.append(class_name)
+        if stream:
+            enrolled_sql += " AND COALESCE(c.stream,'')=?"
+            enrolled_params.append(stream)
+        enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
+        enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
+        assessed_student_ids = {
+            int(row["student_id"]) for row in rows
+            if row.get("student_id") is not None
+        }
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
-        for student_id, summary in data["summaries"].items():
-            overall_grade = _msa_export_grade(summary.get("overall_grade"))
+        for student_id in enrolled_student_ids:
+            if student_id not in assessed_student_ids:
+                msa_overall_counts["X"] += 1
+                continue
+            summary = data["summaries"].get(student_id)
+            overall_grade = _msa_export_grade(summary.get("overall_grade")) if summary else ""
             if overall_grade:
                 msa_overall_counts[overall_grade] += 1
         for subject_id in data["subjects"]:
             subject_id = int(subject_id)
-            for student_id in data["students"]:
+            subject_assessed_ids = {
+                int(student_id) for student_id in enrolled_student_ids
+                if (int(student_id), subject_id) in data["aggregated"]
+            }
+            msa_subject_counts[subject_id]["X"] = len(enrolled_student_ids - subject_assessed_ids)
+            for student_id in subject_assessed_ids:
                 item = data["aggregated"].get((int(student_id), subject_id))
                 if item is None:
-                    msa_subject_counts[subject_id]["X"] += 1
                     continue
                 try:
                     grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["percentage"], data["grading_rules"], 100)
