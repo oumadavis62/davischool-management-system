@@ -11173,7 +11173,6 @@ def class_marksheet_analysis_pdf(
                 "%.2f%%" % mean if mean is not None else "—",
                 stream_rank if mean is not None else "—"
             ])
-        story.append(PageBreak())
         pdf_table(
             "Stream comparisons",
             ["Class", "Stream", "Learners assessed", "Learners not assessed", "Mean %", "Rank"],
@@ -11184,7 +11183,6 @@ def class_marksheet_analysis_pdf(
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
-        story.append(PageBreak())
         pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
             [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
             for x in ranking
@@ -11243,7 +11241,6 @@ def class_marksheet_analysis_pdf(
             len(enrolled_student_ids),
             "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"
         ]]
-        story.append(PageBreak())
         pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
         class_stream_overall = []
         for group_key, student_ids in enrolled_by_class_stream.items():
@@ -11279,7 +11276,6 @@ def class_marksheet_analysis_pdf(
                 + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
                    position if mean is not None else "—"]
             )
-        story.append(PageBreak())
         pdf_table(
             "Grade Distribution Analysis — Overall by Class and Stream",
             ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"],
@@ -11293,9 +11289,7 @@ def class_marksheet_analysis_pdf(
                 "%.2f" % mean if mean is not None else "—",
                 msa_subject_positions.get(int(subject_id), "—")
             ])
-        story.append(PageBreak())
         pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
-        story.append(PageBreak())
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         story.append(Paragraph("<u>Subject performance by class and stream</u>", styles["MSASection"]))
         story.append(Paragraph("Subjects are ordered by overall mean, highest first. Position ranks each class/stream within that subject; tied means share a position.", styles["Normal"]))
@@ -11359,7 +11353,6 @@ def class_marksheet_analysis_pdf(
             else:
                 story.append(left_stack)
             story.append(Spacer(1, 3*mm))
-        story.append(PageBreak())
         combined_by_subject = {}
         for entry in data["top_combined"]:
             combined_by_subject.setdefault(entry[0], []).append(entry)
@@ -11378,7 +11371,6 @@ def class_marksheet_analysis_pdf(
             pdf_table(subject_name, ["Rank", "Student", "Class", "Stream", "Mark", "Grade"], [
                 [row[0], row[1], row[3], row[4], row[5], row[7]] for row in combined_rows
             ])
-        story.append(PageBreak())
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
