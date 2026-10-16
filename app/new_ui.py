@@ -11466,16 +11466,16 @@ def class_marksheet_analysis_pdf(
                 half_width = doc.width / 2 - 3*mm
                 # Keep each class/stream heading attached to its own table so
                 # a page break cannot strand the heading at the bottom of a page.
-                left_stack = KeepTogether([
-                    Paragraph(escape(left_name), styles["MSACell"]),
-                    left_table,
-                ])
+                left_stack = Table(
+                    [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
+                    colWidths=[half_width], hAlign="LEFT"
+                )
                 if pair_start + 1 < len(subject_stream_tables):
                     right_name, right_table = subject_stream_tables[pair_start + 1]
-                    right_stack = KeepTogether([
-                        Paragraph(escape(right_name), styles["MSACell"]),
-                        right_table,
-                    ])
+                    right_stack = Table(
+                        [[Paragraph(escape(right_name), styles["MSACell"])], [right_table]],
+                        colWidths=[half_width], hAlign="LEFT"
+                    )
                     paired_table = Table([[left_stack, right_stack]],
                                          colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
                     paired_table.setStyle(TableStyle([
@@ -11632,16 +11632,16 @@ def class_marksheet_analysis_pdf(
             left_subject, left_table = class_subject_tables[pair_start]
             half_width = doc.width / 2
             # Keep each subject heading together with its corresponding table.
-            left_stack = KeepTogether([
-                Paragraph(escape(left_subject), styles["MSACell"]),
-                left_table,
-            ])
+            left_stack = Table(
+                [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
+                colWidths=[half_width], hAlign="LEFT"
+            )
             if pair_start + 1 < len(class_subject_tables):
                 right_subject, right_table = class_subject_tables[pair_start + 1]
-                right_stack = KeepTogether([
-                    Paragraph(escape(right_subject), styles["MSACell"]),
-                    right_table,
-                ])
+                right_stack = Table(
+                    [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
+                    colWidths=[half_width], hAlign="LEFT"
+                )
                 paired_class_tables = Table(
                     [[left_stack, right_stack]],
                     colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
