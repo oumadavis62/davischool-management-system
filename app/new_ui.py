@@ -11012,7 +11012,7 @@ def class_marksheet_analysis_pdf(
         )
         story.append(Paragraph("<b>BROAD-MARKSHEET ANALYSIS</b>", analysis_title_style))
         story.append(Spacer(1, 4*mm))
-        def pdf_table(title, headers, values, compact=False):
+        def pdf_table(title, headers, values, compact=False, column_profile=None):
             if title:
                 story.append(Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]))
             cell_style = styles["MSACell"]
@@ -11051,6 +11051,13 @@ def class_marksheet_analysis_pdf(
                     doc.width * 0.024, doc.width * 0.24, doc.width * 0.096,
                     doc.width * 0.048, doc.width * 0.060,
                 ]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif column_profile and len(column_profile) == len(headers):
+                # In combined-class Top Students per Subject tables, keep the
+                # Student column at its normal width and reduce every other
+                # column to 30% of that width.
+                base_width = doc.width / len(headers)
+                col_widths = [base_width * weight for weight in column_profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif profile and len(profile) == len(headers):
                 col_widths = [target_width * weight / sum(profile) for weight in profile]
@@ -11402,7 +11409,7 @@ def class_marksheet_analysis_pdf(
                 combined_rows.append(row_values[:3] + [class_label] + row_values[3:])
             pdf_table(subject_name, ["Rank", "Student", "Class", "Stream", "Mark", "Grade"], [
                 [row[0], row[1], row[3], row[4], row[5], row[7]] for row in combined_rows
-            ])
+            ], column_profile=[0.30, 1.0, 0.30, 0.30, 0.30, 0.30])
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
