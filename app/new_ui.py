@@ -10465,10 +10465,11 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
 
 
 def _msa_teacher_performance(cur, school_id, data):
-    """Rank allocated teachers using mean recorded marks for selected exams."""
+    """Rank allocated teachers by mean recorded marks in the selected exams."""
     allocation_rows = cur.execute(
         """SELECT a.teacher_id, t.name AS teacher_name, a.class_id,
-                  c.name AS class_name, a.subject_id, sub.name AS subject_name
+                  c.name AS class_name, c.stream AS class_stream,
+                  a.subject_id, sub.name AS subject_name
            FROM teacher_allocations a
            JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
@@ -10479,7 +10480,6 @@ def _msa_teacher_performance(cur, school_id, data):
     ).fetchall()
     combined = {}
     by_class = {}
-    by_stream = {}
     for allocation in allocation_rows:
         teacher_id = int(allocation["teacher_id"])
         class_id = int(allocation["class_id"])
@@ -10488,17 +10488,13 @@ def _msa_teacher_performance(cur, school_id, data):
         subject_name = str(allocation["subject_name"] or "Unknown subject")
         class_label = str(allocation["class_name"] or "Unassigned")
         scores = []
-        stream_scores = {}
         for (student_id, aggregated_subject_id), item in data["aggregated"].items():
             if int(aggregated_subject_id) != subject_id:
                 continue
             info = data["students"].get(int(student_id), {})
             if int(info.get("class_id") or 0) != class_id:
                 continue
-            score = float(item.get("percentage") or 0)
-            scores.append(score)
-            stream_label = str(info.get("stream") or "No stream")
-            stream_scores.setdefault(stream_label, []).append(score)
+            scores.append(float(item.get("percentage") or 0))
         if not scores:
             continue
         base = {
@@ -10506,14 +10502,19 @@ def _msa_teacher_performance(cur, school_id, data):
             "subject_id": subject_id, "subject": subject_name,
             "class_id": class_id, "class": class_label,
         }
-        combined.setdefault((teacher_id, subject_id), {**base, "class": "All classes", "stream": "All streams", "scores": []})["scores"].extend(scores)
-        by_class.setdefault((teacher_id, subject_id, class_id), {**base, "stream": "All streams", "scores": []})["scores"].extend(scores)
-        for stream_label, values in stream_scores.items():
-            by_stream.setdefault((teacher_id, subject_id, class_id, stream_label), {**base, "stream": stream_label, "scores": []})["scores"].extend(values)
+        combined.setdefault(
+            (teacher_id, subject_id),
+            {**base, "class": "All classes", "stream": "All streams", "scores": []}
+        )["scores"].extend(scores)
+        by_class.setdefault(
+            (teacher_id, subject_id, class_id),
+            {**base, "stream": "All streams", "scores": []}
+        )["scores"].extend(scores)
 
     def ranked(buckets, grouping):
         records = []
-        for item in buckets.values():
+        for source in buckets.values():
+            item = dict(source)
             values = item.pop("scores")
             if not values:
                 continue
@@ -10538,12 +10539,22 @@ def _msa_teacher_performance(cur, school_id, data):
                 previous_mean = item["mean"]
             item["rank"] = rank
         return records
-    return {
-        "combined": ranked(combined, ("subject",)),
-        "class": ranked(by_class, ("subject", "class")),
-        "stream": ranked(by_stream, ("subject", "class", "stream")),
-    }
 
+    # The combined table shows only the single leading teacher for each subject
+    # across all classes. The stream-wise table likewise shows one leader per
+    # subject after pooling the results from every stream, rather than repeating
+    # a subject for every class/stream. Class-wise still shows each class leader.
+    combined_ranked = ranked(combined, ("subject",))
+    combined_winners = [item for item in combined_ranked if item["rank"] == 1]
+    stream_winners = [
+        {**item, "class": "All classes", "stream": "All streams"}
+        for item in combined_winners
+    ]
+    return {
+        "combined": combined_winners,
+        "class": [item for item in ranked(by_class, ("subject", "class")) if item["rank"] == 1],
+        "stream": stream_winners,
+    }
 
 @router.get("/app/academics/marksheet-analysis/csv")
 def class_marksheet_analysis_csv(
