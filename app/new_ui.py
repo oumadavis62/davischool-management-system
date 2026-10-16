@@ -11400,16 +11400,79 @@ def class_marksheet_analysis_pdf(
             str(info.get("admission_no") or ""): str(info.get("class_name") or "Unassigned")
             for info in data["students"].values()
         }
+        combined_subject_cards = []
+        combined_half_width = (doc.width - 6 * mm) / 2
+        combined_base_width = combined_half_width / 6
+        combined_col_widths = [
+            combined_base_width * 0.30,
+            combined_base_width * 1.0,
+            combined_base_width * 0.30,
+            combined_base_width * 0.30,
+            combined_base_width * 0.30,
+            combined_base_width * 0.30,
+        ]
+        combined_cell_style = ParagraphStyle(
+            "MSACombinedTopStudentCell", parent=styles["MSACell"], fontSize=6, leading=6.5
+        )
+        combined_header_style = ParagraphStyle(
+            "MSACombinedTopStudentHeader", parent=combined_cell_style, fontName="Helvetica-Bold"
+        )
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
             subject_entries = combined_by_subject.get(subject_name, [])
-            combined_rows = []
+            subject_table_data = [[
+                Paragraph("<b>Rank</b>", combined_header_style),
+                Paragraph("<b>Student</b>", combined_header_style),
+                Paragraph("<b>Class</b>", combined_header_style),
+                Paragraph("<b>Stream</b>", combined_header_style),
+                Paragraph("<b>Mark</b>", combined_header_style),
+                Paragraph("<b>Grade</b>", combined_header_style),
+            ]]
             for entry in subject_entries:
                 row_values = entry[2:]
                 class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
-                combined_rows.append(row_values[:3] + [class_label] + row_values[3:])
-            pdf_table(subject_name, ["Rank", "Student", "Class", "Stream", "Mark", "Grade"], [
-                [row[0], row[1], row[3], row[4], row[5], row[7]] for row in combined_rows
-            ], column_profile=[0.30, 1.0, 0.30, 0.30, 0.30, 0.30])
+                values = [row_values[0], row_values[1], class_label, row_values[3], row_values[4], row_values[6]]
+                subject_table_data.append([
+                    Paragraph(escape(str(value)), combined_cell_style) for value in values
+                ])
+            if len(subject_table_data) == 1:
+                subject_table_data.append([
+                    Paragraph("No eligible students", combined_cell_style)
+                ] + [Paragraph("", combined_cell_style) for _ in range(5)])
+            subject_table = Table(
+                subject_table_data, colWidths=combined_col_widths, repeatRows=1, hAlign="LEFT"
+            )
+            subject_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 1),
+                ("RIGHTPADDING", (0,0), (-1,-1), 1),
+                ("TOPPADDING", (0,0), (-1,-1), 1),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+            ]))
+            combined_subject_cards.append([
+                Paragraph("<u>" + escape(subject_name) + "</u>", styles["MSASection"]),
+                subject_table,
+            ])
+        for pair_start in range(0, len(combined_subject_cards), 2):
+            left_card = combined_subject_cards[pair_start]
+            right_card = combined_subject_cards[pair_start + 1] if pair_start + 1 < len(combined_subject_cards) else []
+            paired_subjects = Table(
+                [[left_card, right_card]],
+                colWidths=[combined_half_width, combined_half_width],
+                hAlign="LEFT",
+            )
+            paired_subjects.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 0),
+                ("RIGHTPADDING", (0,0), (-1,-1), 3 * mm),
+                ("TOPPADDING", (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2 * mm),
+            ]))
+            story.append(paired_subjects)
+        story.append(Spacer(1, 1.5 * mm))
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
