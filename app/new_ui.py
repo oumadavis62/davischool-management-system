@@ -11548,7 +11548,7 @@ def class_marksheet_analysis_pdf(
                             Paragraph(escape(str(row[7])), styles["MSACell"]),
                         ])
                     stream_table_width = doc.width / 2 - 3*mm
-                    student_col_width = (stream_table_width - 9*mm - 11*mm - 13*mm) * 0.60
+                    student_col_width = (stream_table_width - 9*mm - 11*mm - 13*mm) * 0.40
                     compact_table = Table(
                         compact_data,
                         colWidths=[9*mm, student_col_width, 11*mm, 13*mm],
