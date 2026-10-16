@@ -10752,7 +10752,7 @@ def class_marksheet_analysis_csv(
         writer.writerow([])
         _msa_csv_heading("PER-SUBJECT GRADE DISTRIBUTION")
         writer.writerow(["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"])
-        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
+        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: (msa_subject_positions.get(int(item[0]), 10**9), str(item[1]).casefold())):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
             writer.writerow([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
                 sum(msa_subject_counts[int(subject_id)].values()),
@@ -11313,7 +11313,7 @@ def class_marksheet_analysis_pdf(
             class_stream_overall_rows
         )
         per_subject_distribution_rows = []
-        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
+        for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: (msa_subject_positions.get(int(item[0]), 10**9), str(item[1]).casefold())):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
             per_subject_distribution_rows.append([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
                 len(enrolled_student_ids),
