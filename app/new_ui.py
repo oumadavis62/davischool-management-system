@@ -10530,7 +10530,7 @@ def class_marksheet_analysis_csv(
         # Include every enrolled learner in the selected report scope, including
         # learners who have no marks row at all for the selected examination(s).
         enrolled_sql = (
-            "SELECT st.id FROM students st "
+            "SELECT st.id, c.name AS class_name, c.stream FROM students st "
             "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
             "WHERE st.school_id=?"
         )
@@ -10543,6 +10543,13 @@ def class_marksheet_analysis_csv(
             enrolled_params.append(stream)
         enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
         enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
+        enrolled_by_class_stream = {}
+        for enrolled in enrolled_rows:
+            group_key = (
+                str(enrolled["class_name"] or "Unassigned"),
+                str(enrolled["stream"] or "No stream"),
+            )
+            enrolled_by_class_stream.setdefault(group_key, set()).add(int(enrolled["id"]))
         assessed_student_ids = {
             int(row["student_id"]) for row in rows
             if row.get("student_id") is not None
@@ -10598,6 +10605,40 @@ def class_marksheet_analysis_csv(
         writer.writerow(["OVERALL GRADE DISTRIBUTION"])
         writer.writerow(msa_grade_order + ["Entries", "Class Mean %"])
         writer.writerow([msa_overall_counts[g] for g in msa_grade_order] + [sum(msa_overall_counts.values()), "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"])
+        writer.writerow([])
+        writer.writerow(["OVERALL GRADE DISTRIBUTION BY CLASS AND STREAM"])
+        writer.writerow(["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"])
+        class_stream_overall = []
+        for group_key, student_ids in enrolled_by_class_stream.items():
+            counts = {grade: 0 for grade in msa_grade_order}
+            mean_values = []
+            for student_id in student_ids:
+                if student_id not in assessed_student_ids:
+                    counts["X"] += 1
+                    continue
+                summary = data["summaries"].get(student_id)
+                if not summary or int(summary.get("subject_count") or 0) <= 0:
+                    continue
+                grade = _msa_export_grade(summary.get("overall_grade"))
+                if grade and grade != "X":
+                    counts[grade] += 1
+                mean_values.append(float(summary.get("average") or 0))
+            mean = sum(mean_values) / len(mean_values) if mean_values else None
+            class_stream_overall.append((group_key, counts, mean))
+        class_stream_overall.sort(key=lambda item: (
+            item[2] is None, -(item[2] or 0), item[0][0].casefold(), item[0][1].casefold()
+        ))
+        previous_mean = None
+        position = 0
+        for index, (group_key, counts, mean) in enumerate(class_stream_overall, 1):
+            if mean is not None:
+                if previous_mean is None or abs(mean - previous_mean) > 0.000001:
+                    position = index
+                    previous_mean = mean
+            entries = sum(counts.values())
+            writer.writerow([group_key[0], group_key[1]] + [counts[g] for g in msa_grade_order] + [
+                entries, "%.2f" % mean if mean is not None else "—", position if mean is not None else "—"
+            ])
         writer.writerow([])
         writer.writerow(["PER-SUBJECT GRADE DISTRIBUTION"])
         writer.writerow(["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"])
@@ -10881,7 +10922,7 @@ def class_marksheet_analysis_pdf(
         # Use the enrolled roster, not only learners present in marks rows, so X
         # represents non-sitters and Entries can include those learners.
         enrolled_sql = (
-            "SELECT st.id FROM students st "
+            "SELECT st.id, c.name AS class_name, c.stream FROM students st "
             "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
             "WHERE st.school_id=?"
         )
@@ -10894,6 +10935,13 @@ def class_marksheet_analysis_pdf(
             enrolled_params.append(stream)
         enrolled_rows = cur.execute(enrolled_sql, enrolled_params).fetchall()
         enrolled_student_ids = {int(row["id"]) for row in enrolled_rows}
+        enrolled_by_class_stream = {}
+        for enrolled in enrolled_rows:
+            group_key = (
+                str(enrolled["class_name"] or "Unassigned"),
+                str(enrolled["stream"] or "No stream"),
+            )
+            enrolled_by_class_stream.setdefault(group_key, set()).add(int(enrolled["id"]))
         assessed_student_ids = {
             int(row["student_id"]) for row in rows
             if row.get("student_id") is not None
@@ -10953,6 +11001,45 @@ def class_marksheet_analysis_pdf(
             "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"
         ]]
         pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
+        class_stream_overall = []
+        for group_key, student_ids in enrolled_by_class_stream.items():
+            counts = {grade: 0 for grade in msa_grade_order}
+            mean_values = []
+            for student_id in student_ids:
+                if student_id not in assessed_student_ids:
+                    counts["X"] += 1
+                    continue
+                summary = data["summaries"].get(student_id)
+                if not summary or int(summary.get("subject_count") or 0) <= 0:
+                    continue
+                grade = _msa_pdf_grade(summary.get("overall_grade"))
+                if grade and grade != "X":
+                    counts[grade] += 1
+                mean_values.append(float(summary.get("average") or 0))
+            mean = sum(mean_values) / len(mean_values) if mean_values else None
+            class_stream_overall.append((group_key, counts, mean))
+        class_stream_overall.sort(key=lambda item: (
+            item[2] is None, -(item[2] or 0), item[0][0].casefold(), item[0][1].casefold()
+        ))
+        class_stream_overall_rows = []
+        previous_mean = None
+        position = 0
+        for index, (group_key, counts, mean) in enumerate(class_stream_overall, 1):
+            if mean is not None:
+                if previous_mean is None or abs(mean - previous_mean) > 0.000001:
+                    position = index
+                    previous_mean = mean
+            class_stream_overall_rows.append(
+                [group_key[0], group_key[1]]
+                + [counts[g] for g in msa_grade_order]
+                + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
+                   position if mean is not None else "—"]
+            )
+        pdf_table(
+            "Grade Distribution Analysis — Overall by Class and Stream",
+            ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"],
+            class_stream_overall_rows
+        )
         per_subject_distribution_rows = []
         for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: str(item[1]).casefold()):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
