@@ -11414,21 +11414,21 @@ def class_marksheet_analysis_pdf(
                 result.append((rank_number, learner))
             return result
 
-        ranking_headers = ["Rank", "Student", "Admission No.", "Class", "Stream", "Mean %", "Total %", "Grade"]
+        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total %", "Grade"]
         class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
         for ranked_class in class_names:
             class_ranked = _msa_rank_students([
                 learner for learner in ranked_learners if learner["class_name"] == ranked_class
             ])
             class_top_ten = [
-                [rank, learner["name"], learner["admission"], learner["class_name"],
+                [rank, learner["name"], learner["class_name"],
                  learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
                 for rank, learner in class_ranked[:10]
             ]
             pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
 
         overall_top_ten = [
-            [rank, learner["name"], learner["admission"], learner["class_name"],
+            [rank, learner["name"], learner["class_name"],
              learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
             for rank, learner in _msa_rank_students(ranked_learners)[:10]
         ]
