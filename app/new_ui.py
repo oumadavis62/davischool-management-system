@@ -10547,6 +10547,12 @@ def _msa_teacher_performance(cur, school_id, data):
     # a subject for every class/stream. Class-wise still shows each class leader.
     combined_ranked = ranked(combined, ("subject",))
     combined_winners = [item for item in combined_ranked if item["rank"] == 1]
+    # The combined table contains one winning teacher per subject. Rank those
+    # displayed subjects consecutively by their overall mean, highest first,
+    # instead of showing rank 1 for every subject group.
+    combined_winners.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
+    for position, item in enumerate(combined_winners, 1):
+        item["rank"] = position
     stream_winners = [
         {**item, "class": "All classes", "stream": "All streams"}
         for item in combined_winners
