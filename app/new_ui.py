@@ -11414,7 +11414,7 @@ def class_marksheet_analysis_pdf(
                 result.append((rank_number, learner))
             return result
 
-        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total %", "Grade"]
+        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
         class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
         for ranked_class in class_names:
             class_ranked = _msa_rank_students([
