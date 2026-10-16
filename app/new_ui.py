@@ -10877,7 +10877,6 @@ def class_marksheet_analysis_csv(
         for section_title, key in [
             ("BEST TEACHERS PER SUBJECT — COMBINED CLASSES", "combined"),
             ("BEST TEACHERS PER SUBJECT — CLASS-WISE", "class"),
-            ("BEST TEACHERS PER SUBJECT — STREAM-WISE", "stream"),
         ]:
             writer.writerow([])
             writer.writerow([section_title])
@@ -11638,13 +11637,6 @@ def class_marksheet_analysis_pdf(
             else:
                 story.append(left_stack)
             story.append(Spacer(1, 3*mm))
-
-        stream_teacher_rows = [
-            [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
-             item["entries"], "%.2f%%" % item["mean"]]
-            for item in teacher_performance["stream"]
-        ]
-        pdf_table("Best teachers per subject — stream-wise", teacher_headers, stream_teacher_rows, compact=True)
 
         def add_footer(canvas, document):
             canvas.saveState()
