@@ -10464,6 +10464,87 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
     return subject_order, [subjects[sid] for sid in subject_order], grade_order, matrix_rows
 
 
+def _msa_teacher_performance(cur, school_id, data):
+    """Rank allocated teachers using mean recorded marks for selected exams."""
+    allocation_rows = cur.execute(
+        """SELECT a.teacher_id, t.name AS teacher_name, a.class_id,
+                  c.name AS class_name, a.subject_id, sub.name AS subject_name
+           FROM teacher_allocations a
+           JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+           JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+           JOIN subjects sub ON sub.id=a.subject_id AND sub.school_id=a.school_id
+           WHERE a.school_id=?
+           ORDER BY sub.name, t.name, c.name, c.stream""",
+        (school_id,)
+    ).fetchall()
+    combined = {}
+    by_class = {}
+    by_stream = {}
+    for allocation in allocation_rows:
+        teacher_id = int(allocation["teacher_id"])
+        class_id = int(allocation["class_id"])
+        subject_id = int(allocation["subject_id"])
+        teacher_name = str(allocation["teacher_name"] or "Unassigned")
+        subject_name = str(allocation["subject_name"] or "Unknown subject")
+        class_label = str(allocation["class_name"] or "Unassigned")
+        scores = []
+        stream_scores = {}
+        for (student_id, aggregated_subject_id), item in data["aggregated"].items():
+            if int(aggregated_subject_id) != subject_id:
+                continue
+            info = data["students"].get(int(student_id), {})
+            if int(info.get("class_id") or 0) != class_id:
+                continue
+            score = float(item.get("percentage") or 0)
+            scores.append(score)
+            stream_label = str(info.get("stream") or "No stream")
+            stream_scores.setdefault(stream_label, []).append(score)
+        if not scores:
+            continue
+        base = {
+            "teacher_id": teacher_id, "teacher": teacher_name,
+            "subject_id": subject_id, "subject": subject_name,
+            "class_id": class_id, "class": class_label,
+        }
+        combined.setdefault((teacher_id, subject_id), {**base, "class": "All classes", "stream": "All streams", "scores": []})["scores"].extend(scores)
+        by_class.setdefault((teacher_id, subject_id, class_id), {**base, "stream": "All streams", "scores": []})["scores"].extend(scores)
+        for stream_label, values in stream_scores.items():
+            by_stream.setdefault((teacher_id, subject_id, class_id, stream_label), {**base, "stream": stream_label, "scores": []})["scores"].extend(values)
+
+    def ranked(buckets, grouping):
+        records = []
+        for item in buckets.values():
+            values = item.pop("scores")
+            if not values:
+                continue
+            item["entries"] = len(values)
+            item["mean"] = sum(values) / len(values)
+            records.append(item)
+        records.sort(key=lambda item: (
+            tuple(str(item.get(field) or "").casefold() for field in grouping),
+            -item["mean"], item["teacher"].casefold()
+        ))
+        previous_key = None
+        previous_mean = None
+        rank = 0
+        for index, item in enumerate(records, 1):
+            group_key = tuple(item.get(field) for field in grouping)
+            if group_key != previous_key:
+                rank = 1
+                previous_mean = item["mean"]
+                previous_key = group_key
+            elif abs(item["mean"] - previous_mean) > 0.000001:
+                rank += 1
+                previous_mean = item["mean"]
+            item["rank"] = rank
+        return records
+    return {
+        "combined": ranked(combined, ("subject",)),
+        "class": ranked(by_class, ("subject", "class")),
+        "stream": ranked(by_stream, ("subject", "class", "stream")),
+    }
+
+
 @router.get("/app/academics/marksheet-analysis/csv")
 def class_marksheet_analysis_csv(
     request: Request, exam_ids: str = "", year: str = "", term: str = "",
@@ -10780,6 +10861,23 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % (max(vals) if vals else 0),
                 "%.2f%%" % (min(vals) if vals else 0),
             ])
+        teacher_performance = _msa_teacher_performance(cur, sid, data)
+        teacher_columns = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
+        for section_title, key in [
+            ("BEST TEACHERS PER SUBJECT — COMBINED CLASSES", "combined"),
+            ("BEST TEACHERS PER SUBJECT — CLASS-WISE", "class"),
+            ("BEST TEACHERS PER SUBJECT — STREAM-WISE", "stream"),
+        ]:
+            writer.writerow([])
+            writer.writerow([section_title])
+            writer.writerow(teacher_columns)
+            for item in teacher_performance[key]:
+                writer.writerow([
+                    item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
+                    item["entries"], "%.2f%%" % item["mean"],
+                ])
+            if not teacher_performance[key]:
+                writer.writerow(["", "No teacher performance data for the selected examination(s)"])
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.csv"'
         return response
@@ -11433,6 +11531,22 @@ def class_marksheet_analysis_pdf(
             for rank, learner in _msa_rank_students(ranked_learners)[:10]
         ]
         pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
+
+        teacher_performance = _msa_teacher_performance(cur, sid, data)
+        story.append(PageBreak())
+        story.append(Paragraph("Best teachers by subject", styles["MSASection"]))
+        teacher_headers = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
+        for section_title, key in [
+            ("Best teachers per subject — combined classes", "combined"),
+            ("Best teachers per subject — class-wise", "class"),
+            ("Best teachers per subject — stream-wise", "stream"),
+        ]:
+            teacher_rows = [
+                [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
+                 item["entries"], "%.2f%%" % item["mean"]]
+                for item in teacher_performance[key]
+            ]
+            pdf_table(section_title, teacher_headers, teacher_rows, compact=True)
 
         def add_footer(canvas, document):
             canvas.saveState()
