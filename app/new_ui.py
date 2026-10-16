@@ -11554,19 +11554,19 @@ def class_marksheet_analysis_pdf(
         ]
         pdf_table("Best teachers per subject — combined classes", teacher_headers, combined_teacher_rows, compact=True)
 
-        # Show one table per subject, with one leading teacher row for each class.
-        # This keeps the subject heading singular and makes class comparisons easy.
+        # Show one compact table per subject, with the best teacher for each class.
+        # Pair subject tables horizontally to use the landscape page width efficiently.
         story.append(Paragraph("Best teachers per subject — class-wise", styles["MSASection"]))
         class_teacher_records = teacher_performance["class"]
+        class_subject_tables = []
+        header_style = styles["MSAMatrixHeader"]
+        cell_style = ParagraphStyle(
+            "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
+        )
         for subject_name in sorted(data["subjects"].values(), key=str.casefold):
             subject_records = sorted(
                 [item for item in class_teacher_records if item["subject"] == subject_name],
                 key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
-            )
-            story.append(Paragraph(escape(str(subject_name)), styles["MSASection"]))
-            header_style = styles["MSAMatrixHeader"]
-            cell_style = ParagraphStyle(
-                "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
             )
             table_data = [[
                 Paragraph("<b>Class</b>", header_style),
@@ -11589,8 +11589,8 @@ def class_marksheet_analysis_pdf(
                     Paragraph("0", cell_style),
                     Paragraph("—", cell_style),
                 ])
-            # Keep these merged class-wise tables compact: each column is half
-            # its former width so the subject sections take less horizontal space.
+            # The widths total half the page, keeping each table compact enough
+            # to sit beside another subject table on landscape A4.
             class_table = Table(
                 table_data,
                 colWidths=[doc.width * 0.11, doc.width * 0.24, doc.width * 0.065, doc.width * 0.085],
@@ -11608,7 +11608,35 @@ def class_marksheet_analysis_pdf(
                 ("TOPPADDING", (0,0), (-1,-1), 1),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 1),
             ]))
-            story.append(class_table)
+            class_subject_tables.append((str(subject_name), class_table))
+
+        for pair_start in range(0, len(class_subject_tables), 2):
+            left_subject, left_table = class_subject_tables[pair_start]
+            half_width = doc.width / 2
+            left_stack = Table(
+                [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
+                colWidths=[half_width], hAlign="LEFT"
+            )
+            if pair_start + 1 < len(class_subject_tables):
+                right_subject, right_table = class_subject_tables[pair_start + 1]
+                right_stack = Table(
+                    [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
+                    colWidths=[half_width], hAlign="LEFT"
+                )
+                paired_class_tables = Table(
+                    [[left_stack, right_stack]],
+                    colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
+                )
+                paired_class_tables.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(paired_class_tables)
+            else:
+                story.append(left_stack)
             story.append(Spacer(1, 3*mm))
 
         stream_teacher_rows = [
