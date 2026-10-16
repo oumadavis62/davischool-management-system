@@ -11402,14 +11402,10 @@ def class_marksheet_analysis_pdf(
         }
         combined_subject_cards = []
         combined_half_width = (doc.width - 6 * mm) / 2
-        combined_base_width = combined_half_width / 6
+        combined_profile = [0.30, 1.0, 0.30, 0.30, 0.30, 0.30]
         combined_col_widths = [
-            combined_base_width * 0.30,
-            combined_base_width * 1.0,
-            combined_base_width * 0.30,
-            combined_base_width * 0.30,
-            combined_base_width * 0.30,
-            combined_base_width * 0.30,
+            combined_half_width * weight / sum(combined_profile)
+            for weight in combined_profile
         ]
         combined_cell_style = ParagraphStyle(
             "MSACombinedTopStudentCell", parent=styles["MSACell"], fontSize=6, leading=6.5
