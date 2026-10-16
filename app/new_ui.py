@@ -11062,6 +11062,13 @@ def class_marksheet_analysis_pdf(
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * weight for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif title == "Grade Distribution Analysis — Per Subject" and len(headers) > 1:
+                # Give Subject a wider label column; compress grade/count/mean/
+                # position columns evenly while keeping the table within page width.
+                subject_width = doc.width * 0.24
+                other_width = (doc.width - subject_width) / (len(headers) - 1)
+                col_widths = [subject_width] + [other_width] * (len(headers) - 1)
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
                 # Keep Subject at its previous width and reduce the other
                 # combined-class columns by 70% to make the table more compact.
