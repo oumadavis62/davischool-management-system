@@ -10947,7 +10947,7 @@ def class_marksheet_analysis_pdf(
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=12*mm)
         styles = getSampleStyleSheet()
@@ -11464,16 +11464,18 @@ def class_marksheet_analysis_pdf(
             for pair_start in range(0, len(subject_stream_tables), 2):
                 left_name, left_table = subject_stream_tables[pair_start]
                 half_width = doc.width / 2 - 3*mm
-                left_stack = Table(
-                    [[Paragraph(escape(left_name), styles["MSACell"])], [left_table]],
-                    colWidths=[half_width], hAlign="LEFT"
-                )
+                # Keep each class/stream heading attached to its own table so
+                # a page break cannot strand the heading at the bottom of a page.
+                left_stack = KeepTogether([
+                    Paragraph(escape(left_name), styles["MSACell"]),
+                    left_table,
+                ])
                 if pair_start + 1 < len(subject_stream_tables):
                     right_name, right_table = subject_stream_tables[pair_start + 1]
-                    right_stack = Table(
-                        [[Paragraph(escape(right_name), styles["MSACell"])], [right_table]],
-                        colWidths=[half_width], hAlign="LEFT"
-                    )
+                    right_stack = KeepTogether([
+                        Paragraph(escape(right_name), styles["MSACell"]),
+                        right_table,
+                    ])
                     paired_table = Table([[left_stack, right_stack]],
                                          colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
                     paired_table.setStyle(TableStyle([
@@ -11629,16 +11631,17 @@ def class_marksheet_analysis_pdf(
         for pair_start in range(0, len(class_subject_tables), 2):
             left_subject, left_table = class_subject_tables[pair_start]
             half_width = doc.width / 2
-            left_stack = Table(
-                [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
-                colWidths=[half_width], hAlign="LEFT"
-            )
+            # Keep each subject heading together with its corresponding table.
+            left_stack = KeepTogether([
+                Paragraph(escape(left_subject), styles["MSACell"]),
+                left_table,
+            ])
             if pair_start + 1 < len(class_subject_tables):
                 right_subject, right_table = class_subject_tables[pair_start + 1]
-                right_stack = Table(
-                    [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
-                    colWidths=[half_width], hAlign="LEFT"
-                )
+                right_stack = KeepTogether([
+                    Paragraph(escape(right_subject), styles["MSACell"]),
+                    right_table,
+                ])
                 paired_class_tables = Table(
                     [[left_stack, right_stack]],
                     colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
