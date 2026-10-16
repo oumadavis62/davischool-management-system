@@ -10877,17 +10877,27 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % (min(vals) if vals else 0),
             ])
         teacher_performance = _msa_teacher_performance(cur, sid, data)
-        teacher_columns = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
         for key, heading in [("combined", "Combined classes"), ("class", "Class-wise")]:
             writer.writerow([])
             _msa_csv_heading("BEST TEACHERS BY SUBJECT")
             _msa_csv_heading(heading)
+            teacher_columns = (
+                ["Rank", "Subject", "Teacher", "Entries", "Mean %"]
+                if key == "combined"
+                else ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
+            )
             writer.writerow(teacher_columns)
             for item in teacher_performance[key]:
-                writer.writerow([
-                    item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
-                    item["entries"], "%.2f%%" % item["mean"],
-                ])
+                if key == "combined":
+                    writer.writerow([
+                        item["rank"], item["subject"], item["teacher"],
+                        item["entries"], "%.2f%%" % item["mean"],
+                    ])
+                else:
+                    writer.writerow([
+                        item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
+                        item["entries"], "%.2f%%" % item["mean"],
+                    ])
             if not teacher_performance[key]:
                 writer.writerow(["", "No teacher performance data for the selected examination(s)"])
         response = Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8")
@@ -10941,7 +10951,7 @@ def class_marksheet_analysis_pdf(
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=12*mm)
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name="MSASection", parent=styles["Heading2"], textColor=colors.HexColor("#176b3a"), spaceBefore=8, spaceAfter=5))
+        styles.add(ParagraphStyle(name="MSASection", parent=styles["Heading2"], textColor=colors.HexColor("#176b3a"), spaceBefore=8, spaceAfter=5, keepWithNext=1))
         styles.add(ParagraphStyle(name="MSACell", parent=styles["BodyText"], fontSize=7, leading=8))
         styles.add(ParagraphStyle(name="MSAMatrixHeader", parent=styles["MSACell"], textColor=colors.white, fontSize=5.5, leading=6))
         story = []
@@ -11549,9 +11559,11 @@ def class_marksheet_analysis_pdf(
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
-        teacher_headers = ["Rank", "Subject", "Teacher", "Class", "Stream", "Entries", "Mean %"]
+        # Combined results identify one leading teacher per subject across all
+        # classes, so class and stream columns are not applicable here.
+        teacher_headers = ["Rank", "Subject", "Teacher", "Entries", "Mean %"]
         combined_teacher_rows = [
-            [item["rank"], item["subject"], item["teacher"], item["class"], item["stream"],
+            [item["rank"], item["subject"], item["teacher"],
              item["entries"], "%.2f%%" % item["mean"]]
             for item in teacher_performance["combined"]
         ]
