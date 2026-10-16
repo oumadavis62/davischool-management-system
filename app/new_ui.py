@@ -9832,7 +9832,7 @@ def _msa_student_summaries(rows, aggregated, grading_rules, overall_rules, cur, 
         grade = _marksheet_overall_grade(cur, school_id, average, len(items), overall_rules)
         summaries[student_id] = {
             "average": average,
-            "total": sum(x["percentage"] for x in items),
+            "total": sum(x["mark"] for x in items),
             "subject_count": len(items),
             "average_points": sum(points) / len(points) if points else 0.0,
             "overall_grade": grade,
@@ -11519,17 +11519,19 @@ def class_marksheet_analysis_pdf(
             })
 
         def _msa_rank_students(learners):
+            # Rank these Top 10 lists by total marks, not average percentage:
+            # learners may have sat different numbers of exams/subjects.
             ordered = sorted(
                 learners,
-                key=lambda item: (-item["mean"], item["name"].casefold(), item["admission"].casefold())
+                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
             )
             result = []
-            previous_mean = None
+            previous_total = None
             rank_number = 0
             for index, learner in enumerate(ordered, 1):
-                if previous_mean is None or abs(learner["mean"] - previous_mean) > 0.000001:
+                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
                     rank_number = index
-                    previous_mean = learner["mean"]
+                    previous_total = learner["total"]
                 result.append((rank_number, learner))
             return result
 
