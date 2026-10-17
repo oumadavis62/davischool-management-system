@@ -5303,7 +5303,17 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
-    cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
+    try:
+        participating_ids=_exam_participating_class_ids(cur,sid,eid) if eid else None
+        if participating_ids is not None:
+            classes=[c for c in classes if int(c["id"]) in participating_ids]
+        con.commit()
+    except Exception as exc:
+        print("DAVISCHOOL EXAM CLASS SCOPE FALLBACK:",repr(exc),flush=True)
+        try: con.rollback()
+        except Exception: pass
+        participating_ids=None
+    cid=int(class_id) if class_id.isdigit() and any(int(c["id"])==int(class_id) for c in classes) else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     # On the teacher landing page, choose the first allocated class/subject pair
     # rather than independently choosing the first class and first subject.
@@ -5562,6 +5572,9 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         if not exam:
             con.close()
             return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+        if not _exam_class_is_allowed(cur,sid,exam_id,class_id):
+            con.close()
+            return HTMLResponse("This class/stream is not selected for the examination. <a href='/app/academics/marks'>Back</a>",403)
         if _academic_lock(cur,sid,exam_id,class_id,subject_id):
             con.close(); return HTMLResponse("These marks are already submitted and locked. <a href='/app/academics/marks'>Back</a>",403)
         form=await request.form()
@@ -5733,6 +5746,9 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     if not exam:
         con.close()
         return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if not _exam_class_is_allowed(cur,sid,exam_id,class_id):
+        con.close()
+        return HTMLResponse("This class/stream is not selected for the examination. <a href='/app/academics/marks'>Back</a>",403)
     if _academic_lock(cur,sid,exam_id,class_id,subject_id):
         con.close()
         return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
@@ -5884,6 +5900,8 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
     valid=cur.execute("SELECT id FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone() and cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone() and cur.execute("SELECT id FROM subjects WHERE id=? AND school_id=?",(subject_id,sid)).fetchone()
     if not valid:
         con.close(); return HTMLResponse("Invalid academic selection. <a href='/app/academics/marks'>Back</a>",400)
+    if not _exam_class_is_allowed(cur,sid,exam_id,class_id):
+        con.close(); return HTMLResponse("This class/stream is not selected for the examination. <a href='/app/academics/marks'>Back</a>",403)
     if not _teacher_class_authorized(cur, request, sid, class_id, subject_id):
         con.close(); return HTMLResponse("You are not allocated to this class and subject.",403)
     existing_lock_row = _academic_lock(cur,sid,exam_id,class_id,subject_id)
