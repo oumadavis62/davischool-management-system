@@ -5535,7 +5535,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     body=(
       "<div class='page'><h1>Marks Entry</h1><div class='muted'>Enter marks and DaviSchool will apply the subject's configured grade and point rules automatically.</div>"
       "<div class='card section'><form method='get' data-no-history-filter='1' class='marks-entry-filter-form' action='/app/academics/marks" + tab_q + "' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>"
-      "<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select>"
+      "<select name='exam_id' class='field' onchange='this.form.requestSubmit()'><option value=''>Select examination</option>"+eopts+"</select>"
       "<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select>"
       "<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select>"
       "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><button class='btn' type='submit'>Load Students</button></form>"
