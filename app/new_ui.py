@@ -6061,6 +6061,14 @@ async def request_marks_correction(request: Request, exam_id:int=Form(0), class_
         return HTMLResponse("Only teachers can submit a correction request.",403)
     if not _require_permission(request, sid, "marks.edit"):
         return HTMLResponse("You do not have permission to request mark corrections.",403)
+    con=_db();cur=con.cursor()
+    try:
+        if not exam_id or not class_id or not subject_id or not _exam_class_is_allowed(cur,sid,exam_id,class_id):
+            con.close()
+            return HTMLResponse("This class/stream is not selected for the examination. <a href='/app/academics/marks'>Back</a>",403)
+    finally:
+        try: con.close()
+        except Exception: pass
     teacher_id=request.session.get("teacher_id")
     if not teacher_id:
         return HTMLResponse("Your teacher account is not linked to a teacher record. Please contact the school administrator.",403)
