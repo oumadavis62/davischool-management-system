@@ -5307,9 +5307,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     exam_class_scope={}
     try:
+        _ensure_exam_class_participation_table(cur)
+        scope_rows=cur.execute("SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",(sid,)).fetchall()
+        scoped_classes={}
+        for scope_row in scope_rows:
+            scoped_classes.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
         for exam_row in exams:
-            scope_ids=_exam_participating_class_ids(cur,sid,int(exam_row["id"]))
-            exam_class_scope[int(exam_row["id"])]=None if scope_ids is None else set(scope_ids)
+            exam_key=int(exam_row["id"])
+            exam_class_scope[exam_key]=set(scoped_classes[exam_key]) if exam_key in scoped_classes else None
         participating_ids=exam_class_scope.get(eid) if eid else None
         if participating_ids is not None:
             classes=[c for c in classes if int(c["id"]) in participating_ids]
