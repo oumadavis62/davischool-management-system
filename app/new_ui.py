@@ -6064,7 +6064,6 @@ async def request_marks_correction(request: Request, exam_id:int=Form(0), class_
     con=_db();cur=con.cursor()
     try:
         if not exam_id or not class_id or not subject_id or not _exam_class_is_allowed(cur,sid,exam_id,class_id):
-            con.close()
             return HTMLResponse("This class/stream is not selected for the examination. <a href='/app/academics/marks'>Back</a>",403)
     finally:
         try: con.close()
