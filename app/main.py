@@ -2392,9 +2392,9 @@ def finance_fee_payment(request:Request,student_id:int=Form(...),amount:float=Fo
 
 # === ADDITIVE WORKING MODULE WINDOWS ===
 def _role_permission(request, permission):
-    """Check a school role permission; missing rules remain enabled for compatibility."""
+    """School Admin and Registrar share school-level permissions; Super Admin stays platform-level."""
     role=request.session.get("role")
-    if role in ("school_admin","super_admin"):
+    if role in ("school_admin","registrar","super_admin"):
         return True
     school_id=request.session.get("school_id")
     if not school_id or not role:
