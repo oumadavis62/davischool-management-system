@@ -1107,9 +1107,12 @@ def _permission_enabled(cur, school_id, role, permission):
     return True if row is None else bool(int(row["enabled"] or 0))
 
 def _require_permission(request, school_id, permission):
-    """Enforce configured permissions for every school role, including School Admin/Registrar."""
+    """School Admin and Registrar share full school-level access; Super Admin remains platform-level."""
     role=str(request.session.get("role",""))
-    if role == "super_admin":
+    # Registrar is a separate account identity, but has the same school-side
+    # capabilities as School Admin. This bypass applies only to school-module
+    # permissions and does not grant any Super Admin/platform-level routes.
+    if role in ("super_admin", "school_admin", "registrar"):
         return True
     cache=getattr(request.state,"davischool_permission_cache",None)
     if cache is None:
@@ -9824,9 +9827,11 @@ def accounting_expense(request: Request,category:str=Form(...),description:str=F
 # settings, student records, or the existing MarkSheet workflow.
 # ---------------------------------------------------------------------------
 def _msa_require_school_admin(request, school_id):
+    # Class MarkSheet Analysis is a school-side admin feature. Registrar has
+    # the same school-level access as School Admin, but not Super Admin access.
     return (
         int(school_id or 0) > 0
-        and str(request.session.get("role", "")) == "school_admin"
+        and str(request.session.get("role", "")) in ("school_admin", "registrar")
         and int(request.session.get("school_id") or 0) == int(school_id)
     )
 
