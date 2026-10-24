@@ -7506,14 +7506,78 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         "<option value='%s' %s>%s%s</option>" % (int(c["id"]), "selected" if history_class_value == int(c["id"]) else "", escape(str(c["name"] or "")), (" — " + escape(str(c["stream"] or ""))) if c["stream"] else "")
         for c in classes
     )
-    history_rows = "".join(
-        "<tr><td>%s</td><td>%s%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (
-            escape(str(h["cycle_year"] or "")), escape(str(h["class_name"] or "Archived class")),
-            (" — " + escape(str(h["class_stream"] or ""))) if h["class_stream"] else "",
-            escape(str(h["subject_name"] or "")), escape(str(h["teacher_name"] or "")),
-            escape(str(h["reason"] or "")), escape(str(h["recorded_at"] or "").replace("T", " ").split(" ")[0])
-        ) for h in historical_allocations
-    )
+    # A class is terminal only when no next numeric level exists for the same
+    # class-name pattern and stream. Continuing-class history intentionally
+    # omits reason/timestamp; final-class history keeps reason but omits timestamp.
+    class_by_id = {int(c["id"]): c for c in classes}
+    class_next_level_ids = set()
+    for class_row in classes:
+        class_id = int(class_row["id"])
+        class_name = str(class_row["name"] or "").strip()
+        class_stream = str(class_row["stream"] or "").strip().casefold()
+        class_number_match = re.search(r"\\d+", class_name)
+        if not class_number_match:
+            continue
+        class_number = int(class_number_match.group())
+        class_prefix = re.sub(r"\\d+", "#", class_name).casefold().strip()
+        for candidate in classes:
+            if int(candidate["id"]) == class_id:
+                continue
+            candidate_name = str(candidate["name"] or "").strip()
+            candidate_number = re.search(r"\\d+", candidate_name)
+            if (
+                str(candidate["stream"] or "").strip().casefold() == class_stream
+                and re.sub(r"\\d+", "#", candidate_name).casefold().strip() == class_prefix
+                and candidate_number
+                and int(candidate_number.group()) == class_number + 1
+            ):
+                class_next_level_ids.add(class_id)
+                break
+
+    continuing_history_rows = []
+    final_history_rows = []
+    for h in historical_allocations:
+        history_class_id_value = int(h["class_id"] or 0)
+        base_cells = (
+            "<td>%s</td><td>%s%s</td><td>%s</td><td>%s</td>" % (
+                escape(str(h["cycle_year"] or "")),
+                escape(str(h["class_name"] or "Archived class")),
+                (" — " + escape(str(h["class_stream"] or ""))) if h["class_stream"] else "",
+                escape(str(h["subject_name"] or "")),
+                escape(str(h["teacher_name"] or "")),
+            )
+        )
+        if history_class_id_value in class_next_level_ids:
+            continuing_history_rows.append("<tr>%s</tr>" % base_cells)
+        else:
+            final_history_rows.append(
+                "<tr>%s<td>%s</td></tr>" % (
+                    base_cells, escape(str(h["reason"] or ""))
+                )
+            )
+
+    history_filter_applied = ("history_year" in request.query_params or "history_class_id" in request.query_params)
+    if history_filter_applied:
+        history_tables = []
+        if continuing_history_rows:
+            history_tables.append(
+                "<h3>Continuing Classes</h3><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'>"
+                "<table class='teacher-allocation-table'><thead><tr><th>Year</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th></tr></thead><tbody>%s</tbody></table></div>"
+                % "".join(continuing_history_rows)
+            )
+        if final_history_rows:
+            history_tables.append(
+                "<h3>Final Classes</h3><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'>"
+                "<table class='teacher-allocation-table'><thead><tr><th>Year</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Reason</th></tr></thead><tbody>%s</tbody></table></div>"
+                % "".join(final_history_rows)
+            )
+        history_table_html = "".join(history_tables) or (
+            "<div class='muted'>No historical allocations match these filters.</div>"
+        )
+    else:
+        history_table_html = (
+            "<div class='muted teacher-allocation-history-prompt'>Select a year and/or class, then click Apply Filter to display historical allocations.</div>"
+        )
     history_filter_applied = ("history_year" in request.query_params or "history_class_id" in request.query_params)
     history_table_html = (
         "<div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Year</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Reason</th><th>Recorded At</th></tr></thead><tbody>%s</tbody></table></div>"
