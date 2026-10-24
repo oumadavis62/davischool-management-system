@@ -8327,13 +8327,17 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
         for c in classes if int(c["id"]) != cid
     )
-    rows = "".join(
-        f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
-        f"<td>{escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</td>"
-        f"<td>{('<b>Eligible cohort</b>' if (int(st['id']) in cohort_ids if snapshot else True) else '<span style=\'color:#9a3412\'>New arrival / outside this cycle</span>')}</td>"
-        f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
-        for st in students
-    )
+    row_parts = []
+    for st in students:
+        is_eligible = int(st["id"]) in cohort_ids if snapshot else True
+        cohort_label = "<b>Eligible cohort</b>" if is_eligible else "<span style='color:#9a3412'>New arrival / outside this cycle</span>"
+        row_parts.append(
+            f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
+            f"<td>{escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</td>"
+            f"<td>{cohort_label}</td>"
+            f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
+        )
+    rows = "".join(row_parts)
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
     bulk_action = (
         f"<div class='card section'><h2>Promote the eligible cohort</h2><p>Promote {eligible_count} eligible students from this class to <b>{next_class_label}</b>. Students who arrived from another class during this cycle are excluded automatically.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote the {eligible_count} eligible cohort students to the next class for {cycle}? Students outside this cohort will not be moved.');\">Promote Eligible Cohort to Next Class</button></div>"
