@@ -4710,7 +4710,22 @@ def _ensure_student_history_table(cur):
     # school-wide active academic year remains unchanged while classes are
     # processed individually.
     for column in ("promotion_year", "from_academic_year", "to_academic_year"):
-        cur.execute("ALTER TABLE student_class_history ADD COLUMN IF NOT EXISTS %s INTEGER" % column)
+        try:
+            cur.execute("SAVEPOINT davischool_promotion_year_column")
+            cur.execute("ALTER TABLE student_class_history ADD COLUMN %s INTEGER" % column)
+            cur.execute("RELEASE SAVEPOINT davischool_promotion_year_column")
+        except Exception as exc:
+            try:
+                cur.execute("ROLLBACK TO SAVEPOINT davischool_promotion_year_column")
+                cur.execute("RELEASE SAVEPOINT davischool_promotion_year_column")
+            except Exception:
+                try:
+                    cur.connection.rollback()
+                except Exception:
+                    pass
+            message = str(exc).lower()
+            if "already exists" not in message and "duplicate column" not in message:
+                raise
 
 def _ensure_student_parent_name_column(cur, con):
     """Add the optional parent-name field safely on older existing databases."""
