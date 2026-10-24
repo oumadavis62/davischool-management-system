@@ -6479,7 +6479,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                              < moved_into_class.to_academic_year
                    ))
                    ) ORDER BY s.name""",
-            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0),class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,eid)).fetchall()
+            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0),class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,exam_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         # Load grading rules once per save, not once per student. Re-querying
@@ -6694,7 +6694,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                          AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                              < moved_into_class.to_academic_year
                    ))
-                   ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,eid)).fetchall()
+                   ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,exam_id)).fetchall()
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
