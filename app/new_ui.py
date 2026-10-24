@@ -7571,11 +7571,27 @@ def teacher_allocations_delete(request: Request,allocation_id:int):
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.edit"):return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
-    allocation=cur.execute("SELECT id FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid)).fetchone()
+    _ensure_teacher_assignment_history_tables(cur)
+    allocation=cur.execute("""SELECT a.id,a.teacher_id,a.class_id,a.subject_id,t.name teacher_name,
+                                     s.name subject_name
+                              FROM teacher_allocations a
+                              LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+                              LEFT JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+                              WHERE a.id=? AND a.school_id=?""",(allocation_id,sid)).fetchone()
     if not allocation:
         con.close()
         return HTMLResponse("Teacher allocation not found. <a href='/app/academics/allocations'>Back</a>",404)
     try:
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute(
+            """INSERT INTO teacher_allocation_history
+               (school_id,cycle_year,class_id,teacher_id,teacher_name,subject_id,subject_name,recorded_at,reason)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid, datetime.now(ZoneInfo("Africa/Nairobi")).year, int(allocation["class_id"]),
+             int(allocation["teacher_id"]), str(allocation["teacher_name"] or ""),
+             int(allocation["subject_id"]), str(allocation["subject_name"] or ""), now,
+             "Teacher allocation manually removed")
+        )
         cur.execute("DELETE FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid))
         if not cur.rowcount:
             con.rollback();con.close()
