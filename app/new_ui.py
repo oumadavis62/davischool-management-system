@@ -7342,6 +7342,59 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
     _ensure_teacher_assignment_history_tables(cur)
+    # Reconcile legacy graduation records: older code paths may have left the
+    # final class's allocations active instead of archiving them at graduation.
+    # Only archive when that class has graduates and no current non-graduated
+    # learners, so a class reused for an active cohort keeps its allocations.
+    try:
+        _ensure_student_promotion_cohort_tables(cur)
+        completed_classes = cur.execute(
+            """SELECT g.final_class_id class_id, MAX(g.graduation_year) cycle_year
+               FROM student_graduations g
+               WHERE g.school_id=? AND g.final_class_id IS NOT NULL
+               GROUP BY g.final_class_id
+               ORDER BY MAX(g.graduation_year) DESC""",
+            (sid,)
+        ).fetchall()
+        reconciled = False
+        for completed in completed_classes:
+            completed_class_id = int(completed["class_id"] or 0)
+            if not completed_class_id:
+                continue
+            remaining = cur.execute(
+                """SELECT 1 FROM students s
+                   WHERE s.school_id=? AND s.class_id=?
+                     AND lower(coalesce(s.status,'active')) NOT IN ('graduated','deleted')
+                     AND NOT EXISTS (
+                         SELECT 1 FROM student_graduations sg
+                         WHERE sg.school_id=s.school_id AND sg.student_id=s.id
+                     )
+                   LIMIT 1""",
+                (sid, completed_class_id)
+            ).fetchone()
+            if remaining:
+                continue
+            has_active_staffing = cur.execute(
+                """SELECT 1 FROM teacher_allocations WHERE school_id=? AND class_id=?
+                   UNION ALL
+                   SELECT 1 FROM class_teacher_assignments WHERE school_id=? AND class_id=?
+                   LIMIT 1""",
+                (sid, completed_class_id, sid, completed_class_id)
+            ).fetchone()
+            if not has_active_staffing:
+                continue
+            _archive_class_staff_assignments(
+                cur, sid, completed_class_id, int(completed["cycle_year"] or datetime.now(ZoneInfo("Africa/Nairobi")).year),
+                datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
+                "Class cohort graduated (historical reconciliation)"
+            )
+            reconciled = True
+        if reconciled:
+            con.commit()
+    except Exception as history_reconcile_error:
+        # Keep the allocations page usable if an older database has a partial
+        # promotion schema; do not fail the whole page because of reconciliation.
+        print("DAVISCHOOL TEACHER ALLOCATION HISTORY RECONCILIATION WARNING: %r" % (history_reconcile_error,), flush=True)
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
