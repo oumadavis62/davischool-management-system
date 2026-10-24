@@ -1878,6 +1878,125 @@ def _ensure_class_teacher_assignments_table(cur):
         UNIQUE(school_id,class_id)
     )""")
 
+def _ensure_teacher_assignment_history_tables(cur):
+    """Durable snapshots for class and subject teacher assignments that are no longer active."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS teacher_allocation_history(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        cycle_year INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        teacher_name TEXT,
+        subject_id INTEGER NOT NULL,
+        subject_name TEXT,
+        recorded_at TEXT NOT NULL,
+        reason TEXT NOT NULL
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS class_teacher_assignment_history(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        cycle_year INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        teacher_name TEXT,
+        assigned_at TEXT,
+        ended_at TEXT NOT NULL,
+        reason TEXT NOT NULL
+    )""")
+
+def _archive_class_staff_assignments(cur, school_id, class_id, cycle_year, now, reason):
+    """Archive and deactivate a class's current allocations and class teacher without losing names."""
+    _ensure_teacher_allocations_table(cur)
+    _ensure_class_teacher_assignments_table(cur)
+    _ensure_teacher_assignment_history_tables(cur)
+    allocations = cur.execute(
+        """SELECT a.teacher_id,a.subject_id,t.name teacher_name,s.name subject_name
+           FROM teacher_allocations a
+           LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+           LEFT JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+           WHERE a.school_id=? AND a.class_id=?""", (school_id, class_id)
+    ).fetchall()
+    for a in allocations:
+        cur.execute(
+            """INSERT INTO teacher_allocation_history
+               (school_id,cycle_year,class_id,teacher_id,teacher_name,subject_id,subject_name,recorded_at,reason)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (school_id, cycle_year, class_id, int(a["teacher_id"]), str(a["teacher_name"] or ""),
+             int(a["subject_id"]), str(a["subject_name"] or ""), now, reason)
+        )
+    cur.execute("DELETE FROM teacher_allocations WHERE school_id=? AND class_id=?", (school_id, class_id))
+    assignment = cur.execute(
+        """SELECT a.teacher_id,a.assigned_at,t.name teacher_name
+           FROM class_teacher_assignments a
+           LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+           WHERE a.school_id=? AND a.class_id=? ORDER BY a.id DESC LIMIT 1""",
+        (school_id, class_id)
+    ).fetchone()
+    if assignment:
+        cur.execute(
+            """INSERT INTO class_teacher_assignment_history
+               (school_id,cycle_year,class_id,teacher_id,teacher_name,assigned_at,ended_at,reason)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (school_id, cycle_year, class_id, int(assignment["teacher_id"]),
+             str(assignment["teacher_name"] or ""), assignment["assigned_at"], now, reason)
+        )
+        cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND class_id=?", (school_id, class_id))
+    return allocations, assignment
+
+def _move_class_staff_assignments(cur, school_id, from_class_id, to_class_id, cycle_year, now):
+    """Move source class assignments with a fully promoted cohort, retaining historical snapshots."""
+    allocations, assignment = _archive_class_staff_assignments(
+        cur, school_id, from_class_id, cycle_year, now, "Cohort promoted to next class"
+    )
+    _ensure_teacher_allocations_table(cur)
+    for a in allocations:
+        cur.execute(
+            """INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id)
+               VALUES(?,?,?,?) ON CONFLICT(school_id,teacher_id,class_id,subject_id) DO NOTHING""",
+            (school_id, int(a["teacher_id"]), to_class_id, int(a["subject_id"]))
+        )
+    # A single class can have only one class teacher. When promoting in
+    # descending class order the destination cohort has already moved onward,
+    # so its old class-teacher slot is normally vacant. Never overwrite an
+    # assignment if the destination still has students.
+    destination_has_students = cur.execute(
+        """SELECT 1 FROM students WHERE school_id=? AND class_id=?
+           AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
+        (school_id, to_class_id)
+    ).fetchone()
+    if assignment and not destination_has_students:
+        _ensure_class_teacher_assignments_table(cur)
+        existing = cur.execute(
+            "SELECT teacher_id,assigned_at FROM class_teacher_assignments WHERE school_id=? AND class_id=?",
+            (school_id, to_class_id)
+        ).fetchone()
+        if existing:
+            old = cur.execute(
+                """SELECT a.teacher_id,a.assigned_at,t.name teacher_name
+                   FROM class_teacher_assignments a LEFT JOIN teachers t
+                     ON t.id=a.teacher_id AND t.school_id=a.school_id
+                   WHERE a.school_id=? AND a.class_id=? LIMIT 1""",
+                (school_id, to_class_id)
+            ).fetchone()
+            if old:
+                cur.execute(
+                    """INSERT INTO class_teacher_assignment_history
+                       (school_id,cycle_year,class_id,teacher_id,teacher_name,assigned_at,ended_at,reason)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (school_id, cycle_year, to_class_id, int(old["teacher_id"]),
+                     str(old["teacher_name"] or ""), old["assigned_at"], now,
+                     "Destination cohort advanced during promotion")
+                )
+                cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND class_id=?",
+                            (school_id, to_class_id))
+        cur.execute(
+            """INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
+               VALUES(?,?,?,?) ON CONFLICT(school_id,class_id) DO UPDATE SET
+               teacher_id=excluded.teacher_id,assigned_at=excluded.assigned_at""",
+            (school_id, to_class_id, int(assignment["teacher_id"]), now)
+        )
+    return len(allocations), bool(assignment)
+
 def _report_signatories(cur, school_id, class_id):
     # Assignment storage is optional for compatibility with older databases.
     # If the assignment table cannot be created/read on a legacy database,
@@ -8588,7 +8707,15 @@ def student_graduation_records_page(
     if loaded == "1":
         sql = """SELECT g.student_id,s.name,s.admission_no,s.gender,s.parent_name,s.parent_phone,s.status,
                         g.graduation_year,g.graduated_at,g.graduated_by,sch.school_type school_level,
-                        c.id final_class_id,c.name final_class,c.stream final_stream
+                        c.id final_class_id,c.name final_class,c.stream final_stream,
+                        COALESCE((SELECT h.teacher_name FROM class_teacher_assignment_history h
+                                  WHERE h.school_id=g.school_id AND h.class_id=g.final_class_id
+                                    AND h.cycle_year=g.graduation_year
+                                  ORDER BY h.id DESC LIMIT 1),
+                                 (SELECT t.name FROM class_teacher_assignments a
+                                  JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+                                  WHERE a.school_id=g.school_id AND a.class_id=g.final_class_id
+                                  LIMIT 1)) class_teacher_name
                  FROM student_graduations g
                  JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
                  JOIN schools sch ON sch.id=g.school_id
@@ -8622,6 +8749,8 @@ def student_graduation_records_page(
         f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
         f"<td>{escape(str(g['school_level'] or ''))}</td>"
         f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
+        f"<td>{escape(str(g['class_teacher_name'] or 'Not recorded'))}</td>"
+        f"<td>{escape(str(g['class_teacher_name'] or 'Not recorded'))}</td>"
         f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td></tr>"
         for i, g in enumerate(records)
     )
@@ -8631,8 +8760,8 @@ def student_graduation_records_page(
     hidden_tab = f"<input type='hidden' name='ds_tab' value='{escape(tab_id)}'>" if tab_id else ""
     filter_summary = f"<p class='muted'>Loaded {len(records)} graduation record(s) matching the selected filters.</p>" if loaded == "1" else ""
     if loaded == "1":
-        empty_row = "<tr><td colspan='7'>No graduation records match the selected filters.</td></tr>"
-        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Level</th><th>Final Class / Stream</th><th>Graduated At</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
+        empty_row = "<tr><td colspan='8'>No graduation records match the selected filters.</td></tr>"
+        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Level</th><th>Final Class / Stream</th><th>Class Teacher</th><th>Graduated At</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
     else:
         table_html = "<div class='card section muted'>Choose one or more filters, then select <b>Load Records</b> to display matching graduation records.</div>"
     tab_query = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
@@ -8649,13 +8778,14 @@ def student_graduation_records_page(
             escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
             escape(str(g["school_level"] or "")),
             escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
+            escape(str(g["class_teacher_name"] or "Not recorded")),
             escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
             escape(str(g["parent_phone"] or "")),
             escape(str(g["graduation_year"] or "")),
             escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0])
         ) for g in records
     )
-    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='10'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
+    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Class Teacher</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='11'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
     graduation_print_script = r"""<script>
 function printGraduationRegister(){
  var source=document.getElementById('graduation-print-source');
@@ -8874,6 +9004,8 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             con.close()
             return HTMLResponse("This class has a matching next class. Use promotion instead of graduation.", 400)
         _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
+        # Preserve the final class's teacher identities before deactivating its assignments.
+        _archive_class_staff_assignments(cur, sid, from_class_id, cycle, now, "Class cohort graduated")
         eligible = cur.execute(
             """SELECT s.id FROM students s JOIN student_promotion_cohort_members m
                  ON m.school_id=s.school_id AND m.student_id=s.id
@@ -9104,6 +9236,17 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
                f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
         changed += 1
+    # Only move teacher allocations when this was a whole-class promotion and
+    # every non-graduated student has left the source class. Individual transfers
+    # must not change staffing for the rest of the class.
+    if bulk_value.isdigit() and changed:
+        remaining = cur.execute(
+            """SELECT 1 FROM students WHERE school_id=? AND class_id=?
+               AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
+            (sid, from_class_id)
+        ).fetchone()
+        if not remaining:
+            _move_class_staff_assignments(cur, sid, from_class_id, int(bulk_value), cycle, now)
     con.commit()
     con.close()
     return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&changed={changed}", 303)
