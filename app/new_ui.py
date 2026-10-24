@@ -6105,14 +6105,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                         AND cohort_eligible.class_id=? AND cohort_eligible.student_id=s.id
                     )
                   ) AND NOT EXISTS (
-                    SELECT 1 FROM student_class_history moved_into_class
-                    WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
-                      AND moved_into_class.to_class_id=?
+                    SELECT 1 FROM student_class_history moved_out_of_class
+                    WHERE moved_out_of_class.school_id=s.school_id AND moved_out_of_class.student_id=s.id
+                      AND moved_out_of_class.from_class_id=?
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
-                          COALESCE(NULLIF(moved_into_class.to_academic_year,0),
-                                   NULLIF(moved_into_class.promotion_year,0)+1,
-                                   CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                          COALESCE(NULLIF(moved_out_of_class.to_academic_year,0),
+                                   NULLIF(moved_out_of_class.promotion_year,0)+1,
+                                   CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER))
                   ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
@@ -6156,14 +6156,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                         AND cohort_eligible.class_id=? AND cohort_eligible.student_id=s.id
                     )
                   ) AND NOT EXISTS (
-                    SELECT 1 FROM student_class_history moved_into_class
-                    WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
-                      AND moved_into_class.to_class_id=?
+                    SELECT 1 FROM student_class_history moved_out_of_class
+                    WHERE moved_out_of_class.school_id=s.school_id AND moved_out_of_class.student_id=s.id
+                      AND moved_out_of_class.from_class_id=?
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
-                          COALESCE(NULLIF(moved_into_class.to_academic_year,0),
-                                   NULLIF(moved_into_class.promotion_year,0)+1,
-                                   CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                          COALESCE(NULLIF(moved_out_of_class.to_academic_year,0),
+                                   NULLIF(moved_out_of_class.promotion_year,0)+1,
+                                   CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER))
                   ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
@@ -6436,14 +6436,14 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                   AND historical_draft.subject_id=? AND historical_draft.teacher_id=?
               )
             ) AND NOT EXISTS (
-              SELECT 1 FROM student_class_history moved_into_class
-              WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
-                AND moved_into_class.to_class_id=?
+              SELECT 1 FROM student_class_history moved_out_of_class
+              WHERE moved_out_of_class.school_id=s.school_id AND moved_out_of_class.student_id=s.id
+                AND moved_out_of_class.from_class_id=?
                 AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
-                          COALESCE(NULLIF(moved_into_class.to_academic_year,0),
-                                   NULLIF(moved_into_class.promotion_year,0)+1,
-                                   CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                          COALESCE(NULLIF(moved_out_of_class.to_academic_year,0),
+                                   NULLIF(moved_out_of_class.promotion_year,0)+1,
+                                   CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER))
             ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
@@ -6645,14 +6645,14 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
               AND historical.exam_id=? AND historical.class_id=? AND historical.subject_id=?
           )
         ) AND NOT EXISTS (
-          SELECT 1 FROM student_class_history moved_into_class
-          WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
-            AND moved_into_class.to_class_id=?
+          SELECT 1 FROM student_class_history moved_out_of_class
+          WHERE moved_out_of_class.school_id=s.school_id AND moved_out_of_class.student_id=s.id
+            AND moved_out_of_class.from_class_id=?
             AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
-                          COALESCE(NULLIF(moved_into_class.to_academic_year,0),
-                                   NULLIF(moved_into_class.promotion_year,0)+1,
-                                   CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                          COALESCE(NULLIF(moved_out_of_class.to_academic_year,0),
+                                   NULLIF(moved_out_of_class.promotion_year,0)+1,
+                                   CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER))
         ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
