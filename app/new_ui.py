@@ -7420,16 +7420,9 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         promoted_candidates = []
         for source in promoted_sources:
             source_id = int(source["id"])
-            if cur.execute(
-                """SELECT 1 FROM students
-                   WHERE school_id=? AND class_id=?
-                     AND lower(trim(coalesce(status,'active'))) NOT IN ('graduated','deleted','promoted','transferred','transferred out','left','withdrawn','inactive','archived','completed')
-                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
-                                     WHERE g.school_id=students.school_id AND g.student_id=students.id)
-                   LIMIT 1""",
-                (sid, source_id)
-            ).fetchone():
-                continue
+            # Class IDs are reused across cohorts. Do not decide whether a
+            # previous cohort was promoted by checking current occupancy here;
+            # a new cohort may already be sitting in this source class.
             # Graduated final classes are archived only; they must never feed
             # staffing into another active class.
             if cur.execute(
@@ -7455,6 +7448,37 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             ).fetchone()
             if not destination:
                 continue
+            # Repair legacy bulk promotions that happened before staffing was
+            # moved automatically. If the source still has current students,
+            # only treat the old history as a cohort promotion when multiple
+            # students moved from this class to the same destination in the
+            # same recorded operation. This avoids interpreting a single-student
+            # transfer as a whole-class promotion.
+            source_has_current_students = cur.execute(
+                """SELECT 1 FROM students
+                   WHERE school_id=? AND class_id=?
+                     AND lower(trim(coalesce(status,'active'))) NOT IN
+                         ('graduated','deleted','promoted','transferred','transferred out','left','withdrawn','inactive','archived','completed')
+                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                     WHERE g.school_id=students.school_id AND g.student_id=students.id)
+                   LIMIT 1""",
+                (sid, source_id)
+            ).fetchone()
+            if source_has_current_students:
+                latest_operation = cur.execute(
+                    """SELECT MAX(changed_at) changed_at FROM student_class_history
+                       WHERE school_id=? AND from_class_id=? AND to_class_id=?""",
+                    (sid, source_id, int(destination["id"]))
+                ).fetchone()
+                operation_time = str(latest_operation["changed_at"] or "") if latest_operation else ""
+                operation_size = cur.execute(
+                    """SELECT COUNT(DISTINCT student_id) n FROM student_class_history
+                       WHERE school_id=? AND from_class_id=? AND to_class_id=?
+                         AND changed_at=? AND coalesce(reason,'')='Promotion / transfer'""",
+                    (sid, source_id, int(destination["id"]), operation_time)
+                ).fetchone()
+                if int(operation_size["n"] or 0) < 2:
+                    continue
             has_staffing = cur.execute(
                 """SELECT 1 FROM teacher_allocations WHERE school_id=? AND class_id=?
                    UNION ALL SELECT 1 FROM class_teacher_assignments
@@ -9313,15 +9337,10 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                 (sid, student_id, from_class_id, None, now, request.session.get("email", ""), "Graduated")
             )
             _audit(cur, sid, request, "STUDENT_GRADUATED", f"Graduated student {student_id} from class {from_class_id} in {cycle}")
-        # Deactivate this class's active staffing only once no active learners
-        # remain; late-added students must not lose their current teachers.
-        remaining = cur.execute(
-            """SELECT 1 FROM students WHERE school_id=? AND class_id=?
-               AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
-            (sid, from_class_id)
-        ).fetchone()
-        if not remaining:
-            _archive_class_staff_assignments(cur, sid, from_class_id, cycle, now, "Class cohort graduated")
+        # Staffing belongs to the cohort being closed, not to whichever
+        # students happen to occupy this reusable class row afterwards. Archive
+        # the graduating cohort's allocations in the same transaction.
+        _archive_class_staff_assignments(cur, sid, from_class_id, cycle, now, "Class cohort graduated")
         con.commit()
         con.close()
         return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&graduated={len(eligible)}", 303)
@@ -9524,17 +9543,11 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
                f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
         changed += 1
-    # Only move teacher allocations when this was a whole-class promotion and
-    # every non-graduated student has left the source class. Individual transfers
-    # must not change staffing for the rest of the class.
+    # A bulk promotion moves the cohort's staffing even if new students have
+    # already been added to the reusable source class row. Individual transfers
+    # intentionally leave staffing untouched.
     if bulk_value.isdigit() and changed:
-        remaining = cur.execute(
-            """SELECT 1 FROM students WHERE school_id=? AND class_id=?
-               AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
-            (sid, from_class_id)
-        ).fetchone()
-        if not remaining:
-            _move_class_staff_assignments(cur, sid, from_class_id, int(bulk_value), cycle, now)
+        _move_class_staff_assignments(cur, sid, from_class_id, int(bulk_value), cycle, now)
     con.commit()
     con.close()
     return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&changed={changed}", 303)
