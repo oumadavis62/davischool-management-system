@@ -9189,7 +9189,6 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table>
 {"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
-<div class='card section'><h2>Promotion History</h2><p class='muted'>Each completed class-cohort promotion is recorded with its selected promotion year, the academic-year transition, date, operator, and number of students moved. This register does not change the school's active academic year.</p><div style='overflow-x:auto;-webkit-overflow-scrolling:touch'><table style='min-width:850px'><thead><tr><th>Promotion Year</th><th>From Class</th><th>To Class</th><th>Academic Year Transition</th><th>Date</th><th>Recorded By</th><th>Students</th></tr></thead><tbody>{promotion_history_rows or "<tr><td colspan='7'>No class-cohort promotions recorded yet.</td></tr>"}</tbody></table></div></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 
 </div>
