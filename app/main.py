@@ -1149,7 +1149,7 @@ body{margin:0;font-family:Arial;background:#f8fafc;color:#172033}.wrap{max-width
 <div style='display:flex;gap:10px;justify-content:flex-end;margin-top:20px'><a href='/schools/manage'>Cancel</a><button type='submit'>💾 Save Changes</button></div></form></div></div></body></html>"""
     def _safe(value):
         return str(value or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
-    page=page.replace("__SID__",str(sid)).replace("__NAME__",_safe(school["name"])).replace("__EMAIL__",_safe(school["email"])).replace("__LOCATION__",_safe(school["location"])).replace("__PHONE__",_safe(school["phone"])).replace("__PRINCIPAL__",_safe(school["principal"] or full_name)).replace("__PRIMARY__",primary_selected).replace("__SENIOR__",junior_selected).replace("__SECONDARY__",secondary_selected).replace("__PJS__",pjs_selected).replace("__TERTIARY__",tertiary_selected).replace("__UNIVERSITY__",university_selected)
+    page=page.replace("__SID__",str(sid)).replace("__NAME__",_safe(school["name"])).replace("__EMAIL__",_safe(school["email"])).replace("__LOCATION__",_safe(school["location"])).replace("__PHONE__",_safe(school["phone"])).replace("__PRINCIPAL__",_safe(school["principal"] or full_name)).replace("__PRIMARY__",primary_selected).replace("__SENIOR__",senior_selected).replace("__SECONDARY__",secondary_selected).replace("__PJS__",pjs_selected).replace("__TERTIARY__",tertiary_selected).replace("__UNIVERSITY__",university_selected)
     return HTMLResponse(page)
 
 @app.post("/schools/edit/{sid}")
