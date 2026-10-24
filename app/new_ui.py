@@ -1944,51 +1944,27 @@ def _archive_class_staff_assignments(cur, school_id, class_id, cycle_year, now, 
     return allocations, assignment
 
 def _move_class_staff_assignments(cur, school_id, from_class_id, to_class_id, cycle_year, now):
-    """Move source class assignments with a fully promoted cohort, retaining historical snapshots."""
+    """Archive both class snapshots, then carry the promoted class's staffing into its new class."""
+    _ensure_teacher_allocations_table(cur)
+    _ensure_class_teacher_assignments_table(cur)
+    _ensure_teacher_assignment_history_tables(cur)
+    # Each class/stream has one active staffing set. Replace the destination's
+    # previous set instead of merging it with the source set, which created
+    # duplicate subjects and stale teachers after promotion.
+    _archive_class_staff_assignments(
+        cur, school_id, to_class_id, cycle_year, now,
+        "Destination class staffing replaced by promoted cohort"
+    )
     allocations, assignment = _archive_class_staff_assignments(
         cur, school_id, from_class_id, cycle_year, now, "Cohort promoted to next class"
     )
-    _ensure_teacher_allocations_table(cur)
     for a in allocations:
         cur.execute(
             """INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id)
                VALUES(?,?,?,?) ON CONFLICT(school_id,teacher_id,class_id,subject_id) DO NOTHING""",
             (school_id, int(a["teacher_id"]), to_class_id, int(a["subject_id"]))
         )
-    # A single class can have only one class teacher. When promoting in
-    # descending class order the destination cohort has already moved onward,
-    # so its old class-teacher slot is normally vacant. Never overwrite an
-    # assignment if the destination still has students.
-    destination_has_students = cur.execute(
-        """SELECT 1 FROM students WHERE school_id=? AND class_id=?
-           AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
-        (school_id, to_class_id)
-    ).fetchone()
-    if assignment and not destination_has_students:
-        _ensure_class_teacher_assignments_table(cur)
-        existing = cur.execute(
-            "SELECT teacher_id,assigned_at FROM class_teacher_assignments WHERE school_id=? AND class_id=?",
-            (school_id, to_class_id)
-        ).fetchone()
-        if existing:
-            old = cur.execute(
-                """SELECT a.teacher_id,a.assigned_at,t.name teacher_name
-                   FROM class_teacher_assignments a LEFT JOIN teachers t
-                     ON t.id=a.teacher_id AND t.school_id=a.school_id
-                   WHERE a.school_id=? AND a.class_id=? LIMIT 1""",
-                (school_id, to_class_id)
-            ).fetchone()
-            if old:
-                cur.execute(
-                    """INSERT INTO class_teacher_assignment_history
-                       (school_id,cycle_year,class_id,teacher_id,teacher_name,assigned_at,ended_at,reason)
-                       VALUES(?,?,?,?,?,?,?,?)""",
-                    (school_id, cycle_year, to_class_id, int(old["teacher_id"]),
-                     str(old["teacher_name"] or ""), old["assigned_at"], now,
-                     "Destination cohort advanced during promotion")
-                )
-                cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND class_id=?",
-                            (school_id, to_class_id))
+    if assignment:
         cur.execute(
             """INSERT INTO class_teacher_assignments(school_id,class_id,teacher_id,assigned_at)
                VALUES(?,?,?,?) ON CONFLICT(school_id,class_id) DO UPDATE SET
@@ -7342,12 +7318,13 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
     _ensure_teacher_assignment_history_tables(cur)
-    # Reconcile legacy graduation records: older code paths may have left the
-    # final class's allocations active instead of archiving them at graduation.
-    # Only archive when that class has graduates and no current non-graduated
-    # learners, so a class reused for an active cohort keeps its allocations.
+    # Reconcile legacy graduation and promotion records before showing active
+    # staffing. Older versions could leave allocations attached to an emptied
+    # class, or merge old destination allocations with the promoted class.
     try:
         _ensure_student_promotion_cohort_tables(cur)
+        _ensure_student_history_table(cur)
+        _ensure_class_teacher_assignments_table(cur)
         completed_classes = cur.execute(
             """SELECT g.final_class_id class_id, MAX(g.graduation_year) cycle_year
                FROM student_graduations g
@@ -7387,6 +7364,87 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
                 cur, sid, completed_class_id, int(completed["cycle_year"] or datetime.now(ZoneInfo("Africa/Nairobi")).year),
                 datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
                 "Class cohort graduated (historical reconciliation)"
+            )
+            reconciled = True
+        # Repair completed promotions left behind by earlier versions. Process
+        # higher classes first so their own staffing reaches the next class
+        # before the lower class replaces it. Only act where class-history
+        # confirms a promotion to the matching next level and the source is empty.
+        promoted_sources = cur.execute(
+            """SELECT DISTINCT src.id,src.name,src.stream
+               FROM classes src
+               JOIN student_class_history h
+                 ON h.school_id=src.school_id AND h.from_class_id=src.id
+                AND h.to_class_id IS NOT NULL
+               WHERE src.school_id=?
+               ORDER BY src.name DESC,src.stream""",
+            (sid,)
+        ).fetchall()
+        promoted_candidates = []
+        for source in promoted_sources:
+            source_id = int(source["id"])
+            if cur.execute(
+                """SELECT 1 FROM students
+                   WHERE school_id=? AND class_id=?
+                     AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted')
+                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                     WHERE g.school_id=students.school_id AND g.student_id=students.id)
+                   LIMIT 1""",
+                (sid, source_id)
+            ).fetchone():
+                continue
+            # Graduated final classes are archived only; they must never feed
+            # staffing into another active class.
+            if cur.execute(
+                "SELECT 1 FROM student_graduations WHERE school_id=? AND final_class_id=? LIMIT 1",
+                (sid, source_id)
+            ).fetchone():
+                continue
+            source_name = str(source["name"] or "")
+            source_stream = str(source["stream"] or "")
+            source_number = re.search(r"\\d+", source_name)
+            if not source_number:
+                continue
+            source_prefix = re.sub(r"\\d+", "#", source_name).casefold().strip()
+            destinations = cur.execute(
+                """SELECT id,name,stream FROM classes
+                   WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))""",
+                (sid, source_stream)
+            ).fetchall()
+            destination = next((d for d in destinations
+                if int(d["id"]) != source_id
+                and re.sub(r"\\d+", "#", str(d["name"] or "")).casefold().strip() == source_prefix
+                and re.search(r"\\d+", str(d["name"] or ""))
+                and int(re.search(r"\\d+", str(d["name"] or "")).group()) == int(source_number.group()) + 1
+                and cur.execute(
+                    """SELECT 1 FROM student_class_history
+                       WHERE school_id=? AND from_class_id=? AND to_class_id=? LIMIT 1""",
+                    (sid, source_id, int(d["id"])
+                ).fetchone()), None)
+            if not destination:
+                continue
+            has_staffing = cur.execute(
+                """SELECT 1 FROM teacher_allocations WHERE school_id=? AND class_id=?
+                   UNION ALL SELECT 1 FROM class_teacher_assignments
+                   WHERE school_id=? AND class_id=? LIMIT 1""",
+                (sid, source_id, sid, source_id)
+            ).fetchone()
+            if not has_staffing:
+                continue
+            date_row = cur.execute(
+                """SELECT MAX(changed_at) changed_at FROM student_class_history
+                   WHERE school_id=? AND from_class_id=? AND to_class_id=?""",
+                (sid, source_id, int(destination["id"]))
+            ).fetchone()
+            cycle_match = re.search(r"20\\d{2}", str((date_row or {}).get("changed_at") or ""))
+            promoted_candidates.append((
+                int(source_number.group()), source_id, int(destination["id"]),
+                int(cycle_match.group()) if cycle_match else datetime.now(ZoneInfo("Africa/Nairobi")).year
+            ))
+        for _, source_id, destination_id, source_cycle in sorted(promoted_candidates, reverse=True):
+            _move_class_staff_assignments(
+                cur, sid, source_id, destination_id, source_cycle,
+                datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             )
             reconciled = True
         if reconciled:
