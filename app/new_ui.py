@@ -6170,6 +6170,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
                       AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
                           CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+                  ) AND NOT EXISTS (
+                    SELECT 1 FROM student_class_history moved_out_of_class
+                    WHERE moved_out_of_class.school_id=s.school_id
+                      AND moved_out_of_class.student_id=s.id
+                      AND moved_out_of_class.from_class_id=?
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >
+                          CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER)
                   ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
