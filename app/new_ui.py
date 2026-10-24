@@ -7378,7 +7378,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             remaining = cur.execute(
                 """SELECT 1 FROM students s
                    WHERE s.school_id=? AND s.class_id=?
-                     AND lower(coalesce(s.status,'active')) NOT IN ('graduated','deleted')
+                     AND lower(trim(coalesce(s.status,'active'))) NOT IN ('graduated','deleted','promoted','transferred','transferred out','left','withdrawn','inactive','archived','completed')
                      AND NOT EXISTS (
                          SELECT 1 FROM student_graduations sg
                          WHERE sg.school_id=s.school_id AND sg.student_id=s.id
@@ -7423,7 +7423,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             if cur.execute(
                 """SELECT 1 FROM students
                    WHERE school_id=? AND class_id=?
-                     AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted')
+                     AND lower(trim(coalesce(status,'active'))) NOT IN ('graduated','deleted','promoted','transferred','transferred out','left','withdrawn','inactive','archived','completed')
                      AND NOT EXISTS (SELECT 1 FROM student_graduations g
                                      WHERE g.school_id=students.school_id AND g.student_id=students.id)
                    LIMIT 1""",
