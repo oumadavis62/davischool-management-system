@@ -5650,10 +5650,45 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     con=_db();cur=con.cursor()
     try:
         all_exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        role=str(request.session.get("role",""))
+        # In the Teachers Portal, hide exams whose explicitly participating
+        # classes have no current active learners (for example, a fully
+        # graduated final class). This only filters the teacher's selector;
+        # exams, marks, and historical reports remain untouched for admins.
+        if role=="teacher":
+            try:
+                _ensure_exam_class_participation_table(cur)
+                scope_rows=cur.execute(
+                    "SELECT exam_id,class_id FROM exam_class_participation WHERE school_id=?",
+                    (sid,)
+                ).fetchall()
+                scoped_classes_by_exam={}
+                for scope_row in scope_rows:
+                    scoped_classes_by_exam.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
+                active_class_rows=cur.execute("""SELECT DISTINCT c.id
+                    FROM classes c
+                    JOIN students st ON st.school_id=c.school_id AND st.class_id=c.id
+                    WHERE c.school_id=?
+                      AND lower(coalesce(st.status,'active'))='active'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM student_graduations sg
+                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                      )""",(sid,)).fetchall()
+                active_class_ids={int(row["id"]) for row in active_class_rows}
+                all_exams=[
+                    exam for exam in all_exams
+                    if int(exam["id"]) not in scoped_classes_by_exam
+                    or bool(scoped_classes_by_exam[int(exam["id"])] & active_class_ids)
+                ]
+            except Exception as scope_exc:
+                # Preserve the existing selector if an older database is
+                # missing a supporting table; never block the teacher portal.
+                print("DAVISCHOOL TEACHER EXAM VISIBILITY FALLBACK:",repr(scope_exc),flush=True)
+                try: con.rollback()
+                except Exception: pass
         available_years=sorted({str(e["year"]).strip() for e in all_exams if str(e["year"] or "").strip()}, reverse=True)
         year_filter=str(year or "").strip()
         exams=[e for e in all_exams if not year_filter or str(e["year"] or "").strip()==year_filter]
-        role=str(request.session.get("role",""))
         teacher_id=int(request.session.get("teacher_id") or 0) if role=="teacher" else 0
         if role=="teacher" and teacher_id:
             # Teachers must see only the classes/subjects actually allocated to
