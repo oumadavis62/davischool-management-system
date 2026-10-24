@@ -5779,11 +5779,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                         visible_teacher_exams.append(exam)
                 all_exams=visible_teacher_exams
             except Exception as scope_exc:
-                # Preserve the existing selector if an older database is
-                # missing a supporting table; never block the teacher portal.
-                print("DAVISCHOOL TEACHER EXAM VISIBILITY FALLBACK:",repr(scope_exc),flush=True)
+                # Fail closed: if eligibility cannot be verified, never expose
+                # exams that may belong exclusively to graduated classes.
+                # Historical marks remain stored and admin/registrar history
+                # is unaffected; the teacher can retry after the data issue is fixed.
+                print("DAVISCHOOL TEACHER EXAM VISIBILITY FAILED CLOSED:",repr(scope_exc),flush=True)
                 try: con.rollback()
                 except Exception: pass
+                all_exams=[]
         available_years=sorted({str(e["year"]).strip() for e in all_exams if str(e["year"] or "").strip()}, reverse=True)
         year_filter=str(year or "").strip()
         exams=[e for e in all_exams if not year_filter or str(e["year"] or "").strip()==year_filter]
