@@ -11200,7 +11200,8 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
             """SELECT st.id AS student_id, c.name AS class_name, c.stream
                FROM students st
                JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
-               WHERE st.school_id=?""",
+               WHERE st.school_id=? AND lower(coalesce(st.status,'active'))='active'
+                 AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",
             (school_id,)
         ).fetchall()
         for enrolled in enrolled_rows:
@@ -11462,7 +11463,8 @@ def class_marksheet_analysis_csv(
         enrolled_sql = (
             "SELECT st.id, c.name AS class_name, c.stream FROM students st "
             "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
-            "WHERE st.school_id=?"
+            "WHERE st.school_id=? AND lower(coalesce(st.status,'active'))='active' "
+            "AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)"
         )
         enrolled_params = [sid]
         if class_name:
@@ -11991,7 +11993,8 @@ def class_marksheet_analysis_pdf(
         enrolled_sql = (
             "SELECT st.id, c.name AS class_name, c.stream FROM students st "
             "JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id "
-            "WHERE st.school_id=?"
+            "WHERE st.school_id=? AND lower(coalesce(st.status,'active'))='active' "
+            "AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)"
         )
         enrolled_params = [sid]
         if class_name:
