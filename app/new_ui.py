@@ -3384,10 +3384,9 @@ def class_marksheets_pdf(
 
         placeholders = ",".join("?" for _ in selected_class_ids)
         student_sql = (
-            "SELECT * FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) AND class_id IN (" +
-            placeholders + ")"
+            "SELECT * FROM students WHERE school_id=? AND class_id IN (" + placeholders + ") AND ((lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN (" + ",".join("?" for _ in selected_exam_ids) + ") AND historical.class_id IN (" + placeholders + ")))"
         )
-        student_params = [sid] + selected_class_ids
+        student_params = [sid] + selected_class_ids + selected_exam_ids + selected_class_ids
         if stream and not combined_mode:
             student_sql += " AND stream=?"
             student_params.append(stream)
@@ -8495,9 +8494,9 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
                 FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-                WHERE sub.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id) GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
-                list(selected_exam_ids)+[sid,sid,cid]).fetchall()
-            students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name",(sid,cid)).fetchall()
+                WHERE sub.school_id=? AND ((st.class_id=? AND lower(coalesce(st.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)) OR m.class_id=?) GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
+                list(selected_exam_ids)+[sid,sid,cid,cid]).fetchall()
+            students=cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? AND ((lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN ("+placeholders+") AND historical.class_id=?)) ORDER BY name",[sid,cid]+selected_exam_ids+[cid]).fetchall()
             class_grading_rules=_load_grading_rules(cur,sid)
             class_overall_rules=_load_overall_grading_rules(cur,sid)
             bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,class_grading_rules,class_overall_rules)
