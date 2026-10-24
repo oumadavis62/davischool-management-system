@@ -6136,8 +6136,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         for subject_row in subjects:
             subject_key=int(subject_row["id"])
             if role=="teacher":
-                valid_pairs={(class_key,subject_key) for class_key,subject_key in allowed_pairs
-                             if class_key in valid_class_ids and subject_key==subject_key}
+                valid_pairs={(allocated_class_id,allocated_subject_id)
+                             for allocated_class_id,allocated_subject_id in allowed_pairs
+                             if allocated_class_id in valid_class_ids and allocated_subject_id==subject_key}
                 class_keys={pair[0] for pair in valid_pairs}
             else:
                 class_keys=valid_class_ids
