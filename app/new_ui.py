@@ -1945,12 +1945,20 @@ def _archive_class_staff_assignments(cur, school_id, class_id, cycle_year, now, 
            WHERE a.school_id=? AND a.class_id=?""", (school_id, class_id)
     ).fetchall()
     for a in allocations:
+        # A promotion/graduation retry must not duplicate the same class,
+        # teacher, subject and academic-year snapshot.
         cur.execute(
             """INSERT INTO teacher_allocation_history
                (school_id,cycle_year,class_id,teacher_id,teacher_name,subject_id,subject_name,recorded_at,reason)
-               VALUES(?,?,?,?,?,?,?,?,?)""",
+               SELECT ?,?,?,?,?,?,?,?,?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM teacher_allocation_history h
+                   WHERE h.school_id=? AND h.cycle_year=? AND h.class_id=?
+                     AND h.teacher_id=? AND h.subject_id=? AND h.reason=?
+               )""",
             (school_id, cycle_year, class_id, int(a["teacher_id"]), str(a["teacher_name"] or ""),
-             int(a["subject_id"]), str(a["subject_name"] or ""), now, reason)
+             int(a["subject_id"]), str(a["subject_name"] or ""), now, reason,
+             school_id, cycle_year, class_id, int(a["teacher_id"]), int(a["subject_id"]), reason)
         )
     cur.execute("DELETE FROM teacher_allocations WHERE school_id=? AND class_id=?", (school_id, class_id))
     assignment = cur.execute(
@@ -1964,9 +1972,16 @@ def _archive_class_staff_assignments(cur, school_id, class_id, cycle_year, now, 
         cur.execute(
             """INSERT INTO class_teacher_assignment_history
                (school_id,cycle_year,class_id,teacher_id,teacher_name,assigned_at,ended_at,reason)
-               VALUES(?,?,?,?,?,?,?,?)""",
+               SELECT ?,?,?,?,?,?,?,?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM class_teacher_assignment_history h
+                   WHERE h.school_id=? AND h.cycle_year=? AND h.class_id=?
+                     AND h.teacher_id=? AND COALESCE(h.assigned_at,'')=COALESCE(?,'')
+                     AND h.reason=?
+               )""",
             (school_id, cycle_year, class_id, int(assignment["teacher_id"]),
-             str(assignment["teacher_name"] or ""), assignment["assigned_at"], now, reason)
+             str(assignment["teacher_name"] or ""), assignment["assigned_at"], now, reason,
+             school_id, cycle_year, class_id, int(assignment["teacher_id"]), assignment["assigned_at"], reason)
         )
         cur.execute("DELETE FROM class_teacher_assignments WHERE school_id=? AND class_id=?", (school_id, class_id))
     return allocations, assignment
