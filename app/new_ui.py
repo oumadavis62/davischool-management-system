@@ -8359,7 +8359,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         ("<div class='card section'><b>Automatic next class not found.</b> Individual transfers remain available. For bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students and not next_class else "")
     )
     graduate_action = (
-        f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick="return confirm('Graduate the eligible cohort for {cycle}?');">Graduate Eligible Cohort</button></div>"
+        f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick='return confirm(&#39;Graduate eligible cohort for {cycle}?&#39;);'>Graduate Eligible Cohort</button></div>"
         if students and eligible_count and not next_class else ""
     )
     graduates = cur.execute(
@@ -8369,7 +8369,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
            WHERE g.school_id=? ORDER BY g.graduation_year DESC,s.name""", (sid,)
     ).fetchall()
     graduate_rows = "".join(
-        f"<tr><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td><td><form method='post' action='/app/students/promotion' onsubmit="return confirm('Reverse this graduation?');"><input type='hidden' name='ungraduate_student_id' value='{int(g['student_id'])}'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><button class='btn' type='submit'>Reverse Graduation</button></form></td></tr>"
+        f"<tr><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td><td><form method='post' action='/app/students/promotion' onsubmit='return confirm(&#39;Reverse this graduation?&#39;);'><input type='hidden' name='ungraduate_student_id' value='{int(g['student_id'])}'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><button class='btn' type='submit'>Reverse Graduation</button></form></td></tr>"
         for g in graduates
     )
     changed_value = request.query_params.get("changed")
@@ -8440,17 +8440,17 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         if not source_class:
             con.close()
             return HTMLResponse("Invalid final class. No students were changed.", 400)
-        source_number = re.search(r"\\d+", str(source_class["name"] or ""))
-        source_prefix = re.sub(r"\\d+", "#", str(source_class["name"] or "")).casefold().strip()
+        source_number = re.search(r"\d+", str(source_class["name"] or ""))
+        source_prefix = re.sub(r"\d+", "#", str(source_class["name"] or "")).casefold().strip()
         next_classes = cur.execute(
             "SELECT id,name,stream FROM classes WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))",
             (sid, source_class["stream"])
         ).fetchall()
         next_classes = [c for c in next_classes if int(c["id"]) != from_class_id
             and source_number
-            and re.sub(r"\\d+", "#", str(c["name"] or "")).casefold().strip() == source_prefix
-            and re.search(r"\\d+", str(c["name"] or ""))
-            and int(re.search(r"\\d+", str(c["name"] or "")).group()) == int(source_number.group()) + 1]
+            and re.sub(r"\d+", "#", str(c["name"] or "")).casefold().strip() == source_prefix
+            and re.search(r"\d+", str(c["name"] or ""))
+            and int(re.search(r"\d+", str(c["name"] or "")).group()) == int(source_number.group()) + 1]
         if next_classes:
             con.close()
             return HTMLResponse("This class has a matching next class. Use promotion instead of graduation.", 400)
