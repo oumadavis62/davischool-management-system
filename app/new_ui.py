@@ -1879,7 +1879,13 @@ def _ensure_class_teacher_assignments_table(cur):
     )""")
 
 def _ensure_teacher_assignment_history_tables(cur):
-    """Durable snapshots for class and subject teacher assignments that are no longer active."""
+    """Create and upgrade durable snapshots for inactive teacher assignments.
+
+    CREATE TABLE IF NOT EXISTS does not repair an older table with an incomplete
+    schema. Add every field used by archive, reconciliation, and history display
+    so legacy deployments can actually move allocations instead of silently
+    rolling the reconciliation transaction back.
+    """
     cur.execute("""CREATE TABLE IF NOT EXISTS teacher_allocation_history(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
@@ -1903,6 +1909,28 @@ def _ensure_teacher_assignment_history_tables(cur):
         ended_at TEXT NOT NULL,
         reason TEXT NOT NULL
     )""")
+    # Older installations may already have these tables but be missing columns.
+    # Add the columns individually; nullable definitions let existing rows survive.
+    migrations = {
+        "teacher_allocation_history": (
+            ("school_id", "INTEGER"), ("cycle_year", "INTEGER"),
+            ("class_id", "INTEGER"), ("teacher_id", "INTEGER"),
+            ("teacher_name", "TEXT"), ("subject_id", "INTEGER"),
+            ("subject_name", "TEXT"), ("recorded_at", "TEXT"), ("reason", "TEXT"),
+        ),
+        "class_teacher_assignment_history": (
+            ("school_id", "INTEGER"), ("cycle_year", "INTEGER"),
+            ("class_id", "INTEGER"), ("teacher_id", "INTEGER"),
+            ("teacher_name", "TEXT"), ("assigned_at", "TEXT"),
+            ("ended_at", "TEXT"), ("reason", "TEXT"),
+        ),
+    }
+    for table, columns in migrations.items():
+        for column, definition in columns:
+            cur.execute(
+                "ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s"
+                % (table, column, definition)
+            )
 
 def _archive_class_staff_assignments(cur, school_id, class_id, cycle_year, now, reason):
     """Archive and deactivate a class's current allocations and class teacher without losing names."""
