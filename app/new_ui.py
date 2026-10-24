@@ -6098,6 +6098,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                         AND historical_draft.exam_id=? AND historical_draft.subject_id=?
                         AND historical_draft.class_id=? AND historical_draft.teacher_id=?
                     )
+                    OR EXISTS (
+                      SELECT 1 FROM student_promotion_cohort_members cohort_eligible
+                      WHERE cohort_eligible.school_id=s.school_id
+                        AND cohort_eligible.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+                        AND cohort_eligible.class_id=? AND cohort_eligible.student_id=s.id
+                    )
                   ) AND NOT EXISTS (
                     SELECT 1 FROM student_class_history moved_into_class
                     WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
@@ -6119,7 +6125,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
                      )
                    ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,cid,eid,eid,eid,cid,eid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -6140,6 +6146,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       SELECT 1 FROM marks historical
                       WHERE historical.school_id=s.school_id AND historical.student_id=s.id
                         AND historical.exam_id=? AND historical.subject_id=? AND historical.class_id=?
+                    )
+                    OR EXISTS (
+                      SELECT 1 FROM student_promotion_cohort_members cohort_eligible
+                      WHERE cohort_eligible.school_id=s.school_id
+                        AND cohort_eligible.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+                        AND cohort_eligible.class_id=? AND cohort_eligible.student_id=s.id
                     )
                   ) AND NOT EXISTS (
                     SELECT 1 FROM student_class_history moved_into_class
@@ -6168,7 +6180,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_historical.exam_id=? AND cohort_historical.subject_id=?
                          AND cohort_historical.class_id=?
                      )
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid)).fetchall()
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
