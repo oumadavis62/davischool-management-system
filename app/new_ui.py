@@ -7402,10 +7402,10 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
                 continue
             source_name = str(source["name"] or "")
             source_stream = str(source["stream"] or "")
-            source_number = re.search(r"\\d+", source_name)
+            source_number = re.search(r"\d+", source_name)
             if not source_number:
                 continue
-            source_prefix = re.sub(r"\\d+", "#", source_name).casefold().strip()
+            source_prefix = re.sub(r"\d+", "#", source_name).casefold().strip()
             destinations = cur.execute(
                 """SELECT id,name,stream FROM classes
                    WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))""",
@@ -7443,7 +7443,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
                    WHERE school_id=? AND from_class_id=? AND to_class_id=?""",
                 (sid, source_id, int(destination["id"]))
             ).fetchone()
-            cycle_match = re.search(r"20\\d{2}", str((date_row or {}).get("changed_at") or ""))
+            cycle_match = re.search(r"20\d{2}", str(date_row["changed_at"] if date_row else ""))
             promoted_candidates.append((
                 int(source_number.group()), source_id, int(destination["id"]),
                 int(cycle_match.group()) if cycle_match else datetime.now(ZoneInfo("Africa/Nairobi")).year
