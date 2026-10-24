@@ -9091,23 +9091,6 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     ).fetchall() if cid else []
     cohort_ids = {int(row["student_id"]) for row in cohort_rows}
     eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
-    promotion_history = cur.execute(
-        """SELECT h.promotion_year,h.from_academic_year,h.to_academic_year,
-                  h.from_class_id,f.name from_class,f.stream from_stream,
-                  h.to_class_id,t.name to_class,t.stream to_stream,
-                  MIN(h.changed_at) promoted_at,MAX(h.changed_by) changed_by,
-                  COUNT(DISTINCT h.student_id) student_count
-           FROM student_class_history h
-           LEFT JOIN classes f ON f.id=h.from_class_id AND f.school_id=h.school_id
-           LEFT JOIN classes t ON t.id=h.to_class_id AND t.school_id=h.school_id
-           WHERE h.school_id=? AND h.promotion_year IS NOT NULL
-             AND h.reason='Class cohort promotion'
-           GROUP BY h.promotion_year,h.from_academic_year,h.to_academic_year,
-                    h.from_class_id,f.name,f.stream,h.to_class_id,t.name,t.stream,
-                    h.changed_at
-           ORDER BY MAX(h.id) DESC LIMIT 100""",
-        (sid,)
-    ).fetchall()
     con.commit()
     con.close()
     copts = "".join(
@@ -9134,15 +9117,6 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
             f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
         )
     rows = "".join(row_parts)
-    promotion_history_rows = "".join(
-        f"<tr><td>{escape(str(h['promotion_year']))}</td>"
-        f"<td>{escape(str(h['from_class'] or 'Unknown'))} {escape(str(h['from_stream'] or ''))}</td>"
-        f"<td>{escape(str(h['to_class'] or 'Unknown'))} {escape(str(h['to_stream'] or ''))}</td>"
-        f"<td>{escape(str(h['from_academic_year']))} → {escape(str(h['to_academic_year']))}</td>"
-        f"<td>{escape(str(h['promoted_at'] or ''))}</td><td>{escape(str(h['changed_by'] or ''))}</td>"
-        f"<td>{escape(str(h['student_count']))}</td></tr>"
-        for h in promotion_history
-    )
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
     bulk_action = (
         f"<div class='card section'><h2>Promote the eligible cohort</h2><p>Promote {eligible_count} eligible students from this class to <b>{next_class_label}</b>. Students who arrived from another class during this cycle are excluded automatically.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote the {eligible_count} eligible cohort students to the next class for {cycle}? Students outside this cohort will not be moved.');\">Promote Eligible Cohort to Next Class</button></div>"
@@ -9491,31 +9465,48 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
         targets = individual_targets
     changed = 0
-    for student_id, to_class_id in targets:
-        cur.execute(
+    changed_by = request.session.get("email", "")
+    if bulk_value.isdigit():
+        # Keep the bulk path set-oriented: avoid three separate database
+        # round trips per learner on the remote production database.
+        cur.executemany(
             "UPDATE students SET class_id=? WHERE id=? AND school_id=? AND class_id=?",
-            (to_class_id, student_id, sid, from_class_id)
+            [(to_class_id, student_id, sid, from_class_id)
+             for student_id, to_class_id in targets]
         )
-        if cur.rowcount != 1:
-            continue
-        # Bulk cohort promotion is an explicit academic-year transition.
-        # Individual transfers are not automatically treated as promotions.
-        is_cohort_promotion = bool(bulk_value.isdigit())
-        cur.execute(
+        changed = len(targets)
+        cur.executemany(
             """INSERT INTO student_class_history
                (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,
                 promotion_year,from_academic_year,to_academic_year)
                VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            (sid, student_id, from_class_id, to_class_id, now,
-             request.session.get("email", ""),
-             "Class cohort promotion" if is_cohort_promotion else "Promotion / transfer",
-             cycle if is_cohort_promotion else None,
-             cycle if is_cohort_promotion else None,
-             cycle + 1 if is_cohort_promotion else None)
+            [(sid, student_id, from_class_id, to_class_id, now, changed_by,
+              "Class cohort promotion", cycle, cycle, cycle + 1)
+             for student_id, to_class_id in targets]
         )
-        _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
-               f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
-        changed += 1
+        cur.executemany(
+            "INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
+            [(sid, changed_by, "STUDENT_CLASS_CHANGE",
+              f"Moved student {student_id} from class {from_class_id} to {to_class_id}", now)
+             for student_id, to_class_id in targets]
+        )
+    else:
+        for student_id, to_class_id in targets:
+            cur.execute(
+                "UPDATE students SET class_id=? WHERE id=? AND school_id=? AND class_id=?",
+                (to_class_id, student_id, sid, from_class_id)
+            )
+            if cur.rowcount != 1:
+                continue
+            cur.execute(
+                """INSERT INTO student_class_history
+                   (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (sid, student_id, from_class_id, to_class_id, now, changed_by, "Promotion / transfer")
+            )
+            _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
+                   f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
+            changed += 1
     # A bulk promotion moves the cohort's staffing even if new students have
     # already been added to the reusable source class row. Individual transfers
     # intentionally leave staffing untouched.
