@@ -8550,10 +8550,11 @@ def student_graduation_records_page(
     records = []
     if loaded == "1":
         sql = """SELECT g.student_id,s.name,s.admission_no,s.gender,s.parent_name,s.parent_phone,s.status,
-                        g.graduation_year,g.graduated_at,g.graduated_by,c.id final_class_id,
-                        c.name final_class,c.stream final_stream
+                        g.graduation_year,g.graduated_at,g.graduated_by,sch.school_type school_level,
+                        c.id final_class_id,c.name final_class,c.stream final_stream
                  FROM student_graduations g
                  JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
+                 JOIN schools sch ON sch.id=g.school_id
                  LEFT JOIN classes c ON c.id=g.final_class_id AND c.school_id=g.school_id
                  WHERE g.school_id=?"""
         params = [sid]
@@ -8582,8 +8583,9 @@ def student_graduation_records_page(
     rows = "".join(
         f"<tr><td>{int(i)+1}</td><td>{escape(str(g['graduation_year'] or ''))}</td>"
         f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
+        f"<td>{escape(str(g['school_level'] or ''))}</td>"
         f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
-        f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td><td>{escape(str(g['graduated_by'] or ''))}</td></tr>"
+        f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td></tr>"
         for i, g in enumerate(records)
     )
     tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
@@ -8593,7 +8595,7 @@ def student_graduation_records_page(
     filter_summary = f"<p class='muted'>Loaded {len(records)} graduation record(s) matching the selected filters.</p>" if loaded == "1" else ""
     if loaded == "1":
         empty_row = "<tr><td colspan='7'>No graduation records match the selected filters.</td></tr>"
-        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Final Class / Stream</th><th>Graduated At</th><th>Recorded By</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
+        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Level</th><th>Final Class / Stream</th><th>Graduated At</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
     else:
         table_html = "<div class='card section muted'>Choose one or more filters, then select <b>Load Records</b> to display matching graduation records.</div>"
     tab_query = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
@@ -8606,8 +8608,9 @@ def student_graduation_records_page(
     print_school_contact = "".join("<div>" + x + "</div>" for x in [" ".join(x for x in [print_school_postal, print_school_code] if x), ("☎ " + print_school_phone) if print_school_phone else "", ("✉ " + print_school_email) if print_school_email else ""] if x)
     graduation_print_header = ("<div class='doc-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>GRADUATION RECORDS</h1>") % (print_school_name, print_school_contact)
     graduation_print_rows = "".join(
-        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
+        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
             escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
+            escape(str(g["school_level"] or "")),
             escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
             escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
             escape(str(g["parent_phone"] or "")),
@@ -8615,7 +8618,7 @@ def student_graduation_records_page(
             escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0])
         ) for g in records
     )
-    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='9'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
+    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='10'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
     graduation_print_script = r"""<script>
 function printGraduationRegister(){
  var source=document.getElementById('graduation-print-source');
