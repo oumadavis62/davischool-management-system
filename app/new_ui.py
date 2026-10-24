@@ -7431,6 +7431,7 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
         q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
           COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
           FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
+            AND EXISTS (SELECT 1 FROM students eligible WHERE eligible.id=m.student_id AND eligible.school_id=m.school_id AND lower(coalesce(eligible.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=eligible.school_id AND sg.student_id=eligible.id))
           LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id AND lower(coalesce(sm.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=sm.school_id AND sg.student_id=sm.id)"""
         q=q.replace("PLACEHOLDERS",placeholders)
         params=list(selected_exam_ids)+[sid]
@@ -8485,7 +8486,7 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
                 FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-                WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
+                WHERE sub.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id) GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
                 list(selected_exam_ids)+[sid,sid,cid]).fetchall()
             students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name",(sid,cid)).fetchall()
             class_grading_rules=_load_grading_rules(cur,sid)
