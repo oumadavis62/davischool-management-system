@@ -7454,9 +7454,15 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         if reconciled:
             con.commit()
     except Exception as history_reconcile_error:
-        # Keep the allocations page usable if an older database has a partial
-        # promotion schema; do not fail the whole page because of reconciliation.
+        # PostgreSQL marks the whole transaction failed after any SQL error.
+        # Roll it back before continuing to load the allocations page; otherwise
+        # the next SELECT raises InFailedSqlTransaction and turns this fallback
+        # into a second, fatal error.
         print("DAVISCHOOL TEACHER ALLOCATION HISTORY RECONCILIATION WARNING: %r" % (history_reconcile_error,), flush=True)
+        try:
+            con.rollback()
+        except Exception as rollback_error:
+            print("DAVISCHOOL TEACHER ALLOCATION RECONCILIATION ROLLBACK WARNING: %r" % (rollback_error,), flush=True)
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
