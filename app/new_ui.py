@@ -7810,7 +7810,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         cls = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
         if not cls or not selected_exam_ids:
             return HTMLResponse("Please select a class and examination first.", 400)
-        students = cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name,id", (sid,cid)).fetchall()
+        students = cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? AND ((lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN (" + ",".join("?" for _ in selected_exam_ids) + ") AND historical.class_id=?)) ORDER BY name,id", [sid,cid]+selected_exam_ids+[cid]).fetchall()
         school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
         grading_rules = _load_grading_rules(cur,sid)
         overall_rules = _load_overall_grading_rules(cur,sid)
@@ -8028,7 +8028,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         if not cls:
             return HTMLResponse("Class/stream not found.",404)
         students=cur.execute("""SELECT s.* FROM students s
-            WHERE s.school_id=? AND s.class_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY s.name,s.id""",(sid,cid)).fetchall()
+            WHERE s.school_id=? AND s.class_id=? AND ((lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=s.school_id AND historical.student_id=s.id AND historical.exam_id IN (%s) AND historical.class_id=?)) ORDER BY s.name,s.id""" % ",".join("?" for _ in selected_exam_ids),[sid,cid]+selected_exam_ids+[cid]).fetchall()
         exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? AND id IN (%s) ORDER BY id" %
                            ",".join("?" for _ in selected_exam_ids), [sid]+selected_exam_ids).fetchall()
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
@@ -8451,7 +8451,7 @@ def student_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
         return HTMLResponse("You do not have permission to view student analysis.", 403)
     con=_db(); cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY s.name",(sid,)).fetchall()
+    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
     selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
