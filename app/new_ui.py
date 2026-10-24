@@ -1228,15 +1228,19 @@ def students_page(request: Request):
     if gender_filter in ("Male", "Female", "Other"):
         where.append("lower(coalesce(s.gender,''))=lower(?)")
         params.append(gender_filter)
-    if status_filter in ("active", "inactive", "graduated", "transferred"):
-        where.append("lower(coalesce(s.status,'active'))=?")
+    if status_filter == "graduated":
+        where.append("EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)")
+    elif status_filter in ("active", "inactive", "transferred"):
+        where.append("lower(coalesce(s.status,'active'))=? AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)")
         params.append(status_filter)
     where_sql = " AND ".join(where)
     total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE " + where_sql, tuple(params)).fetchone()["n"]
     page_count = max(1, (int(total) + page_size - 1) // page_size)
     page_num = min(page_num, page_count)
     offset = (page_num - 1) * page_size
-    students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
+    students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream,
+        CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+             THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
         WHERE """ + where_sql + " ORDER BY s.name COLLATE NOCASE ASC, s.admission_no COLLATE NOCASE ASC LIMIT ? OFFSET ?",
         tuple(params + [page_size, offset])).fetchall()
@@ -1244,7 +1248,7 @@ def students_page(request: Request):
 
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
-      <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] if 'status' in s.keys() and s['status'] else 'Active'))}</td>
+      <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
       <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}{tab_q}'>History</a></td></tr>""" for s in students)
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
@@ -8756,6 +8760,7 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                    VALUES(?,?,?,?,?,?)""",
                 (sid, student_id, cycle, from_class_id, now, request.session.get("email", ""))
             )
+            cur.execute("UPDATE students SET status='graduated' WHERE id=? AND school_id=?", (student_id, sid))
             cur.execute(
                 """INSERT INTO student_class_history
                    (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
@@ -8786,6 +8791,7 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (restored_class, sid)).fetchone():
                 continue
             cur.execute("DELETE FROM student_graduations WHERE school_id=? AND student_id=?", (sid, student_id))
+            cur.execute("UPDATE students SET status='active' WHERE id=? AND school_id=? AND lower(coalesce(status,''))='graduated'", (student_id, sid))
             cur.execute(
                 """INSERT INTO student_class_history
                    (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
@@ -8868,6 +8874,7 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             return HTMLResponse("Graduation record not found.", 404)
         restored_class = int(record["final_class_id"] or from_class_id)
         cur.execute("DELETE FROM student_graduations WHERE school_id=? AND student_id=?", (sid, student_id))
+        cur.execute("UPDATE students SET status='active' WHERE id=? AND school_id=? AND lower(coalesce(status,''))='graduated'", (student_id, sid))
         cur.execute(
             """INSERT INTO student_class_history
                (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
