@@ -5413,7 +5413,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # Marks Entry screen from opening.
         try:
             _ensure_student_history_table(cur)
-_ensure_student_promotion_cohort_tables(cur)
+            _ensure_student_promotion_cohort_tables(cur)
             if role=="teacher":
                 _ensure_teacher_mark_drafts_table(cur)
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
@@ -5716,7 +5716,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         form=await request.form()
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         _ensure_student_history_table(cur)
-_ensure_student_promotion_cohort_tables(cur)
+        _ensure_student_promotion_cohort_tables(cur)
         students=cur.execute("""SELECT s.id FROM students s
             WHERE s.school_id=? AND (
               s.class_id=? OR EXISTS (
@@ -5926,7 +5926,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
     _ensure_student_history_table(cur)
-_ensure_student_promotion_cohort_tables(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     students=cur.execute("""SELECT s.id FROM students s
         WHERE s.school_id=? AND (
           s.class_id=? OR EXISTS (
@@ -8416,7 +8416,7 @@ def student_graduation_records_page(
 
     con = _db()
     cur = con.cursor()
-_ensure_student_promotion_cohort_tables(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     classes = cur.execute(
         "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
