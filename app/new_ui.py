@@ -5891,7 +5891,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         scoped_classes={}
         for scope_row in scope_rows:
             scoped_classes.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
-        for exam_row in exams:
+        for exam_row in all_exams:
             exam_key=int(exam_row["id"])
             known_classes=set(scoped_classes.get(exam_key,set()))
             # Include the class recorded on marks as well as saved participation
@@ -6124,11 +6124,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
                      )
-                     -- Include current class members who missed this subject/exam.
-                     -- The moved-into-class guard above excludes later cohorts.
-                     OR s.class_id=?
+                     -- Current-class membership is covered above; do not bypass a saved cohort snapshot.
                    ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -6183,10 +6181,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_historical.exam_id=? AND cohort_historical.subject_id=?
                          AND cohort_historical.class_id=?
                      )
-                     -- Include current class members who missed this subject/exam.
-                     -- Later transfers into this class are excluded by the guard above.
-                     OR s.class_id=?
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid,cid)).fetchall()
+                     -- Current-class membership is covered above; do not bypass a saved cohort snapshot.
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
@@ -6266,11 +6262,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             continue
     js_rules="["+",".join(safe_rules)+"]"
     year_opts="<option value=''>Select academic year</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(y), "selected" if y==year_filter else "", escape(y)) for y in available_years)
-    eopts="".join("<option value='%s' data-year='%s' data-scope-classes='%s' %s>%s (%s)</option>"%(e["id"],escape(str(e["year"] or "")),",".join(str(int(c["id"])) for c in all_classes if exam_class_scope.get(int(e["id"])) is None or int(c["id"]) in exam_class_scope.get(int(e["id"]),set())),"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in exams)
+    eopts="".join("<option value='%s' data-year='%s' data-scope-classes='%s' %s>%s (%s)</option>"%(e["id"],escape(str(e["year"] or "")),",".join(str(int(c["id"])) for c in all_classes if exam_class_scope.get(int(e["id"])) is None or int(c["id"]) in exam_class_scope.get(int(e["id"]),set())),"selected" if int(e["id"])==eid else "",escape(str(e["name"])),escape(str(e["year"] or ""))) for e in all_exams)
     allowed_pairs={(int(a["class_id"]),int(a["subject_id"])) for a in all_allocations if a["class_id"] is not None and a["subject_id"] is not None} if role=="teacher" else set()
-    copts="".join("<option value='%s' data-exam-ids='%s' %s>%s %s</option>"%(c["id"],",".join(str(int(e["id"])) for e in exams if exam_class_scope.get(int(e["id"])) is None or int(c["id"]) in exam_class_scope.get(int(e["id"]),set())),"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in all_classes if role!="teacher" or any(pair[0]==int(c["id"]) for pair in allowed_pairs))
+    copts="".join("<option value='%s' data-exam-ids='%s' %s>%s %s</option>"%(c["id"],",".join(str(int(e["id"])) for e in all_exams if exam_class_scope.get(int(e["id"])) is None or int(c["id"]) in exam_class_scope.get(int(e["id"]),set())),"selected" if int(c["id"])==cid else "",escape(str(c["name"])),escape(str(c["stream"] or ""))) for c in all_classes if role!="teacher" or any(pair[0]==int(c["id"]) for pair in allowed_pairs))
     subject_scope_tokens={}
-    for exam_row in exams:
+    for exam_row in all_exams:
         exam_key=int(exam_row["id"])
         scoped=exam_class_scope.get(exam_key)
         valid_class_ids={int(c["id"]) for c in all_classes if scoped is None or int(c["id"]) in scoped}
