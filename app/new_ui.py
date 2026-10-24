@@ -5765,6 +5765,29 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     (sid,teacher_id_for_exam_filter)).fetchall()
                 # Reuse the active allocated-class set fetched above.
                 teacher_pairs={(int(row["class_id"]),int(row["subject_id"])) for row in teacher_alloc_rows}
+                # Batch the "historical marks follow active learners" check for
+                # every exam. The former nested loop could execute one query for
+                # every exam x allocated class/subject pair on each page load.
+                active_cohort_marks_by_exam={}
+                try:
+                    active_cohort_mark_rows=cur.execute("""SELECT DISTINCT m.exam_id,st.class_id,m.subject_id
+                        FROM marks m
+                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                        JOIN teacher_allocations ta ON ta.school_id=st.school_id
+                          AND ta.teacher_id=? AND ta.class_id=st.class_id
+                          AND ta.subject_id=m.subject_id
+                        WHERE m.school_id=?
+                          AND lower(coalesce(st.status,'active'))='active'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM student_graduations sg
+                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                          )""",(teacher_id_for_exam_filter,sid)).fetchall()
+                    for active_mark in active_cohort_mark_rows:
+                        active_cohort_marks_by_exam.setdefault(int(active_mark["exam_id"]),set()).add(
+                            (int(active_mark["class_id"]),int(active_mark["subject_id"]))
+                        )
+                except Exception:
+                    active_cohort_marks_by_exam={}
                 visible_teacher_exams=[]
                 for exam in all_exams:
                     exam_key=int(exam["id"])
@@ -5788,23 +5811,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     # active, non-graduated learner with marks for this exam is
                     # now in a class/subject allocated to this teacher.
                     if not visible and teacher_pairs:
-                        for current_class_id,subject_id in teacher_pairs:
-                            if current_class_id not in eligible_active_class_ids:
-                                continue
-                            historical_mark=cur.execute("""SELECT 1
-                                FROM marks m
-                                JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                                WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
-                                  AND st.class_id=?
-                                  AND lower(coalesce(st.status,'active'))='active'
-                                  AND NOT EXISTS (
-                                      SELECT 1 FROM student_graduations sg
-                                      WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                                  )
-                                LIMIT 1""",(sid,exam_key,subject_id,current_class_id)).fetchone()
-                            if historical_mark:
-                                visible=True
-                                break
+                        visible=bool(
+                            active_cohort_marks_by_exam.get(exam_key,set())
+                            & teacher_pairs
+                            & {(class_key,subject_key) for class_key,subject_key in teacher_pairs
+                               if class_key in eligible_active_class_ids}
+                        )
                     if visible:
                         visible_teacher_exams.append(exam)
                 all_exams=visible_teacher_exams
