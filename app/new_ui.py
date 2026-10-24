@@ -7509,25 +7509,24 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
     # A class is terminal only when no next numeric level exists for the same
     # class-name pattern and stream. Continuing-class history intentionally
     # omits reason/timestamp; final-class history keeps reason but omits timestamp.
-    class_by_id = {int(c["id"]): c for c in classes}
     class_next_level_ids = set()
     for class_row in classes:
         class_id = int(class_row["id"])
         class_name = str(class_row["name"] or "").strip()
         class_stream = str(class_row["stream"] or "").strip().casefold()
-        class_number_match = re.search(r"\\d+", class_name)
+        class_number_match = re.search(r"\d+", class_name)
         if not class_number_match:
             continue
         class_number = int(class_number_match.group())
-        class_prefix = re.sub(r"\\d+", "#", class_name).casefold().strip()
+        class_prefix = re.sub(r"\d+", "#", class_name).casefold().strip()
         for candidate in classes:
             if int(candidate["id"]) == class_id:
                 continue
             candidate_name = str(candidate["name"] or "").strip()
-            candidate_number = re.search(r"\\d+", candidate_name)
+            candidate_number = re.search(r"\d+", candidate_name)
             if (
                 str(candidate["stream"] or "").strip().casefold() == class_stream
-                and re.sub(r"\\d+", "#", candidate_name).casefold().strip() == class_prefix
+                and re.sub(r"\d+", "#", candidate_name).casefold().strip() == class_prefix
                 and candidate_number
                 and int(candidate_number.group()) == class_number + 1
             ):
