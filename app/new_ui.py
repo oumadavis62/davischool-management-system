@@ -9127,8 +9127,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
     bulk_action = (
         f"<div class='card section'><h2>Promote the eligible cohort</h2><p>Promote {eligible_count} eligible students from this class to <b>{next_class_label}</b>. Students who arrived from another class during this cycle are excluded automatically.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote the {eligible_count} eligible cohort students to the next class for {cycle}? Students outside this cohort will not be moved.');\">Promote Eligible Cohort to Next Class</button></div>"
-        if students and eligible_count and next_class else
-        ("<div class='card section'><b>Automatic next class not found.</b> Individual transfers remain available. For bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students and not next_class else "")
+        if students and eligible_count and next_class else ""
     )
     graduate_action = (
         f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick='return confirm(&#39;Graduate eligible cohort for {cycle}?&#39;);'>Graduate Eligible Cohort</button></div>"
@@ -9173,7 +9172,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 
 </div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.promotion-student-table-scroll{{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain}}.promotion-student-table{{min-width:900px;width:100%;border-collapse:collapse}}.promotion-student-table th,.promotion-student-table td{{white-space:nowrap;padding:10px;border-bottom:1px solid #e5e7eb}}</style>"""
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.promotion-student-table-scroll{{display:block;width:100%;max-width:100%;max-height:62vh;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;contain:layout paint;position:relative}}.promotion-student-table{{min-width:900px;width:100%;border-collapse:collapse}}.promotion-student-table th,.promotion-student-table td{{white-space:nowrap;padding:10px;border-bottom:1px solid #e5e7eb}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
 
 
