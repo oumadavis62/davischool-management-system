@@ -5947,7 +5947,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             _historic_class_map={int(c["id"]):c for c in all_classes}
             _historic_pair_set={(int(a["class_id"]),int(a["subject_id"]))
                                 for a in all_allocations
-                                if a.get("class_id") is not None and a.get("subject_id") is not None}
+                                if a["class_id"] is not None and a["subject_id"] is not None}
             for _exam_row in exams:
                 _exam_key=int(_exam_row["id"])
                 _scope=exam_class_scope.get(_exam_key)
