@@ -4113,7 +4113,7 @@ def app_home(request: Request):
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
         platform_users=cur.execute("SELECT full_name,email,role FROM users ORDER BY id").fetchall()
-        students=cur.execute("SELECT COUNT(*) c FROM students").fetchone()["c"]
+        students=cur.execute("SELECT COUNT(*) c FROM students s WHERE lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)").fetchone()["c"]
         revenue=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments").fetchone()["v"]
         recent=cur.execute("SELECT name,location FROM schools ORDER BY id DESC LIMIT 8").fetchall()
         con.close()
@@ -4161,7 +4161,7 @@ def app_home(request: Request):
             if teacher_class_ids:
                 class_ph=",".join("?" for _ in teacher_class_ids)
                 teacher_student_count=int(cur.execute(
-                    f"SELECT COUNT(*) c FROM students WHERE school_id=? AND class_id IN ({class_ph})",
+                    f"SELECT COUNT(*) c FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) AND s.class_id IN ({class_ph})",
                     [school_id]+teacher_class_ids
                 ).fetchone()["c"] or 0)
             else:
@@ -4178,7 +4178,7 @@ def app_home(request: Request):
                 expected_marks=int(cur.execute(
                     f"""SELECT COUNT(*) c FROM students s
                         JOIN teacher_allocations a ON a.school_id=s.school_id AND a.class_id=s.class_id
-                        WHERE s.school_id=? AND a.teacher_id=? AND a.class_id IN ({class_ph})
+                        WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) AND a.teacher_id=? AND a.class_id IN ({class_ph})
                         AND a.subject_id IN ({subject_ph})""",
                     [school_id,teacher_id]+teacher_class_ids+teacher_subject_ids
                 ).fetchone()["c"] or 0)
@@ -4188,6 +4188,7 @@ def app_home(request: Request):
                         JOIN teacher_allocations a ON a.school_id=m.school_id AND a.class_id=s.class_id AND a.subject_id=m.subject_id
                         WHERE m.school_id=? AND m.exam_id=? AND a.teacher_id=?
                         AND a.class_id IN ({class_ph}) AND a.subject_id IN ({subject_ph})
+                        AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
                         AND m.marks IS NOT NULL AND CAST(m.marks AS TEXT)<>''""",
                     [school_id,latest_exam_id,teacher_id]+teacher_class_ids+teacher_subject_ids
                 ).fetchone()["c"] or 0)
@@ -4308,11 +4309,11 @@ function toggleTeacherTile(event, tile){{
 }}
 </script></div>"""
         else:
-            s=cur.execute("SELECT COUNT(*) c FROM students WHERE school_id=?",(school_id,)).fetchone()["c"]
+            s=cur.execute("SELECT COUNT(*) c FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
             c=cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?",(school_id,)).fetchone()["c"]
 
-            gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM students WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
+            gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) GROUP BY gender",(school_id,)).fetchall()
             gender_counts={"Male":0,"Female":0,"Other":0}
             for gr in gender_rows:
                 value=str(gr["gender"] or "").strip().lower()
@@ -4349,6 +4350,8 @@ function toggleTeacherTile(event, tile){{
             class_size_rows=cur.execute("""SELECT c.id,c.name,c.stream,COUNT(s.id) AS student_count
                                            FROM classes c
                                            LEFT JOIN students s ON s.class_id=c.id AND s.school_id=c.school_id
+                                             AND lower(coalesce(s.status,'active'))='active'
+                                             AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
                                            WHERE c.school_id=?
                                            GROUP BY c.id,c.name,c.stream
                                            ORDER BY c.name,c.stream""",(school_id,)).fetchall()
