@@ -3955,7 +3955,7 @@ def school_settings_page(request: Request):
 <label>Postal Address<input name='postal_address' placeholder='P.O. Box 123' value='{val("postal_address")}' class='field'></label>
 <label>Postal Code<input name='postal_code' placeholder='00100' value='{val("postal_code")}' class='field'></label>
 <label>Principal / Administrator<input name='principal' required value='{val("principal")}' class='field'></label>
-<label>School Type<select name='school_type' class='field'><option {'selected' if school["school_type"]=="Primary" else ''}>Primary</option><option {'selected' if school["school_type"]=="Junior School" else ''}>Junior School</option><option {'selected' if school["school_type"]=="Secondary" else ''}>Secondary</option><option {'selected' if school["school_type"]=="Primary & Junior Secondary" else ''}>Primary & Junior Secondary</option><option {'selected' if school["school_type"]=="Tertiary" else ''}>Tertiary</option><option {'selected' if school["school_type"]=="University" else ''}>University</option></select></label>
+<label>School Type<select name='school_type' class='field'><option {'selected' if school["school_type"]=="Primary" else ''}>Primary</option><option {'selected' if (school["school_type"] in ("Junior School", "Senior School")) else ''}>Senior School</option><option {'selected' if school["school_type"]=="Secondary" else ''}>Secondary</option><option {'selected' if school["school_type"]=="Primary & Junior Secondary" else ''}>Primary & Junior Secondary</option><option {'selected' if school["school_type"]=="Tertiary" else ''}>Tertiary</option><option {'selected' if school["school_type"]=="University" else ''}>University</option></select></label>
 <div style='grid-column:1/-1'><div style='font-size:12px;font-weight:800;color:#475569;margin-bottom:7px'>School Logo</div>{logo_preview}<input name='school_logo' type='file' accept='image/png,image/jpeg,image/webp,image/gif' class='field' style='margin-top:8px'><div class='muted' style='margin-top:5px'>Upload PNG, JPG, WEBP or GIF. The logo will appear on school printouts, including report cards and marksheets.</div></div>
 <div style='grid-column:1/-1'><button class='btn'>Save School Settings</button></div></form></div></div>
 <style>label{{display:block;font-size:12px;font-weight:800;color:#475569}}.field{{width:100%;margin-top:6px;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
@@ -3967,7 +3967,7 @@ async def school_settings_save(request: Request, school_name:str=Form(...), scho
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "settings.edit"):
         return HTMLResponse("You do not have permission to edit school settings.", 403)
-    allowed={"Primary","Junior School","Secondary","Primary & Junior Secondary","Tertiary","University"}
+    allowed={"Primary","Junior School","Senior School","Secondary","Primary & Junior Secondary","Tertiary","University"}
     if school_type not in allowed:return HTMLResponse("Invalid school type. <a href='/app/school-settings'>Back</a>",400)
     logo_data=None
     if school_logo and school_logo.filename:
