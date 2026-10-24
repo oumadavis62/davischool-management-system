@@ -9090,10 +9090,14 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         (sid, cycle, cid)
     ).fetchall() if cid else []
     cohort_ids = {int(row["student_id"]) for row in cohort_rows}
-    eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
-    # In the terminal class, late-arriving learners still need graduation.
-    if selected_class and not next_class and students and eligible_count == 0:
+    # Graduation is based on current membership in the terminal class, not
+    # a promotion-cycle snapshot: learners promoted into this class later must
+    # still be eligible to graduate with their classmates.
+    terminal_class = bool(selected_class and not next_class)
+    if terminal_class:
         eligible_count = len(students)
+    else:
+        eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
     con.commit()
     con.close()
     copts = "".join(
@@ -9110,8 +9114,8 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     )
     row_parts = []
     for st in students:
-        is_eligible = int(st["id"]) in cohort_ids if snapshot else True
-        cohort_label = "<b>Eligible cohort</b>" if is_eligible else "<span style='color:#9a3412'>New arrival / outside this cycle</span>"
+        is_eligible = terminal_class or (int(st["id"]) in cohort_ids if snapshot else True)
+        cohort_label = "<b>Eligible to graduate</b>" if terminal_class else ("<b>Eligible cohort</b>" if is_eligible else "<span style='color:#9a3412'>New arrival / outside this cycle</span>")
         row_parts.append(
             f"<tr><td><input type='checkbox' name='reverse_promotion_student_id' value='{int(st['id'])}' aria-label='Select {escape(str(st['name']))} to reverse promotion'></td>"
             f"<td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
@@ -9128,7 +9132,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     )
     graduate_action = (
         f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick='return confirm(&#39;Graduate eligible cohort for {cycle}?&#39;);'>Graduate Eligible Cohort</button></div>"
-        if students and eligible_count and not next_class else ""
+        if students and not next_class else ""
     )
     changed_value = request.query_params.get("changed")
     result_notice = (
@@ -9216,26 +9220,16 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         if next_classes:
             con.close()
             return HTMLResponse("This class has a matching next class. Use promotion instead of graduation.", 400)
-        _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
+        # Graduation closes the current terminal class, so include every
+        # non-graduated student currently in it. Promotion-cycle snapshots are
+        # intentionally not used here: they may omit students who arrived later.
         eligible = cur.execute(
-            """SELECT s.id FROM students s JOIN student_promotion_cohort_members m
-                 ON m.school_id=s.school_id AND m.student_id=s.id
-                AND m.class_id=? AND m.cycle_year=?
+            """SELECT s.id FROM students s
                WHERE s.school_id=? AND s.class_id=?
                  AND NOT EXISTS (SELECT 1 FROM student_graduations g
                                  WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
-            (from_class_id, cycle, sid, from_class_id)
+            (sid, from_class_id)
         ).fetchall()
-        # Learners promoted into the final class after its snapshot are not
-        # members of that earlier cohort, but must still be gradable there.
-        if not eligible:
-            eligible = cur.execute(
-                """SELECT s.id FROM students s
-                   WHERE s.school_id=? AND s.class_id=?
-                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
-                                     WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
-                (sid, from_class_id)
-            ).fetchall()
         if not eligible:
             con.close()
             return HTMLResponse("No students remain to graduate from this class.", 400)
