@@ -1381,7 +1381,7 @@ def student_edit_page(request: Request,student_id:int):
 <label>Parent name<input name='parent_name' value='{escape(str(st['parent_name'] or ''))}' class='field'></label>
 <label>Parent phone<input name='parent_phone' value='{escape(str(st['parent_phone'] or ''))}' class='field'></label>
 <label>Status<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='graduated'>Graduated</option><option value='transferred'>Transferred</option></select></label>
-<div><button class='btn'>Save Changes</button> <a class='action' href='/app/students'>Cancel</a></div></form></div></div>
+<div style='grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:center'><button class='btn'>Save Changes</button> <a class='action' href='/app/students'>Cancel</a></div></form><form method='post' action='/app/students/delete/{student_id}{tab_q}' style='margin-top:14px' onsubmit="return confirm('Delete this student permanently? This cannot be undone.');"><button type='submit' class='btn' style='background:#b91c1c'>Delete Student</button><p style='color:#b91c1c;font-size:13px;margin:6px 0 0'>Use only for a student added by mistake. Students with recorded academic or financial records may not be deletable.</p></form></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin-top:5px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Edit Student",body)
 
@@ -1412,6 +1412,44 @@ def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name
         _audit(cur,sid,request,"STUDENT_TRANSFER",f"Transferred {name.strip()} from class {old_class or 'Unassigned'} to {cid or 'Unassigned'}")
     _audit(cur,sid,request,"STUDENT_UPDATE",f"Updated student {name.strip()} ({admission})")
     con.commit();con.close();return RedirectResponse("/app/students",303)
+
+@router.post("/app/students/delete/{student_id}")
+def student_delete(request: Request, student_id: int):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to delete students.", 403)
+    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
+        tab_id = ""
+    con = _db()
+    cur = con.cursor()
+    st = cur.execute("SELECT id, name, admission_no FROM students WHERE id=? AND school_id=?", (student_id, sid)).fetchone()
+    if not st:
+        con.close()
+        return HTMLResponse("Student not found.", 404)
+    # Do not remove a student if academic or financial records depend on them.
+    for table in ("marks", "student_marks", "fee_payments", "fees", "receipts", "attendance"):
+        try:
+            exists = cur.execute(f"SELECT 1 FROM {table} WHERE student_id=? AND school_id=? LIMIT 1", (student_id, sid)).fetchone()
+        except Exception:
+            exists = None
+        if exists:
+            con.close()
+            return HTMLResponse("This student has linked academic or financial records and cannot be deleted here. Keep the record and mark the student inactive instead.", 409)
+    try:
+        cur.execute("DELETE FROM student_class_history WHERE student_id=? AND school_id=?", (student_id, sid))
+        cur.execute("DELETE FROM students WHERE id=? AND school_id=?", (student_id, sid))
+        _audit(cur, sid, request, "STUDENT_DELETE", f"Deleted accidentally added student {st['name']} ({st['admission_no']})")
+        con.commit()
+    except Exception:
+        con.rollback()
+        con.close()
+        return HTMLResponse("The student could not be deleted because other records are linked to this student. No changes were made.", 409)
+    con.close()
+    return RedirectResponse("/app/students", 303)
+
 
 @router.get("/app/students/history/{student_id}",response_class=HTMLResponse)
 def student_history(request: Request,student_id:int):
