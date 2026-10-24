@@ -8538,6 +8538,7 @@ def student_graduation_records_page(
     classes = cur.execute(
         "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
+    print_school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
     years = cur.execute(
         "SELECT DISTINCT graduation_year FROM student_graduations WHERE school_id=? ORDER BY graduation_year DESC",
         (sid,)
@@ -8548,8 +8549,8 @@ def student_graduation_records_page(
     search_text = str(student or "").strip()
     records = []
     if loaded == "1":
-        sql = """SELECT g.student_id,s.name,s.admission_no,g.graduation_year,
-                        g.graduated_at,g.graduated_by,c.id final_class_id,
+        sql = """SELECT g.student_id,s.name,s.admission_no,s.gender,s.parent_name,s.parent_phone,s.status,
+                        g.graduation_year,g.graduated_at,g.graduated_by,c.id final_class_id,
                         c.name final_class,c.stream final_stream
                  FROM student_graduations g
                  JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
@@ -8596,6 +8597,39 @@ def student_graduation_records_page(
     else:
         table_html = "<div class='card section muted'>Choose one or more filters, then select <b>Load Records</b> to display matching graduation records.</div>"
     tab_query = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
+    print_school_name = escape(str(print_school["name"] or "DaviSchool")) if print_school else "DaviSchool"
+    print_school_postal = escape("P.O. Box " + str(print_school["postal_address"] or "")) if print_school and "postal_address" in print_school.keys() and print_school["postal_address"] else ""
+    print_school_code = escape(str(print_school["postal_code"] or "")) if print_school and "postal_code" in print_school.keys() and print_school["postal_code"] else ""
+    print_school_phone = escape(str(print_school["phone"] or "")) if print_school and "phone" in print_school.keys() and print_school["phone"] else ""
+    print_school_email = escape(str(print_school["email"] or "")) if print_school and "email" in print_school.keys() and print_school["email"] else ""
+    print_school_logo = str(print_school["logo_data"] or "") if print_school and "logo_data" in print_school.keys() else ""
+    print_school_contact = "".join("<div>" + x + "</div>" for x in [" ".join(x for x in [print_school_postal, print_school_code] if x), ("☎ " + print_school_phone) if print_school_phone else "", ("✉ " + print_school_email) if print_school_email else ""] if x)
+    graduation_print_header = ("<div class='doc-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>GRADUATION RECORDS</h1>") % (print_school_name, print_school_contact)
+    graduation_print_rows = "".join(
+        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (
+            escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
+            escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
+            escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
+            escape(str(g["parent_phone"] or "")),
+            escape(str(g["graduation_year"] or "")),
+            escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0]),
+            escape(str(g["graduated_by"] or ""))
+        ) for g in records
+    )
+    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th><th>Recorded By</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='10'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
+    graduation_print_script = r"""<script>
+function printGraduationRegister(){
+ var source=document.getElementById('graduation-print-source');
+ if(!source){alert('Load graduation records before printing.');return;}
+ var w=window.open('','_blank','width=1200,height=800');
+ if(!w){alert('Chrome blocked the print preview. Allow pop-ups for this site, then try again.');return;}
+ var bar='<div class="preview-bar no-print"><div><b>Graduation Records Print Preview</b><span>Review the filtered graduation records. The print preview opens automatically.</span></div><div><button onclick="window.print()">Print Graduation Records</button><button onclick="window.close()">Close Preview</button></div></div>';
+ var css='*{box-sizing:border-box}body{margin:0;padding:18px;background:#fff;color:#111;font:12px Arial,sans-serif}.preview-bar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;margin:-18px -18px 18px;background:#172033;color:#fff}.preview-bar span{display:block;font-size:12px;margin-top:4px;opacity:.85}.preview-bar button{border:0;border-radius:7px;padding:10px 12px;margin-left:7px;font-weight:800;cursor:pointer}.preview-bar button:first-child{background:#176B3A;color:#fff}.doc-header{display:grid;grid-template-columns:76px 1fr 76px;align-items:center;gap:10px;border-top:2px solid #2E8B57;border-bottom:3px solid #2E8B57;padding:8px 0;margin-bottom:12px}.doc-logo{height:64px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:70px;max-height:60px;object-fit:contain}.doc-school-block{text-align:center}.doc-school{font-size:20px;font-weight:800;text-transform:uppercase}.doc-contact{font-size:10px;line-height:1.4}.register-title{text-align:center;font-size:16px;margin:12px 0;text-decoration:underline}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #333;padding:5px;text-align:left;vertical-align:top}th{background:#e8f5ec;font-weight:800}.print-footer{display:flex;justify-content:space-between;margin-top:16px;padding-top:6px;border-top:1px solid #777;font-size:9px}@page{size:A4 landscape;margin:10mm}@media print{.no-print{display:none!important}body{padding:0}.doc-header{break-inside:avoid}thead{display:table-header-group}tr{break-inside:avoid}}';
+ var html='<!doctype html><html><head><meta charset="utf-8"><title>Graduation Records Print Preview</title><style>'+css+'</style></head><body>'+bar+source.innerHTML+'<div class="print-footer"><span>DaviSchool Management System</span><span>Generated: '+new Date().toLocaleString()+'</span></div></body></html>';
+ w.document.open();w.document.write(html);w.document.close();w.focus();setTimeout(function(){try{w.print()}catch(e){console.error(e)}},400);
+}
+</script>"""
+    graduation_print_script = graduation_print_script.replace("__GRADUATION_PRINT_HEADER__", json.dumps(graduation_print_header, ensure_ascii=False))
     body = f"""<div class='page'>
 <h1>Graduation Records</h1>
 <div class='muted'>Review graduates recorded by DaviSchool. Filtering this register does not alter student status or academic history.</div>
@@ -8604,9 +8638,10 @@ def student_graduation_records_page(
 <label>Final Class / Stream<select name='class_id' class='field'>{class_options}</select></label>
 <label>Student Name / Admission No.<input name='student' value='{escape(search_text)}' class='field' placeholder='Search student or admission number'></label>
 {hidden_tab}<input type='hidden' name='loaded' value='1'>
-<div class='filter-actions'><button class='btn' type='submit'>Load Records</button><a class='action' href='/app/students/graduation-records{tab_query}'>Clear Filters</a></div>
+<div class='filter-actions'><button class='btn' type='submit'>Load Records</button>{("<button class='btn graduation-print-button' type='button' onclick='printGraduationRegister()'>Print Records</button>" if loaded == "1" else "")}<a class='action' href='/app/students/graduation-records{tab_query}'>Clear Filters</a></div>
 </form></div>
 <div class='card section'><h2>Graduation Register</h2>{filter_summary}{table_html}</div>
+{("<div id='graduation-print-source' style='display:none'>" + graduation_print_header + graduation_print_table + "</div>" + graduation_print_script) if loaded == "1" else ""}
 </div>
 <style>
 .graduation-filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end}}
