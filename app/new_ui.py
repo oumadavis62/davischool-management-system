@@ -8236,6 +8236,25 @@ def student_promotion_page(request: Request, class_id: str = ""):
         "SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
     cid = int(class_id) if class_id.isdigit() else 0
+    selected_class = next((c for c in classes if int(c["id"]) == cid), None)
+    next_class = None
+    if selected_class:
+        current_name = str(selected_class["name"] or "").strip()
+        current_stream = str(selected_class["stream"] or "").strip().casefold()
+        current_number = re.search(r"\d+", current_name)
+        if current_number:
+            current_level = int(current_number.group())
+            current_prefix = re.sub(r"\d+", "#", current_name).casefold().strip()
+            candidates = [
+                c for c in classes
+                if int(c["id"]) != cid
+                and str(c["stream"] or "").strip().casefold() == current_stream
+                and re.sub(r"\d+", "#", str(c["name"] or "")).casefold().strip() == current_prefix
+                and (re.search(r"\d+", str(c["name"] or "")) is not None)
+                and int(re.search(r"\d+", str(c["name"] or "")).group()) == current_level + 1
+            ]
+            if len(candidates) == 1:
+                next_class = candidates[0]
     students = cur.execute(
         """SELECT s.id,s.name,s.admission_no,s.class_id,c.name class_name,c.stream
            FROM students s LEFT JOIN classes c ON c.id=s.class_id
@@ -8260,6 +8279,12 @@ def student_promotion_page(request: Request, class_id: str = ""):
         f"<td><select name='to_class_{s['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
         for s in students
     )
+    next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
+    bulk_action = (
+        f"<div class='card section'><h2>Promote the whole class</h2><p>Promote all {len(students)} students from this class together to <b>{next_class_label}</b>, keeping their stream. This avoids selecting learners one by one.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote all {len(students)} students to {next_class_label}? This will move every student currently in this class.');\">Promote All Students to Next Class</button></div>"
+        if students and next_class else
+        ("<div class='card section'><b>Automatic next class not found.</b> You can still use the individual destination selectors below. For automatic bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students else "")
+    )
     body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
 <div class='muted'>Move learners between classes while preserving their existing marks, attendance and financial records. Every change is recorded in the student class history.</div>
 <div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
@@ -8268,9 +8293,10 @@ def student_promotion_page(request: Request, class_id: str = ""):
 <button class='btn' type='submit'>Load Students</button></form></div>
 <div class='card section'><form method='post' action='/app/students/promotion'>
 <input type='hidden' name='from_class_id' value='{cid}'>
+{bulk_action}
 <table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promote / Transfer To</th></tr></thead>
 <tbody>{rows or "<tr><td colspan='4'>Select a class to load its students.</td></tr>"}</tbody></table>
-{"<button class='btn' style='margin-top:12px'>Save Class Changes</button>" if students else ""}
+{"<button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school.</div>
 </div>
@@ -8296,30 +8322,64 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         return HTMLResponse("Invalid current class. <a href='/app/students/promotion'>Back</a>", 400)
     changed = 0
     now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    for key, value in form.multi_items():
-        if not key.startswith("to_class_"):
-            continue
-        try:
-            student_id = int(key.split("_", 2)[2])
-            to_class_id = int(str(value)) if str(value).isdigit() else 0
-        except Exception:
-            continue
-        if not to_class_id or to_class_id == from_class_id:
-            continue
-        if not cur.execute(
-            "SELECT id FROM classes WHERE id=? AND school_id=?", (to_class_id, sid)
-        ).fetchone():
-            continue
-        student = cur.execute(
-            "SELECT id,class_id FROM students WHERE id=? AND school_id=? AND class_id=?",
-            (student_id, sid, from_class_id)
+    bulk_value = str(form.get("bulk_to_class_id", "")).strip()
+    targets = []
+    if bulk_value.isdigit():
+        to_class_id = int(bulk_value)
+        source_class = cur.execute(
+            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",
+            (from_class_id, sid)
         ).fetchone()
-        if not student:
-            continue
+        destination_class = cur.execute(
+            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",
+            (to_class_id, sid)
+        ).fetchone()
+        if not source_class or not destination_class or to_class_id == from_class_id:
+            con.close()
+            return HTMLResponse("Invalid promotion destination. No students were changed.", 400)
+        if str(source_class["stream"] or "").strip().casefold() != str(destination_class["stream"] or "").strip().casefold():
+            con.close()
+            return HTMLResponse("Bulk promotion must keep students in the same stream. No students were changed.", 400)
+        source_number = re.search(r"\d+", str(source_class["name"] or ""))
+        destination_number = re.search(r"\d+", str(destination_class["name"] or ""))
+        source_prefix = re.sub(r"\d+", "#", str(source_class["name"] or "")).casefold().strip()
+        destination_prefix = re.sub(r"\d+", "#", str(destination_class["name"] or "")).casefold().strip()
+        if not source_number or not destination_number or destination_prefix != source_prefix or int(destination_number.group()) != int(source_number.group()) + 1:
+            con.close()
+            return HTMLResponse("The selected destination is not the next class level. No students were changed.", 400)
+        source_students = cur.execute(
+            "SELECT id FROM students WHERE school_id=? AND class_id=?",
+            (sid, from_class_id)
+        ).fetchall()
+        targets = [(int(student["id"]), to_class_id) for student in source_students]
+    else:
+        for key, value in form.multi_items():
+            if not key.startswith("to_class_"):
+                continue
+            try:
+                student_id = int(key.split("_", 2)[2])
+                to_class_id = int(str(value)) if str(value).isdigit() else 0
+            except Exception:
+                continue
+            if not to_class_id or to_class_id == from_class_id:
+                continue
+            if not cur.execute(
+                "SELECT id FROM classes WHERE id=? AND school_id=?", (to_class_id, sid)
+            ).fetchone():
+                continue
+            student = cur.execute(
+                "SELECT id,class_id FROM students WHERE id=? AND school_id=? AND class_id=?",
+                (student_id, sid, from_class_id)
+            ).fetchone()
+            if student:
+                targets.append((student_id, to_class_id))
+    for student_id, to_class_id in targets:
         cur.execute(
-            "UPDATE students SET class_id=? WHERE id=? AND school_id=?",
-            (to_class_id, student_id, sid)
+            "UPDATE students SET class_id=? WHERE id=? AND school_id=? AND class_id=?",
+            (to_class_id, student_id, sid, from_class_id)
         )
+        if cur.rowcount != 1:
+            continue
         cur.execute(
             """INSERT INTO student_class_history
                (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
