@@ -8334,7 +8334,7 @@ def student_graduation_records_page(
         f"<tr><td>{int(i)+1}</td><td>{escape(str(g['graduation_year'] or ''))}</td>"
         f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
         f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
-        f"<td>{escape(str(g['graduated_at'] or ''))}</td><td>{escape(str(g['graduated_by'] or ''))}</td></tr>"
+        f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td><td>{escape(str(g['graduated_by'] or ''))}</td></tr>"
         for i, g in enumerate(records)
     )
     tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
