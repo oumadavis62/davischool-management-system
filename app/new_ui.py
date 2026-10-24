@@ -5750,32 +5750,27 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     if participating & eligible_active_class_ids:
                         visible_teacher_exams.append(exam)
                         continue
-                    # A promoted cohort may have active learners whose marks
-                    # belong to its former class. Keep that exam visible only
-                    # if this teacher historically taught that class and those
-                    # still-active learners actually have marks there.
+                    # Keep an older exam selectable when a teacher's current
+                    # class/subject allocation matches active learners who have
+                    # marks recorded under their former class in this exam.
                     historical_visible=False
                     if participating:
                         try:
-                            _ensure_teacher_assignment_history_tables(cur)
                             for old_class_id in participating:
-                                had_allocation=cur.execute(
-                                    "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
-                                    (sid,teacher_id_for_exam_filter,old_class_id)
-                                ).fetchone()
-                                if not had_allocation:
-                                    continue
-                                has_active_cohort_marks=cur.execute("""SELECT 1
+                                has_current_cohort_allocation=cur.execute("""SELECT 1
                                     FROM marks m
                                     JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                                    JOIN teacher_allocations ta
+                                      ON ta.school_id=st.school_id AND ta.teacher_id=?
+                                     AND ta.class_id=st.class_id AND ta.subject_id=m.subject_id
                                     WHERE m.school_id=? AND m.exam_id=? AND m.class_id=?
                                       AND lower(coalesce(st.status,'active'))='active'
                                       AND NOT EXISTS (
                                           SELECT 1 FROM student_graduations sg
                                           WHERE sg.school_id=st.school_id AND sg.student_id=st.id
                                       )
-                                    LIMIT 1""",(sid,exam_key,old_class_id)).fetchone()
-                                if has_active_cohort_marks:
+                                    LIMIT 1""",(teacher_id_for_exam_filter,sid,exam_key,old_class_id)).fetchone()
+                                if has_current_cohort_allocation:
                                     historical_visible=True
                                     break
                         except Exception as history_filter_exc:
