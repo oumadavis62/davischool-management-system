@@ -9152,7 +9152,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     else:
         cohort_notice = ""
     body = f"""<div class='page promotion-transfer-page'><h1>Student Promotion / Transfer</h1>
-<div class='muted'>Promote a class cohort in one action. The selected year is the cohort's current academic year; promotion records the transition from that year to the following year. The school's active academic year stays unchanged while classes are processed individually. DaviSchool snapshots existing class members by promotion year, so newly arriving students are not promoted again with the destination cohort.</div>
+
 {result_notice}
 <div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
 <select name='cycle_year' class='field'>{year_options}</select>
