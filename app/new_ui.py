@@ -5702,7 +5702,21 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             subject_ids=sorted({int(a["subject_id"]) for a in allocations if a["subject_id"] is not None})
             if class_ids:
                 ph=",".join("?" for _ in class_ids)
-                classes=cur.execute("SELECT * FROM classes WHERE school_id=? AND id IN ("+ph+") ORDER BY name,stream",[sid]+class_ids).fetchall()
+                # Teacher class filters must contain only currently active
+                # classes. Graduated classes remain available to authorised
+                # school administrators/registrars, but not in the teacher UI.
+                classes=cur.execute("""SELECT * FROM classes c
+                    WHERE c.school_id=? AND c.id IN (""" + ph + """)
+                      AND EXISTS (
+                          SELECT 1 FROM students st
+                          WHERE st.school_id=c.school_id AND st.class_id=c.id
+                            AND lower(coalesce(st.status,'active'))='active'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM student_graduations sg
+                                WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                            )
+                      )
+                    ORDER BY c.name,c.stream""",[sid]+class_ids).fetchall()
             else:
                 classes=[]
             if subject_ids:
