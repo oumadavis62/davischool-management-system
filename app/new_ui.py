@@ -6111,6 +6111,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
                       AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
                           CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+                  ) AND NOT EXISTS (
+                    SELECT 1 FROM student_class_history moved_out_of_class
+                    WHERE moved_out_of_class.school_id=s.school_id
+                      AND moved_out_of_class.student_id=s.id
+                      AND moved_out_of_class.from_class_id=?
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >
+                          CAST(substr(COALESCE(moved_out_of_class.changed_at,''),1,4) AS INTEGER)
                   ) AND (
                      NOT EXISTS (
                        SELECT 1 FROM student_promotion_cohort_snapshots cohort
@@ -6128,7 +6135,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                      -- The moved-into-class guard above excludes later cohorts.
                      OR s.class_id=?
                    ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,cid,eid,eid,cid,eid,cid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -6186,7 +6193,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                      -- Include current class members who missed this subject/exam.
                      -- Later transfers into this class are excluded by the guard above.
                      OR s.class_id=?
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid,cid)).fetchall()
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,cid,eid,eid,cid,eid,cid,eid,subid,cid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
