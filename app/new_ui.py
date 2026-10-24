@@ -1242,12 +1242,19 @@ def students_page(request: Request):
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
         WHERE """ + where_sql + " ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC LIMIT ? OFFSET ?",
         tuple(params + [page_size, offset])).fetchall()
+    print_students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream,
+        CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+             THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
+        FROM students s LEFT JOIN classes c ON c.id=s.class_id
+        WHERE """ + where_sql + " ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC",
+        tuple(params)).fetchall()
     con.close()
 
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
       <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
       <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}{tab_q}'>History</a></td></tr>""" for s in students)
+    print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
     gender_opts = "".join(f"<option {'selected' if gender_filter == g else ''}>{g}</option>" for g in ("Male", "Female", "Other"))
@@ -1264,7 +1271,7 @@ def students_page(request: Request):
     pager = f"""<div class='students-pager'><span>Showing {offset + 1 if total else 0}–{min(offset + len(students), int(total))} of {int(total)} matching students · Page {page_num} of {page_count}</span><div>{("<a class='action' href='" + page_url(page_num - 1) + "'>← Previous</a>") if page_num > 1 else ""} {("<a class='action' href='" + page_url(page_num + 1) + "'>Next →</a>") if page_num < page_count else ""}</div></div>"""
     students_print_script = '''<script>
 function openStudentsPrintPreview(){
-  var source=document.querySelector('.students-register-scroll table');
+  var source=document.querySelector('#students-print-source table');
   if(!source){alert('The student register is not ready to print.');return;}
   var table=source.cloneNode(true);
   table.querySelectorAll('tr').forEach(function(row){if(row.lastElementChild){row.lastElementChild.remove();}});
@@ -1291,6 +1298,7 @@ function openStudentsPrintPreview(){
 <select name='status' class='field'><option value=''>All statuses</option>{status_opts}</select>
 <input type='hidden' name='ds_tab' value='{escape(tab_id, quote=True)}'><button class='btn' type='submit'>Apply filters</button><a class='action' href='/app/students{tab_q}'>Reset</a></form>
 {pager}
+<div id='students-print-source' style='display:none'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead><tbody>{print_rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>
 <div class='students-register-scroll'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead>
 <tbody>{rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>{pager}</div>
 {students_print_script}
