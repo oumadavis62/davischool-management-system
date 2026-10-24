@@ -1196,32 +1196,86 @@ def students_page(request: Request):
     if not _require_permission(request, sid, "students.view"):
         return HTMLResponse("You do not have permission to view students.", 403)
     # Keep the active browser-tab session on the student-create POST URL.
-    # Middleware chooses the authentication cookie from the ds_tab query value;
-    # a JavaScript-only injection can fail and fall back to the generic cookie.
     tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
         tab_id = ""
     tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
+
+    # Server-side filters and pagination keep large student registers quick and easy to browse.
+    search = str(request.query_params.get("q") or "").strip()[:100]
+    class_filter = str(request.query_params.get("class_id") or "").strip()
+    gender_filter = str(request.query_params.get("gender") or "").strip()
+    status_filter = str(request.query_params.get("status") or "").strip().lower()
+    try:
+        page_num = max(1, int(request.query_params.get("page") or "1"))
+    except (TypeError, ValueError):
+        page_num = 1
+    page_size = 50
+
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
+    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+    where = ["s.school_id=?"]
+    params = [sid]
+    if search:
+        where.append("(lower(coalesce(s.name,'')) LIKE lower(?) OR lower(coalesce(s.admission_no,'')) LIKE lower(?) OR lower(coalesce(s.assessment_no,'')) LIKE lower(?))")
+        term = "%" + search + "%"
+        params.extend([term, term, term])
+    if class_filter == "unassigned":
+        where.append("(s.class_id IS NULL OR s.class_id=0)")
+    elif class_filter.isdigit():
+        where.append("s.class_id=?")
+        params.append(int(class_filter))
+    if gender_filter in ("Male", "Female", "Other"):
+        where.append("lower(coalesce(s.gender,''))=lower(?)")
+        params.append(gender_filter)
+    if status_filter in ("active", "inactive", "graduated", "transferred"):
+        where.append("lower(coalesce(s.status,'active'))=?")
+        params.append(status_filter)
+    where_sql = " AND ".join(where)
+    total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE " + where_sql, tuple(params)).fetchone()["n"]
+    page_count = max(1, (int(total) + page_size - 1) // page_size)
+    page_num = min(page_num, page_count)
+    offset = (page_num - 1) * page_size
     students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
-        WHERE s.school_id=? ORDER BY s.id DESC""",(sid,)).fetchall()
-    classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        WHERE """ + where_sql + " ORDER BY s.name COLLATE NOCASE ASC, s.admission_no COLLATE NOCASE ASC LIMIT ? OFFSET ?",
+        tuple(params + [page_size, offset])).fetchall()
     con.close()
+
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
       <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] if 'status' in s.keys() and s['status'] else 'Active'))}</td>
-      <td><a class='action' href='/app/students/edit/{s["id"]}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}'>History</a></td></tr>""" for s in students)
-    opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    body=f"""<div class='page'><h1>Students</h1><div class='muted'>Student register, admissions, transfers and academic-history management.</div>
-<div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add{tab_q}' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
+      <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}{tab_q}'>History</a></td></tr>""" for s in students)
+    opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
+    selected_unassigned = "selected" if class_filter == "unassigned" else ""
+    gender_opts = "".join(f"<option {'selected' if gender_filter == g else ''}>{g}</option>" for g in ("Male", "Female", "Other"))
+    status_opts = "".join(f"<option value='{v}' {'selected' if status_filter == v else ''}>{label}</option>" for v, label in (("active","Active"),("inactive","Inactive"),("graduated","Graduated"),("transferred","Transferred")))
+    def page_url(n):
+        pairs = []
+        if search: pairs.append("q=" + quote(search, safe=""))
+        if class_filter: pairs.append("class_id=" + quote(class_filter, safe=""))
+        if gender_filter: pairs.append("gender=" + quote(gender_filter, safe=""))
+        if status_filter: pairs.append("status=" + quote(status_filter, safe=""))
+        pairs.append("page=" + str(n))
+        if tab_id: pairs.append("ds_tab=" + quote(tab_id, safe=""))
+        return "/app/students?" + "&".join(pairs)
+    pager = f"""<div class='students-pager'><span>Showing {offset + 1 if total else 0}–{min(offset + len(students), int(total))} of {int(total)} matching students · Page {page_num} of {page_count}</span><div>{("<a class='action' href='" + page_url(page_num - 1) + "'>← Previous</a>") if page_num > 1 else ""} {("<a class='action' href='" + page_url(page_num + 1) + "'>Next →</a>") if page_num < page_count else ""}</div></div>"""
+    body=f"""<div class='page'><h1>Students</h1><div class='muted'>Student register, admissions, transfers and academic-history management. Search by name, admission number or assessment number, or narrow the list using filters.</div>
+<div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add{tab_q}' style='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
 <input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
 <select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
 <button class='btn'>Save Student</button></form></div>
-<div class='card section'><div style='display:flex;justify-content:space-between'><h2>Student register ({len(students)})</h2><a class='action' href='/app/students'>Refresh</a></div>
+<div class='card section'><div class='register-heading'><h2>Student register ({int(total)} matching / all students)</h2><a class='action' href='/app/students{tab_q}'>Clear filters</a></div>
+<form method='get' action='/app/students' class='student-filters'>
+<input type='search' name='q' value='{escape(search, quote=True)}' placeholder='Search name, admission or assessment no.' class='field'>
+<select name='class_id' class='field'><option value=''>All classes</option>{opts}<option value='unassigned' {selected_unassigned}>Unassigned</option></select>
+<select name='gender' class='field'><option value=''>All genders</option>{gender_opts}</select>
+<select name='status' class='field'><option value=''>All statuses</option>{status_opts}</select>
+<input type='hidden' name='ds_tab' value='{escape(tab_id, quote=True)}'><button class='btn' type='submit'>Apply filters</button><a class='action' href='/app/students{tab_q}'>Reset</a></form>
+{pager}
 <div class='students-register-scroll'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{rows or '<tr><td colspan=7>No students yet.</td></tr>'}</tbody></table></div></div>
-<style>.students-register-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px}}.students-register-scroll table{{width:max-content;min-width:100%;white-space:nowrap}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style><script>function selectCorrectionSubject(row,event){{if(event&&event.target&&event.target.closest&&event.target.closest('a,button,form'))return;document.querySelectorAll('.correction-subject-row.selected').forEach(function(r){{if(r!==row){{r.classList.remove('selected');r.querySelectorAll('.lock-btn,.unlock-btn').forEach(function(b){{b.style.display='none'}})}}}});var was=row.classList.contains('selected');row.classList.toggle('selected');row.querySelectorAll('.lock-btn,.unlock-btn').forEach(function(b){{b.style.display=was?'none':'inline-block'}})}}</script>"""
+<tbody>{rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>{pager}</div>
+<style>.students-register-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:8px}}.students-register-scroll table{{width:max-content;min-width:100%;white-space:nowrap}}.field{{box-sizing:border-box;width:100%;min-width:0;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.student-filters{{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr auto auto;gap:9px;align-items:center;margin:12px 0}}.register-heading,.students-pager{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}}.students-pager{{font-size:13px;color:#64748b;margin:12px 0}}@media(max-width:760px){{.student-filters{{grid-template-columns:1fr 1fr}}.student-filters input[type=search]{{grid-column:1/-1}}}}</style></div>"""
     return _school_page(request,"Students",body)
 
 @router.post("/app/students/add")
