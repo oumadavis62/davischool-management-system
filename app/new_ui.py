@@ -2012,10 +2012,19 @@ def _move_class_staff_assignments(cur, school_id, from_class_id, to_class_id, cy
         cur, school_id, from_class_id, cycle_year, now, "Cohort promoted to next class"
     )
     for a in allocations:
+        # Production databases may not have a composite unique constraint on
+        # teacher_allocations. Avoid a targeted ON CONFLICT clause that PostgreSQL
+        # rejects unless that exact constraint exists.
         cur.execute(
             """INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id)
-               VALUES(?,?,?,?) ON CONFLICT(school_id,teacher_id,class_id,subject_id) DO NOTHING""",
-            (school_id, int(a["teacher_id"]), to_class_id, int(a["subject_id"]))
+               SELECT ?,?,?,?
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM teacher_allocations existing
+                   WHERE existing.school_id=? AND existing.teacher_id=?
+                     AND existing.class_id=? AND existing.subject_id=?
+               )""",
+            (school_id, int(a["teacher_id"]), to_class_id, int(a["subject_id"]),
+             school_id, int(a["teacher_id"]), to_class_id, int(a["subject_id"]))
         )
     if assignment:
         cur.execute(
