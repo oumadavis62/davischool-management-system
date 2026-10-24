@@ -5743,18 +5743,58 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                             scoped_classes_by_exam[exam_key]={int(row["class_id"]) for row in rows}
                         except Exception:
                             scoped_classes_by_exam[exam_key]=set()
+                # A teacher may see an exam when it includes one of their
+                # currently allocated active classes, OR when the exam contains
+                # historical marks for active, non-graduated learners now in a
+                # class/subject allocated to that teacher. The latter preserves
+                # access to last year's Grade 7 marks after those learners move
+                # to Grade 8, without exposing exams belonging only to a fully
+                # graduated cohort.
+                teacher_alloc_rows=cur.execute("""SELECT DISTINCT ta.class_id,ta.subject_id
+                    FROM teacher_allocations ta
+                    WHERE ta.school_id=? AND ta.teacher_id=?
+                      AND ta.class_id IS NOT NULL AND ta.subject_id IS NOT NULL""",
+                    (sid,teacher_id_for_exam_filter)).fetchall()
+                teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id
+                    FROM classes c
+                    JOIN teacher_allocations ta
+                      ON ta.school_id=c.school_id AND ta.class_id=c.id
+                    WHERE c.school_id=? AND ta.teacher_id=?
+                      AND EXISTS (
+                          SELECT 1 FROM students st
+                          WHERE st.school_id=c.school_id AND st.class_id=c.id
+                            AND lower(coalesce(st.status,'active'))='active'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM student_graduations sg
+                                WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                            )
+                      )""",(sid,teacher_id_for_exam_filter)).fetchall()
+                eligible_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
+                teacher_pairs={(int(row["class_id"]),int(row["subject_id"])) for row in teacher_alloc_rows}
                 visible_teacher_exams=[]
                 for exam in all_exams:
                     exam_key=int(exam["id"])
                     participating=scoped_classes_by_exam.get(exam_key,set())
-                    # Show an exam if at least one participating class currently
-                    # has active, non-graduated learners anywhere in the school.
-                    # Do not require that this particular teacher is allocated
-                    # to that active class: exams shared by active and graduated
-                    # classes should remain selectable for every teacher.
-                    # An exam whose participating classes are all graduated/
-                    # inactive is hidden from the teacher selector.
-                    if participating & active_class_ids:
+                    visible=bool(participating & eligible_active_class_ids)
+                    if not visible and teacher_pairs:
+                        for current_class_id,subject_id in teacher_pairs:
+                            if current_class_id not in eligible_active_class_ids:
+                                continue
+                            historical_mark=cur.execute("""SELECT 1
+                                FROM marks m
+                                JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                                WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
+                                  AND st.class_id=?
+                                  AND lower(coalesce(st.status,'active'))='active'
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM student_graduations sg
+                                      WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                                  )
+                                LIMIT 1""",(sid,exam_key,subject_id,current_class_id)).fetchone()
+                            if historical_mark:
+                                visible=True
+                                break
+                    if visible:
                         visible_teacher_exams.append(exam)
                 all_exams=visible_teacher_exams
             except Exception as scope_exc:
