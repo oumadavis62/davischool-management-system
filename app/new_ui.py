@@ -5775,7 +5775,35 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 for exam in all_exams:
                     exam_key=int(exam["id"])
                     participating=scoped_classes_by_exam.get(exam_key,set())
+                    # Class IDs are reused as learners are promoted, so a class
+                    # having active learners today does NOT prove that those
+                    # learners sat an older exam assigned to that class ID.
+                    # When an exam has marks, distinguish actual marked cohorts
+                    # from a later cohort that now occupies the same class.
+                    try:
+                        mark_class_rows=cur.execute(
+                            "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
+                            (sid,exam_key)
+                        ).fetchall()
+                        marked_class_ids={int(row["class_id"]) for row in mark_class_rows}
+                        has_marks=bool(cur.execute(
+                            "SELECT 1 FROM marks WHERE school_id=? AND exam_id=? LIMIT 1",
+                            (sid,exam_key)
+                        ).fetchone())
+                    except Exception:
+                        marked_class_ids=set()
+                        has_marks=False
+                    # If there are no marks yet, use the explicit participation
+                    # list and current active classes. If marks exist, do not
+                    # count a participating class already represented only by
+                    # the old exam's marks as active merely because a new
+                    # cohort has since been promoted into that class ID.
                     visible=bool(participating & eligible_active_class_ids)
+                    if has_marks:
+                        visible=bool((participating & eligible_active_class_ids) - marked_class_ids)
+                    # Keep historical exams visible when at least one currently
+                    # active, non-graduated learner with marks for this exam is
+                    # now in a class/subject allocated to this teacher.
                     if not visible and teacher_pairs:
                         for current_class_id,subject_id in teacher_pairs:
                             if current_class_id not in eligible_active_class_ids:
