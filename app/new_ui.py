@@ -5935,6 +5935,56 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
+    # Preload former class options for every available exam, using the
+    # current teacher allocation + the same active student cohort's recorded
+    # marks. This lets changing the exam reveal Grade 7 history while the
+    # teacher is currently allocated to Grade 8 for the same subject.
+    if role=="teacher" and teacher_id:
+        try:
+            _teacher_current_pairs={(int(a["class_id"]),int(a["subject_id"]))
+                                    for a in allocations
+                                    if a.get("class_id") is not None and a.get("subject_id") is not None}
+            _historic_class_map={int(c["id"]):c for c in all_classes}
+            _historic_pair_set={(int(a["class_id"]),int(a["subject_id"]))
+                                for a in all_allocations
+                                if a.get("class_id") is not None and a.get("subject_id") is not None}
+            for _exam_row in exams:
+                _exam_key=int(_exam_row["id"])
+                _scope=exam_class_scope.get(_exam_key)
+                for _current_class_id,_subject_id in _teacher_current_pairs:
+                    _historical_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
+                        FROM marks m
+                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                        WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
+                          AND m.class_id IS NOT NULL AND st.class_id=?
+                          AND lower(coalesce(st.status,'active'))='active'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM student_graduations sg
+                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                          )""",(sid,_exam_key,_subject_id,_current_class_id)).fetchall()
+                    for _historical_row in _historical_rows:
+                        _old_class_id=int(_historical_row["class_id"])
+                        _old_subject_id=int(_historical_row["subject_id"])
+                        if _scope is not None and _old_class_id not in _scope:
+                            continue
+                        if _old_class_id not in _historic_class_map:
+                            _old_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
+                                                   (sid,_old_class_id)).fetchone()
+                            if _old_class:
+                                _historic_class_map[_old_class_id]=_old_class
+                        _historic_pair_set.add((_old_class_id,_old_subject_id))
+                        _old_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
+                                                 (sid,_old_subject_id)).fetchone()
+                        if _old_subject and not any(int(x["id"])==_old_subject_id for x in subjects):
+                            subjects.append(_old_subject)
+            all_classes=list(_historic_class_map.values())
+            for _class_id,_subject_id in _historic_pair_set:
+                if not any(a.get("class_id") is not None and a.get("subject_id") is not None
+                           and int(a["class_id"])==_class_id and int(a["subject_id"])==_subject_id
+                           for a in all_allocations):
+                    all_allocations.append({"class_id":_class_id,"subject_id":_subject_id})
+        except Exception as _historic_options_exc:
+            print("DAVISCHOOL TEACHER HISTORICAL FILTER OPTIONS:",repr(_historic_options_exc),flush=True)
     # Keep a master list for the interactive filters across every exam.
     # The working classes list is scoped to the currently selected exam, but
     # the dropdown must retain classes from other exams so changing the exam
