@@ -5848,7 +5848,19 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             scoped_classes.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
         for exam_row in exams:
             exam_key=int(exam_row["id"])
-            exam_class_scope[exam_key]=set(scoped_classes[exam_key]) if exam_key in scoped_classes else None
+            known_classes=set(scoped_classes.get(exam_key,set()))
+            # Include the class recorded on marks as well as saved participation
+            # scope. Promotion must not replace the class the learners sat the
+            # historical exam in.
+            try:
+                mark_class_rows=cur.execute(
+                    "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
+                    (sid,exam_key)
+                ).fetchall()
+                known_classes.update(int(row["class_id"]) for row in mark_class_rows)
+            except Exception:
+                pass
+            exam_class_scope[exam_key]=known_classes if known_classes else (None if exam_key not in scoped_classes else set())
         participating_ids=exam_class_scope.get(eid) if eid else None
         if role=="teacher":
             if participating_ids is None and eid:
@@ -5907,6 +5919,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             if participating_ids is not None:
                 classes=[c for c in classes if int(c["id"]) in participating_ids]
         elif participating_ids is not None:
+            # Admin and Registrar must see the class that actually sat the
+            # selected exam, even if those learners have since been promoted.
             classes=[c for c in classes if int(c["id"]) in participating_ids]
         con.commit()
     except Exception as exc:
@@ -5921,6 +5935,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
+    # Rebuild after exam-scoped filtering and historical-class additions.
+    # The option renderer must use this final list, not the pre-filter list.
+    all_classes=list(classes)
     cid=int(class_id) if class_id.isdigit() and any(int(c["id"])==int(class_id) for c in classes) else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     # On the teacher landing page, choose the first allocated class/subject pair
