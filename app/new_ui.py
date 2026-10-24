@@ -5617,7 +5617,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             except Exception:
                 pass
             students=cur.execute("""SELECT id,admission_no,name,'' AS marks
-              FROM students WHERE school_id=? AND class_id=? ORDER BY name""",(sid,cid)).fetchall()
+              FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' ORDER BY name""",(sid,cid)).fetchall()
         try:
             cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
             out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
@@ -5832,7 +5832,9 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         _ensure_student_history_table(cur)
         _ensure_student_promotion_cohort_tables(cur)
         students=cur.execute("""SELECT s.id FROM students s
-            WHERE s.school_id=? AND (
+            WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active'
+              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+              AND (
               s.class_id=? OR EXISTS (
                 SELECT 1 FROM marks historical
                 WHERE historical.school_id=s.school_id AND historical.student_id=s.id
@@ -6042,7 +6044,9 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
     _ensure_student_history_table(cur)
     _ensure_student_promotion_cohort_tables(cur)
     students=cur.execute("""SELECT s.id FROM students s
-        WHERE s.school_id=? AND (
+        WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active'
+          AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+          AND (
           s.class_id=? OR EXISTS (
             SELECT 1 FROM marks historical
             WHERE historical.school_id=s.school_id AND historical.student_id=s.id
@@ -6238,7 +6242,7 @@ async def finalize_marks(request: Request, exam_id:int=Form(...), class_id:int=F
         form=await request.form()
         # Capture the current screen before publishing.
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+        students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)",(sid,class_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         exam=cur.execute("SELECT year,term FROM exams WHERE id=? AND school_id=?",(exam_id,sid)).fetchone()
@@ -9062,7 +9066,7 @@ async def attendance_save(request: Request, class_id:int=Form(...), date:str=For
     if not _teacher_class_authorized(cur, request, sid, class_id):
         con.close()
         return HTMLResponse("You are not allocated to this class.", 403)
-    students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)",(sid,class_id)).fetchall()
     for s in students:
         status=str(form.get(f"status_{s['id']}","Present"))
         old=cur.execute("SELECT id FROM attendance WHERE school_id=? AND student_id=? AND date=?",(sid,s["id"],date)).fetchone()
