@@ -6130,7 +6130,6 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                   WHERE s.school_id=? AND (
                     (lower(coalesce(s.status,'active'))='active'
                      AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id))
-                    OR s.class_id=?
                     OR EXISTS (
                       SELECT 1 FROM marks historical_eligible
                       WHERE historical_eligible.school_id=s.school_id AND historical_eligible.student_id=s.id
@@ -6162,7 +6161,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
                      )
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid,cid,eid,subid,cid,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
+                     OR EXISTS (
+                       SELECT 1 FROM marks cohort_historical
+                       WHERE cohort_historical.school_id=s.school_id
+                         AND cohort_historical.student_id=s.id
+                         AND cohort_historical.exam_id=? AND cohort_historical.subject_id=?
+                         AND cohort_historical.class_id=?
+                     )
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
