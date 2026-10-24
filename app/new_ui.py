@@ -6123,10 +6123,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                        WHERE cohort_member.school_id=s.school_id
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
-                     )
-                     -- Current-class membership is covered above; do not bypass a saved cohort snapshot.
+                     ) OR s.class_id=?
                    ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,eid,cid,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -6180,9 +6179,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                          AND cohort_historical.student_id=s.id
                          AND cohort_historical.exam_id=? AND cohort_historical.subject_id=?
                          AND cohort_historical.class_id=?
-                     )
-                     -- Current-class membership is covered above; do not bypass a saved cohort snapshot.
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid)).fetchall()
+                     ) OR s.class_id=?
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,eid,subid,cid,cid,eid,subid,cid,eid,cid,cid,eid,eid,eid,cid,eid,cid,eid,subid,cid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
@@ -6452,9 +6450,9 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                        WHERE cohort_member.school_id=s.school_id
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
-                     )
+                     ) OR s.class_id=?
                    ) ORDER BY s.name""",
-            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0),class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id)).fetchall()
+            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0),class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         # Load grading rules once per save, not once per student. Re-querying
@@ -6659,8 +6657,8 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                        WHERE cohort_member.school_id=s.school_id
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
-                     )
-                   ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id)).fetchall()
+                     ) OR s.class_id=?
+                   ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id)).fetchall()
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
