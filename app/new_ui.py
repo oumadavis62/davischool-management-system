@@ -1214,7 +1214,7 @@ def students_page(request: Request):
 
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_promotion_cohort_tables(cur)
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    where = ["s.school_id=?"]
+    where = ["s.school_id=?", "lower(coalesce(s.status,'active')) <> 'graduated'", "NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)"]
     params = [sid]
     if search:
         where.append("(lower(coalesce(s.name,'')) LIKE lower(?) OR lower(coalesce(s.admission_no,'')) LIKE lower(?) OR lower(coalesce(s.assessment_no,'')) LIKE lower(?))")
@@ -1228,10 +1228,8 @@ def students_page(request: Request):
     if gender_filter in ("Male", "Female", "Other"):
         where.append("lower(coalesce(s.gender,''))=lower(?)")
         params.append(gender_filter)
-    if status_filter == "graduated":
-        where.append("EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)")
-    elif status_filter in ("active", "inactive", "transferred"):
-        where.append("lower(coalesce(s.status,'active'))=? AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)")
+    if status_filter in ("active", "inactive", "transferred"):
+        where.append("lower(coalesce(s.status,'active'))=?")
         params.append(status_filter)
     where_sql = " AND ".join(where)
     total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE " + where_sql, tuple(params)).fetchone()["n"]
@@ -1253,7 +1251,7 @@ def students_page(request: Request):
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
     gender_opts = "".join(f"<option {'selected' if gender_filter == g else ''}>{g}</option>" for g in ("Male", "Female", "Other"))
-    status_opts = "".join(f"<option value='{v}' {'selected' if status_filter == v else ''}>{label}</option>" for v, label in (("active","Active"),("inactive","Inactive"),("graduated","Graduated"),("transferred","Transferred")))
+    status_opts = "".join(f"<option value='{v}' {'selected' if status_filter == v else ''}>{label}</option>" for v, label in (("active","Active"),("inactive","Inactive"),("transferred","Transferred")))
     def page_url(n):
         pairs = []
         if search: pairs.append("q=" + quote(search, safe=""))
