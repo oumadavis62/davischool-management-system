@@ -5746,36 +5746,15 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 visible_teacher_exams=[]
                 for exam in all_exams:
                     exam_key=int(exam["id"])
-                    participating= scoped_classes_by_exam.get(exam_key,set())
-                    if participating & eligible_active_class_ids:
-                        visible_teacher_exams.append(exam)
-                        continue
-                    # Keep an older exam selectable when a teacher's current
-                    # class/subject allocation matches active learners who have
-                    # marks recorded under their former class in this exam.
-                    historical_visible=False
-                    if participating:
-                        try:
-                            for old_class_id in participating:
-                                has_current_cohort_allocation=cur.execute("""SELECT 1
-                                    FROM marks m
-                                    JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                                    JOIN teacher_allocations ta
-                                      ON ta.school_id=st.school_id AND ta.teacher_id=?
-                                     AND ta.class_id=st.class_id AND ta.subject_id=m.subject_id
-                                    WHERE m.school_id=? AND m.exam_id=? AND m.class_id=?
-                                      AND lower(coalesce(st.status,'active'))='active'
-                                      AND NOT EXISTS (
-                                          SELECT 1 FROM student_graduations sg
-                                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                                      )
-                                    LIMIT 1""",(teacher_id_for_exam_filter,sid,exam_key,old_class_id)).fetchone()
-                                if has_current_cohort_allocation:
-                                    historical_visible=True
-                                    break
-                        except Exception as history_filter_exc:
-                            print("DAVISCHOOL TEACHER HISTORICAL EXAM FILTER:",repr(history_filter_exc),flush=True)
-                    if historical_visible:
+                    participating=scoped_classes_by_exam.get(exam_key,set())
+                    # Show an exam if at least one participating class currently
+                    # has active, non-graduated learners anywhere in the school.
+                    # Do not require that this particular teacher is allocated
+                    # to that active class: exams shared by active and graduated
+                    # classes should remain selectable for every teacher.
+                    # An exam whose participating classes are all graduated/
+                    # inactive is hidden from the teacher selector.
+                    if participating & active_class_ids:
                         visible_teacher_exams.append(exam)
                 all_exams=visible_teacher_exams
             except Exception as scope_exc:
