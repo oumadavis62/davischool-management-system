@@ -1137,14 +1137,34 @@ def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None
     if not teacher_id:
         return False
     if subject_id:
-        return bool(cur.execute(
+        current = cur.execute(
             "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
             (school_id, teacher_id, class_id, subject_id)
-        ).fetchone())
-    return bool(cur.execute(
+        ).fetchone()
+        if current:
+            return True
+        try:
+            _ensure_teacher_assignment_history_tables(cur)
+            return bool(cur.execute(
+                "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+                (school_id, teacher_id, class_id, subject_id)
+            ).fetchone())
+        except Exception:
+            return False
+    current = cur.execute(
         "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
         (school_id, teacher_id, class_id)
-    ).fetchone())
+    ).fetchone()
+    if current:
+        return True
+    try:
+        _ensure_teacher_assignment_history_tables(cur)
+        return bool(cur.execute(
+            "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
+            (school_id, teacher_id, class_id)
+        ).fetchone())
+    except Exception:
+        return False
 
 def _school_page(request, title, body):
     sid=_school_session(request)
@@ -5675,34 +5695,38 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                           WHERE sg.school_id=st.school_id AND sg.student_id=st.id
                       )""",(sid,)).fetchall()
                 active_class_ids={int(row["id"]) for row in active_class_rows}
-                # For teachers, an exam is selectable only when at least one
-                # class that participated is both still active and allocated
-                # to this teacher. This hides exams belonging solely to
-                # graduated classes without deleting exam or marks history.
                 teacher_id_for_exam_filter=int(request.session.get("teacher_id") or 0)
-                if teacher_id_for_exam_filter:
-                    teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id
-                        FROM classes c
-                        JOIN teacher_allocations ta
-                          ON ta.school_id=c.school_id AND ta.class_id=c.id
-                        WHERE c.school_id=? AND ta.teacher_id=?
-                          AND EXISTS (
-                              SELECT 1 FROM students st
-                              WHERE st.school_id=c.school_id AND st.class_id=c.id
-                                AND lower(coalesce(st.status,'active'))='active'
-                                AND NOT EXISTS (
-                                    SELECT 1 FROM student_graduations sg
-                                    WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                                )
-                          )""",(sid,teacher_id_for_exam_filter)).fetchall()
-                    teacher_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
-                else:
-                    teacher_active_class_ids=active_class_ids
-                eligible_active_class_ids=active_class_ids & teacher_active_class_ids
+                teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id
+                    FROM classes c
+                    JOIN teacher_allocations ta
+                      ON ta.school_id=c.school_id AND ta.class_id=c.id
+                    WHERE c.school_id=? AND ta.teacher_id=?
+                      AND EXISTS (
+                          SELECT 1 FROM students st
+                          WHERE st.school_id=c.school_id AND st.class_id=c.id
+                            AND lower(coalesce(st.status,'active'))='active'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM student_graduations sg
+                                WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                            )
+                      )""",(sid,teacher_id_for_exam_filter)).fetchall()
+                eligible_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
+                # Legacy exams without saved participation rows are checked
+                # against classes represented by their recorded marks.
+                for exam in all_exams:
+                    exam_key=int(exam["id"])
+                    if exam_key not in scoped_classes_by_exam:
+                        try:
+                            rows=cur.execute(
+                                "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
+                                (sid,exam_key)
+                            ).fetchall()
+                            scoped_classes_by_exam[exam_key]={int(row["class_id"]) for row in rows}
+                        except Exception:
+                            scoped_classes_by_exam[exam_key]=set()
                 all_exams=[
                     exam for exam in all_exams
-                    if (int(exam["id"]) not in scoped_classes_by_exam)
-                    or bool(scoped_classes_by_exam[int(exam["id"])] & eligible_active_class_ids)
+                    if bool(scoped_classes_by_exam.get(int(exam["id"]),set()) & eligible_active_class_ids)
                 ]
             except Exception as scope_exc:
                 # Preserve the existing selector if an older database is
