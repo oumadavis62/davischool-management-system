@@ -5935,9 +5935,15 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
-    # Rebuild after exam-scoped filtering and historical-class additions.
-    # The option renderer must use this final list, not the pre-filter list.
-    all_classes=list(classes)
+    # Keep a master list for the interactive filters across every exam.
+    # The working classes list is scoped to the currently selected exam, but
+    # the dropdown must retain classes from other exams so changing the exam
+    # can reveal its own historical class options.
+    _all_class_map={int(c["id"]):c for c in all_classes}
+    for _class_row in classes:
+        _all_class_map[int(_class_row["id"])]=_class_row
+    all_classes=list(_all_class_map.values())
+    all_classes.sort(key=lambda c:(str(c["name"] or ""),str(c["stream"] or "")))
     cid=int(class_id) if class_id.isdigit() and any(int(c["id"])==int(class_id) for c in classes) else (int(classes[0]["id"]) if classes else 0)
     subid=int(subject_id) if subject_id.isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     # On the teacher landing page, choose the first allocated class/subject pair
