@@ -7317,7 +7317,16 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
     if not _require_permission(request,sid,"staff.edit"):
         return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
-    _ensure_teacher_assignment_history_tables(cur)
+    history_schema_ready = True
+    try:
+        _ensure_teacher_assignment_history_tables(cur)
+    except Exception as history_schema_error:
+        history_schema_ready = False
+        print("DAVISCHOOL TEACHER ALLOCATION HISTORY SCHEMA WARNING: %r" % (history_schema_error,), flush=True)
+        try:
+            con.rollback()
+        except Exception:
+            pass
     # Reconcile legacy graduation and promotion records before showing active
     # staffing. Older versions could leave allocations attached to an emptied
     # class, or merge old destination allocations with the promoted class.
@@ -7470,11 +7479,23 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         history_sql += " AND h.class_id=?"
         history_params.append(history_class_value)
     history_sql += " ORDER BY h.cycle_year DESC,class_name,h.subject_name,h.teacher_name"
-    historical_allocations = cur.execute(history_sql, history_params).fetchall()
-    history_years = cur.execute(
-        "SELECT DISTINCT cycle_year FROM teacher_allocation_history WHERE school_id=? ORDER BY cycle_year DESC",
-        (sid,)
-    ).fetchall()
+    historical_allocations = []
+    history_years = []
+    if history_schema_ready:
+        try:
+            historical_allocations = cur.execute(history_sql, history_params).fetchall()
+            history_years = cur.execute(
+                "SELECT DISTINCT cycle_year FROM teacher_allocation_history WHERE school_id=? ORDER BY cycle_year DESC",
+                (sid,)
+            ).fetchall()
+        except Exception as history_read_error:
+            print("DAVISCHOOL TEACHER ALLOCATION HISTORY READ WARNING: %r" % (history_read_error,), flush=True)
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            historical_allocations = []
+            history_years = []
     # The school-wide allocation ceiling is the complete class/subject matrix:
     # every class/stream can have one allocation slot for every subject.
     # Example: 4 classes x 10 subjects = 40 maximum allocations.
