@@ -9428,24 +9428,42 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                          for row in reversal_rows
                          if row["previous_class_id"] is not None
                          and int(row["previous_class_id"]) in valid_previous_ids]
-        reversed_count = 0
-        affected_classes = {int(from_class_id)}
+        # Batch the writes as well as the reads. With a remote PostgreSQL
+        # database, one execute per learner adds avoidable network round trips.
         changed_by = request.session.get("email", "")
-        for student_id, previous_class_id in reversed_rows:
-            cur.execute("UPDATE students SET class_id=? WHERE id=? AND school_id=?",
-                        (previous_class_id, student_id, sid))
-            if cur.rowcount != 1:
-                continue
-            cur.execute(
+        audit_time = now
+        update_rows = [(previous_class_id, student_id, sid)
+                       for student_id, previous_class_id in reversed_rows]
+        history_rows = [
+            (sid, student_id, from_class_id, previous_class_id, now, changed_by, "Promotion reversed")
+            for student_id, previous_class_id in reversed_rows
+        ]
+        audit_rows = [
+            (sid, changed_by, "STUDENT_PROMOTION_REVERSED",
+             f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}",
+             audit_time)
+            for student_id, previous_class_id in reversed_rows
+        ]
+        if update_rows:
+            cur.executemany(
+                "UPDATE students SET class_id=? WHERE id=? AND school_id=? AND class_id=?",
+                [(previous_class_id, student_id, sid, from_class_id)
+                 for student_id, previous_class_id in reversed_rows]
+            )
+            # Keep history/audit aligned with the selected, validated rows.
+            # The cohort reset below is once per affected class, not per learner.
+            cur.executemany(
                 """INSERT INTO student_class_history
                    (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
                    VALUES(?,?,?,?,?,?,?)""",
-                (sid, student_id, from_class_id, previous_class_id, now, changed_by, "Promotion reversed")
+                history_rows
             )
-            _audit(cur, sid, request, "STUDENT_PROMOTION_REVERSED",
-                   f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}")
-            reversed_count += 1
-            affected_classes.add(previous_class_id)
+            cur.executemany(
+                "INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
+                audit_rows
+            )
+        reversed_count = len(reversed_rows)
+        affected_classes = {int(from_class_id)} | {previous_class_id for _, previous_class_id in reversed_rows}
         # Reset each affected class snapshot once, not once per selected learner.
         if reversed_count:
             for affected_class_id in affected_classes:
