@@ -8203,11 +8203,12 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
             report_final=False
         # Position is calculated from total marks among students in the same class.
         totals=cur.execute("""SELECT s.id,COALESCE(SUM(m.marks),0) total
-          FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.school_id=? AND m.exam_id=?
-          WHERE s.school_id=? AND s.class_id=? AND lower(coalesce(s.status,'active'))='active'
-            AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+          FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.school_id=? AND m.exam_id=? AND m.class_id=?
+          WHERE s.school_id=? AND ((s.class_id=? AND lower(coalesce(s.status,'active'))='active'
+            AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id))
+            OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=s.school_id AND historical.student_id=s.id AND historical.exam_id=? AND historical.class_id=?))
           GROUP BY s.id ORDER BY total DESC,s.id""",
-          (sid,eid,sid,st["class_id"])).fetchall()
+          (sid,eid,st["class_id"],sid,st["class_id"],eid,st["class_id"])).fetchall()
         class_total_students=len(totals)
         last_total=None
         last_position=0
@@ -8492,10 +8493,10 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
             placeholders=",".join("?" for _ in selected_exam_ids)
             stats=cur.execute("""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
-                FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
+                FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=? AND m.class_id=?
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
                 WHERE sub.school_id=? AND ((st.class_id=? AND lower(coalesce(st.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)) OR m.class_id=?) GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
-                list(selected_exam_ids)+[sid,sid,cid,cid]).fetchall()
+                list(selected_exam_ids)+[sid,cid,sid,cid,cid]).fetchall()
             students=cur.execute("SELECT * FROM students WHERE school_id=? AND ((class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN ("+placeholders+") AND historical.class_id=?)) ORDER BY name",[sid,cid]+selected_exam_ids+[cid]).fetchall()
             class_grading_rules=_load_grading_rules(cur,sid)
             class_overall_rules=_load_overall_grading_rules(cur,sid)
