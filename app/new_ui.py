@@ -5442,7 +5442,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                               WHERE m2.student_id=s.id AND m2.exam_id=? AND m2.subject_id=? AND m2.school_id=?
                               ORDER BY m2.id DESC LIMIT 1),'') marks
                   FROM students s
-                  WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(eid,subid,sid,sid,cid)).fetchall()
+                  WHERE s.school_id=? AND (
+                    s.class_id=? OR EXISTS (
+                      SELECT 1 FROM marks historical
+                      WHERE historical.school_id=s.school_id AND historical.student_id=s.id
+                        AND historical.exam_id=? AND historical.subject_id=? AND historical.class_id=?
+                    )
+                  ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
@@ -5660,7 +5666,20 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             con.close(); return HTMLResponse("These marks are already submitted and locked. <a href='/app/academics/marks'>Back</a>",403)
         form=await request.form()
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+        students=cur.execute("""SELECT s.id FROM students s
+            WHERE s.school_id=? AND (
+              s.class_id=? OR EXISTS (
+                SELECT 1 FROM marks historical
+                WHERE historical.school_id=s.school_id AND historical.student_id=s.id
+                  AND historical.exam_id=? AND historical.class_id=? AND historical.subject_id=?
+              ) OR EXISTS (
+                SELECT 1 FROM teacher_mark_drafts historical_draft
+                WHERE historical_draft.school_id=s.school_id AND historical_draft.student_id=s.id
+                  AND historical_draft.exam_id=? AND historical_draft.class_id=?
+                  AND historical_draft.subject_id=? AND historical_draft.teacher_id=?
+              )
+            ) ORDER BY s.name""",
+            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0))).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         # Load grading rules once per save, not once per student. Re-querying
@@ -5835,7 +5854,14 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
-    students=cur.execute("SELECT id FROM students WHERE school_id=? AND class_id=?",(sid,class_id)).fetchall()
+    students=cur.execute("""SELECT s.id FROM students s
+        WHERE s.school_id=? AND (
+          s.class_id=? OR EXISTS (
+            SELECT 1 FROM marks historical
+            WHERE historical.school_id=s.school_id AND historical.student_id=s.id
+              AND historical.exam_id=? AND historical.class_id=? AND historical.subject_id=?
+          )
+        ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id)).fetchall()
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
