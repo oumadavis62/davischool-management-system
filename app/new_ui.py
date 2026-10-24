@@ -8516,7 +8516,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     con = _db()
     cur = con.cursor()
     _ensure_student_history_table(cur)
-_ensure_student_promotion_cohort_tables(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     classes = cur.execute(
         "SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
@@ -8649,7 +8649,7 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
     con = _db()
     cur = con.cursor()
     _ensure_student_history_table(cur)
-_ensure_student_promotion_cohort_tables(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     if not cur.execute(
         "SELECT id FROM classes WHERE id=? AND school_id=?", (from_class_id, sid)
     ).fetchone():
