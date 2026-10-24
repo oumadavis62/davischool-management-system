@@ -5801,13 +5801,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             exam_class_scope[exam_key]=set(scoped_classes[exam_key]) if exam_key in scoped_classes else None
         participating_ids=exam_class_scope.get(eid) if eid else None
         if role=="teacher":
-            # The teacher's class filter must intersect the selected exam's
-            # participating classes with classes that still have active,
-            # non-graduated learners. Never show a graduated class merely
-            # because it participated in the same exam.
             if participating_ids is None and eid:
-                # Legacy exams may not have a saved participation scope;
-                # infer participation from the exam's recorded marks.
                 try:
                     mark_class_rows=cur.execute(
                         "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
@@ -5816,6 +5810,47 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     participating_ids={int(row["class_id"]) for row in mark_class_rows}
                 except Exception:
                     participating_ids=set()
+            # Add a former class only when this teacher historically taught
+            # it, it participated in this exam, and active non-graduated
+            # learners have marks for that class/exam. This preserves a
+            # promoted cohort's old-class marks without exposing final
+            # graduated classes that no longer have active learners.
+            if eid and participating_ids:
+                try:
+                    _ensure_teacher_assignment_history_tables(cur)
+                    historical_alloc_rows=cur.execute("""SELECT DISTINCT class_id,subject_id
+                        FROM teacher_allocation_history
+                        WHERE school_id=? AND teacher_id=?""",(sid,teacher_id)).fetchall()
+                    historical_class_ids={int(a["class_id"]) for a in historical_alloc_rows
+                                          if a["class_id"] is not None and int(a["class_id"]) in participating_ids}
+                    for historical_class_id in historical_class_ids:
+                        active_cohort_mark=cur.execute("""SELECT 1
+                            FROM marks m
+                            JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                            WHERE m.school_id=? AND m.exam_id=? AND m.class_id=?
+                              AND lower(coalesce(st.status,'active'))='active'
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM student_graduations sg
+                                  WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                              )
+                            LIMIT 1""",(sid,eid,historical_class_id)).fetchone()
+                        if not active_cohort_mark:
+                            continue
+                        if not any(int(c["id"])==historical_class_id for c in classes):
+                            former_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
+                                                     (sid,historical_class_id)).fetchone()
+                            if former_class:
+                                classes.append(former_class)
+                        for allocation_row in historical_alloc_rows:
+                            if allocation_row["class_id"] is not None and int(allocation_row["class_id"])==historical_class_id:
+                                if not any(int(a["class_id"])==historical_class_id and int(a["subject_id"])==int(allocation_row["subject_id"]) for a in allocations):
+                                    allocations.append(allocation_row)
+                                hist_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
+                                                         (sid,allocation_row["subject_id"])).fetchone()
+                                if hist_subject and not any(int(sub["id"])==int(hist_subject["id"]) for sub in subjects):
+                                    subjects.append(hist_subject)
+                except Exception as hist_exc:
+                    print("DAVISCHOOL TEACHER HISTORICAL CLASS FILTER:",repr(hist_exc),flush=True)
             if participating_ids is not None:
                 classes=[c for c in classes if int(c["id"]) in participating_ids]
         elif participating_ids is not None:
