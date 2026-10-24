@@ -7411,16 +7411,23 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
                    WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))""",
                 (sid, source_stream)
             ).fetchall()
-            destination = next((d for d in destinations
-                if int(d["id"]) != source_id
-                and re.sub(r"\\d+", "#", str(d["name"] or "")).casefold().strip() == source_prefix
-                and re.search(r"\\d+", str(d["name"] or ""))
-                and int(re.search(r"\\d+", str(d["name"] or "")).group()) == int(source_number.group()) + 1
-                and cur.execute(
-                    """SELECT 1 FROM student_class_history
-                       WHERE school_id=? AND from_class_id=? AND to_class_id=? LIMIT 1""",
-                    (sid, source_id, int(d["id"])
-                ).fetchone()), None)
+            destination = None
+            for candidate in destinations:
+                candidate_name = str(candidate["name"] or "")
+                candidate_number = re.search(r"\d+", candidate_name)
+                if (
+                    int(candidate["id"]) != source_id
+                    and re.sub(r"\d+", "#", candidate_name).casefold().strip() == source_prefix
+                    and candidate_number
+                    and int(candidate_number.group()) == int(source_number.group()) + 1
+                    and cur.execute(
+                        """SELECT 1 FROM student_class_history
+                           WHERE school_id=? AND from_class_id=? AND to_class_id=? LIMIT 1""",
+                        (sid, source_id, int(candidate["id"]))
+                    ).fetchone()
+                ):
+                    destination = candidate
+                    break
             if not destination:
                 continue
             has_staffing = cur.execute(
