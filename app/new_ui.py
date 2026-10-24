@@ -1560,6 +1560,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     if role in ("school_admin","registrar"):
         actions.append(("/app/academics/marks-corrections",_modern_icon("correction"),"Marks Corrections","Review teacher correction requests"))
         actions.append(("/app/students/promotion",_modern_icon("students"),"Promotion / Transfer","Promote learners and manage class transfers"))
+        actions.append(("/app/students/graduation-records",_modern_icon("students"),"Graduation Records","Filter and review recorded graduates"))
     # Preserve the current isolated browser-tab session when opening an Academic Manager tile.
     # The explicit query parameter prevents the tile navigation from falling back to the
     # generic login session even if the browser-side tab script has not run yet.
@@ -8271,6 +8272,107 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
 <div class='card section'><h2>Learner Ranking</h2><div class='marksheet-scroll class-analysis-scroll' tabindex='0'><table class='class-analysis-table'><thead><tr><th>Position</th><th>Admission</th><th>Student</th><th>Total</th><th>Average</th><th>Grade</th></tr></thead><tbody>{sr or "<tr><td colspan='6'>No learner results found.</td></tr>"}</tbody></table></div></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.class-analysis-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}}.class-analysis-table{{width:max-content;min-width:760px}}</style>"""
     return _school_page(request,"Class Analysis",body)
+
+@router.get("/app/students/graduation-records", response_class=HTMLResponse)
+def student_graduation_records_page(
+    request: Request, graduation_year: str = "", class_id: str = "",
+    student: str = "", loaded: str = ""
+):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.edit"):
+        return HTMLResponse("You do not have permission to view graduation records.", 403)
+
+    con = _db()
+    cur = con.cursor()
+    _ensure_student_promotion_cohort_tables(cur)
+    classes = cur.execute(
+        "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
+    ).fetchall()
+    years = cur.execute(
+        "SELECT DISTINCT graduation_year FROM student_graduations WHERE school_id=? ORDER BY graduation_year DESC",
+        (sid,)
+    ).fetchall()
+
+    selected_year = str(graduation_year).strip() if str(graduation_year).strip().isdigit() else ""
+    selected_class = int(class_id) if str(class_id).isdigit() else 0
+    search_text = str(student or "").strip()
+    records = []
+    if loaded == "1":
+        sql = """SELECT g.student_id,s.name,s.admission_no,g.graduation_year,
+                        g.graduated_at,g.graduated_by,c.id final_class_id,
+                        c.name final_class,c.stream final_stream
+                 FROM student_graduations g
+                 JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
+                 LEFT JOIN classes c ON c.id=g.final_class_id AND c.school_id=g.school_id
+                 WHERE g.school_id=?"""
+        params = [sid]
+        if selected_year:
+            sql += " AND g.graduation_year=?"
+            params.append(int(selected_year))
+        if selected_class:
+            sql += " AND g.final_class_id=?"
+            params.append(selected_class)
+        if search_text:
+            sql += " AND (LOWER(COALESCE(s.name,'')) LIKE ? OR LOWER(COALESCE(s.admission_no,'')) LIKE ?)"
+            term = "%" + search_text.casefold() + "%"
+            params.extend([term, term])
+        sql += " ORDER BY g.graduation_year DESC,s.name"
+        records = cur.execute(sql, params).fetchall()
+    con.close()
+
+    year_options = "<option value=''>All graduation years</option>" + "".join(
+        f"<option value='{int(y['graduation_year'])}' {'selected' if selected_year == str(y['graduation_year']) else ''}>{int(y['graduation_year'])}</option>"
+        for y in years
+    )
+    class_options = "<option value=''>All final classes</option>" + "".join(
+        f"<option value='{int(c['id'])}' {'selected' if selected_class == int(c['id']) else ''}>{escape(str(c['name'] or ''))} {escape(str(c['stream'] or ''))}</option>"
+        for c in classes
+    )
+    rows = "".join(
+        f"<tr><td>{int(i)+1}</td><td>{escape(str(g['graduation_year'] or ''))}</td>"
+        f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
+        f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
+        f"<td>{escape(str(g['graduated_at'] or ''))}</td><td>{escape(str(g['graduated_by'] or ''))}</td></tr>"
+        for i, g in enumerate(records)
+    )
+    tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
+        tab_id = ""
+    hidden_tab = f"<input type='hidden' name='ds_tab' value='{escape(tab_id)}'>" if tab_id else ""
+    filter_summary = f"<p class='muted'>Loaded {len(records)} graduation record(s) matching the selected filters.</p>" if loaded == "1" else ""
+    if loaded == "1":
+        empty_row = "<tr><td colspan='7'>No graduation records match the selected filters.</td></tr>"
+        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Final Class / Stream</th><th>Graduated At</th><th>Recorded By</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
+    else:
+        table_html = "<div class='card section muted'>Choose one or more filters, then select <b>Load Records</b> to display matching graduation records.</div>"
+    tab_query = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
+    body = f"""<div class='page'>
+<h1>Graduation Records</h1>
+<div class='muted'>Review graduates recorded by DaviSchool. Filtering this register does not alter student status or academic history.</div>
+<div class='card section'><form method='get' action='/app/students/graduation-records' class='graduation-filters'>
+<label>Graduation Year<select name='graduation_year' class='field'>{year_options}</select></label>
+<label>Final Class / Stream<select name='class_id' class='field'>{class_options}</select></label>
+<label>Student Name / Admission No.<input name='student' value='{escape(search_text)}' class='field' placeholder='Search student or admission number'></label>
+{hidden_tab}<input type='hidden' name='loaded' value='1'>
+<div class='filter-actions'><button class='btn' type='submit'>Load Records</button><a class='action' href='/app/students/graduation-records{tab_query}'>Clear Filters</a></div>
+</form></div>
+<div class='card section'><h2>Graduation Register</h2>{filter_summary}{table_html}</div>
+</div>
+<style>
+.graduation-filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end}}
+.graduation-filters label{{display:block;font-weight:700;font-size:13px}}
+.field{{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;margin-top:5px}}
+.filter-actions{{display:flex;gap:10px;align-items:center;flex-wrap:wrap}}
+.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}
+.table-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}}
+table{{width:100%;border-collapse:collapse;min-width:760px}}
+th,td{{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;white-space:nowrap}}
+@media(max-width:800px){{.graduation-filters{{grid-template-columns:1fr}}}}
+</style>"""
+    return _school_page(request, "Graduation Records", body)
+
 
 @router.get("/app/students/promotion", response_class=HTMLResponse)
 def student_promotion_page(request: Request, class_id: str = "", cycle_year: str = ""):
