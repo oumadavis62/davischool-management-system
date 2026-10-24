@@ -5730,19 +5730,27 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                             )
                       )""",(sid,teacher_id_for_exam_filter)).fetchall()
                 eligible_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
+                # Fetch legacy participation from marks in one grouped query,
+                # rather than issuing a separate database round-trip per exam.
+                marked_classes_by_exam={}
+                exams_with_marks=set()
+                try:
+                    mark_scope_rows=cur.execute("""SELECT exam_id,class_id
+                        FROM marks WHERE school_id=? GROUP BY exam_id,class_id""",(sid,)).fetchall()
+                    for mark_scope in mark_scope_rows:
+                        mark_exam_id=int(mark_scope["exam_id"])
+                        exams_with_marks.add(mark_exam_id)
+                        if mark_scope["class_id"] is not None:
+                            marked_classes_by_exam.setdefault(mark_exam_id,set()).add(int(mark_scope["class_id"]))
+                except Exception:
+                    marked_classes_by_exam={}
+                    exams_with_marks=set()
                 # Legacy exams without saved participation rows are checked
                 # against classes represented by their recorded marks.
                 for exam in all_exams:
                     exam_key=int(exam["id"])
                     if exam_key not in scoped_classes_by_exam:
-                        try:
-                            rows=cur.execute(
-                                "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
-                                (sid,exam_key)
-                            ).fetchall()
-                            scoped_classes_by_exam[exam_key]={int(row["class_id"]) for row in rows}
-                        except Exception:
-                            scoped_classes_by_exam[exam_key]=set()
+                        scoped_classes_by_exam[exam_key]=set(marked_classes_by_exam.get(exam_key,set()))
                 # A teacher may see an exam when it includes one of their
                 # currently allocated active classes, OR when the exam contains
                 # historical marks for active, non-graduated learners now in a
@@ -5755,21 +5763,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     WHERE ta.school_id=? AND ta.teacher_id=?
                       AND ta.class_id IS NOT NULL AND ta.subject_id IS NOT NULL""",
                     (sid,teacher_id_for_exam_filter)).fetchall()
-                teacher_active_class_rows=cur.execute("""SELECT DISTINCT c.id
-                    FROM classes c
-                    JOIN teacher_allocations ta
-                      ON ta.school_id=c.school_id AND ta.class_id=c.id
-                    WHERE c.school_id=? AND ta.teacher_id=?
-                      AND EXISTS (
-                          SELECT 1 FROM students st
-                          WHERE st.school_id=c.school_id AND st.class_id=c.id
-                            AND lower(coalesce(st.status,'active'))='active'
-                            AND NOT EXISTS (
-                                SELECT 1 FROM student_graduations sg
-                                WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                            )
-                      )""",(sid,teacher_id_for_exam_filter)).fetchall()
-                eligible_active_class_ids={int(row["id"]) for row in teacher_active_class_rows}
+                # Reuse the active allocated-class set fetched above.
                 teacher_pairs={(int(row["class_id"]),int(row["subject_id"])) for row in teacher_alloc_rows}
                 visible_teacher_exams=[]
                 for exam in all_exams:
@@ -5780,19 +5774,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     # learners sat an older exam assigned to that class ID.
                     # When an exam has marks, distinguish actual marked cohorts
                     # from a later cohort that now occupies the same class.
-                    try:
-                        mark_class_rows=cur.execute(
-                            "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
-                            (sid,exam_key)
-                        ).fetchall()
-                        marked_class_ids={int(row["class_id"]) for row in mark_class_rows}
-                        has_marks=bool(cur.execute(
-                            "SELECT 1 FROM marks WHERE school_id=? AND exam_id=? LIMIT 1",
-                            (sid,exam_key)
-                        ).fetchone())
-                    except Exception:
-                        marked_class_ids=set()
-                        has_marks=False
+                    marked_class_ids=marked_classes_by_exam.get(exam_key,set())
+                    has_marks=exam_key in exams_with_marks
                     # If there are no marks yet, use the explicit participation
                     # list and current active classes. If marks exist, do not
                     # count a participating class already represented only by
