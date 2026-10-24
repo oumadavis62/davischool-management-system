@@ -1463,8 +1463,8 @@ def student_history(request: Request,student_id:int):
         WHERE h.student_id=? AND h.school_id=? ORDER BY h.id DESC""",(student_id,sid)).fetchall()
     con.close()
     if not st:return HTMLResponse("Student not found.",404)
-    rows="".join(f"<tr><td>{escape(str(h['changed_at'] or ''))}</td><td>{escape(str(h['from_class'] or 'Unassigned'))}</td><td>{escape(str(h['to_class'] or 'Unassigned'))}</td><td>{escape(str(h['changed_by'] or ''))}</td><td>{escape(str(h['reason'] or ''))}</td></tr>" for h in hist)
-    body=f"""<div class='page'><h1>Student History</h1><div class='card section'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))}</div><table><thead><tr><th>Date</th><th>From Class</th><th>To Class</th><th>Changed By</th><th>Reason</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No class transfer history recorded yet.</td></tr>'}</tbody></table></div></div>"""
+    rows="".join(f"<tr><td>{escape(str(h['changed_at'] or ''))}</td><td>{escape(str(h['from_class'] or 'Unassigned'))}</td><td>{escape(str(h['to_class'] or 'Unassigned'))}</td><td>{escape(str(h['promotion_year'] if h['promotion_year'] is not None else '—'))}</td><td>{escape(str(h['from_academic_year'] if h['from_academic_year'] is not None else '—'))} → {escape(str(h['to_academic_year'] if h['to_academic_year'] is not None else '—'))}</td><td>{escape(str(h['changed_by'] or ''))}</td><td>{escape(str(h['reason'] or ''))}</td></tr>" for h in hist)
+    body=f"""<div class='page'><h1>Student History</h1><div class='card section'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))}</div><p class='muted'>For class cohort promotions, Promotion Year is the selected cohort year and Academic Year Transition shows the move from that year to the next. The school's active academic year is not changed by an individual class promotion.</p><div style='overflow-x:auto'><table><thead><tr><th>Date</th><th>From Class</th><th>To Class</th><th>Promotion Year</th><th>Academic Year Transition</th><th>Changed By</th><th>Reason</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No class transfer history recorded yet.</td></tr>'}</tbody></table></div></div></div>"""
     return _school_page(request,"Student History",body)
 
 @router.get("/app/staff", response_class=HTMLResponse)
@@ -4701,8 +4701,16 @@ def _ensure_student_history_table(cur):
         to_class_id INTEGER,
         changed_at TEXT,
         changed_by TEXT,
-        reason TEXT
+        reason TEXT,
+        promotion_year INTEGER,
+        from_academic_year INTEGER,
+        to_academic_year INTEGER
     )""")
+    # Each cohort promotion records its own academic-year transition. The
+    # school-wide active academic year remains unchanged while classes are
+    # processed individually.
+    for column in ("promotion_year", "from_academic_year", "to_academic_year"):
+        cur.execute("ALTER TABLE student_class_history ADD COLUMN IF NOT EXISTS %s INTEGER" % column)
 
 def _ensure_student_parent_name_column(cur, con):
     """Add the optional parent-name field safely on older existing databases."""
@@ -9109,7 +9117,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     else:
         cohort_notice = ""
     body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
-<div class='muted'>Promote a class cohort in one action. DaviSchool snapshots existing class members by promotion year, so students newly arriving from a lower class are kept separate from the cohort already in the destination class.</div>
+<div class='muted'>Promote a class cohort in one action. The selected year is the cohort's current academic year; promotion records the transition from that year to the following year. The school's active academic year stays unchanged while classes are processed individually. DaviSchool snapshots existing class members by promotion year, so newly arriving students are not promoted again with the destination cohort.</div>
 {result_notice}
 <div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
 <select name='cycle_year' class='field'>{year_options}</select>
@@ -9435,12 +9443,20 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         )
         if cur.rowcount != 1:
             continue
+        # Bulk cohort promotion is an explicit academic-year transition.
+        # Individual transfers are not automatically treated as promotions.
+        is_cohort_promotion = bool(bulk_value.isdigit())
         cur.execute(
             """INSERT INTO student_class_history
-               (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
-               VALUES(?,?,?,?,?,?,?)""",
+               (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,
+                promotion_year,from_academic_year,to_academic_year)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
             (sid, student_id, from_class_id, to_class_id, now,
-             request.session.get("email", ""), "Promotion / transfer")
+             request.session.get("email", ""),
+             "Class cohort promotion" if is_cohort_promotion else "Promotion / transfer",
+             cycle if is_cohort_promotion else None,
+             cycle if is_cohort_promotion else None,
+             cycle + 1 if is_cohort_promotion else None)
         )
         _audit(cur, sid, request, "STUDENT_CLASS_CHANGE",
                f"Moved student {student_id} from class {from_class_id} to {to_class_id}")
