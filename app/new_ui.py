@@ -5422,8 +5422,19 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       ''
                     ) marks
                   FROM students s
-                  WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid)).fetchall()
+                  WHERE s.school_id=? AND (
+                    s.class_id=? OR EXISTS (
+                      SELECT 1 FROM marks historical
+                      WHERE historical.school_id=s.school_id AND historical.student_id=s.id
+                        AND historical.exam_id=? AND historical.subject_id=? AND historical.class_id=?
+                    ) OR EXISTS (
+                      SELECT 1 FROM teacher_mark_drafts historical_draft
+                      WHERE historical_draft.school_id=s.school_id AND historical_draft.student_id=s.id
+                        AND historical_draft.exam_id=? AND historical_draft.subject_id=?
+                        AND historical_draft.class_id=? AND historical_draft.teacher_id=?
+                    )
+                  ) ORDER BY s.name""",
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
