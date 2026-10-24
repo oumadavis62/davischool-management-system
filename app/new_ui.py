@@ -7431,7 +7431,7 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
         q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
           COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
           FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
-          LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id"""
+          LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id AND lower(coalesce(sm.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=sm.school_id AND sg.student_id=sm.id)"""
         q=q.replace("PLACEHOLDERS",placeholders)
         params=list(selected_exam_ids)+[sid]
         if cid:q+=" AND sm.class_id=?";params.append(cid)
@@ -7442,7 +7442,7 @@ def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str
             try: con.rollback()
             except Exception: pass
             stats=[]
-        students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
+        students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
         bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
         try:
             lock_rows=cur.execute(
@@ -8441,7 +8441,7 @@ def student_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
         return HTMLResponse("You do not have permission to view student analysis.", 403)
     con=_db(); cur=con.cursor()
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+    students=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY s.name",(sid,)).fetchall()
     selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
@@ -8487,7 +8487,7 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
                 WHERE sub.school_id=? AND st.class_id=? GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
                 list(selected_exam_ids)+[sid,sid,cid]).fetchall()
-            students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",(sid,cid)).fetchall()
+            students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name",(sid,cid)).fetchall()
             class_grading_rules=_load_grading_rules(cur,sid)
             class_overall_rules=_load_overall_grading_rules(cur,sid)
             bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,class_grading_rules,class_overall_rules)
