@@ -8831,19 +8831,37 @@ def student_graduation_records_page(
     print_school_logo = str(print_school["logo_data"] or "") if print_school and "logo_data" in print_school.keys() else ""
     print_school_contact = "".join("<div>" + x + "</div>" for x in [" ".join(x for x in [print_school_postal, print_school_code] if x), ("☎ " + print_school_phone) if print_school_phone else "", ("✉ " + print_school_email) if print_school_email else ""] if x)
     graduation_print_header = ("<div class='doc-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>GRADUATION RECORDS</h1>") % (print_school_name, print_school_contact)
-    graduation_print_rows = "".join(
-        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
-            escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
-            escape(str(g["school_level"] or "")),
-            escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
-            escape(str(g["class_teacher_name"] or "Not recorded")),
-            escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
-            escape(str(g["parent_phone"] or "")),
-            escape(str(g["graduation_year"] or "")),
-            escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0])
-        ) for g in records
-    )
-    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Class Teacher</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='11'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
+    graduation_print_groups = {}
+    for g in records:
+        group_key = (str(g["graduation_year"] or ""), int(g["final_class_id"] or 0),
+                     str(g["final_class"] or "Unassigned"), str(g["final_stream"] or ""))
+        graduation_print_groups.setdefault(group_key, []).append(g)
+    graduation_print_tables = []
+    for (group_year, group_class_id, group_class_name, group_stream), group_records in sorted(
+        graduation_print_groups.items(), key=lambda item: (item[0][0], item[0][2], item[0][3]), reverse=True
+    ):
+        class_teacher_name = next((str(g["class_teacher_name"] or "").strip() for g in group_records
+                                   if str(g["class_teacher_name"] or "").strip()), "Not recorded")
+        graduation_print_rows = "".join(
+            "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
+                escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
+                escape(str(g["school_level"] or "")),
+                escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
+                escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
+                escape(str(g["parent_phone"] or "")), escape(str(g["graduation_year"] or "")),
+                escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0])
+            ) for g in group_records
+        )
+        graduation_print_tables.append(
+            "<div class='graduation-class-table'><table><thead>"
+            "<tr class='class-teacher-heading'><th colspan='9'>Class Teacher: %s</th></tr>"
+            "<tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr>"
+            "</thead><tbody>%s</tbody></table></div>" % (escape(class_teacher_name), graduation_print_rows)
+        )
+    graduation_print_table = "<div class='graduation-record-tables'>" + (
+        "".join(graduation_print_tables) or
+        "<div class='table-scroll'><table><tbody><tr><td>No graduation records match the selected filters.</td></tr></tbody></table></div>"
+    ) + "</div>"
     graduation_print_script = r"""<script>
 function printGraduationRegister(){
  var source=document.getElementById('graduation-print-source');
@@ -8851,7 +8869,7 @@ function printGraduationRegister(){
  var w=window.open('','_blank','width=1200,height=800');
  if(!w){alert('Chrome blocked the print preview. Allow pop-ups for this site, then try again.');return;}
  var bar='<div class="preview-bar no-print"><div><b>Graduation Records Print Preview</b><span>Review the filtered graduation records. The print preview opens automatically.</span></div><div><button onclick="window.print()">Print Graduation Records</button><button onclick="window.close()">Close Preview</button></div></div>';
- var css='*{box-sizing:border-box}body{margin:0;padding:18px;background:#fff;color:#111;font:12px Arial,sans-serif}.preview-bar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;margin:-18px -18px 18px;background:#172033;color:#fff}.preview-bar span{display:block;font-size:12px;margin-top:4px;opacity:.85}.preview-bar button{border:0;border-radius:7px;padding:10px 12px;margin-left:7px;font-weight:800;cursor:pointer}.preview-bar button:first-child{background:#176B3A;color:#fff}.doc-header{display:grid;grid-template-columns:76px 1fr 76px;align-items:center;gap:10px;border-top:2px solid #2E8B57;border-bottom:3px solid #2E8B57;padding:8px 0;margin-bottom:12px}.doc-logo{height:64px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:70px;max-height:60px;object-fit:contain}.doc-school-block{text-align:center}.doc-school{font-size:20px;font-weight:800;text-transform:uppercase}.doc-contact{font-size:10px;line-height:1.4}.register-title{text-align:center;font-size:16px;margin:12px 0;text-decoration:underline}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #333;padding:5px;text-align:left;vertical-align:top}th{background:#e8f5ec;font-weight:800}.print-footer{display:flex;justify-content:space-between;margin-top:16px;padding-top:6px;border-top:1px solid #777;font-size:9px}@page{size:A4 landscape;margin:10mm}@media print{.no-print{display:none!important}body{padding:0}.doc-header{break-inside:avoid}thead{display:table-header-group}tr{break-inside:avoid}}';
+ var css='*{box-sizing:border-box}body{margin:0;padding:18px;background:#fff;color:#111;font:12px Arial,sans-serif}.preview-bar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;margin:-18px -18px 18px;background:#172033;color:#fff}.preview-bar span{display:block;font-size:12px;margin-top:4px;opacity:.85}.preview-bar button{border:0;border-radius:7px;padding:10px 12px;margin-left:7px;font-weight:800;cursor:pointer}.preview-bar button:first-child{background:#176B3A;color:#fff}.doc-header{display:grid;grid-template-columns:76px 1fr 76px;align-items:center;gap:10px;border-top:2px solid #2E8B57;border-bottom:3px solid #2E8B57;padding:8px 0;margin-bottom:12px}.doc-logo{height:64px;display:flex;align-items:center;justify-content:center}.doc-logo img{max-width:70px;max-height:60px;object-fit:contain}.doc-school-block{text-align:center}.doc-school{font-size:20px;font-weight:800;text-transform:uppercase}.doc-contact{font-size:10px;line-height:1.4}.register-title{text-align:center;font-size:16px;margin:12px 0;text-decoration:underline}.graduation-class-table{margin-bottom:16px;break-inside:avoid}.class-teacher-heading th{text-align:left;background:#f1f5f9;font-size:10px}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #333;padding:5px;text-align:left;vertical-align:top}th{background:#e8f5ec;font-weight:800}.print-footer{display:flex;justify-content:space-between;margin-top:16px;padding-top:6px;border-top:1px solid #777;font-size:9px}@page{size:A4 landscape;margin:10mm}@media print{.no-print{display:none!important}body{padding:0}.doc-header{break-inside:avoid}thead{display:table-header-group}tr{break-inside:avoid}}';
  var html='<!doctype html><html><head><meta charset="utf-8"><title>Graduation Records Print Preview</title><style>'+css+'</style></head><body>'+bar+source.innerHTML+'<div class="print-footer"><span>DaviSchool Management System</span><span>Generated: '+new Date().toLocaleString()+'</span></div></body></html>';
  w.document.open();w.document.write(html);w.document.close();w.focus();setTimeout(function(){try{w.print()}catch(e){console.error(e)}},400);
 }
