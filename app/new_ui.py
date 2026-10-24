@@ -1992,15 +1992,10 @@ def _move_class_staff_assignments(cur, school_id, from_class_id, to_class_id, cy
     _ensure_teacher_allocations_table(cur)
     _ensure_class_teacher_assignments_table(cur)
     _ensure_teacher_assignment_history_tables(cur)
-    source_has_staffing = cur.execute(
-        """SELECT 1 FROM teacher_allocations WHERE school_id=? AND class_id=?
-           UNION ALL SELECT 1 FROM class_teacher_assignments
-           WHERE school_id=? AND class_id=? LIMIT 1""",
-        (school_id, from_class_id, school_id, from_class_id)
-    ).fetchone()
-    # Never erase destination staffing if the source has nothing to transfer.
-    if not source_has_staffing:
-        return 0, False
+    # Each successful cohort promotion makes the destination the active
+    # class for this staffing set. Always clear/archive destination staffing,
+    # even when the source has no assignments; otherwise stale destination
+    # teachers remain visible after promotion and appear to belong to the new cohort.
     # Each class/stream has one active staffing set. Replace the destination's
     # previous set instead of merging it with the source set, which created
     # duplicate subjects and stale teachers after promotion.
