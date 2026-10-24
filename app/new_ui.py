@@ -500,7 +500,6 @@ def _shell(title, name, role, body, school_id=None):
         nav = [
             ("/app",_modern_icon("dashboard"),"Platform Overview",None),
             ("/schools/manage",_modern_icon("school"),"Manage Schools",None),
-            ("/super/global-control/dashboard",_modern_icon("globe"),"Global Control",None),
             ("/account/change-password",_modern_icon("key"),"My Account",None),
         ]
     else:
@@ -4146,7 +4145,7 @@ def app_home(request: Request):
     if role=="super_admin":
         schools=cur.execute("SELECT COUNT(*) c FROM schools").fetchone()["c"]
         users=cur.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
-        platform_users=cur.execute("SELECT full_name,email,role FROM users ORDER BY id").fetchall()
+        platform_users=cur.execute("SELECT full_name,email,role FROM users WHERE lower(trim(coalesce(role,''))) IN ('super_admin','school_admin') ORDER BY id").fetchall()
         students=cur.execute("SELECT COUNT(*) c FROM students s WHERE lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)").fetchone()["c"]
         revenue=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM fee_payments").fetchone()["v"]
         recent=cur.execute("SELECT name,location FROM schools ORDER BY id DESC LIMIT 8").fetchall()
