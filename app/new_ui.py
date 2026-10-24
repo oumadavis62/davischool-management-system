@@ -1145,10 +1145,29 @@ def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None
             return True
         try:
             _ensure_teacher_assignment_history_tables(cur)
-            return bool(cur.execute(
+            if cur.execute(
                 "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
                 (school_id, teacher_id, class_id, subject_id)
-            ).fetchone())
+            ).fetchone():
+                return True
+            # Allow the teacher's current allocation to follow the same active
+            # cohort back to a former class for historical review of this subject.
+            return bool(cur.execute("""SELECT 1
+                FROM teacher_allocations current_alloc
+                JOIN students st ON st.school_id=current_alloc.school_id
+                  AND st.class_id=current_alloc.class_id
+                JOIN marks historical_mark ON historical_mark.school_id=st.school_id
+                  AND historical_mark.student_id=st.id
+                  AND historical_mark.class_id=?
+                  AND historical_mark.subject_id=current_alloc.subject_id
+                WHERE current_alloc.school_id=? AND current_alloc.teacher_id=?
+                  AND current_alloc.subject_id=?
+                  AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM student_graduations sg
+                    WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                  )
+                LIMIT 1""",(class_id,school_id,teacher_id,subject_id)).fetchone())
         except Exception:
             return False
     current = cur.execute(
