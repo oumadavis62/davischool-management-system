@@ -7611,7 +7611,7 @@ def class_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = "", 
             return HTMLResponse("Please select a class and examination first.", 400)
         placeholders = ",".join("?" for _ in selected_exam_ids)
         students = cur.execute(
-            "SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? ORDER BY name",
+            "SELECT id,name,admission_no FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name",
             (sid, cid)
         ).fetchall()
         stats = cur.execute(
@@ -7622,7 +7622,7 @@ def class_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = "", 
                FROM subjects sub
                LEFT JOIN marks m ON m.subject_id=sub.id
                  AND m.exam_id IN (%s) AND m.school_id=?
-                 AND m.student_id IN (SELECT id FROM students WHERE school_id=? AND class_id=?)
+                 AND m.student_id IN (SELECT id FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id))
                WHERE sub.school_id=?
                GROUP BY sub.id,sub.name ORDER BY sub.name""" % placeholders,
             selected_exam_ids + [sid, sid, cid, sid]
@@ -8198,7 +8198,9 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
         # Position is calculated from total marks among students in the same class.
         totals=cur.execute("""SELECT s.id,COALESCE(SUM(m.marks),0) total
           FROM students s LEFT JOIN marks m ON m.student_id=s.id AND m.school_id=? AND m.exam_id=?
-          WHERE s.school_id=? AND s.class_id=? GROUP BY s.id ORDER BY total DESC,s.id""",
+          WHERE s.school_id=? AND s.class_id=? AND lower(coalesce(s.status,'active'))='active'
+            AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
+          GROUP BY s.id ORDER BY total DESC,s.id""",
           (sid,eid,sid,st["class_id"])).fetchall()
         class_total_students=len(totals)
         last_total=None
