@@ -8803,23 +8803,43 @@ def student_graduation_records_page(
         f"<option value='{int(c['id'])}' {'selected' if selected_class == int(c['id']) else ''}>{escape(str(c['name'] or ''))} {escape(str(c['stream'] or ''))}</option>"
         for c in classes
     )
-    rows = "".join(
-        f"<tr><td>{int(i)+1}</td><td>{escape(str(g['graduation_year'] or ''))}</td>"
-        f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
-        f"<td>{escape(str(g['school_level'] or ''))}</td>"
-        f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
-        f"<td>{escape(str(g['class_teacher_name'] or 'Not recorded'))}</td>"
-        f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td></tr>"
-        for i, g in enumerate(records)
-    )
+    graduation_register_groups = {}
+    for g in records:
+        group_key = (str(g["graduation_year"] or ""), int(g["final_class_id"] or 0),
+                     str(g["final_class"] or "Unassigned"), str(g["final_stream"] or ""))
+        graduation_register_groups.setdefault(group_key, []).append(g)
+    graduation_register_tables = []
+    register_index = 0
+    for (group_year, group_class_id, group_class_name, group_stream), group_records in sorted(
+        graduation_register_groups.items(), key=lambda item: (item[0][0], item[0][2], item[0][3]), reverse=True
+    ):
+        class_teacher_name = next((str(g["class_teacher_name"] or "").strip() for g in group_records
+                                   if str(g["class_teacher_name"] or "").strip()), "Not recorded")
+        register_rows = []
+        for g in group_records:
+            register_index += 1
+            register_rows.append(
+                f"<tr><td>{register_index}</td><td>{escape(str(g['graduation_year'] or ''))}</td>"
+                f"<td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td>"
+                f"<td>{escape(str(g['school_level'] or ''))}</td>"
+                f"<td>{escape((str(g['final_class'] or 'Unassigned') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
+                f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td></tr>"
+            )
+        graduation_register_tables.append(
+            "<div class='graduation-register-class-table'><table><thead>"
+            "<tr class='register-class-teacher-heading'><th colspan='7'>Class Teacher: %s</th></tr>"
+            "<tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Level</th><th>Final Class / Stream</th><th>Graduated At</th></tr>"
+            "</thead><tbody>%s</tbody></table></div>" % (escape(class_teacher_name), "".join(register_rows))
+        )
+    rows = "".join(graduation_register_tables)
     tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", tab_id):
         tab_id = ""
     hidden_tab = f"<input type='hidden' name='ds_tab' value='{escape(tab_id)}'>" if tab_id else ""
     filter_summary = f"<p class='muted'>Loaded {len(records)} graduation record(s) matching the selected filters.</p>" if loaded == "1" else ""
     if loaded == "1":
-        empty_row = "<tr><td colspan='8'>No graduation records match the selected filters.</td></tr>"
-        table_html = f"<div class='table-scroll'><table><thead><tr><th>#</th><th>Graduation Year</th><th>Student</th><th>Admission No.</th><th>Level</th><th>Final Class / Stream</th><th>Class Teacher</th><th>Graduated At</th></tr></thead><tbody>{rows or empty_row}</tbody></table></div>"
+        empty_row = "<div class='table-scroll'><table><tbody><tr><td>No graduation records match the selected filters.</td></tr></tbody></table></div>"
+        table_html = f"<div class='graduation-register-tables'>{rows or empty_row}</div>"
     else:
         table_html = "<div class='card section muted'>Choose one or more filters, then select <b>Load Records</b> to display matching graduation records.</div>"
     tab_query = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
@@ -8897,6 +8917,9 @@ function printGraduationRegister(){
 .table-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}}
 table{{width:100%;border-collapse:collapse;min-width:760px}}
 th,td{{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;white-space:nowrap}}
+.graduation-register-class-table{{margin-top:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}}
+.graduation-register-class-table table{{width:100%;border-collapse:collapse;min-width:760px}}
+.register-class-teacher-heading th{{text-align:left;background:#f1f5f9;font-weight:800;white-space:normal}}
 @media(max-width:800px){{.graduation-filters{{grid-template-columns:1fr}}}}
 </style>"""
     return _school_page(request, "Graduation Records", body)
