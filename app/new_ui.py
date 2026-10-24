@@ -5942,7 +5942,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if role=="teacher" and teacher_id:
         try:
             _teacher_current_pairs={(int(a["class_id"]),int(a["subject_id"]))
-                                    for a in allocations
+                                    for a in all_allocations
                                     if a["class_id"] is not None and a["subject_id"] is not None}
             _historic_class_map={int(c["id"]):c for c in all_classes}
             _historic_pair_set={(int(a["class_id"]),int(a["subject_id"]))
