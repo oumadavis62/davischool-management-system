@@ -1258,10 +1258,10 @@ def students_page(request: Request):
     print_school_email=escape(str(print_school['email'] or '')) if print_school and 'email' in print_school.keys() and print_school['email'] else ''
     print_school_logo=str(print_school['logo_data'] or '') if print_school and 'logo_data' in print_school.keys() else ''
     print_school_contact=''.join('<div>'+x+'</div>' for x in [' '.join(x for x in [print_school_postal,print_school_code] if x),('☎ '+print_school_phone) if print_school_phone else '',('✉ '+print_school_email) if print_school_email else ''] if x)
-    print_school_header=\"<div class='doc-header report-school-header'><div class='doc-logo'>\"+(\"<img src='%s' alt='School logo'>\" % escape(print_school_logo,quote=True) if print_school_logo else '🏫')+\"</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-header-spacer'></div></div><h1 class='register-title'>STUDENT REGISTER</h1>\" % (print_school_name,print_school_contact)
+    print_school_header = ("<div class='doc-header report-school-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "🏫") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-student-photo' title='Student photo'>👤</div></div><h1 class='register-title'>STUDENT REGISTER</h1>") % (print_school_name, print_school_contact)
     students_print_script=students_print_script.replace('__SCHOOL_HEADER_JSON__',json.dumps(print_school_header,ensure_ascii=False))
 
-    rows=\"\".join(f\"\"\"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
+    rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
       <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
       <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}{tab_q}'>History</a></td></tr>""" for s in students)
