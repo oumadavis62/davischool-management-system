@@ -8346,7 +8346,8 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         is_eligible = int(st["id"]) in cohort_ids if snapshot else True
         cohort_label = "<b>Eligible cohort</b>" if is_eligible else "<span style='color:#9a3412'>New arrival / outside this cycle</span>"
         row_parts.append(
-            f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
+            f"<tr><td><input type='checkbox' name='reverse_promotion_student_id' value='{int(st['id'])}' aria-label='Select {escape(str(st['name']))} to reverse promotion'></td>"
+            f"<td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
             f"<td>{escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</td>"
             f"<td>{cohort_label}</td>"
             f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
@@ -8369,7 +8370,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
            WHERE g.school_id=? ORDER BY g.graduation_year DESC,s.name""", (sid,)
     ).fetchall()
     graduate_rows = "".join(
-        f"<tr><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td><td><form method='post' action='/app/students/promotion' onsubmit='return confirm(&#39;Reverse this graduation?&#39;);'><input type='hidden' name='ungraduate_student_id' value='{int(g['student_id'])}'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><button class='btn' type='submit'>Reverse Graduation</button></form></td></tr>"
+        f"<tr><td><input type='checkbox' name='ungraduate_student_id' value='{int(g['student_id'])}' aria-label='Select {escape(str(g['name'] or ''))} to reverse graduation'></td><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td></tr>"
         for g in graduates
     )
     changed_value = request.query_params.get("changed")
@@ -8380,6 +8381,10 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     graduated_value = request.query_params.get("graduated")
     if graduated_value is not None and str(graduated_value).isdigit():
         result_notice += f"<div class='card section'><b>Graduation completed:</b> {escape(str(graduated_value))} student(s) recorded as graduates for {cycle}.</div>"
+    for notice_key, notice_label in (("graduation_reversed", "Graduation(s) reversed"), ("promotion_reversed", "Promotion(s) reversed")):
+        notice_value = request.query_params.get(notice_key)
+        if notice_value is not None and str(notice_value).isdigit():
+            result_notice += f"<div class='card section'><b>{notice_label}:</b> {escape(str(notice_value))} student(s).</div>"
     if students and snapshot and eligible_count == 0:
         cohort_notice = "<div class='card section'><b>No eligible cohort members remain in this class for the selected cycle.</b> New arrivals are intentionally excluded from bulk promotion.</div>"
     elif students and not snapshot:
@@ -8400,12 +8405,12 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <input type='hidden' name='cycle_year' value='{cycle}'>
 {bulk_action}
 {graduate_action}
-<table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
-<tbody>{rows or "<tr><td colspan='5'>Select a class to load its students.</td></tr>"}</tbody></table>
-{"<button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
+<table><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=reverse_promotion_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
+<tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table>
+{"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
-<div class='card section'><h2>Graduation Register</h2><p>Graduates are retained for historical records and excluded from promotion and transfer lists.</p><div style='overflow-x:auto'><table><thead><tr><th>Graduation Year</th><th>Student</th><th>Admission</th><th>Final Class</th><th>Correction</th></tr></thead><tbody>{graduate_rows or "<tr><td colspan='5'>No graduates recorded.</td></tr>"}</tbody></table></div></div>
+<div class='card section'><h2>Graduation Register</h2><p>Tick the graduates whose graduation should be reversed. Their records will return to their recorded final class.</p><form method='post' action='/app/students/promotion' onsubmit='return confirm(&#39;Reverse graduation for the selected learners?&#39;);'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><div style='overflow-x:auto'><table><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=ungraduate_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Graduation Year</th><th>Student</th><th>Admission</th><th>Final Class</th></tr></thead><tbody>{graduate_rows or "<tr><td colspan='5'>No graduates recorded.</td></tr>"}</tbody></table></div><button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_graduations' value='1'>Reverse Selected Graduations</button></form></div>
 </div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
@@ -8485,6 +8490,87 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         con.commit()
         con.close()
         return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&graduated={len(eligible)}", 303)
+    if str(form.get("reverse_selected_graduations", "")).strip() == "1":
+        selected_ids = []
+        for value in form.getlist("ungraduate_student_id"):
+            if str(value).isdigit() and int(value) not in selected_ids:
+                selected_ids.append(int(value))
+        if not selected_ids:
+            con.close()
+            return HTMLResponse("Select at least one graduate to reverse.", 400)
+        reversed_count = 0
+        for student_id in selected_ids:
+            record = cur.execute(
+                "SELECT final_class_id FROM student_graduations WHERE school_id=? AND student_id=?",
+                (sid, student_id)
+            ).fetchone()
+            if not record:
+                continue
+            restored_class = int(record["final_class_id"] or from_class_id)
+            if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (restored_class, sid)).fetchone():
+                continue
+            cur.execute("DELETE FROM student_graduations WHERE school_id=? AND student_id=?", (sid, student_id))
+            cur.execute(
+                """INSERT INTO student_class_history
+                   (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (sid, student_id, None, restored_class, now, request.session.get("email", ""), "Graduation reversed")
+            )
+            _audit(cur, sid, request, "STUDENT_GRADUATION_REVERSED", f"Reversed graduation for student {student_id}")
+            reversed_count += 1
+        if not reversed_count:
+            con.close()
+            return HTMLResponse("None of the selected graduation records could be reversed.", 400)
+        con.commit()
+        con.close()
+        return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&graduation_reversed={reversed_count}", 303)
+    if str(form.get("reverse_selected_promotions", "")).strip() == "1":
+        selected_ids = []
+        for value in form.getlist("reverse_promotion_student_id"):
+            if str(value).isdigit() and int(value) not in selected_ids:
+                selected_ids.append(int(value))
+        if not selected_ids:
+            con.close()
+            return HTMLResponse("Select at least one student whose promotion should be reversed.", 400)
+        reversed_count = 0
+        for student_id in selected_ids:
+            student = cur.execute(
+                """SELECT id,class_id FROM students s WHERE id=? AND school_id=?
+                   AND class_id=? AND NOT EXISTS (
+                       SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id
+                   )""",
+                (student_id, sid, from_class_id)
+            ).fetchone()
+            if not student:
+                continue
+            previous = cur.execute(
+                """SELECT from_class_id FROM student_class_history
+                   WHERE school_id=? AND student_id=? AND to_class_id=?
+                     AND from_class_id IS NOT NULL
+                     AND coalesce(reason,'') NOT IN ('Graduated','Graduation reversed','Promotion reversed')
+                   ORDER BY id DESC LIMIT 1""",
+                (sid, student_id, from_class_id)
+            ).fetchone()
+            if not previous:
+                continue
+            previous_class_id = int(previous["from_class_id"])
+            if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (previous_class_id, sid)).fetchone():
+                continue
+            cur.execute("UPDATE students SET class_id=? WHERE id=? AND school_id=?", (previous_class_id, student_id, sid))
+            cur.execute(
+                """INSERT INTO student_class_history
+                   (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (sid, student_id, from_class_id, previous_class_id, now, request.session.get("email", ""), "Promotion reversed")
+            )
+            _audit(cur, sid, request, "STUDENT_PROMOTION_REVERSED", f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}")
+            reversed_count += 1
+        if not reversed_count:
+            con.close()
+            return HTMLResponse("None of the selected students had a valid recorded previous class to restore.", 400)
+        con.commit()
+        con.close()
+        return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&promotion_reversed={reversed_count}", 303)
     ungraduate_value = str(form.get("ungraduate_student_id", "")).strip()
     if ungraduate_value.isdigit():
         student_id = int(ungraduate_value)
