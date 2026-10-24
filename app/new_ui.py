@@ -8465,16 +8465,6 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick='return confirm(&#39;Graduate eligible cohort for {cycle}?&#39;);'>Graduate Eligible Cohort</button></div>"
         if students and eligible_count and not next_class else ""
     )
-    graduates = cur.execute(
-        """SELECT g.student_id,s.name,s.admission_no,g.graduation_year,c.name final_class
-           FROM student_graduations g JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
-           LEFT JOIN classes c ON c.id=g.final_class_id
-           WHERE g.school_id=? ORDER BY g.graduation_year DESC,s.name""", (sid,)
-    ).fetchall()
-    graduate_rows = "".join(
-        f"<tr><td><input type='checkbox' name='ungraduate_student_id' value='{int(g['student_id'])}' aria-label='Select {escape(str(g['name'] or ''))} to reverse graduation'></td><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td></tr>"
-        for g in graduates
-    )
     changed_value = request.query_params.get("changed")
     result_notice = (
         f"<div class='card section'><b>Promotion completed:</b> {escape(str(changed_value))} student(s) moved successfully.</div>"
@@ -8512,7 +8502,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 {"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
-<div class='card section'><h2>Graduation Register</h2><p>Tick the graduates whose graduation should be reversed. Their records will return to their recorded final class.</p><form method='post' action='/app/students/promotion' onsubmit='return confirm(&#39;Reverse graduation for the selected learners?&#39;);'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><div style='overflow-x:auto'><table><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=ungraduate_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Graduation Year</th><th>Student</th><th>Admission</th><th>Final Class</th></tr></thead><tbody>{graduate_rows or "<tr><td colspan='5'>No graduates recorded.</td></tr>"}</tbody></table></div><button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_graduations' value='1'>Reverse Selected Graduations</button></form></div>
+
 </div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
