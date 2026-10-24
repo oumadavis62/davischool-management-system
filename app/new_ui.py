@@ -1212,7 +1212,7 @@ def students_page(request: Request):
         page_num = 1
     page_size = 50
 
-    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
+    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_promotion_cohort_tables(cur)
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     where = ["s.school_id=?"]
     params = [sid]
