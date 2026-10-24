@@ -1242,7 +1242,7 @@ def students_page(request: Request):
         CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
              THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
-        WHERE """ + where_sql + " ORDER BY s.name COLLATE NOCASE ASC, s.admission_no COLLATE NOCASE ASC LIMIT ? OFFSET ?",
+        WHERE """ + where_sql + " ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC LIMIT ? OFFSET ?",
         tuple(params + [page_size, offset])).fetchall()
     con.close()
 
