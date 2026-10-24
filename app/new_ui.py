@@ -3384,7 +3384,7 @@ def class_marksheets_pdf(
 
         placeholders = ",".join("?" for _ in selected_class_ids)
         student_sql = (
-            "SELECT * FROM students WHERE school_id=? AND class_id IN (" +
+            "SELECT * FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) AND class_id IN (" +
             placeholders + ")"
         )
         student_params = [sid] + selected_class_ids
