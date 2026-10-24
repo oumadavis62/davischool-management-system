@@ -5854,6 +5854,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
         return HTMLResponse("These marks are finalized and locked. <a href='/app/academics/marks'>Back</a>",403)
     cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
     out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
+    _ensure_student_history_table(cur)
     students=cur.execute("""SELECT s.id FROM students s
         WHERE s.school_id=? AND (
           s.class_id=? OR EXISTS (
@@ -5861,7 +5862,13 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
             WHERE historical.school_id=s.school_id AND historical.student_id=s.id
               AND historical.exam_id=? AND historical.class_id=? AND historical.subject_id=?
           )
-        ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id)).fetchall()
+        ) AND NOT EXISTS (
+          SELECT 1 FROM student_class_history moved_into_class
+          WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
+            AND moved_into_class.to_class_id=?
+            AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
+                CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+        ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id)).fetchall()
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
