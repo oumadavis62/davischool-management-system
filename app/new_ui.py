@@ -8787,6 +8787,18 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             )
             _audit(cur, sid, request, "STUDENT_PROMOTION_REVERSED", f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}")
             reversed_count += 1
+            # A reversal changes this cycle's class membership. Reset both
+            # affected cohort snapshots so the restored and remaining learners
+            # are eligible together on the next promotion-page load.
+            for affected_class_id in {int(from_class_id), int(previous_class_id)}:
+                cur.execute(
+                    "DELETE FROM student_promotion_cohort_members WHERE school_id=? AND cycle_year=? AND class_id=?",
+                    (sid, cycle, affected_class_id)
+                )
+                cur.execute(
+                    "DELETE FROM student_promotion_cohort_snapshots WHERE school_id=? AND cycle_year=? AND class_id=?",
+                    (sid, cycle, affected_class_id)
+                )
         if not reversed_count:
             con.close()
             return HTMLResponse("None of the selected students had a valid recorded previous class to restore.", 400)
