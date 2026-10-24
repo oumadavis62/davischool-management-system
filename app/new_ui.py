@@ -2427,9 +2427,8 @@ def class_marksheets_csv(
     placeholders = ",".join("?" for _ in selected_class_ids)
     student_query = "SELECT * FROM students WHERE school_id=? AND ((class_id IN (" + placeholders + ") AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN (" + ",".join("?" for _ in selected_exam_ids) + ") AND historical.class_id IN (" + placeholders + ")))"
     student_params = [sid] + selected_class_ids + selected_exam_ids + selected_class_ids
-    if stream and not combined_mode:
-        student_query += " AND stream=?"
-        student_params.append(stream)
+    # Selected class IDs already identify the exam-time class/stream.
+    # Do not filter historical learners by their current stream.
     student_query += " ORDER BY name"
     students = cur.execute(student_query, student_params).fetchall()
 
@@ -2789,9 +2788,8 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     else:
         student_query = "SELECT * FROM students WHERE school_id=? AND class_id=?"
         student_params = [sid, cid]
-    if stream and not combined_mode:
-        student_query += " AND stream=?"
-        student_params.append(stream)
+    # Selected class IDs already identify the exam-time class/stream.
+    # Do not filter historical learners by their current stream.
     student_query += " ORDER BY name"
     try:
         students = cur.execute(student_query, student_params).fetchall() if cid else []
@@ -3387,9 +3385,8 @@ def class_marksheets_pdf(
             "SELECT * FROM students WHERE school_id=? AND ((class_id IN (" + placeholders + ") AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN (" + ",".join("?" for _ in selected_exam_ids) + ") AND historical.class_id IN (" + placeholders + ")))"
         )
         student_params = [sid] + selected_class_ids + selected_exam_ids + selected_class_ids
-        if stream and not combined_mode:
-            student_sql += " AND stream=?"
-            student_params.append(stream)
+        # Selected class IDs already identify the exam-time class/stream.
+        # Do not filter historical learners by their current stream.
         student_sql += " ORDER BY name"
         students = cur.execute(student_sql, student_params).fetchall()
 
