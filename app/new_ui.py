@@ -7412,15 +7412,6 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
                    JOIN classes c ON c.id=h.to_class_id AND c.school_id=h.school_id
                    WHERE h.school_id=? AND h.from_class_id=?
                      AND h.to_class_id IS NOT NULL AND h.to_class_id<>?
-                     AND EXISTS (
-                         SELECT 1 FROM students s
-                         WHERE s.school_id=c.school_id AND s.class_id=c.id
-                           AND lower(coalesce(s.status,'active')) NOT IN ('graduated','deleted')
-                           AND NOT EXISTS (
-                               SELECT 1 FROM student_graduations g
-                               WHERE g.school_id=s.school_id AND g.student_id=s.id
-                           )
-                     )
                    ORDER BY h.changed_at DESC
                    LIMIT 1""",
                 (sid, source_id, source_id)
