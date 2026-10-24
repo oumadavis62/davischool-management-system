@@ -9151,7 +9151,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         cohort_notice = f"<div class='card section'><b>First promotion for {cycle}:</b> the current class membership will be recorded as this class's cohort when you save a bulk promotion or individual transfer. Before moving students into a destination class, DaviSchool snapshots the destination's existing students so incoming learners will not be promoted again with that cohort.</div>"
     else:
         cohort_notice = ""
-    body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
+    body = f"""<div class='page promotion-transfer-page'><h1>Student Promotion / Transfer</h1>
 <div class='muted'>Promote a class cohort in one action. The selected year is the cohort's current academic year; promotion records the transition from that year to the following year. The school's active academic year stays unchanged while classes are processed individually. DaviSchool snapshots existing class members by promotion year, so newly arriving students are not promoted again with the destination cohort.</div>
 {result_notice}
 <div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
@@ -9172,7 +9172,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 
 </div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.promotion-student-table-scroll{{display:block;width:100%;max-width:100%;max-height:62vh;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;contain:layout paint;position:relative}}.promotion-student-table{{min-width:900px;width:100%;border-collapse:collapse}}.promotion-student-table th,.promotion-student-table td{{white-space:nowrap;padding:10px;border-bottom:1px solid #e5e7eb}}</style>"""
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.promotion-transfer-page{{position:static!important;height:auto!important;max-height:none!important;min-height:0;overflow:visible!important;overflow-y:visible!important;touch-action:pan-y}}.promotion-transfer-page>.card,.promotion-transfer-page form{{position:static!important}}.promotion-student-table-scroll{{display:block;width:100%;max-width:100%;height:auto;max-height:none;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;contain:none;position:static}}.promotion-student-table{{min-width:900px;width:100%;border-collapse:collapse}}.promotion-student-table th,.promotion-student-table td{{white-space:nowrap;padding:10px;border-bottom:1px solid #e5e7eb}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
 
 
