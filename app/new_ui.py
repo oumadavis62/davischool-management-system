@@ -7679,7 +7679,7 @@ def student_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = ""
             selected_exam_ids = [int(exams[0]["id"])]
         stid = int(student_id) if str(student_id).isdigit() else 0
         st = cur.execute(
-            "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",
+            "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",
             (stid, sid)
         ).fetchone()
         if not st or not selected_exam_ids:
@@ -7729,7 +7729,7 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
             selected_exam_ids = [int(exams[0]["id"])]
         stid = int(student_id) if str(student_id).isdigit() else 0
         st = cur.execute(
-            "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",
+            "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",
             (stid, sid)
         ).fetchone()
         if not st or not selected_exam_ids:
