@@ -9166,14 +9166,14 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <input type='hidden' name='cycle_year' value='{cycle}'>
 {bulk_action}
 {graduate_action}
-<table><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=reverse_promotion_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
-<tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table>
+<div class='promotion-student-table-scroll'><table class='promotion-student-table'><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=reverse_promotion_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
+<tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table></div>
 {"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 
 </div>
-<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+<style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.promotion-student-table-scroll{{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain}}.promotion-student-table{{min-width:900px;width:100%;border-collapse:collapse}}.promotion-student-table th,.promotion-student-table td{{white-space:nowrap;padding:10px;border-bottom:1px solid #e5e7eb}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
 
 
