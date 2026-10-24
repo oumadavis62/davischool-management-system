@@ -1391,7 +1391,30 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
         else:
             class_stream = str(class_row["stream"] or "").strip()
     cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_name.strip(),parent_phone.strip(),class_stream,"active"))
-    # Do not use cursor.lastrowid here: the production PostgreSQL cursor does not expose it.\n    # The inserted row does not need its generated ID for this save operation.\n    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
+    # Record the year a newly enrolled learner entered the assigned class.
+    # Class rows are reused after promotion, so current class_id alone must not
+    # make a new learner part of an older cohort's roster.
+    if cid:
+        entry_year_row = cur.execute(
+            "SELECT MAX(CAST(year AS INTEGER)) AS entry_year FROM exams WHERE school_id=?",
+            (sid,)
+        ).fetchone()
+        entry_year = int(entry_year_row["entry_year"]) if entry_year_row and entry_year_row["entry_year"] else None
+        new_student = cur.execute(
+            "SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",
+            (sid, admission)
+        ).fetchone()
+        if new_student and entry_year:
+            now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute(
+                """INSERT INTO student_class_history
+                   (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,
+                    from_academic_year,to_academic_year)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                (sid,int(new_student["id"]),None,cid,now,request.session.get("email",""),
+                 "Initial class enrollment",None,entry_year)
+            )
+    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
     con.commit(); con.close(); return RedirectResponse("/app/students",303)
 
 @router.get("/app/students/edit/{student_id}",response_class=HTMLResponse)
@@ -1447,7 +1470,19 @@ def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name
     cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_name=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_name.strip(),parent_phone.strip(),class_stream,new_status,student_id,sid))
     if (old_class or None)!=(cid or None):
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("INSERT INTO student_class_history(school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason) VALUES(?,?,?,?,?,?,?)",(sid,student_id,old_class,cid,now,request.session.get("email",""),"Student class/stream transfer"))
+        entry_year_row = cur.execute(
+            "SELECT MAX(CAST(year AS INTEGER)) AS entry_year FROM exams WHERE school_id=?",
+            (sid,)
+        ).fetchone()
+        entry_year = int(entry_year_row["entry_year"]) if entry_year_row and entry_year_row["entry_year"] else None
+        cur.execute(
+            """INSERT INTO student_class_history
+               (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,
+                from_academic_year,to_academic_year)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid,student_id,old_class,cid,now,request.session.get("email",""),
+             "Student class/stream transfer",entry_year,entry_year)
+        )
         _audit(cur,sid,request,"STUDENT_TRANSFER",f"Transferred {name.strip()} from class {old_class or 'Unassigned'} to {cid or 'Unassigned'}")
     _audit(cur,sid,request,"STUDENT_UPDATE",f"Updated student {name.strip()} ({admission})")
     con.commit();con.close();return RedirectResponse("/app/students",303)
