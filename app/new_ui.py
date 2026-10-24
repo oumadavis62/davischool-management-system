@@ -8262,9 +8262,10 @@ def student_promotion_page(request: Request, class_id: str = ""):
     )
     body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
 <div class='muted'>Move learners between classes while preserving their existing marks, attendance and financial records. Every change is recorded in the student class history.</div>
-<div class='card section'><form method='get' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
+<div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
 <select name='class_id' class='field'><option value=''>Select current class</option>{copts}</select>
-<button class='btn'>Load Students</button></form></div>
+<input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or ""))}'>
+<button class='btn' type='submit'>Load Students</button></form></div>
 <div class='card section'><form method='post' action='/app/students/promotion'>
 <input type='hidden' name='from_class_id' value='{cid}'>
 <table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promote / Transfer To</th></tr></thead>
