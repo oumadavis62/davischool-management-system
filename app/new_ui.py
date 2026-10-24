@@ -7578,13 +7578,6 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
         history_table_html = (
             "<div class='muted teacher-allocation-history-prompt'>Select a year and/or class, then click Apply Filter to display historical allocations.</div>"
         )
-    history_filter_applied = ("history_year" in request.query_params or "history_class_id" in request.query_params)
-    history_table_html = (
-        "<div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Year</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Reason</th><th>Recorded At</th></tr></thead><tbody>%s</tbody></table></div>"
-        % (history_rows or "<tr><td colspan='6'>No historical allocations match these filters.</td></tr>")
-        if history_filter_applied else
-        "<div class='muted teacher-allocation-history-prompt'>Select a year and/or class, then click Apply Filter to display historical allocations.</div>"
-    )
     body=f"""<div class='page teacher-allocations-page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
 {limit_notice}
 <div class='card section'><div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>
