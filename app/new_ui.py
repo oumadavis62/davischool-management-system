@@ -7335,12 +7335,13 @@ def assessments_add(
 
 
 @router.get("/app/academics/allocations", response_class=HTMLResponse)
-def teacher_allocations_page(request: Request):
+def teacher_allocations_page(request: Request, history_year: str = "", history_class_id: str = ""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.edit"):
         return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
+    _ensure_teacher_assignment_history_tables(cur)
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
@@ -7348,6 +7349,26 @@ def teacher_allocations_page(request: Request):
                         FROM teacher_allocations a JOIN teachers t ON t.id=a.teacher_id
                         JOIN classes c ON c.id=a.class_id JOIN subjects s ON s.id=a.subject_id
                         WHERE a.school_id=? ORDER BY t.name,c.name,s.name""",(sid,)).fetchall()
+    history_year_value = int(history_year) if str(history_year).isdigit() else 0
+    history_class_value = int(history_class_id) if str(history_class_id).isdigit() else 0
+    history_sql = """SELECT h.cycle_year,h.teacher_name,h.class_id,h.subject_name,h.reason,h.recorded_at,
+                            COALESCE(c.name,'Archived class') class_name,COALESCE(c.stream,'') class_stream
+                     FROM teacher_allocation_history h
+                     LEFT JOIN classes c ON c.id=h.class_id AND c.school_id=h.school_id
+                     WHERE h.school_id=?"""
+    history_params = [sid]
+    if history_year_value:
+        history_sql += " AND h.cycle_year=?"
+        history_params.append(history_year_value)
+    if history_class_value:
+        history_sql += " AND h.class_id=?"
+        history_params.append(history_class_value)
+    history_sql += " ORDER BY h.cycle_year DESC,class_name,h.subject_name,h.teacher_name"
+    historical_allocations = cur.execute(history_sql, history_params).fetchall()
+    history_years = cur.execute(
+        "SELECT DISTINCT cycle_year FROM teacher_allocation_history WHERE school_id=? ORDER BY cycle_year DESC",
+        (sid,)
+    ).fetchall()
     # The school-wide allocation ceiling is the complete class/subject matrix:
     # every class/stream can have one allocation slot for every subject.
     # Example: 4 classes x 10 subjects = 40 maximum allocations.
@@ -7371,6 +7392,22 @@ def teacher_allocations_page(request: Request):
     sops="".join("<option value='%s'>%s</option>"%(x["id"],escape(str(x["name"] or ""))) for x in subjects)
     current_ds_tab_q=("?" + "ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""
     trs="".join("<tr><td>%s</td><td>%s%s</td><td>%s</td><td><a class='btn edit' href='/app/academics/allocations/edit/%s'>Edit</a> <form method='post' action='/app/academics/allocations/delete/%s%s' style='display:inline' onsubmit=\"if(!confirm('Delete this teacher allocation?')) return false; this.submit(); return false;\"><button class='btn danger' type='submit' formaction='/app/academics/allocations/delete/%s%s' formmethod='post'>Delete</button></form></td></tr>"%(escape(str(x["teacher_name"])),escape(str(x["class_name"])),(" — "+escape(str(x["class_stream"]))) if x["class_stream"] else "",escape(str(x["subject_name"])),x["id"],x["id"],current_ds_tab_q,x["id"],current_ds_tab_q) for x in rows)
+    history_year_options = "<option value=''>All years</option>" + "".join(
+        "<option value='%s' %s>%s</option>" % (int(y["cycle_year"]), "selected" if history_year_value == int(y["cycle_year"]) else "", int(y["cycle_year"]))
+        for y in history_years
+    )
+    history_class_options = "<option value=''>All classes</option>" + "".join(
+        "<option value='%s' %s>%s%s</option>" % (int(c["id"]), "selected" if history_class_value == int(c["id"]) else "", escape(str(c["name"] or "")), (" — " + escape(str(c["stream"] or ""))) if c["stream"] else "")
+        for c in classes
+    )
+    history_rows = "".join(
+        "<tr><td>%s</td><td>%s%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (
+            escape(str(h["cycle_year"] or "")), escape(str(h["class_name"] or "Archived class")),
+            (" — " + escape(str(h["class_stream"] or ""))) if h["class_stream"] else "",
+            escape(str(h["subject_name"] or "")), escape(str(h["teacher_name"] or "")),
+            escape(str(h["reason"] or "")), escape(str(h["recorded_at"] or "").replace("T", " ").split(" ")[0])
+        ) for h in historical_allocations
+    )
     body=f"""<div class='page'><h1>Teacher Allocations</h1><div class='muted'>Assign teachers to classes and subjects.</div>
 {limit_notice}
 <div class='card section'><div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>
@@ -7385,6 +7422,10 @@ def teacher_allocations_page(request: Request):
 <select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
 <button class='btn' type='submit' formaction='/app/academics/allocations/add{current_ds_tab_q}' formmethod='post'>Save Allocation</button></form></div></div>
 <div class='card section'><h2>Current Allocations ({len(rows)})</h2><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Teacher</th><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No allocations yet.</td></tr>'}</tbody></table></div></div>
+<div class='card section'><h2>Historical Teacher Allocations ({len(historical_allocations)})</h2><div class='muted'>Past assignments are retained when a class is promoted or graduates. Filter by year and class to identify who taught each subject.</div>
+<form method='get' action='/app/academics/allocations' class='teacher-allocation-filter-form' style='margin:12px 0'>
+<select name='history_year' class='field'>{history_year_options}</select><select name='history_class_id' class='field'>{history_class_options}</select>{("<input type='hidden' name='ds_tab' value='"+escape(request.query_params.get("ds_tab",""))+"'>" if request.query_params.get("ds_tab") else "")}<button class='btn' type='submit'>Filter History</button><a class='btn edit' href='/app/academics/allocations{current_ds_tab_q}'>Clear</a></form>
+<div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table'><thead><tr><th>Year</th><th>Class / Stream</th><th>Subject</th><th>Teacher</th><th>Reason</th><th>Recorded At</th></tr></thead><tbody>{history_rows or '<tr><td colspan=6>No historical allocations match these filters.</td></tr>'}</tbody></table></div></div>
 <style>.allocation-limit-notice{{margin-top:14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.45}}.allocation-cap{{min-width:150px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px}}.allocation-cap span{{display:block;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800}}.allocation-cap b{{display:block;font-size:20px;margin-top:3px}}.allocation-formula{{font-size:12px;color:#64748b;margin-left:auto}}.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;max-height:60vh;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;padding-bottom:10px}}.teacher-allocation-scroll::-webkit-scrollbar{{width:10px;height:10px}}.teacher-allocation-scroll::-webkit-scrollbar-thumb{{border-radius:8px;background:#9ca3af}}.teacher-allocation-filter-scroll::-webkit-scrollbar{{height:10px}}.teacher-allocation-table{{width:max-content;min-width:900px}}.teacher-allocation-filter-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}@media(max-width:700px){{.allocation-formula{{width:100%;margin-left:0}}}}</style></div>"""
     # Allocation data is frequently updated. Explicitly prevent browser/proxy caches
     # from serving an older table after a successful save.
