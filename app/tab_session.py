@@ -67,7 +67,10 @@ class DaviSchoolTabSessionMiddleware:
             return location
         parts = urlsplit(location)
         query = parse_qs(parts.query, keep_blank_values=True)
-        if _TAB_PARAM not in query:
+        existing = query.get(_TAB_PARAM, [""])[0]
+        # Repair missing, blank, or malformed tab IDs rather than preserving
+        # a broken ds_tab parameter that would select the generic session cookie.
+        if not _TAB_RE.fullmatch(existing or ""):
             query[_TAB_PARAM] = [tab_id]
             query_text = urlencode(query, doseq=True)
             return urlunsplit(("", "", parts.path, query_text, parts.fragment))
@@ -119,7 +122,13 @@ class DaviSchoolTabSessionMiddleware:
       try {
         var u = new URL(value, window.location.origin);
         if (u.origin !== window.location.origin) return value;
-        if (!u.searchParams.has("ds_tab")) u.searchParams.set("ds_tab", id);
+        // Existing empty/malformed ds_tab values must be repaired. Merely
+        // checking has() leaves links like ?ds_tab (empty) pointing at the
+        // generic session and causes authenticated pages to redirect to login.
+        var existingTab = u.searchParams.get("ds_tab") || "";
+        if (!/^[A-Za-z0-9_-]{16,64}$/.test(existingTab)) {
+          u.searchParams.set("ds_tab", id);
+        }
         return u.pathname + (u.search ? u.search : "") + (u.hash ? u.hash : "");
       } catch (_) {
         return value;
