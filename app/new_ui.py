@@ -5724,10 +5724,46 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                             scoped_classes_by_exam[exam_key]={int(row["class_id"]) for row in rows}
                         except Exception:
                             scoped_classes_by_exam[exam_key]=set()
-                all_exams=[
-                    exam for exam in all_exams
-                    if bool(scoped_classes_by_exam.get(int(exam["id"]),set()) & eligible_active_class_ids)
-                ]
+                visible_teacher_exams=[]
+                for exam in all_exams:
+                    exam_key=int(exam["id"])
+                    participating= scoped_classes_by_exam.get(exam_key,set())
+                    if participating & eligible_active_class_ids:
+                        visible_teacher_exams.append(exam)
+                        continue
+                    # A promoted cohort may have active learners whose marks
+                    # belong to its former class. Keep that exam visible only
+                    # if this teacher historically taught that class and those
+                    # still-active learners actually have marks there.
+                    historical_visible=False
+                    if participating:
+                        try:
+                            _ensure_teacher_assignment_history_tables(cur)
+                            for old_class_id in participating:
+                                had_allocation=cur.execute(
+                                    "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
+                                    (sid,teacher_id_for_exam_filter,old_class_id)
+                                ).fetchone()
+                                if not had_allocation:
+                                    continue
+                                has_active_cohort_marks=cur.execute("""SELECT 1
+                                    FROM marks m
+                                    JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                                    WHERE m.school_id=? AND m.exam_id=? AND m.class_id=?
+                                      AND lower(coalesce(st.status,'active'))='active'
+                                      AND NOT EXISTS (
+                                          SELECT 1 FROM student_graduations sg
+                                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                                      )
+                                    LIMIT 1""",(sid,exam_key,old_class_id)).fetchone()
+                                if has_active_cohort_marks:
+                                    historical_visible=True
+                                    break
+                        except Exception as history_filter_exc:
+                            print("DAVISCHOOL TEACHER HISTORICAL EXAM FILTER:",repr(history_filter_exc),flush=True)
+                    if historical_visible:
+                        visible_teacher_exams.append(exam)
+                all_exams=visible_teacher_exams
             except Exception as scope_exc:
                 # Preserve the existing selector if an older database is
                 # missing a supporting table; never block the teacher portal.
