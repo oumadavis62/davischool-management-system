@@ -1247,7 +1247,7 @@ def students_page(request: Request):
         CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
              THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
-        WHERE """ + where_sql + " ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC",
+        WHERE """ + where_sql + " AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC",
         tuple(params)).fetchall()
     con.close()
 
@@ -2425,7 +2425,7 @@ def class_marksheets_csv(
         return Response("Please select a class before downloading the MarkSheet.", status_code=400)
 
     placeholders = ",".join("?" for _ in selected_class_ids)
-    student_query = "SELECT * FROM students WHERE school_id=? AND class_id IN (" + placeholders + ")"
+    student_query = "SELECT * FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) AND class_id IN (" + placeholders + ")"
     student_params = [sid] + selected_class_ids
     if stream and not combined_mode:
         student_query += " AND stream=?"
@@ -2784,7 +2784,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
             year = str(er["year"] or "")
     if selected_class_ids:
         class_marks_placeholders = ",".join("?" for _ in selected_class_ids)
-        student_query = "SELECT * FROM students WHERE school_id=? AND class_id IN (" + class_marks_placeholders + ")"
+        student_query = "SELECT * FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) AND class_id IN (" + class_marks_placeholders + ")"
         student_params = [sid] + selected_class_ids
     else:
         student_query = "SELECT * FROM students WHERE school_id=? AND class_id=?"
@@ -5540,7 +5540,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       ''
                     ) marks
                   FROM students s
-                  WHERE s.school_id=? AND (
+                  WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) AND (
                     s.class_id=? OR EXISTS (
                       SELECT 1 FROM marks historical
                       WHERE historical.school_id=s.school_id AND historical.student_id=s.id
@@ -5580,7 +5580,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                               WHERE m2.student_id=s.id AND m2.exam_id=? AND m2.subject_id=? AND m2.school_id=?
                               ORDER BY m2.id DESC LIMIT 1),'') marks
                   FROM students s
-                  WHERE s.school_id=? AND (
+                  WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) AND (
                     s.class_id=? OR EXISTS (
                       SELECT 1 FROM marks historical
                       WHERE historical.school_id=s.school_id AND historical.student_id=s.id
@@ -7802,7 +7802,7 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         cls = cur.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone() if cid else None
         if not cls or not selected_exam_ids:
             return HTMLResponse("Please select a class and examination first.", 400)
-        students = cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? ORDER BY name,id", (sid,cid)).fetchall()
+        students = cur.execute("SELECT * FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) ORDER BY name,id", (sid,cid)).fetchall()
         school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
         grading_rules = _load_grading_rules(cur,sid)
         overall_rules = _load_overall_grading_rules(cur,sid)
@@ -8020,7 +8020,7 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         if not cls:
             return HTMLResponse("Class/stream not found.",404)
         students=cur.execute("""SELECT s.* FROM students s
-            WHERE s.school_id=? AND s.class_id=? ORDER BY s.name,s.id""",(sid,cid)).fetchall()
+            WHERE s.school_id=? AND s.class_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY s.name,s.id""",(sid,cid)).fetchall()
         exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? AND id IN (%s) ORDER BY id" %
                            ",".join("?" for _ in selected_exam_ids), [sid]+selected_exam_ids).fetchall()
         school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
@@ -8164,7 +8164,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
         return HTMLResponse("You do not have permission to view report cards.", 403)
     con=_db();cur=con.cursor();_ensure_report_card_fields(cur);_ensure_overall_grading_table(cur);_ensure_class_teacher_assignments_table(cur)
     exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-    students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? ORDER BY s.name",(sid,)).fetchall()
+    students=cur.execute("SELECT s.*,c.name class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) ORDER BY s.name",(sid,)).fetchall()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     cid=int(class_id) if class_id.isdigit() else 0
     # HTML checkbox groups submit one repeated exam_ids query parameter per
@@ -8178,7 +8178,7 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     # Do not silently select the first student when a class/stream was generated for bulk reports.
     # A class-only selection must stay in bulk mode so the preview contains every student in that class/stream.
     stid=int(student_id) if student_id.isdigit() else (0 if cid else (int(students[0]["id"]) if students else 0))
-    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",(stid,sid)).fetchone()
     rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
         rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
@@ -8447,7 +8447,7 @@ def student_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "
         selected_exam_ids=[int(exams[0]["id"])]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     stid=int(student_id) if student_id.isdigit() else (int(students[0]["id"]) if students else 0)
-    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+    st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",(stid,sid)).fetchone()
     analysis_grading_rules=_load_grading_rules(cur,sid) if st and eid else []
     result=_student_result_for_assessments(cur,sid,stid,selected_exam_ids,analysis_grading_rules,None) if st and eid else {"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"}
     eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))} {escape(str(e['year'] or ''))}</option>" for e in exams)
@@ -10569,6 +10569,8 @@ def _msa_load_rows(cur, school_id, exam_ids):
         FROM marks m
         JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
         JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
+          AND lower(coalesce(st.status,'active'))='active'
+          AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
         JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
         JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
         WHERE m.school_id=? AND m.exam_id IN (""" + placeholders + """)
