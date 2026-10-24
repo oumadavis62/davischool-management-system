@@ -9427,6 +9427,29 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         if not source_number or not destination_number or destination_prefix != source_prefix or int(destination_number.group()) != int(source_number.group()) + 1:
             con.close()
             return HTMLResponse("The selected destination is not the next class level. No students were changed.", 400)
+        # Teacher allocations move with a cohort. If the destination still has
+        # learners, its staffing belongs to that destination cohort and must not
+        # be overwritten by the source cohort. Promote the destination cohort
+        # first (e.g. Grade 8 Blue to Grade 9 Blue), then promote into the vacated
+        # class. This prevents the order-dependent teacher swap/archive corruption.
+        destination_occupancy = cur.execute(
+            """SELECT COUNT(*) AS n FROM students s
+               WHERE s.school_id=? AND s.class_id=?
+                 AND lower(COALESCE(s.status,'active')) <> 'graduated'
+                 AND NOT EXISTS (
+                     SELECT 1 FROM student_graduations g
+                     WHERE g.school_id=s.school_id AND g.student_id=s.id
+                 )""",
+            (sid, to_class_id)
+        ).fetchone()
+        if destination_occupancy and int(destination_occupancy["n"] or 0) > 0:
+            con.close()
+            return HTMLResponse(
+                "Promotion stopped to protect teacher allocations. The destination class still has "
+                "learners, so its teacher allocations belong to that cohort. First promote or graduate "
+                "the destination cohort, then promote this class. No students or teacher allocations were changed.",
+                409
+            )
         _snapshot_student_promotion_cohort(cur, sid, cycle, to_class_id, now)
         _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
         source_students = cur.execute(
