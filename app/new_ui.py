@@ -1212,15 +1212,15 @@ def students_page(request: Request):
         page_num = 1
     page_size = 50
 
-    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_promotion_cohort_tables(cur)
+    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_parent_name_column(cur, con); _ensure_student_promotion_cohort_tables(cur)
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     print_school=cur.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     where = ["s.school_id=?", "lower(coalesce(s.status,'active')) <> 'graduated'", "NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)"]
     params = [sid]
     if search:
-        where.append("(lower(coalesce(s.name,'')) LIKE lower(?) OR lower(coalesce(s.admission_no,'')) LIKE lower(?) OR lower(coalesce(s.assessment_no,'')) LIKE lower(?))")
+        where.append("(lower(coalesce(s.name,'')) LIKE lower(?) OR lower(coalesce(s.admission_no,'')) LIKE lower(?) OR lower(coalesce(s.assessment_no,'')) LIKE lower(?) OR lower(coalesce(s.parent_name,'')) LIKE lower(?))")
         term = "%" + search + "%"
-        params.extend([term, term, term])
+        params.extend([term, term, term, term])
     if class_filter == "unassigned":
         where.append("(s.class_id IS NULL OR s.class_id=0)")
     elif class_filter.isdigit():
@@ -1261,9 +1261,9 @@ def students_page(request: Request):
     print_school_header = ("<div class='doc-header report-school-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span class='logo-fallback'>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo doc-logo-right'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span class='logo-fallback'>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>STUDENT REGISTER</h1>") % (print_school_name, print_school_contact)
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
-      <td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
+      <td>{escape(str(s['parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
       <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a> <a class='action' href='/app/students/history/{s["id"]}{tab_q}'>History</a></td></tr>""" for s in students)
-    print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
+    print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
     gender_opts = "".join(f"<option {'selected' if gender_filter == g else ''}>{g}</option>" for g in ("Male", "Female", "Other"))
@@ -1301,17 +1301,17 @@ function openStudentsPrintPreview(){
     body=f"""<div class='page'><h1>Students</h1><div class='muted'>Student register, admissions, transfers and academic-history management. Search by name, admission number or assessment number, or narrow the list using filters.</div>
 <div class='card section'><h2>Add student</h2><form method='post' action='/app/students/add{tab_q}' style='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px'>
 <input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
-<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
+<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_name' placeholder='Parent name' class='field'><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
 <button class='btn'>Save Student</button></form></div>
 <div class='card section'><div class='register-heading'><h2>Student register ({int(total)} matching / all students)</h2><div class='student-register-actions'><button class='btn students-print-button' type='button' onclick='openStudentsPrintPreview()'>Print Student Register</button><a class='action' href='/app/students{tab_q}'>Clear filters</a></div></div>
 <form method='get' action='/app/students' class='student-filters'>
-<input type='search' name='q' value='{escape(search, quote=True)}' placeholder='Search name, admission or assessment no.' class='field'>
+<input type='search' name='q' value='{escape(search, quote=True)}' placeholder='Search name, admission, assessment or parent name' class='field'>
 <select name='class_id' class='field'><option value=''>All classes</option>{opts}<option value='unassigned' {selected_unassigned}>Unassigned</option></select>
 <select name='gender' class='field'><option value=''>All genders</option>{gender_opts}</select>
 <select name='status' class='field'><option value=''>All statuses</option>{status_opts}</select>
 <input type='hidden' name='ds_tab' value='{escape(tab_id, quote=True)}'><button class='btn' type='submit'>Apply filters</button><a class='action' href='/app/students{tab_q}'>Reset</a></form>
 {pager}
-<div id='students-print-source' style='display:none'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead><tbody>{print_rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>
+<div id='students-print-source' style='display:none'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent name</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead><tbody>{print_rows or '<tr><td colspan=8>No students match these filters.</td></tr>'}</tbody></table></div>
 <div class='students-register-scroll'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead>
 <tbody>{rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>{pager}</div>
 {students_print_script}
@@ -1319,7 +1319,7 @@ function openStudentsPrintPreview(){
     return _school_page(request,"Students",body)
 
 @router.post("/app/students/add")
-def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
+def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
     # Diagnose production-only login redirects without logging credentials or
     # session-cookie contents. This distinguishes a missing tab ID from a
     # session that exists but lacks the school-role fields.
@@ -1339,7 +1339,7 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
     if not sid: return RedirectResponse("/",303)
     if not _require_permission(request, sid, "students.create"):
         return HTMLResponse("You do not have permission to create students.", 403)
-    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur)
+    con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_parent_name_column(cur, con)
     admission=admission_no.strip()
     if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
         con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
@@ -1351,7 +1351,7 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
             cid=None
         else:
             class_stream = str(class_row["stream"] or "").strip()
-    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),class_stream,"active"))
+    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_name.strip(),parent_phone.strip(),class_stream,"active"))
     # Do not use cursor.lastrowid here: the production PostgreSQL cursor does not expose it.\n    # The inserted row does not need its generated ID for this save operation.\n    _audit(cur,sid,request,"STUDENT_CREATE",f"Created student {name.strip()} ({admission})")
     con.commit(); con.close(); return RedirectResponse("/app/students",303)
 
@@ -1366,7 +1366,7 @@ def student_edit_page(request: Request,student_id:int):
     tab_q = ("?ds_tab=" + quote(tab_id, safe="")) if tab_id else ""
     if not _require_permission(request, sid, "students.edit"):
         return HTMLResponse("You do not have permission to edit students.", 403)
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_ensure_student_parent_name_column(cur, con)
     st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     con.close()
@@ -1378,6 +1378,7 @@ def student_edit_page(request: Request,student_id:int):
 <label>Assessment number<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''))}' class='field'></label>
 <label>Class<select name='class_id' class='field'><option value=''>Unassigned</option>{opts}</select></label>
 <label>Gender<select name='gender' class='field'><option>{escape(str(st['gender'] or ''))}</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+<label>Parent name<input name='parent_name' value='{escape(str(st['parent_name'] or ''))}' class='field'></label>
 <label>Parent phone<input name='parent_phone' value='{escape(str(st['parent_phone'] or ''))}' class='field'></label>
 <label>Status<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='graduated'>Graduated</option><option value='transferred'>Transferred</option></select></label>
 <div><button class='btn'>Save Changes</button> <a class='action' href='/app/students'>Cancel</a></div></form></div></div>
@@ -1385,12 +1386,12 @@ def student_edit_page(request: Request,student_id:int):
     return _school_page(request,"Edit Student",body)
 
 @router.post("/app/students/edit/{student_id}")
-def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name:str=Form(...),assessment_no:str=Form(""),class_id:str=Form(""),gender:str=Form(""),parent_phone:str=Form(""),status:str=Form("active")):
+def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name:str=Form(...),assessment_no:str=Form(""),class_id:str=Form(""),gender:str=Form(""),parent_name:str=Form(""),parent_phone:str=Form(""),status:str=Form("active")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "students.edit"):
         return HTMLResponse("You do not have permission to edit students.", 403)
-    con=_db();cur=con.cursor();_ensure_student_history_table(cur)
+    con=_db();cur=con.cursor();_ensure_student_history_table(cur);_ensure_student_parent_name_column(cur, con)
     st=cur.execute("SELECT * FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     if not st:con.close();return HTMLResponse("Student not found.",404)
     admission=admission_no.strip()
@@ -1404,7 +1405,7 @@ def student_edit(request: Request,student_id:int,admission_no:str=Form(...),name
             con.close();return HTMLResponse("Invalid class.",400)
         class_stream = str(class_row["stream"] or "").strip()
     old_class=st["class_id"];new_status=status.strip().lower() if status.strip().lower() in ("active","inactive","graduated","transferred") else "active"
-    cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_phone.strip(),class_stream,new_status,student_id,sid))
+    cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_name=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",(admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_name.strip(),parent_phone.strip(),class_stream,new_status,student_id,sid))
     if (old_class or None)!=(cid or None):
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("INSERT INTO student_class_history(school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason) VALUES(?,?,?,?,?,?,?)",(sid,student_id,old_class,cid,now,request.session.get("email",""),"Student class/stream transfer"))
@@ -4519,6 +4520,22 @@ def _ensure_student_history_table(cur):
         changed_by TEXT,
         reason TEXT
     )""")
+
+def _ensure_student_parent_name_column(cur, con):
+    """Add the optional parent-name field safely on older existing databases."""
+    cur.execute("SELECT * FROM students LIMIT 0")
+    existing = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+    if "parent_name" not in existing:
+        try:
+            cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_name TEXT")
+        except Exception:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            cur.execute("ALTER TABLE students ADD COLUMN parent_name TEXT")
+        con.commit()
+
 
 def _ensure_student_promotion_cohort_tables(cur):
     """Store cohort snapshots and a durable graduation register.""" 
