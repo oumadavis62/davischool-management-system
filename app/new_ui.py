@@ -4425,6 +4425,44 @@ def _ensure_student_history_table(cur):
         reason TEXT
     )""")
 
+def _ensure_student_promotion_cohort_tables(cur):
+    """Store a once-per-cycle snapshot of each class's promotion cohort."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_promotion_cohort_snapshots(
+        school_id INTEGER NOT NULL,
+        cycle_year INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        created_at TEXT,
+        PRIMARY KEY(school_id,cycle_year,class_id)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_promotion_cohort_members(
+        school_id INTEGER NOT NULL,
+        cycle_year INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        created_at TEXT,
+        PRIMARY KEY(school_id,cycle_year,class_id,student_id)
+    )""")
+
+def _snapshot_student_promotion_cohort(cur, school_id, cycle_year, class_id, now):
+    """Snapshot current members only when this class has not been initialized for the cycle."""
+    existing = cur.execute(
+        "SELECT class_id FROM student_promotion_cohort_snapshots WHERE school_id=? AND cycle_year=? AND class_id=?",
+        (school_id, cycle_year, class_id)
+    ).fetchone()
+    if existing:
+        return False
+    cur.execute(
+        "INSERT INTO student_promotion_cohort_snapshots (school_id,cycle_year,class_id,created_at) VALUES(?,?,?,?)",
+        (school_id, cycle_year, class_id, now)
+    )
+    cur.execute(
+        """INSERT INTO student_promotion_cohort_members (school_id,cycle_year,class_id,student_id,created_at)
+           SELECT s.school_id,?,s.class_id,s.id,?
+           FROM students s WHERE s.school_id=? AND s.class_id=?""",
+        (cycle_year, now, school_id, class_id)
+    )
+    return True
+
 def _ensure_report_card_fields(cur):
     global _REPORT_CARD_FIELDS_READY
     if _REPORT_CARD_FIELDS_READY:
@@ -8223,19 +8261,22 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
     return _school_page(request,"Class Analysis",body)
 
 @router.get("/app/students/promotion", response_class=HTMLResponse)
-def student_promotion_page(request: Request, class_id: str = ""):
+def student_promotion_page(request: Request, class_id: str = "", cycle_year: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", 303)
     if not _require_permission(request, sid, "students.edit"):
         return HTMLResponse("You do not have permission to promote or transfer students.", 403)
+    current_year = datetime.now(ZoneInfo("Africa/Nairobi")).year
+    cycle = int(cycle_year) if str(cycle_year).isdigit() and 2000 <= int(cycle_year) <= 2100 else current_year
     con = _db()
     cur = con.cursor()
     _ensure_student_history_table(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     classes = cur.execute(
         "SELECT * FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
-    cid = int(class_id) if class_id.isdigit() else 0
+    cid = int(class_id) if str(class_id).isdigit() else 0
     selected_class = next((c for c in classes if int(c["id"]) == cid), None)
     next_class = None
     if selected_class:
@@ -8250,7 +8291,7 @@ def student_promotion_page(request: Request, class_id: str = ""):
                 if int(c["id"]) != cid
                 and str(c["stream"] or "").strip().casefold() == current_stream
                 and re.sub(r"\d+", "#", str(c["name"] or "")).casefold().strip() == current_prefix
-                and (re.search(r"\d+", str(c["name"] or "")) is not None)
+                and re.search(r"\d+", str(c["name"] or "")) is not None
                 and int(re.search(r"\d+", str(c["name"] or "")).group()) == current_level + 1
             ]
             if len(candidates) == 1:
@@ -8262,43 +8303,72 @@ def student_promotion_page(request: Request, class_id: str = ""):
            ORDER BY s.name""",
         (sid, cid)
     ).fetchall() if cid else []
+    snapshot = cur.execute(
+        "SELECT class_id FROM student_promotion_cohort_snapshots WHERE school_id=? AND cycle_year=? AND class_id=?",
+        (sid, cycle, cid)
+    ).fetchone() if cid else None
+    cohort_rows = cur.execute(
+        "SELECT student_id FROM student_promotion_cohort_members WHERE school_id=? AND cycle_year=? AND class_id=?",
+        (sid, cycle, cid)
+    ).fetchall() if cid else []
+    cohort_ids = {int(row["student_id"]) for row in cohort_rows}
+    eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
     con.commit()
     con.close()
     copts = "".join(
         f"<option value='{c['id']}' {'selected' if int(c['id'])==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
         for c in classes
     )
+    year_options = "".join(
+        f"<option value='{year}' {'selected' if year == cycle else ''}>{year}</option>"
+        for year in range(min(current_year, cycle), max(current_year + 2, cycle) + 1)
+    )
     topts = "".join(
         f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>"
-        for c in classes
-        if int(c["id"]) != cid
+        for c in classes if int(c["id"]) != cid
     )
     rows = "".join(
-        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td>{escape(str(s['name']))}</td>"
-        f"<td>{escape(str(s['class_name'] or ''))} {escape(str(s['stream'] or ''))}</td>"
-        f"<td><select name='to_class_{s['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
-        for s in students
+        f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
+        f"<td>{escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</td>"
+        f"<td>{('<b>Eligible cohort</b>' if (int(st['id']) in cohort_ids if snapshot else True) else '<span style=\'color:#9a3412\'>New arrival / outside this cycle</span>')}</td>"
+        f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
+        for st in students
     )
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
     bulk_action = (
-        f"<div class='card section'><h2>Promote the whole class</h2><p>Promote all {len(students)} students from this class together to <b>{next_class_label}</b>, keeping their stream. This avoids selecting learners one by one.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote all {len(students)} students to {next_class_label}? This will move every student currently in this class.');\">Promote All Students to Next Class</button></div>"
-        if students and next_class else
-        ("<div class='card section'><b>Automatic next class not found.</b> You can still use the individual destination selectors below. For automatic bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students else "")
+        f"<div class='card section'><h2>Promote the eligible cohort</h2><p>Promote {eligible_count} eligible students from this class to <b>{next_class_label}</b>. Students who arrived from another class during this cycle are excluded automatically.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote the {eligible_count} eligible cohort students to the next class for {cycle}? Students outside this cohort will not be moved.');\">Promote Eligible Cohort to Next Class</button></div>"
+        if students and eligible_count and next_class else
+        ("<div class='card section'><b>Automatic next class not found.</b> Individual transfers remain available. For bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students and not next_class else "")
     )
+    changed_value = request.query_params.get("changed")
+    result_notice = (
+        f"<div class='card section'><b>Promotion completed:</b> {escape(str(changed_value))} student(s) moved successfully.</div>"
+        if changed_value is not None and str(changed_value).isdigit() else ""
+    )
+    if students and snapshot and eligible_count == 0:
+        cohort_notice = "<div class='card section'><b>No eligible cohort members remain in this class for the selected cycle.</b> New arrivals are intentionally excluded from bulk promotion.</div>"
+    elif students and not snapshot:
+        cohort_notice = f"<div class='card section'><b>First promotion for {cycle}:</b> the current class membership will be recorded as this class's cohort when you save a bulk promotion or individual transfer. Before moving students into a destination class, DaviSchool snapshots the destination's existing students so incoming learners will not be promoted again with that cohort.</div>"
+    else:
+        cohort_notice = ""
     body = f"""<div class='page'><h1>Student Promotion / Transfer</h1>
-<div class='muted'>Move learners between classes while preserving their existing marks, attendance and financial records. Every change is recorded in the student class history.</div>
-<div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr auto;gap:10px'>
+<div class='muted'>Promote a class cohort in one action. DaviSchool snapshots existing class members by promotion year, so students newly arriving from a lower class are kept separate from the cohort already in the destination class.</div>
+{result_notice}
+<div class='card section'><form method='get' action='/app/students/promotion' style='display:grid;grid-template-columns:1fr 1fr auto;gap:10px'>
+<select name='cycle_year' class='field'>{year_options}</select>
 <select name='class_id' class='field'><option value=''>Select current class</option>{copts}</select>
 <input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or ""))}'>
 <button class='btn' type='submit'>Load Students</button></form></div>
+{cohort_notice}
 <div class='card section'><form method='post' action='/app/students/promotion'>
 <input type='hidden' name='from_class_id' value='{cid}'>
+<input type='hidden' name='cycle_year' value='{cycle}'>
 {bulk_action}
-<table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promote / Transfer To</th></tr></thead>
-<tbody>{rows or "<tr><td colspan='4'>Select a class to load its students.</td></tr>"}</tbody></table>
+<table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
+<tbody>{rows or "<tr><td colspan='5'>Select a class to load its students.</td></tr>"}</tbody></table>
 {"<button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
-<div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school.</div>
+<div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 </div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
@@ -8315,24 +8385,24 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
     con = _db()
     cur = con.cursor()
     _ensure_student_history_table(cur)
+    _ensure_student_promotion_cohort_tables(cur)
     if not cur.execute(
         "SELECT id FROM classes WHERE id=? AND school_id=?", (from_class_id, sid)
     ).fetchone():
         con.close()
         return HTMLResponse("Invalid current class. <a href='/app/students/promotion'>Back</a>", 400)
-    changed = 0
     now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    raw_cycle = str(form.get("cycle_year", datetime.now(ZoneInfo("Africa/Nairobi")).year)).strip()
+    cycle = int(raw_cycle) if raw_cycle.isdigit() and 2000 <= int(raw_cycle) <= 2100 else datetime.now(ZoneInfo("Africa/Nairobi")).year
     bulk_value = str(form.get("bulk_to_class_id", "")).strip()
     targets = []
     if bulk_value.isdigit():
         to_class_id = int(bulk_value)
         source_class = cur.execute(
-            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",
-            (from_class_id, sid)
+            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?", (from_class_id, sid)
         ).fetchone()
         destination_class = cur.execute(
-            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",
-            (to_class_id, sid)
+            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?", (to_class_id, sid)
         ).fetchone()
         if not source_class or not destination_class or to_class_id == from_class_id:
             con.close()
@@ -8347,12 +8417,22 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         if not source_number or not destination_number or destination_prefix != source_prefix or int(destination_number.group()) != int(source_number.group()) + 1:
             con.close()
             return HTMLResponse("The selected destination is not the next class level. No students were changed.", 400)
+        _snapshot_student_promotion_cohort(cur, sid, cycle, to_class_id, now)
+        _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
         source_students = cur.execute(
-            "SELECT id FROM students WHERE school_id=? AND class_id=?",
-            (sid, from_class_id)
+            """SELECT s.id FROM students s
+               JOIN student_promotion_cohort_members m
+                 ON m.school_id=s.school_id AND m.student_id=s.id
+                AND m.class_id=? AND m.cycle_year=?
+               WHERE s.school_id=? AND s.class_id=?""",
+            (from_class_id, cycle, sid, from_class_id)
         ).fetchall()
         targets = [(int(student["id"]), to_class_id) for student in source_students]
+        if not targets:
+            con.close()
+            return HTMLResponse("No eligible students from this promotion cohort remain in the selected class. No students were changed.", 400)
     else:
+        individual_targets = []
         for key, value in form.multi_items():
             if not key.startswith("to_class_"):
                 continue
@@ -8372,7 +8452,13 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                 (student_id, sid, from_class_id)
             ).fetchone()
             if student:
-                targets.append((student_id, to_class_id))
+                individual_targets.append((student_id, to_class_id))
+        for destination_id in sorted({target[1] for target in individual_targets}):
+            _snapshot_student_promotion_cohort(cur, sid, cycle, destination_id, now)
+        if individual_targets:
+            _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
+        targets = individual_targets
+    changed = 0
     for student_id, to_class_id in targets:
         cur.execute(
             "UPDATE students SET class_id=? WHERE id=? AND school_id=? AND class_id=?",
@@ -8392,7 +8478,8 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         changed += 1
     con.commit()
     con.close()
-    return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&changed={changed}", 303)
+    return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&changed={changed}", 303)
+
 
 
 @router.get("/app/attendance", response_class=HTMLResponse)
