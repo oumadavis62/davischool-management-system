@@ -4426,7 +4426,17 @@ def _ensure_student_history_table(cur):
     )""")
 
 def _ensure_student_promotion_cohort_tables(cur):
-    """Store a once-per-cycle snapshot of each class's promotion cohort."""
+    """Store cohort snapshots and a durable graduation register.""" 
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_graduations(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        graduation_year INTEGER NOT NULL,
+        final_class_id INTEGER,
+        graduated_at TEXT NOT NULL,
+        graduated_by TEXT,
+        UNIQUE(school_id,student_id)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS student_promotion_cohort_snapshots(
         school_id INTEGER NOT NULL,
         cycle_year INTEGER NOT NULL,
@@ -4458,7 +4468,9 @@ def _snapshot_student_promotion_cohort(cur, school_id, cycle_year, class_id, now
     cur.execute(
         """INSERT INTO student_promotion_cohort_members (school_id,cycle_year,class_id,student_id,created_at)
            SELECT s.school_id,?,s.class_id,s.id,?
-           FROM students s WHERE s.school_id=? AND s.class_id=?""",
+           FROM students s WHERE s.school_id=? AND s.class_id=?
+             AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                             WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
         (cycle_year, now, school_id, class_id)
     )
     return True
@@ -8300,6 +8312,8 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         """SELECT s.id,s.name,s.admission_no,s.class_id,c.name class_name,c.stream
            FROM students s LEFT JOIN classes c ON c.id=s.class_id
            WHERE s.school_id=? AND s.class_id=?
+             AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                             WHERE g.school_id=s.school_id AND g.student_id=s.id)
            ORDER BY s.name""",
         (sid, cid)
     ).fetchall() if cid else []
@@ -8344,11 +8358,28 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
         if students and eligible_count and next_class else
         ("<div class='card section'><b>Automatic next class not found.</b> Individual transfers remain available. For bulk promotion, ensure the next class follows the same naming pattern and has the same stream.</div>" if students and not next_class else "")
     )
+    graduate_action = (
+        f"<div class='card section'><h2>Graduate eligible cohort</h2><p>Mark {eligible_count} students as graduated for {cycle}. Their academic records are preserved and they will be excluded from future promotion lists.</p><button class='btn' type='submit' name='graduate_cohort' value='1' onclick="return confirm('Graduate the eligible cohort for {cycle}?');">Graduate Eligible Cohort</button></div>"
+        if students and eligible_count and not next_class else ""
+    )
+    graduates = cur.execute(
+        """SELECT g.student_id,s.name,s.admission_no,g.graduation_year,c.name final_class
+           FROM student_graduations g JOIN students s ON s.id=g.student_id AND s.school_id=g.school_id
+           LEFT JOIN classes c ON c.id=g.final_class_id
+           WHERE g.school_id=? ORDER BY g.graduation_year DESC,s.name""", (sid,)
+    ).fetchall()
+    graduate_rows = "".join(
+        f"<tr><td>{escape(str(g['graduation_year']))}</td><td>{escape(str(g['name'] or ''))}</td><td>{escape(str(g['admission_no'] or ''))}</td><td>{escape(str(g['final_class'] or ''))}</td><td><form method='post' action='/app/students/promotion' onsubmit="return confirm('Reverse this graduation?');"><input type='hidden' name='ungraduate_student_id' value='{int(g['student_id'])}'><input type='hidden' name='from_class_id' value='{cid}'><input type='hidden' name='cycle_year' value='{cycle}'><button class='btn' type='submit'>Reverse Graduation</button></form></td></tr>"
+        for g in graduates
+    )
     changed_value = request.query_params.get("changed")
     result_notice = (
         f"<div class='card section'><b>Promotion completed:</b> {escape(str(changed_value))} student(s) moved successfully.</div>"
         if changed_value is not None and str(changed_value).isdigit() else ""
     )
+    graduated_value = request.query_params.get("graduated")
+    if graduated_value is not None and str(graduated_value).isdigit():
+        result_notice += f"<div class='card section'><b>Graduation completed:</b> {escape(str(graduated_value))} student(s) recorded as graduates for {cycle}.</div>"
     if students and snapshot and eligible_count == 0:
         cohort_notice = "<div class='card section'><b>No eligible cohort members remain in this class for the selected cycle.</b> New arrivals are intentionally excluded from bulk promotion.</div>"
     elif students and not snapshot:
@@ -8368,11 +8399,13 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <input type='hidden' name='from_class_id' value='{cid}'>
 <input type='hidden' name='cycle_year' value='{cycle}'>
 {bulk_action}
+{graduate_action}
 <table><thead><tr><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
 <tbody>{rows or "<tr><td colspan='5'>Select a class to load its students.</td></tr>"}</tbody></table>
 {"<button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
+<div class='card section'><h2>Graduation Register</h2><p>Graduates are retained for historical records and excluded from promotion and transfer lists.</p><div style='overflow-x:auto'><table><thead><tr><th>Graduation Year</th><th>Student</th><th>Admission</th><th>Final Class</th><th>Correction</th></tr></thead><tbody>{graduate_rows or "<tr><td colspan='5'>No graduates recorded.</td></tr>"}</tbody></table></div></div>
 </div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
     return _school_page(request, "Student Promotion / Transfer", body)
@@ -8400,6 +8433,77 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
     cycle = int(raw_cycle) if raw_cycle.isdigit() and 2000 <= int(raw_cycle) <= 2100 else datetime.now(ZoneInfo("Africa/Nairobi")).year
     bulk_value = str(form.get("bulk_to_class_id", "")).strip()
     targets = []
+    if str(form.get("graduate_cohort", "")).strip() == "1":
+        source_class = cur.execute(
+            "SELECT id,name,stream FROM classes WHERE id=? AND school_id=?", (from_class_id, sid)
+        ).fetchone()
+        if not source_class:
+            con.close()
+            return HTMLResponse("Invalid final class. No students were changed.", 400)
+        source_number = re.search(r"\\d+", str(source_class["name"] or ""))
+        source_prefix = re.sub(r"\\d+", "#", str(source_class["name"] or "")).casefold().strip()
+        next_classes = cur.execute(
+            "SELECT id,name,stream FROM classes WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))",
+            (sid, source_class["stream"])
+        ).fetchall()
+        next_classes = [c for c in next_classes if int(c["id"]) != from_class_id
+            and source_number
+            and re.sub(r"\\d+", "#", str(c["name"] or "")).casefold().strip() == source_prefix
+            and re.search(r"\\d+", str(c["name"] or ""))
+            and int(re.search(r"\\d+", str(c["name"] or "")).group()) == int(source_number.group()) + 1]
+        if next_classes:
+            con.close()
+            return HTMLResponse("This class has a matching next class. Use promotion instead of graduation.", 400)
+        _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
+        eligible = cur.execute(
+            """SELECT s.id FROM students s JOIN student_promotion_cohort_members m
+                 ON m.school_id=s.school_id AND m.student_id=s.id
+                AND m.class_id=? AND m.cycle_year=?
+               WHERE s.school_id=? AND s.class_id=?
+                 AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                 WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
+            (from_class_id, cycle, sid, from_class_id)
+        ).fetchall()
+        if not eligible:
+            con.close()
+            return HTMLResponse("No eligible cohort students remain to graduate.", 400)
+        for learner in eligible:
+            student_id = int(learner["id"])
+            cur.execute(
+                """INSERT INTO student_graduations
+                   (school_id,student_id,graduation_year,final_class_id,graduated_at,graduated_by)
+                   VALUES(?,?,?,?,?,?)""",
+                (sid, student_id, cycle, from_class_id, now, request.session.get("email", ""))
+            )
+            cur.execute(
+                """INSERT INTO student_class_history
+                   (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (sid, student_id, from_class_id, None, now, request.session.get("email", ""), "Graduated")
+            )
+            _audit(cur, sid, request, "STUDENT_GRADUATED", f"Graduated student {student_id} from class {from_class_id} in {cycle}")
+        con.commit()
+        con.close()
+        return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&graduated={len(eligible)}", 303)
+    ungraduate_value = str(form.get("ungraduate_student_id", "")).strip()
+    if ungraduate_value.isdigit():
+        student_id = int(ungraduate_value)
+        record = cur.execute("SELECT final_class_id FROM student_graduations WHERE school_id=? AND student_id=?", (sid, student_id)).fetchone()
+        if not record:
+            con.close()
+            return HTMLResponse("Graduation record not found.", 404)
+        restored_class = int(record["final_class_id"] or from_class_id)
+        cur.execute("DELETE FROM student_graduations WHERE school_id=? AND student_id=?", (sid, student_id))
+        cur.execute(
+            """INSERT INTO student_class_history
+               (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
+               VALUES(?,?,?,?,?,?,?)""",
+            (sid, student_id, None, restored_class, now, request.session.get("email", ""), "Graduation reversed")
+        )
+        _audit(cur, sid, request, "STUDENT_GRADUATION_REVERSED", f"Reversed graduation for student {student_id}")
+        con.commit()
+        con.close()
+        return RedirectResponse(f"/app/students/promotion?class_id={restored_class}&cycle_year={cycle}", 303)
     if bulk_value.isdigit():
         to_class_id = int(bulk_value)
         source_class = cur.execute(
@@ -8428,7 +8532,9 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                JOIN student_promotion_cohort_members m
                  ON m.school_id=s.school_id AND m.student_id=s.id
                 AND m.class_id=? AND m.cycle_year=?
-               WHERE s.school_id=? AND s.class_id=?""",
+               WHERE s.school_id=? AND s.class_id=?
+                 AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                 WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
             (from_class_id, cycle, sid, from_class_id)
         ).fetchall()
         targets = [(int(student["id"]), to_class_id) for student in source_students]
@@ -8452,7 +8558,10 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             ).fetchone():
                 continue
             student = cur.execute(
-                "SELECT id,class_id FROM students WHERE id=? AND school_id=? AND class_id=?",
+                """SELECT s.id,s.class_id FROM students s
+                   WHERE s.id=? AND s.school_id=? AND s.class_id=?
+                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                     WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
                 (student_id, sid, from_class_id)
             ).fetchone()
             if student:
