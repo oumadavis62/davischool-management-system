@@ -9091,6 +9091,9 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     ).fetchall() if cid else []
     cohort_ids = {int(row["student_id"]) for row in cohort_rows}
     eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
+    # In the terminal class, late-arriving learners still need graduation.
+    if selected_class and not next_class and students and eligible_count == 0:
+        eligible_count = len(students)
     con.commit()
     con.close()
     copts = "".join(
@@ -9223,9 +9226,19 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                                  WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
             (from_class_id, cycle, sid, from_class_id)
         ).fetchall()
+        # Learners promoted into the final class after its snapshot are not
+        # members of that earlier cohort, but must still be gradable there.
+        if not eligible:
+            eligible = cur.execute(
+                """SELECT s.id FROM students s
+                   WHERE s.school_id=? AND s.class_id=?
+                     AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                     WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
+                (sid, from_class_id)
+            ).fetchall()
         if not eligible:
             con.close()
-            return HTMLResponse("No eligible cohort students remain to graduate.", 400)
+            return HTMLResponse("No students remain to graduate from this class.", 400)
         for learner in eligible:
             student_id = int(learner["id"])
             cur.execute(
