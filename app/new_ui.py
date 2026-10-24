@@ -9077,6 +9077,23 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
     ).fetchall() if cid else []
     cohort_ids = {int(row["student_id"]) for row in cohort_rows}
     eligible_count = sum(1 for st in students if (int(st["id"]) in cohort_ids if snapshot else True))
+    promotion_history = cur.execute(
+        """SELECT h.promotion_year,h.from_academic_year,h.to_academic_year,
+                  h.from_class_id,f.name from_class,f.stream from_stream,
+                  h.to_class_id,t.name to_class,t.stream to_stream,
+                  MIN(h.changed_at) promoted_at,MAX(h.changed_by) changed_by,
+                  COUNT(DISTINCT h.student_id) student_count
+           FROM student_class_history h
+           LEFT JOIN classes f ON f.id=h.from_class_id AND f.school_id=h.school_id
+           LEFT JOIN classes t ON t.id=h.to_class_id AND t.school_id=h.school_id
+           WHERE h.school_id=? AND h.promotion_year IS NOT NULL
+             AND h.reason='Class cohort promotion'
+           GROUP BY h.promotion_year,h.from_academic_year,h.to_academic_year,
+                    h.from_class_id,f.name,f.stream,h.to_class_id,t.name,t.stream,
+                    h.changed_at
+           ORDER BY MAX(h.id) DESC LIMIT 100""",
+        (sid,)
+    ).fetchall()
     con.commit()
     con.close()
     copts = "".join(
@@ -9103,6 +9120,15 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
             f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
         )
     rows = "".join(row_parts)
+    promotion_history_rows = "".join(
+        f"<tr><td>{escape(str(h['promotion_year']))}</td>"
+        f"<td>{escape(str(h['from_class'] or 'Unknown'))} {escape(str(h['from_stream'] or ''))}</td>"
+        f"<td>{escape(str(h['to_class'] or 'Unknown'))} {escape(str(h['to_stream'] or ''))}</td>"
+        f"<td>{escape(str(h['from_academic_year']))} → {escape(str(h['to_academic_year']))}</td>"
+        f"<td>{escape(str(h['promoted_at'] or ''))}</td><td>{escape(str(h['changed_by'] or ''))}</td>"
+        f"<td>{escape(str(h['student_count']))}</td></tr>"
+        for h in promotion_history
+    )
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
     bulk_action = (
         f"<div class='card section'><h2>Promote the eligible cohort</h2><p>Promote {eligible_count} eligible students from this class to <b>{next_class_label}</b>. Students who arrived from another class during this cycle are excluded automatically.</p><button class='btn' type='submit' name='bulk_to_class_id' value='{int(next_class['id'])}' onclick=\"return confirm('Promote the {eligible_count} eligible cohort students to the next class for {cycle}? Students outside this cohort will not be moved.');\">Promote Eligible Cohort to Next Class</button></div>"
@@ -9149,6 +9175,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table>
 {"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
+<div class='card section'><h2>Promotion History</h2><p class='muted'>Each completed class-cohort promotion is recorded with its selected promotion year, the academic-year transition, date, operator, and number of students moved. This register does not change the school's active academic year.</p><div style='overflow-x:auto;-webkit-overflow-scrolling:touch'><table style='min-width:850px'><thead><tr><th>Promotion Year</th><th>From Class</th><th>To Class</th><th>Academic Year Transition</th><th>Date</th><th>Recorded By</th><th>Students</th></tr></thead><tbody>{promotion_history_rows or "<tr><td colspan='7'>No class-cohort promotions recorded yet.</td></tr>"}</tbody></table></div></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
 
 </div>
