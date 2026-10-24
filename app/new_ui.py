@@ -8691,6 +8691,8 @@ def student_graduation_records_page(
     con = _db()
     cur = con.cursor()
     _ensure_student_promotion_cohort_tables(cur)
+    _ensure_class_teacher_assignments_table(cur)
+    _ensure_teacher_assignment_history_tables(cur)
     classes = cur.execute(
         "SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)
     ).fetchall()
@@ -8774,7 +8776,7 @@ def student_graduation_records_page(
     print_school_contact = "".join("<div>" + x + "</div>" for x in [" ".join(x for x in [print_school_postal, print_school_code] if x), ("☎ " + print_school_phone) if print_school_phone else "", ("✉ " + print_school_email) if print_school_email else ""] if x)
     graduation_print_header = ("<div class='doc-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>GRADUATION RECORDS</h1>") % (print_school_name, print_school_contact)
     graduation_print_rows = "".join(
-        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
+        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
             escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
             escape(str(g["school_level"] or "")),
             escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
