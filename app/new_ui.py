@@ -5407,6 +5407,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         # only student data, so a legacy marks schema can never prevent the
         # Marks Entry screen from opening.
         try:
+            _ensure_student_history_table(cur)
             if role=="teacher":
                 _ensure_teacher_mark_drafts_table(cur)
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
@@ -5433,8 +5434,14 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                         AND historical_draft.exam_id=? AND historical_draft.subject_id=?
                         AND historical_draft.class_id=? AND historical_draft.teacher_id=?
                     )
+                  ) AND NOT EXISTS (
+                    SELECT 1 FROM student_class_history moved_into_class
+                    WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
+                      AND moved_into_class.to_class_id=?
+                      AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
+                          CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                   ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,cid,eid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -5448,7 +5455,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       WHERE historical.school_id=s.school_id AND historical.student_id=s.id
                         AND historical.exam_id=? AND historical.subject_id=? AND historical.class_id=?
                     )
-                  ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid)).fetchall()
+                  ) AND NOT EXISTS (
+                    SELECT 1 FROM student_class_history moved_into_class
+                    WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
+                      AND moved_into_class.to_class_id=?
+                      AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
+                          CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
+                  ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid,cid,eid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
@@ -5666,6 +5679,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             con.close(); return HTMLResponse("These marks are already submitted and locked. <a href='/app/academics/marks'>Back</a>",403)
         form=await request.form()
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        _ensure_student_history_table(cur)
         students=cur.execute("""SELECT s.id FROM students s
             WHERE s.school_id=? AND (
               s.class_id=? OR EXISTS (
@@ -5678,8 +5692,14 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
                   AND historical_draft.exam_id=? AND historical_draft.class_id=?
                   AND historical_draft.subject_id=? AND historical_draft.teacher_id=?
               )
+            ) AND NOT EXISTS (
+              SELECT 1 FROM student_class_history moved_into_class
+              WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
+                AND moved_into_class.to_class_id=?
+                AND CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER) >
+                    CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
             ) ORDER BY s.name""",
-            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0))).fetchall()
+            (sid,class_id,exam_id,class_id,subject_id,exam_id,class_id,subject_id,int(request.session.get("teacher_id") or 0),class_id,exam_id)).fetchall()
         cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,exam_id,subject_id)).fetchone()
         out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
         # Load grading rules once per save, not once per student. Re-querying
