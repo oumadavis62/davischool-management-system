@@ -9121,7 +9121,8 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
             f"<td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td>"
             f"<td>{escape(str(st['class_name'] or ''))} {escape(str(st['stream'] or ''))}</td>"
             f"<td>{cohort_label}</td>"
-            f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td></tr>"
+            + (f"<td><select name='to_class_{st['id']}' class='field'><option value=''>Keep current class</option>{topts}</select></td>" if next_class else "")
+            + "</tr>"
         )
     rows = "".join(row_parts)
     next_class_label = (escape(str(next_class["name"] or "")) + " " + escape(str(next_class["stream"] or ""))).strip() if next_class else ""
@@ -9165,8 +9166,8 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
 <input type='hidden' name='cycle_year' value='{cycle}'>
 {bulk_action}
 {graduate_action}
-<div class='promotion-student-table-scroll'><table class='promotion-student-table'><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=reverse_promotion_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th><th>Promote / Transfer To</th></tr></thead>
-<tbody>{rows or "<tr><td colspan='6'>Select a class to load its students.</td></tr>"}</tbody></table></div>
+<div class='promotion-student-table-scroll'><table class='promotion-student-table'><thead><tr><th><label><input type='checkbox' onclick="document.querySelectorAll('input[name=reverse_promotion_student_id]').forEach(x=>x.checked=this.checked)"> Select</label></th><th>Admission</th><th>Student</th><th>Current Class</th><th>Promotion Cohort</th>{'<th>Promote / Transfer To</th>' if next_class else ''}</tr></thead>
+<tbody>{rows or f"<tr><td colspan='{6 if next_class else 5}'>Select a class to load its students.</td></tr>"}</tbody></table></div>
 {"<button class='btn' style='margin-top:12px' type='submit' name='reverse_selected_promotions' value='1' onclick='return confirm(&#39;Reverse promotion for the selected students using their recorded previous classes?&#39;);'>Reverse Selected Promotions</button> <button class='btn' style='margin-top:12px' type='submit'>Save Individual Changes</button>" if students else ""}
 </form></div>
 <div class='card section'><b>Important:</b> Promotion changes only the student's current class. Historical academic records remain attached to their original examination, year and school. Cohort membership is tracked separately for each promotion year.</div>
