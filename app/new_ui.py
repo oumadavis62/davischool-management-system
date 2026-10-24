@@ -7401,33 +7401,30 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             ).fetchone():
                 continue
             source_name = str(source["name"] or "")
-            source_stream = str(source["stream"] or "")
             source_number = re.search(r"\d+", source_name)
-            if not source_number:
-                continue
-            source_prefix = re.sub(r"\d+", "#", source_name).casefold().strip()
-            destinations = cur.execute(
-                """SELECT id,name,stream FROM classes
-                   WHERE school_id=? AND lower(coalesce(stream,''))=lower(coalesce(?,''))""",
-                (sid, source_stream)
-            ).fetchall()
-            destination = None
-            for candidate in destinations:
-                candidate_name = str(candidate["name"] or "")
-                candidate_number = re.search(r"\d+", candidate_name)
-                if (
-                    int(candidate["id"]) != source_id
-                    and re.sub(r"\d+", "#", candidate_name).casefold().strip() == source_prefix
-                    and candidate_number
-                    and int(candidate_number.group()) == int(source_number.group()) + 1
-                    and cur.execute(
-                        """SELECT 1 FROM student_class_history
-                           WHERE school_id=? AND from_class_id=? AND to_class_id=? LIMIT 1""",
-                        (sid, source_id, int(candidate["id"]))
-                    ).fetchone()
-                ):
-                    destination = candidate
-                    break
+            # Resolve the destination from the actual promotion history, not
+            # by guessing the next class name/number. Schools may use custom
+            # class names, streams, or class structures that do not follow
+            # a strict "Grade N" naming pattern.
+            destination = cur.execute(
+                """SELECT c.id,c.name,c.stream
+                   FROM student_class_history h
+                   JOIN classes c ON c.id=h.to_class_id AND c.school_id=h.school_id
+                   WHERE h.school_id=? AND h.from_class_id=?
+                     AND h.to_class_id IS NOT NULL AND h.to_class_id<>?
+                     AND EXISTS (
+                         SELECT 1 FROM students s
+                         WHERE s.school_id=c.school_id AND s.class_id=c.id
+                           AND lower(coalesce(s.status,'active')) NOT IN ('graduated','deleted')
+                           AND NOT EXISTS (
+                               SELECT 1 FROM student_graduations g
+                               WHERE g.school_id=s.school_id AND g.student_id=s.id
+                           )
+                     )
+                   ORDER BY h.changed_at DESC
+                   LIMIT 1""",
+                (sid, source_id, source_id)
+            ).fetchone()
             if not destination:
                 continue
             has_staffing = cur.execute(
@@ -7445,7 +7442,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             ).fetchone()
             cycle_match = re.search(r"20\d{2}", str(date_row["changed_at"] if date_row else ""))
             promoted_candidates.append((
-                int(source_number.group()), source_id, int(destination["id"]),
+                int(source_number.group()) if source_number else 0, source_id, int(destination["id"]),
                 int(cycle_match.group()) if cycle_match else datetime.now(ZoneInfo("Africa/Nairobi")).year
             ))
         for _, source_id, destination_id, source_cycle in sorted(promoted_candidates, reverse=True):
