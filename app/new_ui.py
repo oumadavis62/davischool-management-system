@@ -9062,8 +9062,6 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
             con.close()
             return HTMLResponse("This class has a matching next class. Use promotion instead of graduation.", 400)
         _snapshot_student_promotion_cohort(cur, sid, cycle, from_class_id, now)
-        # Preserve the final class's teacher identities before deactivating its assignments.
-        _archive_class_staff_assignments(cur, sid, from_class_id, cycle, now, "Class cohort graduated")
         eligible = cur.execute(
             """SELECT s.id FROM students s JOIN student_promotion_cohort_members m
                  ON m.school_id=s.school_id AND m.student_id=s.id
@@ -9092,6 +9090,15 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
                 (sid, student_id, from_class_id, None, now, request.session.get("email", ""), "Graduated")
             )
             _audit(cur, sid, request, "STUDENT_GRADUATED", f"Graduated student {student_id} from class {from_class_id} in {cycle}")
+        # Deactivate this class's active staffing only once no active learners
+        # remain; late-added students must not lose their current teachers.
+        remaining = cur.execute(
+            """SELECT 1 FROM students WHERE school_id=? AND class_id=?
+               AND lower(coalesce(status,'active')) NOT IN ('graduated','deleted') LIMIT 1""",
+            (sid, from_class_id)
+        ).fetchone()
+        if not remaining:
+            _archive_class_staff_assignments(cur, sid, from_class_id, cycle, now, "Class cohort graduated")
         con.commit()
         con.close()
         return RedirectResponse(f"/app/students/promotion?class_id={from_class_id}&cycle_year={cycle}&graduated={len(eligible)}", 303)
