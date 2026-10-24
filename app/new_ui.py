@@ -8863,7 +8863,7 @@ def student_graduation_records_page(
         class_teacher_name = next((str(g["class_teacher_name"] or "").strip() for g in group_records
                                    if str(g["class_teacher_name"] or "").strip()), "Not recorded")
         graduation_print_rows = "".join(
-            "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
+            "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>Graduated</td><td>%s</td><td>%s</td></tr>" % (
                 escape(str(g["admission_no"] or "")), escape(str(g["name"] or "")),
                 escape(str(g["school_level"] or "")),
                 escape((str(g["final_class"] or "Unassigned") + " " + str(g["final_stream"] or "")).strip()),
@@ -8874,8 +8874,8 @@ def student_graduation_records_page(
         )
         graduation_print_tables.append(
             "<div class='graduation-class-table'><table><thead>"
-            "<tr class='class-teacher-heading'><th colspan='9'>Class Teacher: %s</th></tr>"
-            "<tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr>"
+            "<tr class='class-teacher-heading'><th colspan='10'>Class Teacher: %s</th></tr>"
+            "<tr><th>Admission No.</th><th>Student</th><th>Level</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr>"
             "</thead><tbody>%s</tbody></table></div>" % (escape(class_teacher_name), graduation_print_rows)
         )
     graduation_print_table = "<div class='graduation-record-tables'>" + (
