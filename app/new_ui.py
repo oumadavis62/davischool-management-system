@@ -9396,43 +9396,59 @@ async def student_promotion_save(request: Request, from_class_id: int = Form(...
         if not selected_ids:
             con.close()
             return HTMLResponse("Select at least one student whose promotion should be reversed.", 400)
+        # Fetch all selected learners and their latest valid previous class
+        # in one query; avoid a SELECT per learner during bulk reversal.
+        placeholders = ",".join("?" for _ in selected_ids)
+        reversal_rows = cur.execute(
+            """SELECT s.id,
+                      (SELECT h.from_class_id FROM student_class_history h
+                       WHERE h.school_id=s.school_id AND h.student_id=s.id
+                         AND h.to_class_id=? AND h.from_class_id IS NOT NULL
+                         AND coalesce(h.reason,'') NOT IN
+                             ('Graduated','Graduation reversed','Promotion reversed')
+                       ORDER BY h.id DESC LIMIT 1) previous_class_id
+               FROM students s
+               WHERE s.id IN (""" + placeholders + """) AND s.school_id=?
+                 AND s.class_id=?
+                 AND NOT EXISTS (SELECT 1 FROM student_graduations g
+                                 WHERE g.school_id=s.school_id AND g.student_id=s.id)""",
+            [from_class_id] + selected_ids + [sid, from_class_id]
+        ).fetchall()
+        # Validate all distinct destination classes in one query.
+        previous_ids = sorted({int(row["previous_class_id"]) for row in reversal_rows
+                               if row["previous_class_id"] is not None})
+        valid_previous_ids = set()
+        if previous_ids:
+            class_placeholders = ",".join("?" for _ in previous_ids)
+            valid_previous_ids = {int(row["id"]) for row in cur.execute(
+                "SELECT id FROM classes WHERE school_id=? AND id IN (" + class_placeholders + ")",
+                [sid] + previous_ids
+            ).fetchall()}
+        reversed_rows = [(int(row["id"]), int(row["previous_class_id"]))
+                         for row in reversal_rows
+                         if row["previous_class_id"] is not None
+                         and int(row["previous_class_id"]) in valid_previous_ids]
         reversed_count = 0
-        for student_id in selected_ids:
-            student = cur.execute(
-                """SELECT id,class_id FROM students s WHERE id=? AND school_id=?
-                   AND class_id=? AND NOT EXISTS (
-                       SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id
-                   )""",
-                (student_id, sid, from_class_id)
-            ).fetchone()
-            if not student:
+        affected_classes = {int(from_class_id)}
+        changed_by = request.session.get("email", "")
+        for student_id, previous_class_id in reversed_rows:
+            cur.execute("UPDATE students SET class_id=? WHERE id=? AND school_id=?",
+                        (previous_class_id, student_id, sid))
+            if cur.rowcount != 1:
                 continue
-            previous = cur.execute(
-                """SELECT from_class_id FROM student_class_history
-                   WHERE school_id=? AND student_id=? AND to_class_id=?
-                     AND from_class_id IS NOT NULL
-                     AND coalesce(reason,'') NOT IN ('Graduated','Graduation reversed','Promotion reversed')
-                   ORDER BY id DESC LIMIT 1""",
-                (sid, student_id, from_class_id)
-            ).fetchone()
-            if not previous:
-                continue
-            previous_class_id = int(previous["from_class_id"])
-            if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (previous_class_id, sid)).fetchone():
-                continue
-            cur.execute("UPDATE students SET class_id=? WHERE id=? AND school_id=?", (previous_class_id, student_id, sid))
             cur.execute(
                 """INSERT INTO student_class_history
                    (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason)
                    VALUES(?,?,?,?,?,?,?)""",
-                (sid, student_id, from_class_id, previous_class_id, now, request.session.get("email", ""), "Promotion reversed")
+                (sid, student_id, from_class_id, previous_class_id, now, changed_by, "Promotion reversed")
             )
-            _audit(cur, sid, request, "STUDENT_PROMOTION_REVERSED", f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}")
+            _audit(cur, sid, request, "STUDENT_PROMOTION_REVERSED",
+                   f"Reversed promotion for student {student_id} from class {from_class_id} to {previous_class_id}")
             reversed_count += 1
-            # A reversal changes this cycle's class membership. Reset both
-            # affected cohort snapshots so the restored and remaining learners
-            # are eligible together on the next promotion-page load.
-            for affected_class_id in {int(from_class_id), int(previous_class_id)}:
+            affected_classes.add(previous_class_id)
+        # Reset each affected class snapshot once, not once per selected learner.
+        if reversed_count:
+            for affected_class_id in affected_classes:
                 cur.execute(
                     "DELETE FROM student_promotion_cohort_members WHERE school_id=? AND cycle_year=? AND class_id=?",
                     (sid, cycle, affected_class_id)
