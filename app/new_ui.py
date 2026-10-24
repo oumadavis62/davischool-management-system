@@ -5980,53 +5980,56 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
-    # Preload former class options for every available exam, using the
-    # current teacher allocation + the same active student cohort's recorded
-    # marks. This lets changing the exam reveal Grade 7 history while the
-    # teacher is currently allocated to Grade 8 for the same subject.
+    # Preload former class options for every available exam in one batch.
+    # The previous exam x allocation-pair loop issued a database query for each
+    # combination, making Load Students slower as exam history accumulated.
     if role=="teacher" and teacher_id:
         try:
-            _teacher_current_pairs={(int(a["class_id"]),int(a["subject_id"]))
-                                    for a in all_allocations
-                                    if a["class_id"] is not None and a["subject_id"] is not None}
             _historic_class_map={int(c["id"]):c for c in all_classes}
             _historic_pair_set={(int(a["class_id"]),int(a["subject_id"]))
                                 for a in all_allocations
                                 if a["class_id"] is not None and a["subject_id"] is not None}
-            for _exam_row in exams:
-                _exam_key=int(_exam_row["id"])
-                _scope=exam_class_scope.get(_exam_key)
-                for _current_class_id,_subject_id in _teacher_current_pairs:
-                    _historical_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
-                        FROM marks m
-                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                        WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
-                          AND m.class_id IS NOT NULL AND st.class_id=?
-                          AND lower(coalesce(st.status,'active'))='active'
-                          AND NOT EXISTS (
-                              SELECT 1 FROM student_graduations sg
-                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                          )""",(sid,_exam_key,_subject_id,_current_class_id)).fetchall()
-                    for _historical_row in _historical_rows:
-                        _old_class_id=int(_historical_row["class_id"])
-                        _old_subject_id=int(_historical_row["subject_id"])
-                        if _scope is not None and _old_class_id not in _scope:
-                            continue
-                        if _old_class_id not in _historic_class_map:
-                            _old_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
-                                                   (sid,_old_class_id)).fetchone()
-                            if _old_class:
-                                _historic_class_map[_old_class_id]=_old_class
-                        _historic_pair_set.add((_old_class_id,_old_subject_id))
+            _historic_subject_map={int(x["id"]):x for x in subjects}
+            _exam_keys=[int(x["id"]) for x in exams]
+            if _exam_keys:
+                _exam_placeholders=",".join("?" for _ in _exam_keys)
+                _historical_rows=cur.execute("""SELECT DISTINCT m.exam_id,m.class_id,m.subject_id
+                    FROM marks m
+                    JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                    JOIN teacher_allocations ta ON ta.school_id=st.school_id
+                      AND ta.teacher_id=? AND ta.class_id=st.class_id
+                      AND ta.subject_id=m.subject_id
+                    WHERE m.school_id=? AND m.exam_id IN (""" + _exam_placeholders + """)
+                      AND m.class_id IS NOT NULL
+                      AND lower(coalesce(st.status,'active'))='active'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM student_graduations sg
+                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                      )""",[teacher_id,sid]+_exam_keys).fetchall()
+                for _historical_row in _historical_rows:
+                    _exam_key=int(_historical_row["exam_id"])
+                    _old_class_id=int(_historical_row["class_id"])
+                    _old_subject_id=int(_historical_row["subject_id"])
+                    _scope=exam_class_scope.get(_exam_key)
+                    if _scope is not None and _old_class_id not in _scope:
+                        continue
+                    if _old_class_id not in _historic_class_map:
+                        _old_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
+                                               (sid,_old_class_id)).fetchone()
+                        if _old_class:
+                            _historic_class_map[_old_class_id]=_old_class
+                    _historic_pair_set.add((_old_class_id,_old_subject_id))
+                    if _old_subject_id not in _historic_subject_map:
                         _old_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
                                                  (sid,_old_subject_id)).fetchone()
-                        if _old_subject and not any(int(x["id"])==_old_subject_id for x in subjects):
-                            subjects.append(_old_subject)
-            all_classes=list(_historic_class_map.values())
-            for _class_id,_subject_id in _historic_pair_set:
-                if not any(a["class_id"] is not None and a["subject_id"] is not None
-                           and int(a["class_id"])==_class_id and int(a["subject_id"])==_subject_id
-                           for a in all_allocations):
+                        if _old_subject:
+                            _historic_subject_map[_old_subject_id]=_old_subject
+                all_classes=list(_historic_class_map.values())
+                subjects=list(_historic_subject_map.values())
+                _existing_pairs={(int(a["class_id"]),int(a["subject_id"]))
+                                 for a in all_allocations
+                                 if a["class_id"] is not None and a["subject_id"] is not None}
+                for _class_id,_subject_id in _historic_pair_set-_existing_pairs:
                     all_allocations.append({"class_id":_class_id,"subject_id":_subject_id})
         except Exception as _historic_options_exc:
             print("DAVISCHOOL TEACHER HISTORICAL FILTER OPTIONS:",repr(_historic_options_exc),flush=True)
