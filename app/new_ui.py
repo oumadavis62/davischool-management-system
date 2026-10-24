@@ -26,6 +26,7 @@ _USER_ACCOUNT_COLUMNS_READY = False
 # per worker process, not on every Save Marks request.
 _REPORT_CARD_FIELDS_READY = False
 _TEACHER_MARK_DRAFTS_SCHEMA_READY = False
+_STUDENT_HISTORY_SCHEMA_READY = False
 
 def _pdf_route_error(request, route_name, exc):
     import traceback
@@ -4693,6 +4694,7 @@ def _grade(mark, out_of=100):
 
 
 def _ensure_student_history_table(cur):
+    global _STUDENT_HISTORY_SCHEMA_READY
     cur.execute("""CREATE TABLE IF NOT EXISTS student_class_history(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
@@ -4709,6 +4711,8 @@ def _ensure_student_history_table(cur):
     # Each cohort promotion records its own academic-year transition. The
     # school-wide active academic year remains unchanged while classes are
     # processed individually.
+    if _STUDENT_HISTORY_SCHEMA_READY:
+        return
     for column in ("promotion_year", "from_academic_year", "to_academic_year"):
         try:
             cur.execute("SAVEPOINT davischool_promotion_year_column")
@@ -4726,6 +4730,7 @@ def _ensure_student_history_table(cur):
             message = str(exc).lower()
             if "already exists" not in message and "duplicate column" not in message:
                 raise
+    _STUDENT_HISTORY_SCHEMA_READY = True
 
 def _ensure_student_parent_name_column(cur, con):
     """Add the optional parent-name field safely on older existing databases."""
