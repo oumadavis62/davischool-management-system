@@ -6044,7 +6044,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         _all_class_map[int(_class_row["id"])]=_class_row
     all_classes=list(_all_class_map.values())
     all_classes.sort(key=lambda c:(str(c["name"] or ""),str(c["stream"] or "")))
-    cid=int(str(class_id)) if str(class_id).isdigit() and any(int(c["id"])==int(str(class_id)) for c in classes) else (int(classes[0]["id"]) if classes else 0)
+    cid=int(str(class_id)) if str(class_id).isdigit() and any(int(c["id"])==int(str(class_id)) for c in all_classes) else (int(classes[0]["id"]) if classes else (int(all_classes[0]["id"]) if all_classes else 0))
     subid=int(str(subject_id)) if str(subject_id).isdigit() else (int(subjects[0]["id"]) if subjects else 0)
     # On the teacher landing page, choose the first allocated class/subject pair
     # rather than independently choosing the first class and first subject.
@@ -6115,9 +6115,9 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                        WHERE cohort_member.school_id=s.school_id
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
-                     )
+                     ) OR s.class_id=?
                    ) ORDER BY s.name""",
-                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,cid,eid,eid,eid,cid,eid,cid)).fetchall()
+                  (eid,subid,sid,cid,eid,subid,cid,sid,teacher_id,sid,cid,eid,subid,cid,eid,subid,cid,teacher_id,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
             else:
                 students=cur.execute("""SELECT s.id,s.admission_no,s.name,
                     COALESCE((SELECT CAST(m2.marks AS TEXT)
@@ -6159,8 +6159,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                        WHERE cohort_member.school_id=s.school_id
                          AND cohort_member.cycle_year=CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)
                          AND cohort_member.class_id=? AND cohort_member.student_id=s.id
-                     )
-                   ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid,cid,eid,subid,cid,cid,eid,eid,eid,cid,eid,cid)).fetchall()
+                     ) OR s.class_id=?
+                   ) ORDER BY s.name""",(eid,subid,sid,sid,cid,eid,subid,cid,cid,eid,subid,cid,cid,eid,eid,eid,cid,eid,cid,cid)).fetchall()
         except Exception as exc:
             print("DAVISCHOOL MARKS LOAD JOIN FALLBACK:", repr(exc), flush=True)
             try:
