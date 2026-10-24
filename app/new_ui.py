@@ -8809,7 +8809,6 @@ def student_graduation_records_page(
         f"<td>{escape(str(g['school_level'] or ''))}</td>"
         f"<td>{escape((str(g['final_class'] or '') + ' ' + str(g['final_stream'] or '')).strip())}</td>"
         f"<td>{escape(str(g['class_teacher_name'] or 'Not recorded'))}</td>"
-        f"<td>{escape(str(g['class_teacher_name'] or 'Not recorded'))}</td>"
         f"<td>{escape(str(g['graduated_at'] or '').replace('T', ' ').split(' ')[0])}</td></tr>"
         for i, g in enumerate(records)
     )
