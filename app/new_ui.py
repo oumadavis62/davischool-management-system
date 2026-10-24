@@ -6109,7 +6109,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
                       AND moved_into_class.to_class_id=?
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
                           COALESCE(NULLIF(moved_into_class.to_academic_year,0),
                                    NULLIF(moved_into_class.promotion_year,0)+1,
                                    CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
@@ -6160,7 +6160,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
                       AND moved_into_class.to_class_id=?
                       AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
                           COALESCE(NULLIF(moved_into_class.to_academic_year,0),
                                    NULLIF(moved_into_class.promotion_year,0)+1,
                                    CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
@@ -6440,7 +6440,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
               WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
                 AND moved_into_class.to_class_id=?
                 AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
                           COALESCE(NULLIF(moved_into_class.to_academic_year,0),
                                    NULLIF(moved_into_class.promotion_year,0)+1,
                                    CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
@@ -6649,7 +6649,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
           WHERE moved_into_class.school_id=s.school_id AND moved_into_class.student_id=s.id
             AND moved_into_class.to_class_id=?
             AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER)>0
-                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) >=
+                      AND CAST((SELECT e.year FROM exams e WHERE e.school_id=s.school_id AND e.id=?) AS INTEGER) <
                           COALESCE(NULLIF(moved_into_class.to_academic_year,0),
                                    NULLIF(moved_into_class.promotion_year,0)+1,
                                    CAST(substr(COALESCE(moved_into_class.changed_at,''),1,4) AS INTEGER))
