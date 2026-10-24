@@ -8612,11 +8612,10 @@ def student_graduation_records_page(
             escape(str(g["gender"] or "")), escape(str(g["parent_name"] or "")),
             escape(str(g["parent_phone"] or "")),
             escape(str(g["graduation_year"] or "")),
-            escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0]),
-            escape(str(g["graduated_by"] or ""))
+            escape(str(g["graduated_at"] or "").replace("T", " ").split(" ")[0])
         ) for g in records
     )
-    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th><th>Recorded By</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='10'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
+    graduation_print_table = "<div class='table-scroll'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Class / Stream</th><th>Gender</th><th>Parent Name</th><th>Parent Phone</th><th>Status</th><th>Graduation Year</th><th>Graduated At</th></tr></thead><tbody>" + (graduation_print_rows or "<tr><td colspan='9'>No graduation records match the selected filters.</td></tr>") + "</tbody></table></div>"
     graduation_print_script = r"""<script>
 function printGraduationRegister(){
  var source=document.getElementById('graduation-print-source');
