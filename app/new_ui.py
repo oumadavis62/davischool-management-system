@@ -5776,7 +5776,25 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             exam_key=int(exam_row["id"])
             exam_class_scope[exam_key]=set(scoped_classes[exam_key]) if exam_key in scoped_classes else None
         participating_ids=exam_class_scope.get(eid) if eid else None
-        if participating_ids is not None:
+        if role=="teacher":
+            # The teacher's class filter must intersect the selected exam's
+            # participating classes with classes that still have active,
+            # non-graduated learners. Never show a graduated class merely
+            # because it participated in the same exam.
+            if participating_ids is None and eid:
+                # Legacy exams may not have a saved participation scope;
+                # infer participation from the exam's recorded marks.
+                try:
+                    mark_class_rows=cur.execute(
+                        "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
+                        (sid,eid)
+                    ).fetchall()
+                    participating_ids={int(row["class_id"]) for row in mark_class_rows}
+                except Exception:
+                    participating_ids=set()
+            if participating_ids is not None:
+                classes=[c for c in classes if int(c["id"]) in participating_ids]
+        elif participating_ids is not None:
             classes=[c for c in classes if int(c["id"]) in participating_ids]
         con.commit()
     except Exception as exc:
@@ -5784,6 +5802,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         try: con.rollback()
         except Exception: pass
         participating_ids=None
+        if role=="teacher":
+            # Fail closed for teacher class options if exam participation
+            # cannot be established, rather than exposing graduated classes.
+            classes=[]
     if role=="teacher" and teacher_id:
         available_class_ids={int(c["id"]) for c in classes}
         allocations=[a for a in allocations if a["class_id"] is not None and int(a["class_id"]) in available_class_ids]
