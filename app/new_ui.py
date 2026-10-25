@@ -14190,7 +14190,7 @@ def class_marksheet_analysis_pdf(
                     previous_pct = percentage
                 if len(table_data) == 1:
                     table_data.append([Paragraph("No eligible students", cell_style)] + [Paragraph("", cell_style) for _ in range(4)])
-                table = Table(table_data, colWidths=[9*mm, doc.width/2-48*mm, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="LEFT")
+                table = Table(table_data, colWidths=[9*mm, (doc.width/2-48*mm)*0.40, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="LEFT")
                 table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
                     ("TEXTCOLOR", (0,0), (-1,0), colors.black),
