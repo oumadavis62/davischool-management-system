@@ -13881,6 +13881,181 @@ def class_marksheet_analysis_pdf(
                 msa_subject_positions.get(int(subject_id), "—")
             ])
         pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
+        # Replace the removed Examination Trends table with actionable, subject-level
+        # Performance Insights. Only recorded subject marks contribute to these means.
+        subject_insight_values = {}
+        for mark_row in rows:
+            subject_label = str(mark_row.get("subject_name") or "Unknown subject")
+            subject_insight_values.setdefault(subject_label, []).append(float(mark_row.get("percentage") or 0))
+        subject_insights = [
+            {"subject": name, "mean": sum(values) / len(values), "entries": len(values)}
+            for name, values in subject_insight_values.items() if values
+        ]
+        subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
+        if subject_insights:
+            # Give Performance Insights and its subject-strengths table a dedicated page.
+            story.append(PageBreak())
+            story.append(Paragraph("<u>Performance Insights</u>", styles["MSASection"]))
+            insight_summary = [[
+                Paragraph("<b>Subjects with results</b>", styles["MSACell"]),
+                Paragraph("<b>Average subject mean</b>", styles["MSACell"]),
+                Paragraph("<b>Strongest subject</b>", styles["MSACell"]),
+                Paragraph("<b>Priority subject</b>", styles["MSACell"]),
+            ], [
+                Paragraph(str(len(subject_insights)), styles["MSACell"]),
+                Paragraph("%.2f%%" % (sum(item["mean"] for item in subject_insights) / len(subject_insights)), styles["MSACell"]),
+                Paragraph(escape(subject_insights[0]["subject"]) + " (%.2f%%)" % subject_insights[0]["mean"], styles["MSACell"]),
+                Paragraph(escape(subject_insights[-1]["subject"]) + " (%.2f%%)" % subject_insights[-1]["mean"], styles["MSACell"]),
+            ]]
+            insight_cards = Table(insight_summary, colWidths=[doc.width * 0.16, doc.width * 0.20, doc.width * 0.32, doc.width * 0.32], hAlign="LEFT")
+            insight_cards.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
+                ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (0,0), (1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 4),
+                ("RIGHTPADDING", (0,0), (-1,-1), 4),
+                ("TOPPADDING", (0,0), (-1,-1), 4),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ]))
+            story.append(insight_cards)
+            story.append(Spacer(1, 2*mm))
+            insight_rows = []
+            for item in subject_insights:
+                if item["mean"] >= subject_insights[max(0, min(2, len(subject_insights)-1))]["mean"]:
+                    label = "Bright spot"
+                elif item["mean"] <= subject_insights[max(0, len(subject_insights)-3)]["mean"]:
+                    label = "Focus for improvement"
+                else:
+                    label = "Steady"
+                insight_rows.append([item["subject"], "%.2f%%" % item["mean"], item["entries"], label])
+            pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Recorded entries", "Insight"], insight_rows, compact=True)
+
+            # Compact horizontal pass-rate comparison, directly below the strengths table.
+            story.append(Paragraph("<u>Subject Pass-Rate Comparison</u>", styles["MSASection"]))
+            chart_items = []
+            for subject_name, stats in subject_pass_fail.items():
+                classified = stats["passed"] + stats["failed"]
+                if classified:
+                    chart_items.append((subject_name, stats["passed"] / classified * 100, classified))
+            chart_items.sort(key=lambda item: (-item[1], item[0].casefold()))
+            chart_width = doc.width * 0.38
+            chart_data = [[
+                Paragraph("<b>Subject</b>", styles["MSACell"]),
+                Paragraph("<b>Pass rate</b>", styles["MSACell"]),
+                Paragraph("<b>Comparison</b>", styles["MSACell"]),
+                Paragraph("<b>Classified</b>", styles["MSACell"]),
+            ]]
+            for subject_name, pass_rate, classified in chart_items:
+                bar_width = max(0, min(chart_width, chart_width * pass_rate / 100))
+                remainder_width = max(0, chart_width - bar_width)
+                bar = Table([["", ""]], colWidths=[bar_width, remainder_width], rowHeights=[5*mm])
+                bar.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (0,0), colors.HexColor("#23864b")),
+                    ("BACKGROUND", (1,0), (1,0), colors.HexColor("#e5e7eb")),
+                    ("BOX", (0,0), (-1,-1), 0.25, colors.HexColor("#cbd5d1")),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                chart_data.append([
+                    Paragraph(escape(subject_name), styles["MSACell"]),
+                    Paragraph("%.1f%%" % pass_rate, styles["MSACell"]),
+                    bar,
+                    Paragraph(str(classified), styles["MSACell"]),
+                ])
+            if not chart_items:
+                chart_data.append([
+                    Paragraph("No classified results", styles["MSACell"]),
+                    Paragraph("—", styles["MSACell"]),
+                    Paragraph("—", styles["MSACell"]),
+                    Paragraph("0", styles["MSACell"]),
+                ])
+            chart_table = Table(
+                chart_data,
+                colWidths=[doc.width * 0.24, doc.width * 0.12, chart_width, doc.width * 0.12],
+                repeatRows=1, hAlign="LEFT"
+            )
+            chart_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("LEFTPADDING", (0,0), (-1,-1), 3),
+                ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            story.append(chart_table)
+            story.append(Spacer(1, 1.5*mm))
+
+        # Continue on a dedicated page with the ten highest-performing learners
+        # in each class, followed by the ten highest-performing learners overall.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Student rankings</u>", styles["MSASection"]))
+        ranked_learners = []
+        for learner_id, learner_summary in data["summaries"].items():
+            learner_info = data["students"].get(learner_id, {})
+            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
+                continue
+            ranked_learners.append({
+                "id": int(learner_id),
+                "name": str(learner_info.get("name") or ""),
+                "admission": str(learner_info.get("admission_no") or ""),
+                "class_name": str(learner_info.get("class_name") or "Unassigned"),
+                "stream": str(learner_info.get("stream") or "No stream"),
+                "mean": float(learner_summary.get("average") or 0),
+                "total": float(learner_summary.get("total") or 0),
+                "points": float(learner_summary.get("average_points") or 0),
+                "grade": str(learner_summary.get("overall_grade") or "—"),
+            })
+
+        def _msa_rank_students(learners):
+            # Rank these Top 10 lists by total marks, not average percentage:
+            # learners may have sat different numbers of exams/subjects.
+            ordered = sorted(
+                learners,
+                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
+            )
+            result = []
+            previous_total = None
+            rank_number = 0
+            for index, learner in enumerate(ordered, 1):
+                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
+                    rank_number = index
+                    previous_total = learner["total"]
+                result.append((rank_number, learner))
+            return result
+
+        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
+        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
+        for ranked_class in class_names:
+            class_ranked = _msa_rank_students([
+                learner for learner in ranked_learners if learner["class_name"] == ranked_class
+            ])
+            class_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in class_ranked[:10]
+            ]
+            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
+
+        # A combined ranking adds no information when the selected exam data
+        # contains only one class: it would repeat that class's Best 10 table.
+        # Keep it for multi-class comparisons, including multi-exam selections.
+        if len(class_names) > 1:
+            overall_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in _msa_rank_students(ranked_learners)[:10]
+            ]
+            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
+
+        teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
+        # Start subject-by-class/stream performance on a separate page after insights.
+        story.append(PageBreak())
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
         story.append(Paragraph("<u>Subject performance by class and stream</u>", styles["MSASection"]))
         grades_per_subject = len(grade_labels)
@@ -14140,179 +14315,6 @@ def class_marksheet_analysis_pdf(
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
 
-        # Replace the removed Examination Trends table with actionable, subject-level
-        # Performance Insights. Only recorded subject marks contribute to these means.
-        subject_insight_values = {}
-        for mark_row in rows:
-            subject_label = str(mark_row.get("subject_name") or "Unknown subject")
-            subject_insight_values.setdefault(subject_label, []).append(float(mark_row.get("percentage") or 0))
-        subject_insights = [
-            {"subject": name, "mean": sum(values) / len(values), "entries": len(values)}
-            for name, values in subject_insight_values.items() if values
-        ]
-        subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
-        if subject_insights:
-            # Give Performance Insights and its subject-strengths table a dedicated page.
-            story.append(PageBreak())
-            story.append(Paragraph("<u>Performance Insights</u>", styles["MSASection"]))
-            insight_summary = [[
-                Paragraph("<b>Subjects with results</b>", styles["MSACell"]),
-                Paragraph("<b>Average subject mean</b>", styles["MSACell"]),
-                Paragraph("<b>Strongest subject</b>", styles["MSACell"]),
-                Paragraph("<b>Priority subject</b>", styles["MSACell"]),
-            ], [
-                Paragraph(str(len(subject_insights)), styles["MSACell"]),
-                Paragraph("%.2f%%" % (sum(item["mean"] for item in subject_insights) / len(subject_insights)), styles["MSACell"]),
-                Paragraph(escape(subject_insights[0]["subject"]) + " (%.2f%%)" % subject_insights[0]["mean"], styles["MSACell"]),
-                Paragraph(escape(subject_insights[-1]["subject"]) + " (%.2f%%)" % subject_insights[-1]["mean"], styles["MSACell"]),
-            ]]
-            insight_cards = Table(insight_summary, colWidths=[doc.width * 0.16, doc.width * 0.20, doc.width * 0.32, doc.width * 0.32], hAlign="LEFT")
-            insight_cards.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
-                ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("ALIGN", (0,0), (1,-1), "CENTER"),
-                ("LEFTPADDING", (0,0), (-1,-1), 4),
-                ("RIGHTPADDING", (0,0), (-1,-1), 4),
-                ("TOPPADDING", (0,0), (-1,-1), 4),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-            ]))
-            story.append(insight_cards)
-            story.append(Spacer(1, 2*mm))
-            insight_rows = []
-            for item in subject_insights:
-                if item["mean"] >= subject_insights[max(0, min(2, len(subject_insights)-1))]["mean"]:
-                    label = "Bright spot"
-                elif item["mean"] <= subject_insights[max(0, len(subject_insights)-3)]["mean"]:
-                    label = "Focus for improvement"
-                else:
-                    label = "Steady"
-                insight_rows.append([item["subject"], "%.2f%%" % item["mean"], item["entries"], label])
-            pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Recorded entries", "Insight"], insight_rows, compact=True)
-
-            # Compact horizontal pass-rate comparison, directly below the strengths table.
-            story.append(Paragraph("<u>Subject Pass-Rate Comparison</u>", styles["MSASection"]))
-            chart_items = []
-            for subject_name, stats in subject_pass_fail.items():
-                classified = stats["passed"] + stats["failed"]
-                if classified:
-                    chart_items.append((subject_name, stats["passed"] / classified * 100, classified))
-            chart_items.sort(key=lambda item: (-item[1], item[0].casefold()))
-            chart_width = doc.width * 0.38
-            chart_data = [[
-                Paragraph("<b>Subject</b>", styles["MSACell"]),
-                Paragraph("<b>Pass rate</b>", styles["MSACell"]),
-                Paragraph("<b>Comparison</b>", styles["MSACell"]),
-                Paragraph("<b>Classified</b>", styles["MSACell"]),
-            ]]
-            for subject_name, pass_rate, classified in chart_items:
-                bar_width = max(0, min(chart_width, chart_width * pass_rate / 100))
-                remainder_width = max(0, chart_width - bar_width)
-                bar = Table([["", ""]], colWidths=[bar_width, remainder_width], rowHeights=[5*mm])
-                bar.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (0,0), colors.HexColor("#23864b")),
-                    ("BACKGROUND", (1,0), (1,0), colors.HexColor("#e5e7eb")),
-                    ("BOX", (0,0), (-1,-1), 0.25, colors.HexColor("#cbd5d1")),
-                    ("LEFTPADDING", (0,0), (-1,-1), 0),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                    ("TOPPADDING", (0,0), (-1,-1), 0),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-                ]))
-                chart_data.append([
-                    Paragraph(escape(subject_name), styles["MSACell"]),
-                    Paragraph("%.1f%%" % pass_rate, styles["MSACell"]),
-                    bar,
-                    Paragraph(str(classified), styles["MSACell"]),
-                ])
-            if not chart_items:
-                chart_data.append([
-                    Paragraph("No classified results", styles["MSACell"]),
-                    Paragraph("—", styles["MSACell"]),
-                    Paragraph("—", styles["MSACell"]),
-                    Paragraph("0", styles["MSACell"]),
-                ])
-            chart_table = Table(
-                chart_data,
-                colWidths=[doc.width * 0.24, doc.width * 0.12, chart_width, doc.width * 0.12],
-                repeatRows=1, hAlign="LEFT"
-            )
-            chart_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("LEFTPADDING", (0,0), (-1,-1), 3),
-                ("RIGHTPADDING", (0,0), (-1,-1), 3),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-            story.append(chart_table)
-            story.append(Spacer(1, 1.5*mm))
-
-        # Continue on a dedicated page with the ten highest-performing learners
-        # in each class, followed by the ten highest-performing learners overall.
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Student rankings</u>", styles["MSASection"]))
-        ranked_learners = []
-        for learner_id, learner_summary in data["summaries"].items():
-            learner_info = data["students"].get(learner_id, {})
-            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
-                continue
-            ranked_learners.append({
-                "id": int(learner_id),
-                "name": str(learner_info.get("name") or ""),
-                "admission": str(learner_info.get("admission_no") or ""),
-                "class_name": str(learner_info.get("class_name") or "Unassigned"),
-                "stream": str(learner_info.get("stream") or "No stream"),
-                "mean": float(learner_summary.get("average") or 0),
-                "total": float(learner_summary.get("total") or 0),
-                "points": float(learner_summary.get("average_points") or 0),
-                "grade": str(learner_summary.get("overall_grade") or "—"),
-            })
-
-        def _msa_rank_students(learners):
-            # Rank these Top 10 lists by total marks, not average percentage:
-            # learners may have sat different numbers of exams/subjects.
-            ordered = sorted(
-                learners,
-                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
-            )
-            result = []
-            previous_total = None
-            rank_number = 0
-            for index, learner in enumerate(ordered, 1):
-                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
-                    rank_number = index
-                    previous_total = learner["total"]
-                result.append((rank_number, learner))
-            return result
-
-        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
-        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
-        for ranked_class in class_names:
-            class_ranked = _msa_rank_students([
-                learner for learner in ranked_learners if learner["class_name"] == ranked_class
-            ])
-            class_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in class_ranked[:10]
-            ]
-            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
-
-        # A combined ranking adds no information when the selected exam data
-        # contains only one class: it would repeat that class's Best 10 table.
-        # Keep it for multi-class comparisons, including multi-exam selections.
-        if len(class_names) > 1:
-            overall_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in _msa_rank_students(ranked_learners)[:10]
-            ]
-            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
-
-        teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
