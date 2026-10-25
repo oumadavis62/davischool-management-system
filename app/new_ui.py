@@ -14057,12 +14057,13 @@ def class_marksheet_analysis_pdf(
             else:
                 story.append(left_stack)
             story.append(Spacer(1, 3*mm))
+        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
         # Start the combined-class Top Students per Subject section on its own page.
         story.append(PageBreak())
         combined_by_subject = {}
         for entry in data["top_combined"]:
             combined_by_subject.setdefault(entry[0], []).append(entry)
-        story.append(Paragraph("<u>Top Students per Subject — combined class</u>", styles["MSASection"]))
+        story.append(Paragraph("<u>Top Students per Subject — combined class</u>", centered_page_heading))
         student_class_by_admission = {
             str(info.get("admission_no") or ""): str(info.get("class_name") or "Unassigned")
             for info in data["students"].values()
@@ -14143,7 +14144,7 @@ def class_marksheet_analysis_pdf(
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
-        story.append(Paragraph("<u>Top Students per Subject — stream-wise</u>", styles["MSASection"]))
+        story.append(Paragraph("<u>Top Students per Subject — stream-wise</u>", centered_page_heading))
         # Organize the report by subject: one heading, followed by that
         # subject's class/stream tables. Never pair tables from different subjects.
         for subject_index, subject_name in enumerate(msa_subject_names_by_position):
@@ -14262,7 +14263,6 @@ def class_marksheet_analysis_pdf(
 
         # Put student rankings directly after per-subject grade distribution, on their own page.
         story.append(PageBreak())
-        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
         story.append(Paragraph("<u>Student rankings</u>", centered_page_heading))
         ranked_learners = []
         for learner_id, learner_summary in data["summaries"].items():
