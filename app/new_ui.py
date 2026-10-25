@@ -1808,7 +1808,11 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                 marked_class_rows=tracker_cur.execute("""SELECT DISTINCT class_id FROM marks
                     WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
                 marked_class_ids={int(row["class_id"]) for row in marked_class_rows}
-                if participating_ids is None and marked_class_ids:
+                # The class IDs on saved marks are the authoritative record of
+                # which cohort/class actually sat this examination. The participation
+                # selector can become stale when a class cohort is promoted, so never
+                # let it replace the historical class IDs recorded with marks.
+                if marked_class_ids:
                     participating_ids=marked_class_ids
                 tracker_con.commit()
                 participating_classes=[c for c in classes if participating_ids is None or int(c["id"]) in participating_ids]
@@ -1837,11 +1841,13 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                 if exam_year:
                     try:
                         historical_allocations=tracker_cur.execute("""SELECT h.cycle_year,h.class_id,h.subject_id,h.teacher_id,
-                            COALESCE(NULLIF(trim(h.teacher_name),''),'Unassigned teacher') AS teacher_name
+                            COALESCE(NULLIF(trim(h.teacher_name),''),'Unassigned teacher') AS teacher_name,
+                            h.reason,h.recorded_at
                             FROM teacher_allocation_history h
                             WHERE h.school_id=?
-                              AND h.reason='Cohort promoted to next class'
-                            ORDER BY h.class_id,h.cycle_year,h.subject_id,teacher_name""",(sid,)).fetchall()
+                              AND (h.reason='Cohort promoted to next class'
+                                   OR lower(coalesce(h.reason,'')) LIKE '%promot%')
+                            ORDER BY h.class_id,h.cycle_year,h.subject_id,h.recorded_at,teacher_name""",(sid,)).fetchall()
                         # The first promotion snapshot ON OR AFTER the exam year is
                         # the staffing that belonged to the cohort sitting that exam.
                         # A class row is reused after promotion, so a later snapshot can
