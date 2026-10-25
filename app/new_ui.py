@@ -13498,9 +13498,22 @@ def class_marksheet_analysis_pdf(
             group_subject_values.setdefault((class_label, stream_label, int(subject_id)), []).append(percentage)
             class_subject_values.setdefault((class_label, int(subject_id)), []).append(percentage)
 
-        def _msa_subject_group_mean(values, group_key, subject_id):
+        def _msa_subject_group_result(values, group_key, subject_id):
             entries = values.get(group_key + (int(subject_id),), [])
-            return ("%.2f%%" % (sum(entries) / len(entries))) if entries else "—"
+            if not entries:
+                return "—", "—"
+            mean_percentage = sum(entries) / len(entries)
+            grade, _, _ = _subject_grade_details(
+                cur, sid, int(subject_id), mean_percentage,
+                ranking_data["grading_rules"], 100
+            )
+            return "%.2f%%" % mean_percentage, str(grade or "—")
+
+        def _msa_overall_grade(mean_percentage):
+            try:
+                return str(_overall_grade(cur, sid, float(mean_percentage), ranking_data["overall_rules"]) or "—")
+            except Exception:
+                return "—"
 
         def _msa_ranking_table(title, headers, values, ranks, subject_start):
             # Premium green header, restrained row striping, and subtle top-three
@@ -13520,11 +13533,15 @@ def class_marksheet_analysis_pdf(
                                   [Paragraph("", cell_style) for _ in headers[1:]])
             base_width = doc.width / max(1, len(headers))
             if subject_start == 4:
-                # Class table: Rank, Class, Overall mean, Assessed, then subjects.
-                widths = [8*mm, 25*mm, 17*mm, 13*mm] + [max(15*mm, (doc.width - 63*mm) / max(1, len(headers)-4))] * (len(headers)-4)
+                # Class table: Rank, Class, Assessed, subject/grade pairs, overall mean, overall grade.
+                fixed_widths = [8*mm, 25*mm, 13*mm]
+                tail_widths = [15*mm, 10*mm]
             else:
-                # Stream table: Class, Stream, Assessed, Not assessed, Mean, Rank, then subjects.
-                widths = [22*mm, 18*mm, 12*mm, 12*mm, 15*mm, 8*mm] + [max(13*mm, (doc.width - 87*mm) / max(1, len(headers)-6))] * (len(headers)-6)
+                # Stream table: Rank, Class, Stream, assessed, not assessed, subject/grade pairs, overall mean, overall grade.
+                fixed_widths = [8*mm, 18*mm, 14*mm, 10*mm, 10*mm]
+                tail_widths = [15*mm, 10*mm]
+            subject_columns = max(0, len(headers) - len(fixed_widths) - len(tail_widths))
+            widths = fixed_widths + [max(8*mm, (doc.width - sum(fixed_widths) - sum(tail_widths)) / max(1, subject_columns))] * subject_columns + tail_widths
             total_width = sum(widths)
             if total_width > doc.width:
                 scale = doc.width / total_width
@@ -13573,17 +13590,19 @@ def class_marksheet_analysis_pdf(
             if previous_stream_mean is None or abs(mean - previous_stream_mean) > 0.000001:
                 stream_rank = index
                 previous_stream_mean = mean
+            subject_cells = []
+            for subject_id in ranking_subject_ids:
+                subject_cells.extend(_msa_subject_group_result(group_subject_values, group_key, subject_id))
             stream_rows.append([
                 stream_rank, group_key[0], group_key[1], assessed_count, not_assessed_count,
-                "%.2f%%" % mean
-            ] + [
-                _msa_subject_group_mean(group_subject_values, group_key, subject_id)
-                for subject_id in ranking_subject_ids
+                *subject_cells, "%.2f%%" % mean, _msa_overall_grade(mean)
             ])
             stream_ranks.append(stream_rank)
         stream_headers = [
-            "Rank", "Class", "Stream", "Learners assessed", "Learners not assessed", "Overall mean %"
-        ] + ranking_subject_names
+            "Rank", "Class", "Stream", "Learners assessed", "Learners not assessed"
+        ] + [label for subject in ranking_subject_names for label in (subject, subject + " Grd")] + [
+            "Overall mean %", "Overall grade"
+        ]
         _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
 
         # Class ranking order and ties are supplied by _msa_ranked_rows. Its
@@ -13592,15 +13611,17 @@ def class_marksheet_analysis_pdf(
         class_ranks = []
         for item in ranking:
             class_label = str(item["class_name"])
-            class_subjects = [
-                _msa_subject_group_mean(class_subject_values, (class_label,), subject_id)
-                for subject_id in ranking_subject_ids
-            ]
+            class_subjects = []
+            for subject_id in ranking_subject_ids:
+                class_subjects.extend(_msa_subject_group_result(class_subject_values, (class_label,), subject_id))
             class_rows.append([
-                item["rank"], class_label, "%.2f%%" % item["mean"], item["students"]
-            ] + class_subjects)
+                item["rank"], class_label, item["students"], *class_subjects,
+                "%.2f%%" % item["mean"], _msa_overall_grade(item["mean"])
+            ])
             class_ranks.append(item["rank"])
-        class_headers = ["Rank", "Class", "Overall mean %", "Learners assessed"] + ranking_subject_names
+        class_headers = ["Rank", "Class", "Learners assessed"] + [
+            label for subject in ranking_subject_names for label in (subject, subject + " Grd")
+        ] + ["Overall mean %", "Overall grade"]
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
 
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
