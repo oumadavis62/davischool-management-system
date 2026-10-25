@@ -14646,7 +14646,6 @@ def class_marksheet_analysis_pdf(
                     story.append(paired_class_tables)
                 else:
                     story.append(left_stack)
-                story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
                 story.append(Spacer(1, 1.5*mm))
 
         def add_footer(canvas, document):
