@@ -13374,6 +13374,15 @@ def class_marksheet_analysis_pdf(
             compact = re.sub(r"[^A-Z0-9]+", "", raw)
             return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
 
+        def _msa_pass_fail_grade(grade):
+            """Use the school's existing CBC grade bands: E/M pass, A/B fail; X/ungraded are excluded."""
+            value = re.sub(r"[^A-Z0-9]+", "", str(grade or "").strip().upper())
+            if value.startswith(("EE", "ME", "E", "M")):
+                return "pass"
+            if value.startswith(("AE", "BE", "A", "B")):
+                return "fail"
+            return None
+
         # Show one summary row per selected examination so assessment counts
         # and Grade X counts are specific to that exam, not blended together.
         summary_rows = []
@@ -13418,6 +13427,83 @@ def class_marksheet_analysis_pdf(
              "Learners not assessed", "Not assessed (%)"],
             summary_rows, compact=True
         )
+
+        # Overall examination outcomes are calculated separately for each exam.
+        overall_pass_fail_rows = []
+        for exam_id in ids:
+            exam_entry = exam_lookup.get(int(exam_id))
+            exam_label = (
+                (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")).strip()
+                if exam_entry else str(exam_id)
+            )
+            exam_rows = [row for row in rows if int(row["exam_id"]) == int(exam_id)]
+            if not exam_rows:
+                continue
+            exam_data = _msa_report_data(cur, sid, exam_rows)
+            passed = failed = assessed = 0
+            for learner_summary in exam_data["summaries"].values():
+                if int(learner_summary.get("subject_count") or 0) <= 0:
+                    continue
+                grade = str(learner_summary.get("overall_grade") or "").strip().upper()
+                outcome = _msa_pass_fail_grade(grade)
+                if outcome is None:
+                    continue
+                assessed += 1
+                if outcome == "pass":
+                    passed += 1
+                else:
+                    failed += 1
+            classified = passed + failed
+            pass_pct = (passed / classified * 100) if classified else None
+            fail_pct = (failed / classified * 100) if classified else None
+            overall_pass_fail_rows.append([
+                exam_label, assessed, passed,
+                f"{pass_pct:.1f}%" if pass_pct is not None else "—",
+                failed, f"{fail_pct:.1f}%" if fail_pct is not None else "—",
+            ])
+        pdf_table(
+            "Overall Examination Pass/Fail",
+            ["Examination", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)"],
+            overall_pass_fail_rows, compact=True
+        )
+
+        # Subject-level outcomes use the configured grade for each saved mark.
+        subject_pass_fail = {}
+        for mark_row in rows:
+            subject_id = int(mark_row.get("subject_id") or 0)
+            subject_name = str(mark_row.get("subject_name") or "Unknown subject")
+            grade, _, _ = _subject_grade_details(
+                cur, sid, subject_id, mark_row.get("mark"),
+                data.get("grading_rules"), mark_row.get("out_of") or 100
+            )
+            outcome = _msa_pass_fail_grade(grade)
+            stats = subject_pass_fail.setdefault(subject_name, {
+                "assessed": 0, "passed": 0, "failed": 0
+            })
+            if outcome is None:
+                continue
+            stats["assessed"] += 1
+            stats["passed" if outcome == "pass" else "failed"] += 1
+        subject_pass_fail_rows = []
+        for subject_name, stats in sorted(
+            subject_pass_fail.items(), key=lambda pair: pair[0].casefold()
+        ):
+            classified = stats["passed"] + stats["failed"]
+            pass_pct = (stats["passed"] / classified * 100) if classified else None
+            fail_pct = (stats["failed"] / classified * 100) if classified else None
+            subject_pass_fail_rows.append([
+                subject_name, stats["assessed"], stats["passed"],
+                f"{pass_pct:.1f}%" if pass_pct is not None else "—",
+                stats["failed"], f"{fail_pct:.1f}%" if fail_pct is not None else "—",
+            ])
+        pdf_table(
+            "Subject Pass/Fail Analysis",
+            ["Subject", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)"],
+            subject_pass_fail_rows, compact=True
+        )
+        # Pass/fail categories follow the configured CBC grades: E/M are passes,
+        # A/B are fails. X and ungraded marks are excluded from the percentages.
+
         # Duplicate the MarkSheet Grade Distribution Analysis near the start of
         # the PDF so both the overall and per-subject distributions are on page 1.
         msa_grade_order = ["E.E1", "E.E2", "M.E1", "M.E2", "A.E1", "A.E2", "B.E1", "B.E2", "X"]
@@ -14080,6 +14166,66 @@ def class_marksheet_analysis_pdf(
                     label = "Steady"
                 insight_rows.append([item["subject"], "%.2f%%" % item["mean"], item["entries"], label])
             pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Recorded entries", "Insight"], insight_rows, compact=True)
+
+            # Compact horizontal pass-rate comparison, directly below the strengths table.
+            story.append(Paragraph("<u>Subject Pass-Rate Comparison</u>", styles["MSASection"]))
+            chart_items = []
+            for subject_name, stats in subject_pass_fail.items():
+                classified = stats["passed"] + stats["failed"]
+                if classified:
+                    chart_items.append((subject_name, stats["passed"] / classified * 100, classified))
+            chart_items.sort(key=lambda item: (-item[1], item[0].casefold()))
+            chart_width = doc.width * 0.38
+            chart_data = [[
+                Paragraph("<b>Subject</b>", styles["MSACell"]),
+                Paragraph("<b>Pass rate</b>", styles["MSACell"]),
+                Paragraph("<b>Comparison</b>", styles["MSACell"]),
+                Paragraph("<b>Classified</b>", styles["MSACell"]),
+            ]]
+            for subject_name, pass_rate, classified in chart_items:
+                bar_width = max(0, min(chart_width, chart_width * pass_rate / 100))
+                remainder_width = max(0, chart_width - bar_width)
+                bar = Table([["", ""]], colWidths=[bar_width, remainder_width], rowHeights=[5*mm])
+                bar.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (0,0), colors.HexColor("#23864b")),
+                    ("BACKGROUND", (1,0), (1,0), colors.HexColor("#e5e7eb")),
+                    ("BOX", (0,0), (-1,-1), 0.25, colors.HexColor("#cbd5d1")),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                chart_data.append([
+                    Paragraph(escape(subject_name), styles["MSACell"]),
+                    Paragraph("%.1f%%" % pass_rate, styles["MSACell"]),
+                    bar,
+                    Paragraph(str(classified), styles["MSACell"]),
+                ])
+            if not chart_items:
+                chart_data.append([
+                    Paragraph("No classified results", styles["MSACell"]),
+                    Paragraph("—", styles["MSACell"]),
+                    Paragraph("—", styles["MSACell"]),
+                    Paragraph("0", styles["MSACell"]),
+                ])
+            chart_table = Table(
+                chart_data,
+                colWidths=[doc.width * 0.24, doc.width * 0.12, chart_width, doc.width * 0.12],
+                repeatRows=1, hAlign="LEFT"
+            )
+            chart_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("LEFTPADDING", (0,0), (-1,-1), 3),
+                ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            story.append(chart_table)
+            story.append(Spacer(1, 1.5*mm))
 
         # Continue on a dedicated page with the ten highest-performing learners
         # in each class, followed by the ten highest-performing learners overall.
