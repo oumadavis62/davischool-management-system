@@ -13505,6 +13505,14 @@ def class_marksheet_analysis_pdf(
                 cur, sid, int(subject_id), mean_percentage,
                 ranking_data["grading_rules"], 100
             )
+            # Some subject rules may be absent from the report's preloaded rule
+            # map. Retry through the normal database-backed grading lookup so
+            # those subjects receive their configured/default grade instead of
+            # displaying a dash despite having assessed marks.
+            if not grade or str(grade).strip() in ("—", "-"):
+                grade, _, _ = _subject_grade_details(
+                    cur, sid, int(subject_id), mean_percentage, None, 100
+                )
             return "%.2f%%" % mean_percentage, str(grade or "—")
 
         def _msa_overall_grade(mean_percentage):
@@ -13591,7 +13599,7 @@ def class_marksheet_analysis_pdf(
             stream_ranks.append(stream_rank)
         stream_headers = [
             "Rank", "Class", "Stream", "Learners assessed", "Learners not assessed"
-        ] + [label for subject in ranking_subject_names for label in (subject, "GRADE")] + [
+        ] + [label for subject in ranking_subject_names for label in (subject, "GRD")] + [
             "Overall mean %", "Overall grade"
         ]
         _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
@@ -13611,7 +13619,7 @@ def class_marksheet_analysis_pdf(
             ])
             class_ranks.append(item["rank"])
         class_headers = ["Rank", "Class", "Learners assessed"] + [
-            label for subject in ranking_subject_names for label in (subject, "GRADE")
+            label for subject in ranking_subject_names for label in (subject, "GRD")
         ] + ["Overall mean %", "Overall grade"]
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
 
