@@ -1777,69 +1777,69 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     action_html="".join("<a class='action academic-manager-tile' data-academic-prefetch='1' href='%s%s'><span>%s</span>%s<small>%s</small></a>"%(x[0],("?ds_tab="+quote(current_ds_tab,safe="")) if current_ds_tab else "",x[1],x[2],x[3]) for x in actions)
     body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Entries</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams),len(classes),int(stat["entries"] or 0))
     body+="<div class='section'><div class='actions'>"+action_html+"</div></div>"
-         # Admin-only tracker: isolated from existing marks/exam workflows.
-     if role in ("school_admin","registrar"):
-         tracker_raw=str(request.query_params.get("tracker_exam_id") or "").strip()
-         tracker_exam_id=int(tracker_raw) if tracker_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
-         tracker_exam=next((e for e in exams if int(e["id"])==tracker_exam_id),None)
-         tracker_tab=str(request.query_params.get("ds_tab") or "").strip()
-         tracker_hidden=("<input type='hidden' name='ds_tab' value='%s'>" % escape(tracker_tab,quote=True)) if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tracker_tab) else ""
-         tracker_options="".join("<option value='%s' %s>%s — %s %s</option>"%(e["id"],"selected" if int(e["id"])==tracker_exam_id else "",escape(str(e["name"] or "")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
-         tracker_rows=[]
-         tracker_error=""
-         if tracker_exam:
-             tracker_con=_db()
-             tracker_cur=tracker_con.cursor()
-             try:
-                 participating_ids=_exam_participating_class_ids(tracker_cur,sid,tracker_exam_id)
-                 tracker_con.commit()
-                 participating_classes=[c for c in classes if participating_ids is None or int(c["id"]) in participating_ids]
-                 assignment_rows=tracker_cur.execute("SELECT DISTINCT class_id,subject_id FROM teacher_allocations WHERE school_id=? ORDER BY class_id,subject_id",(sid,)).fetchall()
-                 subjects_by_class={}
-                 for allocation in assignment_rows:
-                     if allocation["class_id"] is not None and allocation["subject_id"] is not None:
-                         subjects_by_class.setdefault(int(allocation["class_id"]),set()).add(int(allocation["subject_id"]))
-                 all_subject_rows=tracker_cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-                 subject_names={int(x["id"]):str(x["name"] or "Subject") for x in all_subject_rows}
-                 for tracker_class in participating_classes:
-                     tracker_class_id=int(tracker_class["id"])
-                     expected_subject_ids=sorted(subjects_by_class.get(tracker_class_id) or subject_names.keys(),key=lambda x:subject_names.get(x,"").casefold())
-                     active_row=tracker_cur.execute("""SELECT COUNT(*) AS n FROM students st
-                         WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                         AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,tracker_class_id)).fetchone()
-                     active_count=int(active_row["n"] or 0) if active_row else 0
-                     mark_rows=tracker_cur.execute("""SELECT subject_id,COUNT(DISTINCT student_id) AS entered
-                         FROM marks WHERE school_id=? AND exam_id=? AND class_id=? GROUP BY subject_id""",(sid,tracker_exam_id,tracker_class_id)).fetchall()
-                     entered_by_subject={int(m["subject_id"]):int(m["entered"] or 0) for m in mark_rows if m["subject_id"] is not None}
-                     submitted_subjects=[x for x in expected_subject_ids if entered_by_subject.get(x,0)>0]
-                     expected_count=len(expected_subject_ids)
-                     submitted_count=len(submitted_subjects)
-                     if expected_count and submitted_count==expected_count:
-                         status_label="Completed"; status_class="complete"
-                     elif submitted_count:
-                         status_label="In progress"; status_class="progress"
-                     else:
-                         status_label="Pending"; status_class="pending"
-                     subject_lines=[]
-                     for subject_id in expected_subject_ids:
-                         entered=entered_by_subject.get(subject_id,0)
-                         subject_status="Submitted" if entered else "Pending"
-                         subject_class="subject-done" if entered else "subject-pending"
-                         subject_lines.append("<div class='tracker-subject'><span>%s</span><span class='%s'>%s</span><small>%s/%s learners with marks</small></div>"%(escape(subject_names.get(subject_id,"Subject")),subject_class,subject_status,entered,active_count))
-                     if not expected_subject_ids:
-                         subject_lines.append("<div class='tracker-subject'><span>No subjects configured</span><span class='subject-pending'>Pending</span></div>")
-                     class_label=escape(str(tracker_class["name"] or "Class"))+" "+escape(str(tracker_class["stream"] or ""))
-                     pct=int(submitted_count*100/expected_count) if expected_count else 0
-                     tracker_rows.append("<tr><td><b>%s</b></td><td><span class='tracker-status %s'>%s</span><div class='tracker-bar'><span style='width:%s%%'></span></div><small>%s/%s subjects submitted</small></td><td><div class='tracker-subjects'>%s</div></td></tr>"%(class_label,status_class,status_label,pct,submitted_count,expected_count,"".join(subject_lines)))
-             except Exception as tracker_exc:
-                 tracker_error="The tracker could not load for this examination. Existing academic functions remain available."
-                 print("DAVISCHOOL EXAM SUBMISSION TRACKER WARNING:",repr(tracker_exc),flush=True)
-             finally:
-                 tracker_con.close()
-         tracker_table="<div class='tracker-table-wrap'><table class='tracker-table'><thead><tr><th>Class / stream</th><th>Overall status</th><th>Subject submission status</th></tr></thead><tbody>%s</tbody></table></div>"%("".join(tracker_rows) or "<tr><td colspan='3'>No participating classes were found for this examination.</td></tr>")
-         tracker_message=("<p class='tracker-error'>"+escape(tracker_error)+"</p>") if tracker_error else ""
-         body+="<section class='section exam-submission-tracker'><div class='tracker-heading'><div><h2>Exam Submission Tracker</h2><p class='muted'>Follow marks submission for each participating class and subject.</p></div><form method='get' action='/app/academics' class='tracker-exam-form'>"+tracker_hidden+"<label for='tracker-exam-select'>Examination</label><select id='tracker-exam-select' name='tracker_exam_id' onchange='this.form.submit()'>"+tracker_options+"</select><noscript><button type='submit'>View tracker</button></noscript></form></div>"+(tracker_message or (tracker_table if tracker_exam else "<p class='muted'>Create an examination to start tracking submissions.</p>"))+"</section>"
-     body+="<style>.exam-submission-tracker{margin-top:24px;background:#fff;border:1px solid #dbe7df;border-radius:16px;padding:18px;overflow:hidden}.tracker-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}.tracker-heading h2{margin:0 0 5px;font-size:21px;color:#17462d}.tracker-heading p{margin:0}.tracker-exam-form{display:flex;flex-direction:column;gap:6px;min-width:min(100%,260px)}.tracker-exam-form label{font-weight:700;color:#355846;font-size:13px}.tracker-exam-form select{width:100%;padding:11px;border:1px solid #cbded1;border-radius:9px;background:#fff}.tracker-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:16px}.tracker-table{width:100%;min-width:650px;border-collapse:collapse}.tracker-table th,.tracker-table td{padding:11px;border-bottom:1px solid #e4eee7;text-align:left;vertical-align:top}.tracker-table th{background:#f1f8f3;color:#2c513a;font-size:12px}.tracker-status{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:800}.tracker-status.complete{background:#dff5e6;color:#176b3a}.tracker-status.progress{background:#fff0c2;color:#8a5a00}.tracker-status.pending{background:#f1f3f4;color:#59636b}.tracker-bar{height:6px;max-width:150px;background:#e6eee8;border-radius:99px;overflow:hidden;margin:8px 0 4px}.tracker-bar span{display:block;height:100%;background:#16834a;border-radius:99px}.tracker-table td small{display:block;color:#64766c;font-size:11px;margin-top:3px}.tracker-subjects{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;min-width:280px}.tracker-subject{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px;border:1px solid #e2ece5;border-radius:8px;background:#fcfefc;font-size:12px}.tracker-subject>span:first-child{overflow-wrap:anywhere;font-weight:600}.tracker-subject small{grid-column:1/-1}.subject-done{color:#176b3a;font-weight:700}.subject-pending{color:#8a5a00;font-weight:700}.tracker-error{padding:12px;border-radius:9px;background:#fff7ed;color:#9a3412}.exam-submission-tracker{box-sizing:border-box}@media(max-width:640px){.exam-submission-tracker{padding:13px}.tracker-heading{align-items:stretch}.tracker-exam-form{min-width:100%}.tracker-table th,.tracker-table td{padding:8px}}</style>"
+    # Admin-only tracker: isolated from existing marks/exam workflows.
+    if role in ("school_admin","registrar"):
+        tracker_raw=str(request.query_params.get("tracker_exam_id") or "").strip()
+        tracker_exam_id=int(tracker_raw) if tracker_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        tracker_exam=next((e for e in exams if int(e["id"])==tracker_exam_id),None)
+        tracker_tab=str(request.query_params.get("ds_tab") or "").strip()
+        tracker_hidden=("<input type='hidden' name='ds_tab' value='%s'>" % escape(tracker_tab,quote=True)) if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tracker_tab) else ""
+        tracker_options="".join("<option value='%s' %s>%s — %s %s</option>"%(e["id"],"selected" if int(e["id"])==tracker_exam_id else "",escape(str(e["name"] or "")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
+        tracker_rows=[]
+        tracker_error=""
+        if tracker_exam:
+            tracker_con=_db()
+            tracker_cur=tracker_con.cursor()
+            try:
+                participating_ids=_exam_participating_class_ids(tracker_cur,sid,tracker_exam_id)
+                tracker_con.commit()
+                participating_classes=[c for c in classes if participating_ids is None or int(c["id"]) in participating_ids]
+                assignment_rows=tracker_cur.execute("SELECT DISTINCT class_id,subject_id FROM teacher_allocations WHERE school_id=? ORDER BY class_id,subject_id",(sid,)).fetchall()
+                subjects_by_class={}
+                for allocation in assignment_rows:
+                    if allocation["class_id"] is not None and allocation["subject_id"] is not None:
+                        subjects_by_class.setdefault(int(allocation["class_id"]),set()).add(int(allocation["subject_id"]))
+                all_subject_rows=tracker_cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+                subject_names={int(x["id"]):str(x["name"] or "Subject") for x in all_subject_rows}
+                for tracker_class in participating_classes:
+                    tracker_class_id=int(tracker_class["id"])
+                    expected_subject_ids=sorted(subjects_by_class.get(tracker_class_id) or subject_names.keys(),key=lambda x:subject_names.get(x,"").casefold())
+                    active_row=tracker_cur.execute("""SELECT COUNT(*) AS n FROM students st
+                        WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                        AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,tracker_class_id)).fetchone()
+                    active_count=int(active_row["n"] or 0) if active_row else 0
+                    mark_rows=tracker_cur.execute("""SELECT subject_id,COUNT(DISTINCT student_id) AS entered
+                        FROM marks WHERE school_id=? AND exam_id=? AND class_id=? GROUP BY subject_id""",(sid,tracker_exam_id,tracker_class_id)).fetchall()
+                    entered_by_subject={int(m["subject_id"]):int(m["entered"] or 0) for m in mark_rows if m["subject_id"] is not None}
+                    submitted_subjects=[x for x in expected_subject_ids if entered_by_subject.get(x,0)>0]
+                    expected_count=len(expected_subject_ids)
+                    submitted_count=len(submitted_subjects)
+                    if expected_count and submitted_count==expected_count:
+                        status_label="Completed"; status_class="complete"
+                    elif submitted_count:
+                        status_label="In progress"; status_class="progress"
+                    else:
+                        status_label="Pending"; status_class="pending"
+                    subject_lines=[]
+                    for subject_id in expected_subject_ids:
+                        entered=entered_by_subject.get(subject_id,0)
+                        subject_status="Submitted" if entered else "Pending"
+                        subject_class="subject-done" if entered else "subject-pending"
+                        subject_lines.append("<div class='tracker-subject'><span>%s</span><span class='%s'>%s</span><small>%s/%s learners with marks</small></div>"%(escape(subject_names.get(subject_id,"Subject")),subject_class,subject_status,entered,active_count))
+                    if not expected_subject_ids:
+                        subject_lines.append("<div class='tracker-subject'><span>No subjects configured</span><span class='subject-pending'>Pending</span></div>")
+                    class_label=escape(str(tracker_class["name"] or "Class"))+" "+escape(str(tracker_class["stream"] or ""))
+                    pct=int(submitted_count*100/expected_count) if expected_count else 0
+                    tracker_rows.append("<tr><td><b>%s</b></td><td><span class='tracker-status %s'>%s</span><div class='tracker-bar'><span style='width:%s%%'></span></div><small>%s/%s subjects submitted</small></td><td><div class='tracker-subjects'>%s</div></td></tr>"%(class_label,status_class,status_label,pct,submitted_count,expected_count,"".join(subject_lines)))
+            except Exception as tracker_exc:
+                tracker_error="The tracker could not load for this examination. Existing academic functions remain available."
+                print("DAVISCHOOL EXAM SUBMISSION TRACKER WARNING:",repr(tracker_exc),flush=True)
+            finally:
+                tracker_con.close()
+        tracker_table="<div class='tracker-table-wrap'><table class='tracker-table'><thead><tr><th>Class / stream</th><th>Overall status</th><th>Subject submission status</th></tr></thead><tbody>%s</tbody></table></div>"%("".join(tracker_rows) or "<tr><td colspan='3'>No participating classes were found for this examination.</td></tr>")
+        tracker_message=("<p class='tracker-error'>"+escape(tracker_error)+"</p>") if tracker_error else ""
+        body+="<section class='section exam-submission-tracker'><div class='tracker-heading'><div><h2>Exam Submission Tracker</h2><p class='muted'>Follow marks submission for each participating class and subject.</p></div><form method='get' action='/app/academics' class='tracker-exam-form'>"+tracker_hidden+"<label for='tracker-exam-select'>Examination</label><select id='tracker-exam-select' name='tracker_exam_id' onchange='this.form.submit()'>"+tracker_options+"</select><noscript><button type='submit'>View tracker</button></noscript></form></div>"+(tracker_message or (tracker_table if tracker_exam else "<p class='muted'>Create an examination to start tracking submissions.</p>"))+"</section>"
+    body+="<style>.exam-submission-tracker{margin-top:24px;background:#fff;border:1px solid #dbe7df;border-radius:16px;padding:18px;overflow:hidden}.tracker-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}.tracker-heading h2{margin:0 0 5px;font-size:21px;color:#17462d}.tracker-heading p{margin:0}.tracker-exam-form{display:flex;flex-direction:column;gap:6px;min-width:min(100%,260px)}.tracker-exam-form label{font-weight:700;color:#355846;font-size:13px}.tracker-exam-form select{width:100%;padding:11px;border:1px solid #cbded1;border-radius:9px;background:#fff}.tracker-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:16px}.tracker-table{width:100%;min-width:650px;border-collapse:collapse}.tracker-table th,.tracker-table td{padding:11px;border-bottom:1px solid #e4eee7;text-align:left;vertical-align:top}.tracker-table th{background:#f1f8f3;color:#2c513a;font-size:12px}.tracker-status{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:800}.tracker-status.complete{background:#dff5e6;color:#176b3a}.tracker-status.progress{background:#fff0c2;color:#8a5a00}.tracker-status.pending{background:#f1f3f4;color:#59636b}.tracker-bar{height:6px;max-width:150px;background:#e6eee8;border-radius:99px;overflow:hidden;margin:8px 0 4px}.tracker-bar span{display:block;height:100%;background:#16834a;border-radius:99px}.tracker-table td small{display:block;color:#64766c;font-size:11px;margin-top:3px}.tracker-subjects{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;min-width:280px}.tracker-subject{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px;border:1px solid #e2ece5;border-radius:8px;background:#fcfefc;font-size:12px}.tracker-subject>span:first-child{overflow-wrap:anywhere;font-weight:600}.tracker-subject small{grid-column:1/-1}.subject-done{color:#176b3a;font-weight:700}.subject-pending{color:#8a5a00;font-weight:700}.tracker-error{padding:12px;border-radius:9px;background:#fff7ed;color:#9a3412}.exam-submission-tracker{box-sizing:border-box}@media(max-width:640px){.exam-submission-tracker{padding:13px}.tracker-heading{align-items:stretch}.tracker-exam-form{min-width:100%}.tracker-table th,.tracker-table td{padding:8px}}</style>"
 body+="<script>(function(){var cache=new Map(),pending=new Map(),tiles=[].slice.call(document.querySelectorAll('a.academic-manager-tile[data-academic-prefetch]'));function warm(a){if(!a||!a.href)return Promise.resolve(null);if(cache.has(a.href))return Promise.resolve(cache.get(a.href));if(pending.has(a.href))return pending.get(a.href);var url=a.href;var job=fetch(url,{credentials:'same-origin',cache:'force-cache',headers:{'X-DaviSchool-Prefetch':'1','X-Requested-With':'fetch'}}).then(function(r){if(!r.ok)throw new Error('prefetch failed');return r.text();}).then(function(html){if(html)cache.set(url,html);return html;}).catch(function(){return null;}).finally(function(){pending.delete(url);});pending.set(url,job);return job;}function show(url,html){if(!html){window.location.href=url;return;}document.open();document.write(html);document.close();}function activate(a,e){var url=a.href;if(cache.has(url)){e.preventDefault();show(url,cache.get(url));return;}e.preventDefault();a.setAttribute('aria-busy','true');a.classList.add('ds-navigating');var job=pending.get(url)||warm(a);Promise.resolve(job).then(function(html){if(html){show(url,html);}else{window.location.href=url;}}).catch(function(){window.location.href=url;});}function warmAll(){var i=0,active=0,limit=3;function next(){while(active<limit&&i<tiles.length){(function(a){active++;warm(a).finally(function(){active--;next();});})(tiles[i++]);}}next();}tiles.forEach(function(a){a.addEventListener('pointerdown',function(){warm(a);},{passive:true});a.addEventListener('pointerenter',function(){warm(a);},{passive:true});a.addEventListener('touchstart',function(){warm(a);},{passive:true});a.addEventListener('focus',function(){warm(a);},{passive:true});a.addEventListener('click',function(e){activate(a,e);});});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',warmAll,{once:true});else warmAll();})();</script>"
     body+="</div><style>.deletebtn,[data-action='delete-mark'],button[formaction='/app/academics/marks/delete']{display:none!important}.action small{display:block;color:#64748b;margin-top:5px}</style>"
     return _school_page(request,"Academic Management",body)
