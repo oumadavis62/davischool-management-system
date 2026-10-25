@@ -14007,9 +14007,11 @@ def class_marksheet_analysis_pdf(
                     Paragraph("—", styles["MSACell"]),
                     Paragraph("0", styles["MSACell"]),
                 ])
+            # Preserve the Subject column; shrink Pass rate, Comparison and
+            # Classified columns by 70% relative to their previous widths.
             chart_table = Table(
                 chart_data,
-                colWidths=[doc.width * 0.24, doc.width * 0.12, chart_width, doc.width * 0.12],
+                colWidths=[doc.width * 0.24, doc.width * 0.036, chart_width * 0.30, doc.width * 0.036],
                 repeatRows=1, hAlign="LEFT"
             )
             chart_table.setStyle(TableStyle([
