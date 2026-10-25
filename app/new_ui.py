@@ -13881,67 +13881,6 @@ def class_marksheet_analysis_pdf(
                 msa_subject_positions.get(int(subject_id), "—")
             ])
         pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
-        # Put student rankings directly after per-subject grade distribution, on their own page.
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Student rankings</u>", styles["MSASection"]))
-        ranked_learners = []
-        for learner_id, learner_summary in data["summaries"].items():
-            learner_info = data["students"].get(learner_id, {})
-            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
-                continue
-            ranked_learners.append({
-                "id": int(learner_id),
-                "name": str(learner_info.get("name") or ""),
-                "admission": str(learner_info.get("admission_no") or ""),
-                "class_name": str(learner_info.get("class_name") or "Unassigned"),
-                "stream": str(learner_info.get("stream") or "No stream"),
-                "mean": float(learner_summary.get("average") or 0),
-                "total": float(learner_summary.get("total") or 0),
-                "points": float(learner_summary.get("average_points") or 0),
-                "grade": str(learner_summary.get("overall_grade") or "—"),
-            })
-
-        def _msa_rank_students(learners):
-            # Rank these Top 10 lists by total marks, not average percentage:
-            # learners may have sat different numbers of exams/subjects.
-            ordered = sorted(
-                learners,
-                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
-            )
-            result = []
-            previous_total = None
-            rank_number = 0
-            for index, learner in enumerate(ordered, 1):
-                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
-                    rank_number = index
-                    previous_total = learner["total"]
-                result.append((rank_number, learner))
-            return result
-
-        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
-        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
-        for ranked_class in class_names:
-            class_ranked = _msa_rank_students([
-                learner for learner in ranked_learners if learner["class_name"] == ranked_class
-            ])
-            class_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in class_ranked[:10]
-            ]
-            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
-
-        # A combined ranking adds no information when the selected exam data
-        # contains only one class: it would repeat that class's Best 10 table.
-        # Keep it for multi-class comparisons, including multi-exam selections.
-        if len(class_names) > 1:
-            overall_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in _msa_rank_students(ranked_learners)[:10]
-            ]
-            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
-
         # Continue with actionable, subject-level Performance Insights after student rankings.
         # Only recorded subject marks contribute to these means.
         subject_insight_values = {}
@@ -14313,6 +14252,67 @@ def class_marksheet_analysis_pdf(
                     story.extend(left_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
+
+        # Put student rankings directly after per-subject grade distribution, on their own page.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Student rankings</u>", styles["MSASection"]))
+        ranked_learners = []
+        for learner_id, learner_summary in data["summaries"].items():
+            learner_info = data["students"].get(learner_id, {})
+            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
+                continue
+            ranked_learners.append({
+                "id": int(learner_id),
+                "name": str(learner_info.get("name") or ""),
+                "admission": str(learner_info.get("admission_no") or ""),
+                "class_name": str(learner_info.get("class_name") or "Unassigned"),
+                "stream": str(learner_info.get("stream") or "No stream"),
+                "mean": float(learner_summary.get("average") or 0),
+                "total": float(learner_summary.get("total") or 0),
+                "points": float(learner_summary.get("average_points") or 0),
+                "grade": str(learner_summary.get("overall_grade") or "—"),
+            })
+
+        def _msa_rank_students(learners):
+            # Rank these Top 10 lists by total marks, not average percentage:
+            # learners may have sat different numbers of exams/subjects.
+            ordered = sorted(
+                learners,
+                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
+            )
+            result = []
+            previous_total = None
+            rank_number = 0
+            for index, learner in enumerate(ordered, 1):
+                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
+                    rank_number = index
+                    previous_total = learner["total"]
+                result.append((rank_number, learner))
+            return result
+
+        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
+        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
+        for ranked_class in class_names:
+            class_ranked = _msa_rank_students([
+                learner for learner in ranked_learners if learner["class_name"] == ranked_class
+            ])
+            class_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in class_ranked[:10]
+            ]
+            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
+
+        # A combined ranking adds no information when the selected exam data
+        # contains only one class: it would repeat that class's Best 10 table.
+        # Keep it for multi-class comparisons, including multi-exam selections.
+        if len(class_names) > 1:
+            overall_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in _msa_rank_students(ranked_learners)[:10]
+            ]
+            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
 
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
