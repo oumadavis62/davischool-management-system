@@ -13223,7 +13223,7 @@ def class_marksheet_analysis_pdf(
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, HRFlowable
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=10*mm, bottomMargin=12*mm)
         styles = getSampleStyleSheet()
@@ -14417,7 +14417,8 @@ def class_marksheet_analysis_pdf(
                 Paragraph("<u>Best 10 students — " + escape(ranked_class) + "</u>", styles["MSASection"]),
                 class_pair,
             ]))
-            story.append(Spacer(1, 1.5 * mm))
+            story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
+            story.append(Spacer(1, 1.0 * mm))
 
         # A combined ranking adds no information when the selected exam data
         # contains only one class: it would repeat that class's Best 10 table.
@@ -14538,7 +14539,7 @@ def class_marksheet_analysis_pdf(
                 "<u>Best 10 students — combined classes</u>", styles["MSASection"]
             )
             story.append(KeepTogether([combined_heading, paired_top_ten]))
-            story.append(Spacer(1, 1.5 * mm))
+            story.append(Spacer(1, 1.0 * mm))
 
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
