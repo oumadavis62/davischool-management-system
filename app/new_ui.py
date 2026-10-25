@@ -13631,49 +13631,87 @@ def class_marksheet_analysis_pdf(
                 return "—"
 
         def _msa_ranking_table(title, headers, values, ranks, subject_start):
-            # Plain white headers and unshaded cells, matching the other report tables.
+            # Keep the existing plain-white header and grid styling, but group
+            # each subject over its Mean and GRD columns like the MarkSheet.
             cell_style = ParagraphStyle(
                 "MSARankingCell", parent=styles["MSACell"], fontSize=5.4, leading=6.2
             )
             header_style = ParagraphStyle(
                 "MSARankingHeader", parent=cell_style, fontName="Helvetica-Bold",
-                textColor=colors.black, alignment=0
+                textColor=colors.black, alignment=1
             )
-            table_data = [[Paragraph(escape(str(value)), header_style) for value in headers]]
+            if subject_start == 4:
+                fixed_widths = [8*mm, 22*mm, 12*mm, 12*mm]
+                tail_widths = [15*mm, 10*mm]
+            else:
+                fixed_widths = [8*mm, 18*mm, 14*mm, 10*mm, 10*mm]
+                tail_widths = [15*mm, 10*mm]
+            subject_columns = max(0, len(headers) - len(fixed_widths) - len(tail_widths))
+            grouped_subject_headers = subject_columns > 0 and subject_columns % 2 == 0
+            if grouped_subject_headers:
+                first_header = [
+                    Paragraph("<b>%s</b>" % escape(str(value)), header_style)
+                    for value in headers[:len(fixed_widths)]
+                ]
+                subject_names = headers[len(fixed_widths):-len(tail_widths)]
+                first_header.extend(
+                    Paragraph("<b>%s</b>" % escape(str(subject_names[i])), header_style)
+                    for i in range(0, len(subject_names), 2)
+                )
+                first_header.extend(
+                    Paragraph("<b>%s</b>" % escape(str(value)), header_style)
+                    for value in headers[-len(tail_widths):]
+                )
+                second_header = ["" for _ in fixed_widths]
+                for _ in range(subject_columns // 2):
+                    second_header.extend([
+                        Paragraph("<b>Mean</b>", header_style),
+                        Paragraph("<b>GRD</b>", header_style),
+                    ])
+                second_header.extend(["" for _ in tail_widths])
+                table_data = [first_header, second_header]
+            else:
+                table_data = [[
+                    Paragraph("<b>%s</b>" % escape(str(value)), header_style)
+                    for value in headers
+                ]]
             for row in values:
                 table_data.append([Paragraph(escape(str(value)), cell_style) for value in row])
             if not values:
                 table_data.append([Paragraph("No eligible classes or streams have recorded exam entries.", cell_style)] +
                                   [Paragraph("", cell_style) for _ in headers[1:]])
             base_width = doc.width / max(1, len(headers))
-            if subject_start == 4:
-                # Class table: Rank, Class, assessed, not assessed, subject/grade pairs, overall mean, overall grade.
-                fixed_widths = [8*mm, 22*mm, 12*mm, 12*mm]
-                tail_widths = [15*mm, 10*mm]
-            else:
-                # Stream table: Rank, Class, Stream, assessed, not assessed, subject/grade pairs, overall mean, overall grade.
-                fixed_widths = [8*mm, 18*mm, 14*mm, 10*mm, 10*mm]
-                tail_widths = [15*mm, 10*mm]
-            subject_columns = max(0, len(headers) - len(fixed_widths) - len(tail_widths))
-            widths = fixed_widths + [max(8*mm, (doc.width - sum(fixed_widths) - sum(tail_widths)) / max(1, subject_columns))] * subject_columns + tail_widths
+            widths = fixed_widths + [
+                max(8*mm, (doc.width - sum(fixed_widths) - sum(tail_widths)) / max(1, subject_columns))
+            ] * subject_columns + tail_widths
             total_width = sum(widths)
             if total_width > doc.width:
                 scale = doc.width / total_width
                 widths = [width * scale for width in widths]
-            table = Table(table_data, colWidths=widths, repeatRows=1, hAlign="LEFT")
+            table = Table(table_data, colWidths=widths, repeatRows=(2 if grouped_subject_headers else 1), hAlign="LEFT")
             commands = [
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("BACKGROUND", (0,0), (-1,-1), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#c5d8cb")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                # Center every cell, including text labels, across all ranking rows.
                 ("ALIGN", (0,0), (-1,-1), "CENTER"),
                 ("LEFTPADDING", (0,0), (-1,-1), 2),
                 ("RIGHTPADDING", (0,0), (-1,-1), 2),
                 ("TOPPADDING", (0,0), (-1,-1), 3),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ]
-            for row_index, rank_value in enumerate(ranks, 1):
+            if grouped_subject_headers:
+                for col in range(len(fixed_widths)):
+                    commands.append(("SPAN", (col, 0), (col, 1)))
+                subject_col_start = len(fixed_widths)
+                for pair in range(subject_columns // 2):
+                    col = subject_col_start + pair * 2
+                    commands.append(("SPAN", (col, 0), (col + 1, 0)))
+                tail_start = len(fixed_widths) + subject_columns
+                for col in range(tail_start, tail_start + len(tail_widths)):
+                    commands.append(("SPAN", (col, 0), (col, 1)))
+                commands.append(("ALIGN", (0,0), (-1,1), "CENTER"))
+            for row_index, rank_value in enumerate(ranks, 1 if not grouped_subject_headers else 2):
                 try:
                     rank_number = int(rank_value)
                 except (TypeError, ValueError):
