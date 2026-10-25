@@ -14384,7 +14384,7 @@ def class_marksheet_analysis_pdf(
             distribution_data.append([
                 Paragraph("<b>Total</b>", distribution_cell_style),
                 Paragraph("<b>%s</b>" % len(combined_top_ten), distribution_cell_style),
-                Paragraph("<b>100%%</b>" if combined_top_ten else "<b>0.0%%</b>", distribution_cell_style),
+                Paragraph("<b>100%</b>" if combined_top_ten else "<b>0.0%</b>", distribution_cell_style),
             ])
             distribution_table = Table(
                 distribution_data,
