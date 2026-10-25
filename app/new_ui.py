@@ -11852,7 +11852,36 @@ def _msa_historical_roster(cur, school_id, rows):
         for class_id in group["class_ids"]:
             for year in years:
                 members=set()
+                # Promotion-cycle snapshots are the most reliable record of
+                # who belonged to this class cohort in a given exam year.
+                # They include learners who have no marks rows at all, so they
+                # must be counted as not assessed rather than disappearing from
+                # the historical roster. Keep history-based reconstruction as
+                # a fallback for years/classes without a saved snapshot.
+                snapshot_available = False
+                try:
+                    snapshot = cur.execute(
+                        "SELECT 1 FROM student_promotion_cohort_snapshots "
+                        "WHERE school_id=? AND cycle_year=? AND class_id=? LIMIT 1",
+                        (school_id, year, class_id)
+                    ).fetchone()
+                    if snapshot:
+                        snapshot_available = True
+                        snapshot_members = cur.execute(
+                            "SELECT student_id FROM student_promotion_cohort_members "
+                            "WHERE school_id=? AND cycle_year=? AND class_id=?",
+                            (school_id, year, class_id)
+                        ).fetchall()
+                        for snapshot_member in snapshot_members:
+                            try:
+                                members.add(int(snapshot_member["student_id"]))
+                            except (TypeError, ValueError, KeyError):
+                                continue
+                except Exception as exc:
+                    print("DAVISCHOOL MSA COHORT SNAPSHOT WARNING:", repr(exc), flush=True)
                 for student_id,events in histories.items():
+                    if snapshot_available:
+                        break
                     entries=[]; exits=[]
                     for event in events:
                         try:
@@ -11882,6 +11911,11 @@ def _msa_historical_roster(cur, school_id, rows):
                 if year==latest_year:
                     for student_id in current_by_class.get(class_id,set()):
                         if not histories.get(student_id): members.add(student_id)
+                if not snapshot_available:
+                    # Marks rows are evidence of exam participation, but only
+                    # use them as a roster fallback when no exact cohort
+                    # snapshot exists for this class/year.
+                    members.update(row_students_by_group.get(group_key, set()))
                 by_exam_group[(year,group_key)]=by_exam_group.get((year,group_key),set())|members
                 roster.update(members)
         by_group[group_key]=roster; all_ids.update(roster)
