@@ -12711,8 +12711,11 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
         for subject_id in subject_order:
             stats = per_group_subject.get((group_key, subject_id), {"grades": {}, "values": []})
             values.extend(stats["grades"].get(grade, 0) for grade in grade_order)
-            entries = len(stats["values"])
-            mean = sum(stats["values"]) / entries if entries else None
+            # Entries must include every learner represented in the grade columns,
+            # including learners with a dash because they missed this subject/exam.
+            entries = sum(stats["grades"].values())
+            assessed_entries = len(stats["values"])
+            mean = sum(stats["values"]) / assessed_entries if assessed_entries else None
             values.extend([entries, ("%.2f%%" % mean) if mean is not None else "—",
                            positions.get((group_key, subject_id), "—")])
         matrix_rows.append(values)
