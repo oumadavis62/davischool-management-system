@@ -13439,33 +13439,145 @@ def class_marksheet_analysis_pdf(
         stream_comparison_values.sort(key=lambda item: (
             item[3] is None, -(item[3] or 0), item[0][0].casefold(), item[0][1].casefold()
         ))
-        stream_rows = []
-        previous_stream_mean = None
-        stream_rank = 0
-        for index, (group_key, assessed_count, not_assessed_count, mean) in enumerate(stream_comparison_values, 1):
-            if mean is not None:
-                if previous_stream_mean is None or abs(mean - previous_stream_mean) > 0.000001:
-                    stream_rank = index
-                    previous_stream_mean = mean
-            stream_rows.append([
-                group_key[0], group_key[1], assessed_count, not_assessed_count,
-                "%.2f%%" % mean if mean is not None else "—",
-                stream_rank if mean is not None else "—"
-            ])
-        pdf_table(
-            "Stream comparisons",
-            ["Class", "Stream", "Learners assessed", "Learners not assessed", "Mean %", "Rank"],
-            stream_rows, compact=True
-        )
-
         ranking_data = _msa_report_data(cur, sid, rows)
         ranking, common_subjects, grouped, summaries, students, subjects, selected = _msa_ranked_rows(
             rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
-        pdf_table("Class rankings", ["Rank", "Class", "Overall mean %", "Average grade points", "Students"], [
-            [x["rank"], x["class_name"], "%.2f%%" % x["mean"], "%.2f" % x["average_points"], x["students"]]
-            for x in ranking
-        ], compact=True)
+
+        # Use the established DaviSchool subject order for the detailed class
+        # and stream league tables. Subject means are calculated from each
+        # learner's aggregated percentage for that subject, so multi-exam
+        # selections do not count the same learner repeatedly.
+        ranking_subject_order = [
+            "English", "Kiswahili", "Mathematics", "Integrated Science",
+            "Agriculture", "Creative Arts and Sports", "Social Studies",
+            "Christian Religious Education", "Pre-technical Studies",
+        ]
+        def _msa_rank_subject_key(subject_id):
+            subject_name = str(ranking_data["subjects"].get(subject_id, ""))
+            normalized = re.sub(r"[^a-z0-9]+", " ", subject_name.casefold()).strip()
+            for index, expected_name in enumerate(ranking_subject_order):
+                expected = re.sub(r"[^a-z0-9]+", " ", expected_name.casefold()).strip()
+                if normalized == expected:
+                    return (0, index, normalized)
+            return (1, len(ranking_subject_order), normalized)
+        ranking_subject_ids = sorted(ranking_data["subjects"], key=_msa_rank_subject_key)
+        ranking_subject_names = [str(ranking_data["subjects"][subject_id]) for subject_id in ranking_subject_ids]
+
+        group_subject_values = {}
+        class_subject_values = {}
+        for (student_id, subject_id), mark_item in ranking_data["aggregated"].items():
+            student_info = ranking_data["students"].get(student_id) or ranking_data["students"].get(str(student_id))
+            if not student_info:
+                continue
+            class_label = str(student_info.get("class_name") or "Unassigned")
+            stream_label = str(student_info.get("stream") or "No stream")
+            percentage = float(mark_item.get("percentage") or 0)
+            group_subject_values.setdefault((class_label, stream_label, int(subject_id)), []).append(percentage)
+            class_subject_values.setdefault((class_label, int(subject_id)), []).append(percentage)
+
+        def _msa_subject_group_mean(values, group_key, subject_id):
+            entries = values.get(group_key + (int(subject_id),), [])
+            return ("%.2f%%" % (sum(entries) / len(entries))) if entries else "—"
+
+        def _msa_ranking_table(title, headers, values, ranks, subject_start):
+            # Premium green header, restrained row striping, and subtle top-three
+            # podium highlights; repeated header rows remain visible after breaks.
+            cell_style = ParagraphStyle(
+                "MSARankingCell", parent=styles["MSACell"], fontSize=5.4, leading=6.2
+            )
+            header_style = ParagraphStyle(
+                "MSARankingHeader", parent=cell_style, fontName="Helvetica-Bold",
+                textColor=colors.white, alignment=1
+            )
+            table_data = [[Paragraph(escape(str(value)), header_style) for value in headers]]
+            for row in values:
+                table_data.append([Paragraph(escape(str(value)), cell_style) for value in row])
+            if not values:
+                table_data.append([Paragraph("No eligible classes or streams have recorded exam entries.", cell_style)] +
+                                  [Paragraph("", cell_style) for _ in headers[1:]])
+            base_width = doc.width / max(1, len(headers))
+            if subject_start == 4:
+                # Class table: Rank, Class, Overall mean, Assessed, then subjects.
+                widths = [8*mm, 25*mm, 17*mm, 13*mm] + [max(15*mm, (doc.width - 63*mm) / max(1, len(headers)-4))] * (len(headers)-4)
+            else:
+                # Stream table: Class, Stream, Assessed, Not assessed, Mean, Rank, then subjects.
+                widths = [22*mm, 18*mm, 12*mm, 12*mm, 15*mm, 8*mm] + [max(13*mm, (doc.width - 87*mm) / max(1, len(headers)-6))] * (len(headers)-6)
+            total_width = sum(widths)
+            if total_width > doc.width:
+                scale = doc.width / total_width
+                widths = [width * scale for width in widths]
+            table = Table(table_data, colWidths=widths, repeatRows=1, hAlign="LEFT")
+            commands = [
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#c5d8cb")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("ALIGN", (0,0), (0,-1), "CENTER"),
+                ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 3),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+            ]
+            podium = [
+                colors.HexColor("#fff1c2"),
+                colors.HexColor("#edf0f2"),
+                colors.HexColor("#f8e4d7"),
+            ]
+            for row_index, rank_value in enumerate(ranks, 1):
+                try:
+                    rank_number = int(rank_value)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= rank_number <= 3:
+                    commands.append(("BACKGROUND", (0,row_index), (-1,row_index), podium[rank_number-1]))
+                    commands.append(("FONTNAME", (0,row_index), (-1,row_index), "Helvetica-Bold"))
+            table.setStyle(TableStyle(commands))
+            story.append(Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]))
+            story.append(table)
+            story.append(Spacer(1, 2*mm))
+
+        # Stream rankings retain the existing mean/tie calculation, but omit
+        # groups with no actual results and add each subject's assessed mean.
+        ranked_stream_groups = [item for item in stream_comparison_values if item[3] is not None]
+        stream_rows = []
+        stream_ranks = []
+        previous_stream_mean = None
+        stream_rank = 0
+        for index, (group_key, assessed_count, not_assessed_count, mean) in enumerate(ranked_stream_groups, 1):
+            if previous_stream_mean is None or abs(mean - previous_stream_mean) > 0.000001:
+                stream_rank = index
+                previous_stream_mean = mean
+            stream_rows.append([
+                group_key[0], group_key[1], assessed_count, not_assessed_count,
+                "%.2f%%" % mean, stream_rank
+            ] + [
+                _msa_subject_group_mean(group_subject_values, group_key, subject_id)
+                for subject_id in ranking_subject_ids
+            ])
+            stream_ranks.append(stream_rank)
+        stream_headers = [
+            "Class", "Stream", "Learners assessed", "Learners not assessed", "Overall mean %", "Rank"
+        ] + ranking_subject_names
+        _msa_ranking_table("Stream rankings", stream_headers, stream_rows, stream_ranks, 6)
+
+        # Class ranking order and ties are supplied by _msa_ranked_rows. Its
+        # overall mean continues to use the common-subject fairness rule.
+        class_rows = []
+        class_ranks = []
+        for item in ranking:
+            class_label = str(item["class_name"])
+            class_subjects = [
+                _msa_subject_group_mean(class_subject_values, (class_label,), subject_id)
+                for subject_id in ranking_subject_ids
+            ]
+            class_rows.append([
+                item["rank"], class_label, "%.2f%%" % item["mean"], item["students"]
+            ] + class_subjects)
+            class_ranks.append(item["rank"])
+        class_headers = ["Rank", "Class", "Overall mean %", "Learners assessed"] + ranking_subject_names
+        _msa_ranking_table("Class rankings", class_headers, class_rows, class_ranks, 4)
 
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
         for student_id in enrolled_student_ids:
