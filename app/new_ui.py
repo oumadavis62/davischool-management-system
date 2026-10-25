@@ -1839,10 +1839,15 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         historical_allocations=tracker_cur.execute("""SELECT h.cycle_year,h.class_id,h.subject_id,h.teacher_id,
                             COALESCE(NULLIF(trim(h.teacher_name),''),'Unassigned teacher') AS teacher_name
                             FROM teacher_allocation_history h
-                            WHERE h.school_id=? AND h.cycle_year>=?
+                            WHERE h.school_id=?
                               AND h.reason='Cohort promoted to next class'
-                            ORDER BY h.class_id,h.cycle_year,h.subject_id,teacher_name""",(sid,exam_year)).fetchall()
-                        earliest_cycle_by_class={}
+                            ORDER BY h.class_id,h.cycle_year,h.subject_id,teacher_name""",(sid,)).fetchall()
+                        # Promotion cycle can be recorded in the year before or
+                        # after the exam's displayed year, depending on the school's
+                        # academic-year setup. Never discard a valid archived snapshot
+                        # just because its cycle_year is numerically less than exam_year.
+                        # Pick the archived snapshot closest to this exam year per class.
+                        closest_cycle_by_class={}
                         for allocation in historical_allocations:
                             if allocation["class_id"] is None or allocation["subject_id"] is None:
                                 continue
@@ -1850,8 +1855,10 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                             history_cycle=int(allocation["cycle_year"] or 0)
                             if participating_ids is not None and history_class_id not in participating_ids:
                                 continue
-                            earliest_cycle_by_class[history_class_id]=min(
-                                earliest_cycle_by_class.get(history_class_id,history_cycle),history_cycle)
+                            distance=abs(history_cycle-exam_year) if history_cycle else 10**9
+                            current=closest_cycle_by_class.get(history_class_id)
+                            if current is None or distance<current[0] or (distance==current[0] and history_cycle>current[1]):
+                                closest_cycle_by_class[history_class_id]=(distance,history_cycle)
                         historical_subjects_by_class={}
                         historical_teachers_by_class_subject={}
                         for allocation in historical_allocations:
@@ -1859,7 +1866,8 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                                 continue
                             history_class_id=int(allocation["class_id"])
                             history_cycle=int(allocation["cycle_year"] or 0)
-                            if history_class_id not in earliest_cycle_by_class or earliest_cycle_by_class[history_class_id]!=history_cycle:
+                            chosen=closest_cycle_by_class.get(history_class_id)
+                            if chosen is None or chosen[1]!=history_cycle:
                                 continue
                             key=(history_class_id,int(allocation["subject_id"]))
                             historical_subjects_by_class.setdefault(key[0],set()).add(key[1])
