@@ -13983,7 +13983,7 @@ def class_marksheet_analysis_pdf(
                 if classified:
                     chart_items.append((subject_name, stats["passed"] / classified * 100, classified))
             chart_items.sort(key=lambda item: (-item[1], item[0].casefold()))
-            chart_width = doc.width * 0.304
+            chart_width = doc.width * 0.3952
             chart_data = [[
                 Paragraph("<b>Subject</b>", styles["MSACell"]),
                 Paragraph("<b>Pass rate</b>", styles["MSACell"]),
@@ -14022,7 +14022,7 @@ def class_marksheet_analysis_pdf(
                 chart_data,
                 colWidths=[
                     doc.width * 0.24, doc.width * 0.08,
-                    doc.width * 0.3712, doc.width * 0.10,
+                    doc.width * 0.48256, doc.width * 0.10,
                 ],
                 repeatRows=1, hAlign="LEFT"
             )
