@@ -14057,6 +14057,8 @@ def class_marksheet_analysis_pdf(
             else:
                 story.append(left_stack)
             story.append(Spacer(1, 3*mm))
+        # Start the combined-class Top Students per Subject section on its own page.
+        story.append(PageBreak())
         combined_by_subject = {}
         for entry in data["top_combined"]:
             combined_by_subject.setdefault(entry[0], []).append(entry)
@@ -14136,6 +14138,8 @@ def class_marksheet_analysis_pdf(
             ]))
             story.append(paired_subjects)
         story.append(Spacer(1, 1.5 * mm))
+        # Start the stream-wise Top Students per Subject section on its own page.
+        story.append(PageBreak())
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
