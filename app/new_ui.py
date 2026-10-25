@@ -13485,11 +13485,6 @@ def class_marksheet_analysis_pdf(
                 f"{pass_pct:.1f}%" if pass_pct is not None else "—",
                 stats["failed"], f"{fail_pct:.1f}%" if fail_pct is not None else "—",
             ])
-        pdf_table(
-            "Subject Pass/Fail Analysis",
-            ["Subject", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)"],
-            subject_pass_fail_rows, compact=True
-        )
         # Pass/fail categories follow the configured CBC grades: E/M are passes,
         # A/B are fails. X and ungraded marks are excluded from the percentages.
 
@@ -13737,7 +13732,6 @@ def class_marksheet_analysis_pdf(
         ] + [label for subject in ranking_subject_names for label in (subject, "GRD")] + [
             "Overall mean %", "Overall grade"
         ]
-        _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
 
         # Class ranking order and ties are supplied by _msa_ranked_rows. Its
         # overall mean continues to use the common-subject fairness rule.
@@ -13765,7 +13759,6 @@ def class_marksheet_analysis_pdf(
         class_headers = ["Rank", "Class", "Learners assessed", "Learners not assessed"] + [
             label for subject in ranking_subject_names for label in (subject, "GRD")
         ] + ["Overall mean %", "Overall grade"]
-        _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
 
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
         for student_id in enrolled_student_ids:
@@ -13867,10 +13860,18 @@ def class_marksheet_analysis_pdf(
                 + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
                    position if mean is not None else "—"]
             )
+        pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
         pdf_table(
             "Grade Distribution Analysis — Overall by Class and Stream",
             ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"],
             class_stream_overall_rows
+        )
+        _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
+        _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
+        pdf_table(
+            "Subject Pass/Fail Analysis",
+            ["Subject", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)"],
+            subject_pass_fail_rows, compact=True
         )
         per_subject_distribution_rows = []
         for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: (msa_subject_positions.get(int(item[0]), 10**9), str(item[1]).casefold())):
