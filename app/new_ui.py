@@ -12304,7 +12304,7 @@ def class_marksheet_analysis(
             ) for key, label in [
                 ("summary", "Summary"), ("subjects", "Subject Analysis"), ("students", "Student Analysis"),
                 ("streams", "Stream Comparison"), ("rankings", "School-wide Rankings"),
-                ("trends", "Examination Trends"), ("grades", "Grade Distributions"),
+                ("insights", "Performance Insights"), ("grades", "Grade Distributions"),
                 ("top", "Top Students"),
             ]
         )
@@ -12370,42 +12370,47 @@ def class_marksheet_analysis(
                 "%.2f%%" % (sum(averages) / len(averages) if averages else 0),
                 "%.2f%%" % (max(averages) if averages else 0),
             ])
-        trend_rows = []
-        for exam_id in selected_exam_ids:
-            exam_entry = next((e for e in filtered_exams if int(e["id"]) == exam_id), None)
-            exam_marks = [r["percentage"] for r in view_rows if r["exam_id"] == exam_id]
-            trend_rows.append([
-                (str(exam_entry["name"]) + " " + str(exam_entry["year"])) if exam_entry else str(exam_id),
-                len({r["student_id"] for r in view_rows if r["exam_id"] == exam_id}),
-                "%.2f%%" % (sum(exam_marks) / len(exam_marks) if exam_marks else 0),
-                "%.2f%%" % (max(exam_marks) if exam_marks else 0),
-                "%.2f%%" % (min(exam_marks) if exam_marks else 0),
-            ])
-        exam_subject_trend_rows = []
-        exam_grade_trend_rows = []
-        for exam_id in selected_exam_ids:
-            exam_entry = next((e for e in filtered_exams if int(e["id"]) == exam_id), None)
-            exam_label = (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")) if exam_entry else str(exam_id)
-            per_subject = {}
-            per_subject_grades = {}
-            for trend_mark in view_rows:
-                if trend_mark["exam_id"] != exam_id:
-                    continue
-                per_subject.setdefault(trend_mark["subject_id"], []).append(trend_mark["percentage"])
-                grade, _, _ = _subject_grade_details(
-                    cur, sid, trend_mark["subject_id"], trend_mark["percentage"], view_data["grading_rules"], 100
-                )
-                grade_key = (trend_mark["subject_id"], str(grade or "—"))
-                per_subject_grades[grade_key] = per_subject_grades.get(grade_key, 0) + 1
-            for subject_id, vals in per_subject.items():
-                exam_subject_trend_rows.append([
-                    exam_label, subjects.get(subject_id, str(subject_id)), len(vals),
-                    "%.2f%%" % (sum(vals) / len(vals) if vals else 0)
-                ])
-            for (subject_id, grade), count in per_subject_grades.items():
-                exam_grade_trend_rows.append([
-                    exam_label, subjects.get(subject_id, str(subject_id)), grade, count
-                ])
+        # Actionable subject insights replace the old examination-trends view.
+        # Only subjects with recorded results contribute to subject means.
+        insight_items = []
+        for item in subject_rows:
+            try:
+                mean_value = float(str(item[2]).replace("%", "").strip())
+                sat_count = int(item[1] or 0)
+            except (TypeError, ValueError, IndexError):
+                continue
+            if sat_count:
+                insight_items.append({"name": str(item[0]), "sat": sat_count, "mean": mean_value,
+                                      "highest": str(item[3]), "lowest": str(item[4])})
+        insight_best = sorted(insight_items, key=lambda item: (-item["mean"], item["name"].casefold()))[:3]
+        insight_priority = sorted(insight_items, key=lambda item: (item["mean"], item["name"].casefold()))[:3]
+        insight_best_html = "".join(
+            "<div class='msa-insight-row'><span class='msa-insight-rank'>%d</span><div class='msa-insight-copy'><strong>%s</strong><small>%d learners assessed</small></div><strong class='msa-insight-value'>%.2f%%</strong></div>" % (
+                index, escape(item["name"]), item["sat"], item["mean"])
+            for index, item in enumerate(insight_best, 1)
+        ) or "<p>No subject results are available for this selection.</p>"
+        insight_priority_html = "".join(
+            "<div class='msa-insight-row'><span class='msa-insight-rank'>%d</span><div class='msa-insight-copy'><strong>%s</strong><small>%d learners assessed · highest %s · lowest %s</small></div><strong class='msa-insight-value'>%.2f%%</strong></div>" % (
+                index, escape(item["name"]), item["sat"], escape(item["highest"]), escape(item["lowest"]), item["mean"])
+            for index, item in enumerate(insight_priority, 1)
+        ) or "<p>No subject results are available for this selection.</p>"
+        insight_subject_count = len(insight_items)
+        insight_mean = sum(item["mean"] for item in insight_items) / insight_subject_count if insight_subject_count else 0.0
+        insights_html = (
+            "<h2>Performance Insights</h2>"
+            "<p class='msa-insight-intro'>A quick, practical view of subject strengths and where extra support may have the greatest impact. Based on the current examination and filters.</p>"
+            "<div class='msa-insight-summary'>"
+            "<div><small>Subjects with results</small><strong>%d</strong></div>"
+            "<div><small>Average subject mean</small><strong>%.2f%%</strong></div>"
+            "<div><small>Strongest subject</small><strong>%s</strong></div>"
+            "<div><small>Priority subject</small><strong>%s</strong></div></div>"
+            "<div class='msa-insight-grid'><section class='msa-insight-panel msa-insight-strong'><h3>Bright spots</h3><p>Subjects with the highest mean percentages.</p>%s</section>"
+            "<section class='msa-insight-panel msa-insight-focus'><h3>Focus for improvement</h3><p>Subjects with the lowest mean percentages.</p>%s</section></div>"
+            "<p class='msa-insight-note'>Learners without a recorded mark are excluded from subject means and remain counted separately as not assessed.</p>"
+        ) % (insight_subject_count, insight_mean,
+             escape(insight_best[0]["name"]) if insight_best else "—",
+             escape(insight_priority[0]["name"]) if insight_priority else "—",
+             insight_best_html, insight_priority_html)
         individual_rows = []
         individual_trend_rows = []
         selected_student = int(student_id) if str(student_id).isdigit() else 0
@@ -12459,6 +12464,28 @@ def class_marksheet_analysis(
             )
         else:
             individual_head = "<p>Select a learner with recorded marks to see subject strengths and weaknesses.</p>"
+        insights_css = """<style>
+        .msa-insight-intro{color:#536274;max-width:850px;line-height:1.6;margin:0 0 18px}
+        .msa-insight-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin:18px 0 22px}
+        .msa-insight-summary>div{background:linear-gradient(145deg,#f0fdf4,#fff);border:1px solid #d1fae5;border-radius:14px;padding:15px;min-width:0}
+        .msa-insight-summary small{display:block;color:#526579;font-size:12px;margin-bottom:8px}
+        .msa-insight-summary strong{display:block;color:#14532d;font-size:19px;overflow-wrap:anywhere}
+        .msa-insight-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:16px 0}
+        .msa-insight-panel{border:1px solid #e2e8f0;border-radius:16px;padding:18px;background:#fff;box-shadow:0 5px 18px rgba(15,23,42,.05);min-width:0}
+        .msa-insight-panel h3{margin:0 0 5px;font-size:18px;color:#173b2b}
+        .msa-insight-panel>p{margin:0 0 14px;color:#64748b;font-size:13px}
+        .msa-insight-strong{border-top:4px solid #16a34a}.msa-insight-focus{border-top:4px solid #f59e0b}
+        .msa-insight-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #edf2f7}
+        .msa-insight-row:last-child{border-bottom:0}
+        .msa-insight-rank{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#ecfdf5;color:#166534;font-weight:800;flex:none}
+        .msa-insight-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+        .msa-insight-copy strong{font-size:14px;color:#1e293b;overflow-wrap:anywhere}
+        .msa-insight-copy small{font-size:11px;color:#64748b}
+        .msa-insight-value{color:#166534;white-space:nowrap}
+        .msa-insight-focus .msa-insight-rank{background:#fffbeb;color:#92400e}
+        .msa-insight-focus .msa-insight-value{color:#b45309}
+        .msa-insight-note{font-size:12px;color:#64748b;background:#f8fafc;border-radius:10px;padding:12px}
+        </style>"""
         content_by_view = {
             "summary": "" if embedded_in_academic_analysis else summary_cards,
             "subjects": "<h2>Subject Performance Analysis</h2>" + subject_table,
@@ -12473,12 +12500,9 @@ def class_marksheet_analysis(
                         _msa_html_table(["Examination", "Subjects sat", "Average percentage"], individual_trend_rows),
             "streams": "<h2>Stream Comparison</h2>" + _msa_html_table(["Class", "Stream", "Students assessed", "Mean", "Highest learner mean"], stream_rows),
             "rankings": "<h2>School-wide Class Rankings</h2><p>Classes use the subjects common to the compared classes; partial attempts use only recorded subjects. Equal means share rank.</p>" + ranking_table,
-            "trends": "<h2>Examination Trends</h2>" +
-                      _msa_html_table(["Examination", "Learners with marks", "Mean recorded mark %", "Highest mark %", "Lowest mark %"], trend_rows) +
-                      "<h3>Subject averages by examination</h3>" +
-                      _msa_html_table(["Examination", "Subject", "Entries", "Mean percentage"], exam_subject_trend_rows) +
-                      "<h3>Grade distributions by examination</h3>" +
-                      _msa_html_table(["Examination", "Subject", "Grade", "Students"], exam_grade_trend_rows),
+            "insights": insights_css + insights_html,
+            # Keep previously bookmarked trend URLs working with the replacement view.
+            "trends": insights_css + insights_html,
             "grades": "<h2>Grade Distributions</h2>" + grade_table,
             "top": "<h2>Top Five Students per Subject</h2><p>Percentages are ranked highest first. Tied percentages share rank and the next rank is skipped.</p>" + top_table,
         }
