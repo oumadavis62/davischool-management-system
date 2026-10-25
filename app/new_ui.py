@@ -13538,8 +13538,8 @@ def class_marksheet_analysis_pdf(
                                   [Paragraph("", cell_style) for _ in headers[1:]])
             base_width = doc.width / max(1, len(headers))
             if subject_start == 4:
-                # Class table: Rank, Class, Assessed, subject/grade pairs, overall mean, overall grade.
-                fixed_widths = [8*mm, 25*mm, 13*mm]
+                # Class table: Rank, Class, assessed, not assessed, subject/grade pairs, overall mean, overall grade.
+                fixed_widths = [8*mm, 22*mm, 12*mm, 12*mm]
                 tail_widths = [15*mm, 10*mm]
             else:
                 # Stream table: Rank, Class, Stream, assessed, not assessed, subject/grade pairs, overall mean, overall grade.
@@ -13610,15 +13610,24 @@ def class_marksheet_analysis_pdf(
         class_ranks = []
         for item in ranking:
             class_label = str(item["class_name"])
+            class_roster_ids = set()
+            class_assessed_ids = set()
+            for group_key, learner_ids in enrolled_by_class_stream.items():
+                if group_key[0] == class_label:
+                    class_roster_ids.update(learner_ids)
+                    class_assessed_ids.update(stream_learner_values.get(group_key, {}).keys())
+            class_assessed_ids.intersection_update(class_roster_ids)
+            learners_assessed = len(class_assessed_ids)
+            learners_not_assessed = max(0, len(class_roster_ids) - learners_assessed)
             class_subjects = []
             for subject_id in ranking_subject_ids:
                 class_subjects.extend(_msa_subject_group_result(class_subject_values, (class_label,), subject_id))
             class_rows.append([
-                item["rank"], class_label, item["students"], *class_subjects,
+                item["rank"], class_label, learners_assessed, learners_not_assessed, *class_subjects,
                 "%.2f%%" % item["mean"], _msa_overall_grade(item["mean"])
             ])
             class_ranks.append(item["rank"])
-        class_headers = ["Rank", "Class", "Learners assessed"] + [
+        class_headers = ["Rank", "Class", "Learners assessed", "Learners not assessed"] + [
             label for subject in ranking_subject_names for label in (subject, "GRD")
         ] + ["Overall mean %", "Overall grade"]
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
