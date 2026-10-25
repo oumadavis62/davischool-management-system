@@ -14398,7 +14398,7 @@ def class_marksheet_analysis_pdf(
                 [[
                     class_rank_table,
                     Table(
-                        [[Paragraph("<u>Top 10 stream distribution</u>", styles["MSASection"])],
+                        [[Paragraph("<u>Stream Distribution</u>", styles["MSASection"])],
                          [class_dist_table]],
                         colWidths=[class_right_width], hAlign="LEFT"
                     )
@@ -14517,7 +14517,7 @@ def class_marksheet_analysis_pdf(
             ]))
 
             distribution_heading = Paragraph(
-                "<u>Top 10 stream distribution</u>", styles["MSASection"]
+                "<u>Stream Distribution</u>", styles["MSASection"]
             )
             paired_top_ten = Table(
                 [[rank_table, Table(
