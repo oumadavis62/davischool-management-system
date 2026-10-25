@@ -1800,19 +1800,21 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         tracker_tab=str(request.query_params.get("ds_tab") or "").strip()
         tracker_hidden=("<input type='hidden' name='ds_tab' value='%s'>" % escape(tracker_tab,quote=True)) if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tracker_tab) else ""
         tracker_options="".join("<option value='%s' %s>%s — %s %s</option>"%(e["id"],"selected" if int(e["id"])==tracker_exam_id else "",escape(str(e["name"] or "")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
-        # Build the class/stream filter from the selected exam's actual marks.
-        # Historical class IDs on marks remain authoritative after cohort promotion.
+        # Use the examination's saved participation scope when available, so
+        # participating classes remain selectable even before any marks are entered.
+        # For legacy exams without a saved scope, fall back to historical class IDs
+        # on saved marks; these IDs preserve the class that actually sat the exam.
         tracker_filter_participating_ids=set()
         if tracker_exam:
             filter_con=_db()
             try:
-                filter_rows=filter_con.execute("""SELECT DISTINCT class_id FROM marks
-                    WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
-                tracker_filter_participating_ids={int(row["class_id"]) for row in filter_rows}
-                if not tracker_filter_participating_ids:
-                    participation_ids=_exam_participating_class_ids(filter_con.cursor(),sid,tracker_exam_id)
-                    if participation_ids:
-                        tracker_filter_participating_ids={int(x) for x in participation_ids}
+                participation_ids=_exam_participating_class_ids(filter_con.cursor(),sid,tracker_exam_id)
+                if participation_ids is not None:
+                    tracker_filter_participating_ids={int(x) for x in participation_ids}
+                else:
+                    filter_rows=filter_con.execute("""SELECT DISTINCT class_id FROM marks
+                        WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
+                    tracker_filter_participating_ids={int(row["class_id"]) for row in filter_rows}
             finally:
                 filter_con.close()
         tracker_filter_classes=[c for c in classes if not tracker_exam or int(c["id"]) in tracker_filter_participating_ids]
@@ -1829,20 +1831,17 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                 participating_ids=_exam_participating_class_ids(tracker_cur,sid,tracker_exam_id)
                 exam_year_raw=str(tracker_exam["year"] or "").strip()
                 exam_year=int(exam_year_raw) if exam_year_raw.isdigit() else 0
-                # Older exams may predate saved class participation. In that case,
-                # use the class IDs recorded on the exam's marks instead of showing
-                # every class currently in the school under a historical exam.
+                # For exams with an explicit saved participation scope, that scope
+                # identifies every class that took part, including classes still
+                # pending their first submission. For legacy exams without a scope,
+                # derive participation from the historical class IDs on saved marks.
                 marked_class_rows=tracker_cur.execute("""SELECT DISTINCT class_id FROM marks
                     WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
                 marked_class_ids={int(row["class_id"]) for row in marked_class_rows}
-                # The class IDs on saved marks are the authoritative record of
-                # which cohort/class actually sat this examination. The participation
-                # selector can become stale when a class cohort is promoted, so never
-                # let it replace the historical class IDs recorded with marks.
-                if marked_class_ids:
+                if participating_ids is None:
                     participating_ids=marked_class_ids
                 tracker_con.commit()
-                participating_classes=[c for c in classes if participating_ids is None or int(c["id"]) in participating_ids]
+                participating_classes=[c for c in classes if participating_ids is not None and int(c["id"]) in participating_ids]
                 assignment_rows=tracker_cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,a.teacher_id,
                     COALESCE(NULLIF(trim(t.name),''),'Unassigned teacher') AS teacher_name
                     FROM teacher_allocations a
