@@ -13513,6 +13513,15 @@ def class_marksheet_analysis_pdf(
                 grade, _, _ = _subject_grade_details(
                     cur, sid, int(subject_id), mean_percentage, None, 100
                 )
+            # A stream can have assessed marks while its mean falls into a gap
+            # between custom grade bands. Never show a dash for an assessed
+            # subject mean: use the standard percentage grade as the final
+            # display fallback only when configured/database rules did not match.
+            if not grade or str(grade).strip() in ("—", "-"):
+                try:
+                    grade, _ = _default_grade_points(mean_percentage)
+                except Exception:
+                    grade = ""
             return "%.2f%%" % mean_percentage, str(grade or "—")
 
         def _msa_overall_grade(mean_percentage):
