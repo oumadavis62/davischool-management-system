@@ -13983,7 +13983,8 @@ def class_marksheet_analysis_pdf(
                 if classified:
                     chart_items.append((subject_name, stats["passed"] / classified * 100, classified))
             chart_items.sort(key=lambda item: (-item[1], item[0].casefold()))
-            chart_width = doc.width * 0.3952
+            # Match the horizontal bar exactly to the Comparison column's inner width.
+            chart_width = doc.width * 0.48256
             chart_data = [[
                 Paragraph("<b>Subject</b>", styles["MSACell"]),
                 Paragraph("<b>Pass rate</b>", styles["MSACell"]),
@@ -14034,6 +14035,10 @@ def class_marksheet_analysis_pdf(
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 ("LEFTPADDING", (0,0), (-1,-1), 3),
                 ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                # Remove horizontal padding around the Comparison cell so the
+                # bar's border reaches the divider before the Classified column.
+                ("LEFTPADDING", (2,0), (2,-1), 0),
+                ("RIGHTPADDING", (2,0), (2,-1), 0),
                 ("TOPPADDING", (0,0), (-1,-1), 2),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 2),
             ]))
