@@ -13309,12 +13309,12 @@ def class_marksheet_analysis_pdf(
             # width 40% smaller than the available page width and controlled
             # column proportions so long headers wrap instead of expanding it.
             compact_profiles = {
-                "Summary": [0.50, 0.25, 0.25],
+                "Summary": [0.30, 0.18, 0.14, 0.22, 0.16],
                 "Stream comparisons": [0.20, 0.16, 0.18, 0.20, 0.13, 0.13],
                 "Class rankings": [0.10, 0.25, 0.22, 0.25, 0.18],
             }
             profile = compact_profiles.get(title)
-            target_width = doc.width * 0.60 if profile else doc.width
+            target_width = doc.width * (0.78 if title == "Summary" else 0.60) if profile else doc.width
             if title.startswith("Best 10 students") and len(headers) == 7:
                 # Shrink Rank by 70%, preserve Student at a normal base width,
                 # and keep Class, Stream, Mean, Total and Grade compact.
@@ -13403,10 +13403,19 @@ def class_marksheet_analysis_pdf(
             roster_ids = set(exam_roster_data["student_ids"])
             total_learners = len(roster_ids)
             learners_not_assessed = max(0, total_learners - learners_assessed)
-            summary_rows.append([exam_label, learners_assessed, learners_not_assessed])
+            assessed_pct = (learners_assessed / total_learners * 100) if total_learners else None
+            not_assessed_pct = (learners_not_assessed / total_learners * 100) if total_learners else None
+            summary_rows.append([
+                exam_label,
+                learners_assessed,
+                f"{assessed_pct:.1f}%" if assessed_pct is not None else "—",
+                learners_not_assessed,
+                f"{not_assessed_pct:.1f}%" if not_assessed_pct is not None else "—",
+            ])
         pdf_table(
             "Summary",
-            ["Examination", "Learners assessed", "Learners not assessed"],
+            ["Examination", "Learners assessed", "Assessed (%)",
+             "Learners not assessed", "Not assessed (%)"],
             summary_rows, compact=True
         )
         # Duplicate the MarkSheet Grade Distribution Analysis near the start of
