@@ -1791,7 +1791,25 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         tracker_tab=str(request.query_params.get("ds_tab") or "").strip()
         tracker_hidden=("<input type='hidden' name='ds_tab' value='%s'>" % escape(tracker_tab,quote=True)) if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tracker_tab) else ""
         tracker_options="".join("<option value='%s' %s>%s — %s %s</option>"%(e["id"],"selected" if int(e["id"])==tracker_exam_id else "",escape(str(e["name"] or "")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
-        tracker_class_options="<option value=''>All participating classes / streams</option>"+"".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==tracker_class_id_filter else "",escape(str(c["name"] or "Class")),escape(str(c["stream"] or ""))) for c in classes)
+        # Build the class/stream filter from the selected exam's actual marks.
+        # Historical class IDs on marks remain authoritative after cohort promotion.
+        tracker_filter_participating_ids=set()
+        if tracker_exam:
+            filter_con=_db()
+            try:
+                filter_rows=filter_con.execute("""SELECT DISTINCT class_id FROM marks
+                    WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
+                tracker_filter_participating_ids={int(row["class_id"]) for row in filter_rows}
+                if not tracker_filter_participating_ids:
+                    participation_ids=_exam_participating_class_ids(filter_con.cursor(),sid,tracker_exam_id)
+                    if participation_ids:
+                        tracker_filter_participating_ids={int(x) for x in participation_ids}
+            finally:
+                filter_con.close()
+        tracker_filter_classes=[c for c in classes if not tracker_exam or int(c["id"]) in tracker_filter_participating_ids]
+        if tracker_class_id_filter and tracker_class_id_filter not in tracker_filter_participating_ids:
+            tracker_class_id_filter=0
+        tracker_class_options="<option value=''>All participating classes / streams</option>"+"".join("<option value='%s' %s>%s %s</option>"%(c["id"],"selected" if int(c["id"])==tracker_class_id_filter else "",escape(str(c["name"] or "Class")),escape(str(c["stream"] or ""))) for c in tracker_filter_classes)
         tracker_status_options="".join("<option value='%s' %s>%s</option>"%(v,"selected" if tracker_status_filter==v else "",label) for v,label in (("","All statuses"),("pending","Pending"),("progress","In progress"),("complete","Completed")))
         tracker_rows=[]
         tracker_error=""
