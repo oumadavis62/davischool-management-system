@@ -13556,15 +13556,15 @@ def class_marksheet_analysis_pdf(
                 stream_rank = index
                 previous_stream_mean = mean
             stream_rows.append([
-                group_key[0], group_key[1], assessed_count, not_assessed_count,
-                "%.2f%%" % mean, stream_rank
+                stream_rank, group_key[0], group_key[1], assessed_count, not_assessed_count,
+                "%.2f%%" % mean
             ] + [
                 _msa_subject_group_mean(group_subject_values, group_key, subject_id)
                 for subject_id in ranking_subject_ids
             ])
             stream_ranks.append(stream_rank)
         stream_headers = [
-            "Class", "Stream", "Learners assessed", "Learners not assessed", "Overall mean %", "Rank"
+            "Rank", "Class", "Stream", "Learners assessed", "Learners not assessed", "Overall mean %"
         ] + ranking_subject_names
         _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
 
