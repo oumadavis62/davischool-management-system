@@ -13466,7 +13466,25 @@ def class_marksheet_analysis_pdf(
                     return (0, index, normalized)
             return (1, len(ranking_subject_order), normalized)
         ranking_subject_ids = sorted(ranking_data["subjects"], key=_msa_rank_subject_key)
-        ranking_subject_names = [str(ranking_data["subjects"][subject_id]) for subject_id in ranking_subject_ids]
+        # Use compact subject initials in the wide Class/Stream Analysis tables.
+        ranking_subject_initials = {
+            "english": "ENG",
+            "kiswahili": "KIS",
+            "mathematics": "MATH",
+            "integrated science": "IS",
+            "agriculture": "AGR",
+            "creative arts and sports": "CAS",
+            "social studies": "SS",
+            "christian religious education": "CRE",
+            "pre technical studies": "PTS",
+        }
+        ranking_subject_names = [
+            ranking_subject_initials.get(
+                re.sub(r"[^a-z0-9]+", " ", str(ranking_data["subjects"][subject_id]).casefold()).strip(),
+                str(ranking_data["subjects"][subject_id]).strip().upper()
+            )
+            for subject_id in ranking_subject_ids
+        ]
 
         group_subject_values = {}
         class_subject_values = {}
@@ -13492,7 +13510,7 @@ def class_marksheet_analysis_pdf(
             )
             header_style = ParagraphStyle(
                 "MSARankingHeader", parent=cell_style, fontName="Helvetica-Bold",
-                textColor=colors.white, alignment=1
+                textColor=colors.white, alignment=0
             )
             table_data = [[Paragraph(escape(str(value)), header_style) for value in headers]]
             for row in values:
