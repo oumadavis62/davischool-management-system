@@ -14311,12 +14311,122 @@ def class_marksheet_analysis_pdf(
         # contains only one class: it would repeat that class's Best 10 table.
         # Keep it for multi-class comparisons, including multi-exam selections.
         if len(class_names) > 1:
+            # Use exactly the learners shown in the combined Best 10 table for
+            # the accompanying stream distribution, so the counts always agree.
+            combined_top_ten = _msa_rank_students(ranked_learners)[:10]
             overall_top_ten = [
                 [rank, learner["name"], learner["class_name"],
                  learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in _msa_rank_students(ranked_learners)[:10]
+                for rank, learner in combined_top_ten
             ]
-            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
+
+            # Count each class/stream combination represented in the displayed
+            # Top 10. The percentage is its share of the displayed learners.
+            stream_counts = {}
+            for _rank, learner in combined_top_ten:
+                class_label = str(learner.get("class_name") or "Unassigned").strip()
+                stream_label = str(learner.get("stream") or "No stream").strip()
+                group_label = "%s — %s" % (class_label, stream_label)
+                stream_counts[group_label] = stream_counts.get(group_label, 0) + 1
+            distribution_rows = [
+                [group, count, "%.1f%%" % (100.0 * count / len(combined_top_ten))]
+                for group, count in sorted(
+                    stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
+                )
+            ] if combined_top_ten else [["No eligible learners", 0, "0.0%"]]
+
+            # Keep both analyses together on the same page. Split the available
+            # width between the detailed ranking and a compact stream summary.
+            ranking_cell_style = ParagraphStyle(
+                "MSACombinedTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
+            )
+            distribution_cell_style = ParagraphStyle(
+                "MSATopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
+            )
+            left_width = doc.width * 0.67
+            right_width = doc.width - left_width - 5 * mm
+            rank_data = [[
+                Paragraph("<b>%s</b>" % escape(str(header)), ranking_cell_style)
+                for header in ranking_headers
+            ]]
+            rank_data.extend([
+                [Paragraph(escape(str(value)), ranking_cell_style) for value in row]
+                for row in overall_top_ten
+            ])
+            rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
+            rank_widths = [left_width * weight / sum(rank_weights) for weight in rank_weights]
+            rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="LEFT")
+            rank_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+
+            distribution_data = [[
+                Paragraph("<b>Class / Stream</b>", distribution_cell_style),
+                Paragraph("<b>No.</b>", distribution_cell_style),
+                Paragraph("<b>Share</b>", distribution_cell_style),
+            ]]
+            distribution_data.extend([
+                [
+                    Paragraph(escape(str(group)), distribution_cell_style),
+                    Paragraph(str(count), distribution_cell_style),
+                    Paragraph(escape(str(share)), distribution_cell_style),
+                ]
+                for group, count, share in distribution_rows
+            ])
+            distribution_data.append([
+                Paragraph("<b>Total</b>", distribution_cell_style),
+                Paragraph("<b>%s</b>" % len(combined_top_ten), distribution_cell_style),
+                Paragraph("<b>100%%</b>" if combined_top_ten else "<b>0.0%%</b>", distribution_cell_style),
+            ])
+            distribution_table = Table(
+                distribution_data,
+                colWidths=[right_width * 0.58, right_width * 0.16, right_width * 0.26],
+                repeatRows=1, hAlign="LEFT"
+            )
+            distribution_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (1,1), (-1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+
+            distribution_heading = Paragraph(
+                "<u>Top 10 stream distribution</u>", styles["MSASection"]
+            )
+            paired_top_ten = Table(
+                [[rank_table, Table(
+                    [[distribution_heading], [distribution_table]],
+                    colWidths=[right_width], hAlign="LEFT"
+                )]],
+                colWidths=[left_width, right_width + 5 * mm],
+                hAlign="LEFT"
+            )
+            paired_top_ten.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 0),
+                ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                ("TOPPADDING", (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ]))
+            combined_heading = Paragraph(
+                "<u>Best 10 students — combined classes</u>", styles["MSASection"]
+            )
+            story.append(KeepTogether([combined_heading, paired_top_ten]))
+            story.append(Spacer(1, 1.5 * mm))
 
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
