@@ -12764,6 +12764,7 @@ def _msa_teacher_performance(cur, school_id, data, report_rows=None):
             continue
         candidate={"teacher_id":teacher_id,"teacher_name":str(a["teacher_name"] or "Unassigned"),
             "class_id":key[0],"class_name":str(a["class_name"] or "Archived class"),
+            "class_stream":str(a["class_stream"] or ""),
             "subject_id":key[1],"subject_name":str(a["subject_name"] or "Unknown subject"),
             "cycle_year":key[2],"historical":True,"reason":str(a["reason"] or "")}
         old=snapshots.get(key)
@@ -12798,18 +12799,20 @@ def _msa_teacher_performance(cur, school_id, data, report_rows=None):
         if selected is None:
             selected=next(({"teacher_id":int(a["teacher_id"]),
                 "teacher_name":str(a["teacher_name"] or "Unassigned"),"class_id":int(a["class_id"]),
-                "class_name":str(a["class_name"] or "Unassigned"),"subject_id":int(a["subject_id"]),
+                "class_name":str(a["class_name"] or "Unassigned"),"class_stream":str(a["class_stream"] or ""),
+                "subject_id":int(a["subject_id"]),
                 "subject_name":str(a["subject_name"] or "Unknown subject"),"historical":False}
                 for a in current_rows if int(a["class_id"])==class_id and int(a["subject_id"])==subject_id),None)
         if selected is None:
             continue
         teacher_id=int(selected["teacher_id"]); subject_name=str(selected["subject_name"] or row.get("subject_name") or "Unknown subject")
         class_name=str(selected["class_name"] or row.get("class_name") or "Unassigned")
+        stream_name=str(row.get("stream") or selected.get("class_stream") or "Unspecified")
         base={"teacher_id":teacher_id,"teacher":str(selected["teacher_name"] or "Unassigned"),
             "subject_id":subject_id,"subject":subject_name,"class_id":class_id,"class":class_name}
         score=float(row.get("percentage") or 0)
         combined.setdefault((teacher_id,subject_id),{**base,"class":"All classes","stream":"All streams","scores":[]})["scores"].append(score)
-        by_class.setdefault((teacher_id,subject_id,class_id),{**base,"stream":"All streams","scores":[]})["scores"].append(score)
+        by_class.setdefault((teacher_id,subject_id,class_id,stream_name),{**base,"stream":stream_name,"scores":[]})["scores"].append(score)
     def ranked(buckets,grouping):
         records=[]
         for source in buckets.values():
@@ -12832,7 +12835,7 @@ def _msa_teacher_performance(cur, school_id, data, report_rows=None):
     for position,item in enumerate(combined_winners,1): item["rank"]=position
     stream_winners=[{**item,"class":"All classes","stream":"All streams"} for item in combined_winners]
     return {"combined":combined_winners,
-        "class":[item for item in ranked(by_class,("subject","class")) if item["rank"]==1],
+        "class":[item for item in ranked(by_class,("subject","class","stream")) if item["rank"]==1],
         "stream":stream_winners}
 
 @router.get("/app/academics/marksheet-analysis/csv")
@@ -13948,6 +13951,7 @@ def class_marksheet_analysis_pdf(
             table_data = [[
                 Paragraph("<b>Class</b>", header_style),
                 Paragraph("<b>Best Teacher</b>", header_style),
+                Paragraph("<b>Stream</b>", header_style),
                 Paragraph("<b>Entries</b>", header_style),
                 Paragraph("<b>Mean %</b>", header_style),
             ]]
@@ -13956,6 +13960,7 @@ def class_marksheet_analysis_pdf(
                     table_data.append([
                         Paragraph(escape(str(item["class"])), cell_style),
                         Paragraph(escape(str(item["teacher"])), cell_style),
+                        Paragraph(escape(str(item.get("stream") or "Unspecified")), cell_style),
                         Paragraph(escape(str(item["entries"])), cell_style),
                         Paragraph("%.2f%%" % item["mean"], cell_style),
                     ])
@@ -13963,6 +13968,7 @@ def class_marksheet_analysis_pdf(
                 table_data.append([
                     Paragraph("No eligible class", cell_style),
                     Paragraph("No teacher performance data", cell_style),
+                    Paragraph("—", cell_style),
                     Paragraph("0", cell_style),
                     Paragraph("—", cell_style),
                 ])
@@ -13970,7 +13976,7 @@ def class_marksheet_analysis_pdf(
             # to sit beside another subject table on landscape A4.
             class_table = Table(
                 table_data,
-                colWidths=[doc.width * 0.11, doc.width * 0.12, doc.width * 0.065, doc.width * 0.085],
+                colWidths=[doc.width * 0.095, doc.width * 0.105, doc.width * 0.075, doc.width * 0.055, doc.width * 0.065],
                 repeatRows=1, hAlign="LEFT"
             )
             class_table.setStyle(TableStyle([
