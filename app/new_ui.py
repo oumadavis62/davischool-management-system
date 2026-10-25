@@ -13514,14 +13514,13 @@ def class_marksheet_analysis_pdf(
                 return "—"
 
         def _msa_ranking_table(title, headers, values, ranks, subject_start):
-            # Premium green header, restrained row striping, and subtle top-three
-            # podium highlights; repeated header rows remain visible after breaks.
+            # Plain white headers and unshaded cells, matching the other report tables.
             cell_style = ParagraphStyle(
                 "MSARankingCell", parent=styles["MSACell"], fontSize=5.4, leading=6.2
             )
             header_style = ParagraphStyle(
                 "MSARankingHeader", parent=cell_style, fontName="Helvetica-Bold",
-                textColor=colors.white, alignment=0
+                textColor=colors.black, alignment=0
             )
             table_data = [[Paragraph(escape(str(value)), header_style) for value in headers]]
             for row in values:
@@ -13546,8 +13545,8 @@ def class_marksheet_analysis_pdf(
                 widths = [width * scale for width in widths]
             table = Table(table_data, colWidths=widths, repeatRows=1, hAlign="LEFT")
             commands = [
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#176b3a")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#c5d8cb")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
                 # Center every cell, including text labels, across all ranking rows.
@@ -13557,18 +13556,12 @@ def class_marksheet_analysis_pdf(
                 ("TOPPADDING", (0,0), (-1,-1), 3),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ]
-            podium = [
-                colors.HexColor("#fff1c2"),
-                colors.HexColor("#edf0f2"),
-                colors.HexColor("#f8e4d7"),
-            ]
             for row_index, rank_value in enumerate(ranks, 1):
                 try:
                     rank_number = int(rank_value)
                 except (TypeError, ValueError):
                     continue
                 if 1 <= rank_number <= 3:
-                    commands.append(("BACKGROUND", (0,row_index), (-1,row_index), podium[rank_number-1]))
                     commands.append(("FONTNAME", (0,row_index), (-1,row_index), "Helvetica-Bold"))
             table.setStyle(TableStyle(commands))
             story.append(KeepTogether([
