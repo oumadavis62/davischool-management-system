@@ -13987,8 +13987,7 @@ def class_marksheet_analysis_pdf(
             chart_data = [[
                 Paragraph("<b>Subject</b>", styles["MSACell"]),
                 Paragraph("<b>Pass rate</b>", styles["MSACell"]),
-                Paragraph("<b>Comparison</b>", styles["MSACell"]),
-                Paragraph("<b>Classified</b>", styles["MSACell"]),
+                Paragraph("<b>Comparison (classified at end)</b>", styles["MSACell"]),
             ]]
             for subject_name, pass_rate, classified in chart_items:
                 bar_width = max(0, min(chart_width, chart_width * pass_rate / 100))
@@ -14003,24 +14002,37 @@ def class_marksheet_analysis_pdf(
                     ("TOPPADDING", (0,0), (-1,-1), 0),
                     ("BOTTOMPADDING", (0,0), (-1,-1), 0),
                 ]))
+                # Keep the classified count at the far right of the same
+                # comparison cell, immediately after the horizontal bar.
+                comparison_cell = Table(
+                    [[bar, Paragraph("<b>%s</b>" % classified, styles["MSACell"])]],
+                    colWidths=[chart_width * 0.82, chart_width * 0.18],
+                    hAlign="LEFT",
+                )
+                comparison_cell.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                    ("ALIGN", (1,0), (1,0), "RIGHT"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 1),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
                 chart_data.append([
                     Paragraph(escape(subject_name), styles["MSACell"]),
                     Paragraph("%.1f%%" % pass_rate, styles["MSACell"]),
-                    bar,
-                    Paragraph(str(classified), styles["MSACell"]),
+                    comparison_cell,
                 ])
             if not chart_items:
                 chart_data.append([
                     Paragraph("No classified results", styles["MSACell"]),
                     Paragraph("—", styles["MSACell"]),
-                    Paragraph("—", styles["MSACell"]),
-                    Paragraph("0", styles["MSACell"]),
+                    Paragraph("— (classified: 0)", styles["MSACell"]),
                 ])
             # Preserve the Subject column; shrink Pass rate, Comparison and
             # Classified columns by 70% relative to their previous widths.
             chart_table = Table(
                 chart_data,
-                colWidths=[doc.width * 0.24, doc.width * 0.036, chart_width * 0.30, doc.width * 0.036],
+                colWidths=[doc.width * 0.24, doc.width * 0.036, doc.width - (doc.width * 0.24) - (doc.width * 0.036)],
                 repeatRows=1, hAlign="LEFT"
             )
             chart_table.setStyle(TableStyle([
