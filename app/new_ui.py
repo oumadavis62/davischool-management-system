@@ -13253,19 +13253,24 @@ def class_marksheet_analysis_pdf(
             if "phone" in school.keys() and school["phone"]:
                 school_contacts.append(str(school["phone"]))
         logo_cell = ""
+        logo_right_cell = ""
         if school and school["logo_data"]:
             try:
                 import base64 as _msa_base64
                 logo = str(school["logo_data"])
-                if logo.startswith("data:") and "," in logo:
-                    raw_logo = _msa_base64.b64decode(logo.split(",", 1)[1])
-                    logo_cell = ReportImage(BytesIO(raw_logo), width=22*mm, height=18*mm, kind="proportional")
+                raw_logo = _msa_base64.b64decode(
+                    logo.split(",", 1)[1] if logo.startswith("data:") and "," in logo else logo
+                )
+                # Create separate image flowables so both corner logos render reliably.
+                logo_cell = ReportImage(BytesIO(raw_logo), width=22*mm, height=18*mm, kind="proportional")
+                logo_right_cell = ReportImage(BytesIO(raw_logo), width=22*mm, height=18*mm, kind="proportional")
             except Exception:
                 logo_cell = ""
+                logo_right_cell = ""
         school_block = [Paragraph(escape(school_name), styles["MSASchoolName"])]
         school_block.extend(Paragraph(escape(line), styles["MSASchoolContact"]) for line in school_contacts)
         header_table = Table(
-            [[logo_cell, school_block, ""]],
+            [[logo_cell, school_block, logo_right_cell]],
             colWidths=[25*mm, doc.width - 50*mm, 25*mm],
             hAlign="LEFT"
         )
@@ -14235,9 +14240,14 @@ def class_marksheet_analysis_pdf(
 
         def add_footer(canvas, document):
             canvas.saveState()
+            # Thin green border on all four sides of every PDF page.
+            page_width, page_height = landscape(A4)
+            canvas.setStrokeColor(colors.HexColor("#176b3a"))
+            canvas.setLineWidth(0.8)
+            canvas.rect(4*mm, 4*mm, page_width - 8*mm, page_height - 8*mm, stroke=1, fill=0)
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(colors.HexColor("#176b3a"))
-            canvas.drawCentredString(landscape(A4)[0]/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
+            canvas.drawCentredString(page_width/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
             canvas.restoreState()
         doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
         response = Response(content=buffer.getvalue(), media_type="application/pdf")
