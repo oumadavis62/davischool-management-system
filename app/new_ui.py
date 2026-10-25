@@ -13327,8 +13327,8 @@ def class_marksheet_analysis_pdf(
                 # to 60% of their former equal-width allocation.
                 base_width = doc.width / 4
                 col_widths = [
-                    base_width, base_width * 0.60, base_width * 0.80,
-                    base_width * 0.60, base_width * 0.60,
+                    base_width, base_width * 0.42, base_width * 0.56,
+                    base_width * 0.42, base_width * 0.60,
                 ]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Grade Distribution Analysis — Per Subject" and len(headers) > 1:
