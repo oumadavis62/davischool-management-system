@@ -14305,7 +14305,118 @@ def class_marksheet_analysis_pdf(
                  learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
                 for rank, learner in class_ranked[:10]
             ]
-            pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
+            # Add a matching class/stream distribution beside every class-level
+            # Top 10 table, using only the learners shown in that table.
+            class_top_ranked = class_ranked[:10]
+            class_stream_counts = {}
+            for _rank, learner in class_top_ranked:
+                stream_label = str(learner.get("stream") or "No stream").strip()
+                class_stream_counts[stream_label] = class_stream_counts.get(stream_label, 0) + 1
+            class_distribution_rows = [
+                [stream_label, count, "%.1f%%" % (100.0 * count / len(class_top_ranked))]
+                for stream_label, count in sorted(
+                    class_stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
+                )
+            ] if class_top_ranked else [["No eligible learners", 0, "0.0%"]]
+
+            class_rank_style = ParagraphStyle(
+                "MSAClassTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
+            )
+            class_dist_style = ParagraphStyle(
+                "MSAClassTopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
+            )
+            class_left_width = doc.width * 0.67
+            class_right_width = doc.width - class_left_width - 5 * mm
+            class_rank_data = [[
+                Paragraph("<b>%s</b>" % escape(str(header)), class_rank_style)
+                for header in ranking_headers
+            ]]
+            class_rank_data.extend([
+                [Paragraph(escape(str(value)), class_rank_style) for value in row]
+                for row in class_top_ten
+            ])
+            class_rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
+            class_rank_widths = [
+                class_left_width * weight / sum(class_rank_weights)
+                for weight in class_rank_weights
+            ]
+            class_rank_table = Table(
+                class_rank_data, colWidths=class_rank_widths, repeatRows=1, hAlign="LEFT"
+            )
+            class_rank_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            class_dist_data = [[
+                Paragraph("<b>Stream</b>", class_dist_style),
+                Paragraph("<b>No.</b>", class_dist_style),
+                Paragraph("<b>Share</b>", class_dist_style),
+            ]]
+            class_dist_data.extend([
+                [
+                    Paragraph(escape(str(stream_label)), class_dist_style),
+                    Paragraph(str(count), class_dist_style),
+                    Paragraph(escape(str(share)), class_dist_style),
+                ]
+                for stream_label, count, share in class_distribution_rows
+            ])
+            class_dist_data.append([
+                Paragraph("<b>Total</b>", class_dist_style),
+                Paragraph("<b>%s</b>" % len(class_top_ranked), class_dist_style),
+                Paragraph("<b>100%</b>" if class_top_ranked else "<b>0.0%</b>", class_dist_style),
+            ])
+            class_dist_table = Table(
+                class_dist_data,
+                colWidths=[
+                    class_right_width * 0.58,
+                    class_right_width * 0.16,
+                    class_right_width * 0.26,
+                ],
+                repeatRows=1, hAlign="LEFT"
+            )
+            class_dist_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (1,1), (-1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            class_pair = Table(
+                [[
+                    class_rank_table,
+                    Table(
+                        [[Paragraph("<u>Top 10 stream distribution</u>", styles["MSASection"])],
+                         [class_dist_table]],
+                        colWidths=[class_right_width], hAlign="LEFT"
+                    )
+                ]],
+                colWidths=[class_left_width, class_right_width + 5 * mm],
+                hAlign="LEFT"
+            )
+            class_pair.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 0),
+                ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                ("TOPPADDING", (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ]))
+            story.append(KeepTogether([
+                Paragraph("<u>Best 10 students — " + escape(ranked_class) + "</u>", styles["MSASection"]),
+                class_pair,
+            ]))
+            story.append(Spacer(1, 1.5 * mm))
 
         # A combined ranking adds no information when the selected exam data
         # contains only one class: it would repeat that class's Best 10 table.
