@@ -13852,6 +13852,8 @@ def class_marksheet_analysis_pdf(
         ]
         subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
         if subject_insights:
+            # Give Performance Insights and its subject-strengths table a dedicated page.
+            story.append(PageBreak())
             story.append(Paragraph("<u>Performance Insights</u>", styles["MSASection"]))
             insight_summary = [[
                 Paragraph("<b>Subjects with results</b>", styles["MSACell"]),
