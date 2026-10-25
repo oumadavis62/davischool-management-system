@@ -13199,7 +13199,7 @@ def class_marksheet_analysis_pdf(
     con = _db()
     try:
         cur = con.cursor()
-        all_exams = cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        all_exams = cur.execute("SELECT id,name,exam_type,year,term FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
         allowed = [
             int(e["id"]) for e in all_exams
             if (not year or str(e["year"] or "") == year) and (not term or str(e["term"] or "") == term)
@@ -13383,90 +13383,77 @@ def class_marksheet_analysis_pdf(
                 return "fail"
             return None
 
-        # Show one summary row per selected examination so assessment counts
-        # and Grade X counts are specific to that exam, not blended together.
-        summary_rows = []
+        # Consolidate assessment participation and overall pass/fail outcomes into
+        # one table. Keep examination metadata in a compact heading table above it.
+        exam_details_rows = []
+        overall_summary_rows = []
         exam_lookup = {int(e["id"]): e for e in all_exams}
         for exam_id in ids:
             exam_entry = exam_lookup.get(int(exam_id))
-            exam_label = (
-                (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")).strip()
-                if exam_entry else str(exam_id)
-            )
             exam_rows = [row for row in rows if int(row["exam_id"]) == int(exam_id)]
+            if not exam_rows:
+                continue
             exam_group_keys = {
                 (str(row.get("class_name") or "Unassigned"), str(row.get("stream") or "No stream"))
                 for row in exam_rows
             }
-            # Skip an exam with no participating class/stream in the current scope.
             if not exam_group_keys:
                 continue
+
+            exam_name = str(exam_entry["name"] or "").strip() if exam_entry else str(exam_id)
+            exam_details_rows.append([
+                exam_name or str(exam_id),
+                str(exam_entry["exam_type"] or "—") if exam_entry else "—",
+                str(exam_entry["term"] or "—") if exam_entry else "—",
+                str(exam_entry["year"] or "—") if exam_entry else "—",
+            ])
+
             exam_data = _msa_report_data(cur, sid, exam_rows)
-            exam_summaries = list(exam_data["summaries"].values())
-            learners_assessed = sum(
-                1 for item in exam_summaries if int(item.get("subject_count") or 0) > 0
+            assessed = sum(
+                1 for learner_summary in exam_data["summaries"].values()
+                if int(learner_summary.get("subject_count") or 0) > 0
             )
             exam_roster_data = _msa_historical_roster(cur, sid, exam_rows)
-            # Count the roster belonging to this exam year, not today's incoming
-            # cohort now occupying a class after promotion.
-            roster_ids = set(exam_roster_data["student_ids"])
-            total_learners = len(roster_ids)
-            learners_not_assessed = max(0, total_learners - learners_assessed)
-            assessed_pct = (learners_assessed / total_learners * 100) if total_learners else None
-            not_assessed_pct = (learners_not_assessed / total_learners * 100) if total_learners else None
-            summary_rows.append([
-                exam_label,
-                learners_assessed,
-                f"{assessed_pct:.1f}%" if assessed_pct is not None else "—",
-                learners_not_assessed,
-                f"{not_assessed_pct:.1f}%" if not_assessed_pct is not None else "—",
-            ])
-        pdf_table(
-            "Summary",
-            ["Examination", "Learners assessed", "Assessed (%)",
-             "Learners not assessed", "Not assessed (%)"],
-            summary_rows, compact=True
-        )
+            total_learners = len(set(exam_roster_data.get("student_ids", set())))
+            not_assessed = max(0, total_learners - assessed)
+            assessed_pct = assessed / total_learners * 100 if total_learners else None
+            not_assessed_pct = not_assessed / total_learners * 100 if total_learners else None
 
-        # Overall examination outcomes are calculated separately for each exam.
-        overall_pass_fail_rows = []
-        for exam_id in ids:
-            exam_entry = exam_lookup.get(int(exam_id))
-            exam_label = (
-                (str(exam_entry["name"] or "") + " " + str(exam_entry["year"] or "")).strip()
-                if exam_entry else str(exam_id)
-            )
-            exam_rows = [row for row in rows if int(row["exam_id"]) == int(exam_id)]
-            if not exam_rows:
-                continue
-            exam_data = _msa_report_data(cur, sid, exam_rows)
-            passed = failed = assessed = 0
+            passed = failed = 0
             for learner_summary in exam_data["summaries"].values():
                 if int(learner_summary.get("subject_count") or 0) <= 0:
                     continue
-                assessed += 1
-                grade = str(learner_summary.get("overall_grade") or "").strip().upper()
-                outcome = _msa_pass_fail_grade(grade)
+                outcome = _msa_pass_fail_grade(learner_summary.get("overall_grade"))
                 if outcome == "pass":
                     passed += 1
                 elif outcome == "fail":
                     failed += 1
-            exam_roster_data = _msa_historical_roster(cur, sid, exam_rows)
-            total_learners = len(set(exam_roster_data.get("student_ids", set())))
-            not_assessed = max(0, total_learners - assessed)
             classified = passed + failed
-            pass_pct = (passed / classified * 100) if classified else None
-            fail_pct = (failed / classified * 100) if classified else None
-            overall_pass_fail_rows.append([
-                exam_label, assessed, passed,
-                f"{pass_pct:.1f}%" if pass_pct is not None else "—",
-                failed, f"{fail_pct:.1f}%" if fail_pct is not None else "—",
+            pass_pct = passed / classified * 100 if classified else None
+            fail_pct = failed / classified * 100 if classified else None
+            overall_summary_rows.append([
+                exam_name or str(exam_id),
+                assessed,
+                f"{assessed_pct:.1f}%" if assessed_pct is not None else "—",
                 not_assessed,
+                f"{not_assessed_pct:.1f}%" if not_assessed_pct is not None else "—",
+                passed,
+                f"{pass_pct:.1f}%" if pass_pct is not None else "—",
+                failed,
+                f"{fail_pct:.1f}%" if fail_pct is not None else "—",
             ])
+
         pdf_table(
-            "Overall Examination Pass/Fail",
-            ["Examination", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)", "Not assessed"],
-            overall_pass_fail_rows, compact=True
+            "EXAMINATION DETAILS",
+            ["Exam Name", "Exam Type", "Term", "Year"],
+            exam_details_rows, compact=True
+        )
+        pdf_table(
+            "Overall Examination Summary & Pass/Fail",
+            ["Examination", "Learners assessed", "Assessed (%)",
+             "Learners not assessed", "Not assessed (%)",
+             "Passed", "Pass Rate (%)", "Failed", "Fail Rate (%)"],
+            overall_summary_rows, compact=True
         )
 
         # Subject-level outcomes use the configured grade for each saved mark.
