@@ -13322,6 +13322,15 @@ def class_marksheet_analysis_pdf(
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * weight for weight in profile]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
+                # Keep Subject readable; reduce Mean, Recorded entries and Insight
+                # to 60% of their former equal-width allocation.
+                base_width = doc.width / 4
+                col_widths = [
+                    base_width, base_width * 0.60, base_width * 0.80,
+                    base_width * 0.60, base_width * 0.60,
+                ]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Grade Distribution Analysis — Per Subject" and len(headers) > 1:
                 # Give Subject a wider label column; compress grade/count/mean/
                 # position columns evenly while keeping the table within page width.
@@ -13884,30 +13893,56 @@ def class_marksheet_analysis_pdf(
         # Continue with actionable, subject-level Performance Insights after student rankings.
         # Only recorded subject marks contribute to these means.
         subject_insight_values = {}
+        subject_insight_ids = {}
         for mark_row in rows:
             subject_label = str(mark_row.get("subject_name") or "Unknown subject")
             subject_insight_values.setdefault(subject_label, []).append(float(mark_row.get("percentage") or 0))
+            if mark_row.get("subject_id") is not None:
+                subject_insight_ids.setdefault(subject_label, int(mark_row["subject_id"]))
         subject_insights = [
-            {"subject": name, "mean": sum(values) / len(values), "entries": len(values)}
+            {"subject": name, "subject_id": subject_insight_ids.get(name),
+             "mean": sum(values) / len(values), "entries": len(values)}
             for name, values in subject_insight_values.items() if values
         ]
+        def _insight_grade(item):
+            subject_id = item.get("subject_id")
+            if subject_id is not None:
+                grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["mean"], data["grading_rules"], 100)
+                return str(grade or "—")
+            grade, _ = _default_grade_points(item["mean"])
+            return str(grade or "—")
         subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
         if subject_insights:
             # Give Performance Insights and its subject-strengths table a dedicated page.
             story.append(PageBreak())
             story.append(Paragraph("<u>Performance Insights</u>", styles["MSASection"]))
+            average_subject_mean = sum(item["mean"] for item in subject_insights) / len(subject_insights)
+            strongest_insight = subject_insights[0]
+            priority_insight = subject_insights[-1]
             insight_summary = [[
                 Paragraph("<b>Subjects with results</b>", styles["MSACell"]),
                 Paragraph("<b>Average subject mean</b>", styles["MSACell"]),
+                Paragraph("<b>Average subject grade</b>", styles["MSACell"]),
                 Paragraph("<b>Strongest subject</b>", styles["MSACell"]),
+                Paragraph("<b>Strongest subject grade</b>", styles["MSACell"]),
                 Paragraph("<b>Priority subject</b>", styles["MSACell"]),
+                Paragraph("<b>Priority subject grade</b>", styles["MSACell"]),
             ], [
                 Paragraph(str(len(subject_insights)), styles["MSACell"]),
-                Paragraph("%.2f%%" % (sum(item["mean"] for item in subject_insights) / len(subject_insights)), styles["MSACell"]),
-                Paragraph(escape(subject_insights[0]["subject"]) + " (%.2f%%)" % subject_insights[0]["mean"], styles["MSACell"]),
-                Paragraph(escape(subject_insights[-1]["subject"]) + " (%.2f%%)" % subject_insights[-1]["mean"], styles["MSACell"]),
+                Paragraph("%.2f%%" % average_subject_mean, styles["MSACell"]),
+                Paragraph(_insight_grade({"subject_id": strongest_insight.get("subject_id"), "mean": average_subject_mean}), styles["MSACell"]),
+                Paragraph(escape(strongest_insight["subject"]) + " (%.2f%%)" % strongest_insight["mean"], styles["MSACell"]),
+                Paragraph(_insight_grade(strongest_insight), styles["MSACell"]),
+                Paragraph(escape(priority_insight["subject"]) + " (%.2f%%)" % priority_insight["mean"], styles["MSACell"]),
+                Paragraph(_insight_grade(priority_insight), styles["MSACell"]),
             ]]
-            insight_cards = Table(insight_summary, colWidths=[doc.width * 0.16, doc.width * 0.20, doc.width * 0.32, doc.width * 0.32], hAlign="LEFT")
+            # Reduce the original mean, strongest-subject and priority-subject
+            # columns by 30%; use the released width for their grade columns.
+            insight_cards = Table(insight_summary, colWidths=[
+                doc.width * 0.16, doc.width * 0.14, doc.width * 0.084,
+                doc.width * 0.224, doc.width * 0.084,
+                doc.width * 0.224, doc.width * 0.084,
+            ], hAlign="LEFT")
             insight_cards.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
                 ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
@@ -13928,8 +13963,8 @@ def class_marksheet_analysis_pdf(
                     label = "Focus for improvement"
                 else:
                     label = "Steady"
-                insight_rows.append([item["subject"], "%.2f%%" % item["mean"], item["entries"], label])
-            pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Recorded entries", "Insight"], insight_rows, compact=True)
+                insight_rows.append([item["subject"], "%.2f%%" % item["mean"], _insight_grade(item), item["entries"], label])
+            pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Mean grade", "Recorded entries", "Insight"], insight_rows, compact=True)
 
             # Compact horizontal pass-rate comparison, directly below the strengths table.
             story.append(Paragraph("<u>Subject Pass-Rate Comparison</u>", styles["MSASection"]))
