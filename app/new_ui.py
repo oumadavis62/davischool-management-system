@@ -1800,6 +1800,16 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
             tracker_cur=tracker_con.cursor()
             try:
                 participating_ids=_exam_participating_class_ids(tracker_cur,sid,tracker_exam_id)
+                exam_year_raw=str(tracker_exam["year"] or "").strip()
+                exam_year=int(exam_year_raw) if exam_year_raw.isdigit() else 0
+                # Older exams may predate saved class participation. In that case,
+                # use the class IDs recorded on the exam's marks instead of showing
+                # every class currently in the school under a historical exam.
+                marked_class_rows=tracker_cur.execute("""SELECT DISTINCT class_id FROM marks
+                    WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL""",(sid,tracker_exam_id)).fetchall()
+                marked_class_ids={int(row["class_id"]) for row in marked_class_rows}
+                if participating_ids is None and marked_class_ids:
+                    participating_ids=marked_class_ids
                 tracker_con.commit()
                 participating_classes=[c for c in classes if participating_ids is None or int(c["id"]) in participating_ids]
                 assignment_rows=tracker_cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,a.teacher_id,
@@ -1818,14 +1828,50 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         teacher_names=teachers_by_class_subject.setdefault((allocation_class_id,allocation_subject_id),[])
                         if teacher_name and teacher_name not in teacher_names:
                             teacher_names.append(teacher_name)
+                # Staffing moves with promoted cohorts. For an exam in the year
+                # immediately preceding promotion, prefer the archived staffing
+                # snapshot over the current allocation now assigned to a new cohort.
+                if exam_year:
+                    try:
+                        historical_allocations=tracker_cur.execute("""SELECT DISTINCT h.class_id,h.subject_id,h.teacher_id,
+                            COALESCE(NULLIF(trim(h.teacher_name),''),'Unassigned teacher') AS teacher_name
+                            FROM teacher_allocation_history h
+                            WHERE h.school_id=? AND h.cycle_year=? AND h.reason='Cohort promoted to next class'
+                            ORDER BY h.class_id,h.subject_id,teacher_name""",(sid,exam_year)).fetchall()
+                        for allocation in historical_allocations:
+                            if allocation["class_id"] is None or allocation["subject_id"] is None:
+                                continue
+                            key=(int(allocation["class_id"]),int(allocation["subject_id"]))
+                            teacher_names=teachers_by_class_subject.setdefault(key,[])
+                            teacher_name=str(allocation["teacher_name"] or "Unassigned teacher").strip()
+                            if teacher_name and teacher_name not in teacher_names:
+                                teacher_names.append(teacher_name)
+                            subjects_by_class.setdefault(key[0],set()).add(key[1])
+                    except Exception:
+                        pass
                 all_subject_rows=tracker_cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
                 subject_names={int(x["id"]):str(x["name"] or "Subject") for x in all_subject_rows}
                 for tracker_class in participating_classes:
                     tracker_class_id=int(tracker_class["id"])
                     expected_subject_ids=sorted(subjects_by_class.get(tracker_class_id) or subject_names.keys(),key=lambda x:subject_names.get(x,"").casefold())
-                    active_row=tracker_cur.execute("""SELECT COUNT(*) AS n FROM students st
-                        WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                        AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,tracker_class_id)).fetchone()
+                    if exam_year:
+                        active_row=tracker_cur.execute("""SELECT COUNT(DISTINCT cohort.student_id) AS n FROM (
+                            SELECT st.id AS student_id FROM students st
+                            WHERE st.school_id=? AND st.class_id=?
+                              AND lower(coalesce(st.status,'active'))='active'
+                              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+                              AND NOT EXISTS (SELECT 1 FROM student_class_history incoming
+                                  WHERE incoming.school_id=st.school_id AND incoming.student_id=st.id
+                                    AND incoming.to_class_id=? AND incoming.to_academic_year>?)
+                            UNION
+                            SELECT hist.student_id FROM student_class_history hist
+                            WHERE hist.school_id=? AND hist.from_class_id=?
+                              AND hist.from_academic_year=? AND hist.to_academic_year>?
+                        ) cohort""",(sid,tracker_class_id,tracker_class_id,exam_year,sid,tracker_class_id,exam_year,exam_year)).fetchone()
+                    else:
+                        active_row=tracker_cur.execute("""SELECT COUNT(*) AS n FROM students st
+                            WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                            AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,tracker_class_id)).fetchone()
                     active_count=int(active_row["n"] or 0) if active_row else 0
                     mark_rows=tracker_cur.execute("""SELECT subject_id,COUNT(DISTINCT student_id) AS entered
                         FROM marks WHERE school_id=? AND exam_id=? AND class_id=? GROUP BY subject_id""",(sid,tracker_exam_id,tracker_class_id)).fetchall()
