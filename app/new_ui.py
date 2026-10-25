@@ -12353,10 +12353,10 @@ def class_marksheet_analysis(
             ] if v
         )
         export_links = (
-            "<div class='msa-export'><a href='%s/csv?%s'>Download CSV</a>"
-            "<a href='%s/pdf?%s'>Download PDF</a>"
+            "<div class='msa-export'><a href='/app/academics/marksheet-analysis/csv?%s'>Download CSV</a>"
+            "<a href='/app/academics/marksheet-analysis/pdf?%s'>Download PDF</a>"
             "<button type='button' onclick='window.print()'>Print report</button></div>"
-        ) % (base, export_query, base, export_query)
+        ) % (export_query, export_query)
         body = (
             "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>" + escape(page_heading) + "</h1>"
             "<p class='muted'>Explore class results, subject strengths, student performance and examination trends.</p></header>"
