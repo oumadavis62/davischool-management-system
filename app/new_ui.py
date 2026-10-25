@@ -11772,9 +11772,7 @@ def _msa_load_rows(cur, school_id, exam_ids):
                 ORDER BY cfg.id DESC LIMIT 1) AS configured_out_of
         FROM marks m
         JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-        JOIN classes c ON c.id=st.class_id AND c.school_id=st.school_id
-          AND lower(coalesce(st.status,'active'))='active'
-          AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+        JOIN classes c ON c.id=m.class_id AND c.school_id=m.school_id
         JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
         JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
         WHERE m.school_id=? AND m.exam_id IN (""" + placeholders + """)
