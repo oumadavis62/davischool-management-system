@@ -13860,7 +13860,6 @@ def class_marksheet_analysis_pdf(
                 + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
                    position if mean is not None else "—"]
             )
-        pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
         pdf_table(
             "Grade Distribution Analysis — Overall by Class and Stream",
             ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"],
