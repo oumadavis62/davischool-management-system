@@ -12202,6 +12202,13 @@ def class_marksheet_analysis(
             and (not stream or r["stream"] == stream)
         ]
         view_data = _msa_report_data(cur, sid, view_rows)
+        # Count the historical cohort members who have no saved mark in the
+        # selected exam scope. This includes learners with no marks row at all.
+        view_roster_data = _msa_historical_roster(cur, sid, view_rows)
+        view_enrolled_ids = set(view_roster_data.get("student_ids", set()))
+        view_assessed_ids = {int(r["student_id"]) for r in view_rows if r.get("student_id") is not None}
+        view_enrolled_ids.update(view_assessed_ids)
+        view_not_assessed_count = len(view_enrolled_ids - view_assessed_ids)
         top_rows = [r for r in all_rows if (not class_name or r["class_name"] == class_name)]
         top_data = _msa_report_data(cur, sid, top_rows)
         ranking_data = _msa_report_data(cur, sid, all_rows)
@@ -12323,8 +12330,9 @@ def class_marksheet_analysis(
             "<div><small>Highest learner total</small><strong>%.1f</strong></div>"
             "<div><small>Lowest learner total</small><strong>%.1f</strong></div>"
             "<div><small>Learners assessed</small><strong>%d</strong></div>"
+            "<div><small>Learners not assessed</small><strong>%d</strong></div>"
             "<div><small>Average grade points</small><strong>%.2f</strong></div></div>"
-        ) % (overall_mean, highest_total, lowest_total, len(eligible), average_grade_points)
+        ) % (overall_mean, highest_total, lowest_total, len(eligible), view_not_assessed_count, average_grade_points)
         subject_rows = view_data["subject_rows"]
         class_summary = []
         for name in sorted({r["class_name"] for r in view_rows}, key=str.casefold):
