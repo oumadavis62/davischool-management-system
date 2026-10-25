@@ -1845,8 +1845,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                             h.reason,h.recorded_at
                             FROM teacher_allocation_history h
                             WHERE h.school_id=?
-                              AND (h.reason='Cohort promoted to next class'
-                                   OR lower(coalesce(h.reason,'')) LIKE '%promot%')
+                              AND h.reason='Cohort promoted to next class'
                             ORDER BY h.class_id,h.cycle_year,h.subject_id,h.recorded_at,teacher_name""",(sid,)).fetchall()
                         # The first promotion snapshot ON OR AFTER the exam year is
                         # the staffing that belonged to the cohort sitting that exam.
