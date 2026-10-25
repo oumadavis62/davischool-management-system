@@ -14146,7 +14146,10 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<u>Top Students per Subject — stream-wise</u>", styles["MSASection"]))
         # Organize the report by subject: one heading, followed by that
         # subject's class/stream tables. Never pair tables from different subjects.
-        for subject_name in msa_subject_names_by_position:
+        for subject_index, subject_name in enumerate(msa_subject_names_by_position):
+            # Separate each subject's tables from the next subject's heading.
+            if subject_index > 0:
+                story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
             subject_entries = stream_by_subject.get(subject_name, [])
             subject_stream_tables = []
             if not subject_entries:
