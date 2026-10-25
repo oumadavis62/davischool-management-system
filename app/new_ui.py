@@ -13839,7 +13839,54 @@ def class_marksheet_analysis_pdf(
                     story.extend(left_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
-        # Examination trends are intentionally omitted from the PDF export.
+
+        # Replace the removed Examination Trends table with actionable, subject-level
+        # Performance Insights. Only recorded subject marks contribute to these means.
+        subject_insight_values = {}
+        for mark_row in rows:
+            subject_label = str(mark_row.get("subject_name") or "Unknown subject")
+            subject_insight_values.setdefault(subject_label, []).append(float(mark_row.get("percentage") or 0))
+        subject_insights = [
+            {"subject": name, "mean": sum(values) / len(values), "entries": len(values)}
+            for name, values in subject_insight_values.items() if values
+        ]
+        subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
+        if subject_insights:
+            story.append(Paragraph("<u>Performance Insights</u>", styles["MSASection"]))
+            insight_summary = [[
+                Paragraph("<b>Subjects with results</b>", styles["MSACell"]),
+                Paragraph("<b>Average subject mean</b>", styles["MSACell"]),
+                Paragraph("<b>Strongest subject</b>", styles["MSACell"]),
+                Paragraph("<b>Priority subject</b>", styles["MSACell"]),
+            ], [
+                Paragraph(str(len(subject_insights)), styles["MSACell"]),
+                Paragraph("%.2f%%" % (sum(item["mean"] for item in subject_insights) / len(subject_insights)), styles["MSACell"]),
+                Paragraph(escape(subject_insights[0]["subject"]) + " (%.2f%%)" % subject_insights[0]["mean"], styles["MSACell"]),
+                Paragraph(escape(subject_insights[-1]["subject"]) + " (%.2f%%)" % subject_insights[-1]["mean"], styles["MSACell"]),
+            ]]
+            insight_cards = Table(insight_summary, colWidths=[doc.width * 0.16, doc.width * 0.20, doc.width * 0.32, doc.width * 0.32], hAlign="LEFT")
+            insight_cards.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
+                ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (0,0), (1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 4),
+                ("RIGHTPADDING", (0,0), (-1,-1), 4),
+                ("TOPPADDING", (0,0), (-1,-1), 4),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ]))
+            story.append(insight_cards)
+            story.append(Spacer(1, 2*mm))
+            insight_rows = []
+            for item in subject_insights:
+                if item["mean"] >= subject_insights[max(0, min(2, len(subject_insights)-1))]["mean"]:
+                    label = "Bright spot"
+                elif item["mean"] <= subject_insights[max(0, len(subject_insights)-3)]["mean"]:
+                    label = "Focus for improvement"
+                else:
+                    label = "Steady"
+                insight_rows.append([item["subject"], "%.2f%%" % item["mean"], item["entries"], label])
+            pdf_table("Subject strengths and improvement priorities", ["Subject", "Mean %", "Recorded entries", "Insight"], insight_rows, compact=True)
 
         # Continue on a dedicated page with the ten highest-performing learners
         # in each class, followed by the ten highest-performing learners overall.
