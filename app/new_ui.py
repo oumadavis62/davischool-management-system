@@ -12096,12 +12096,29 @@ def class_marksheet_analysis(
             all_rows, ranking_data["aggregated"], ranking_data["grading_rules"], ranking_data["overall_rules"], cur, sid
         )
         school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
-        classes = cur.execute(
-            "SELECT DISTINCT name FROM classes WHERE school_id=? ORDER BY name", (sid,)
-        ).fetchall()
-        streams = cur.execute(
-            "SELECT DISTINCT stream FROM classes WHERE school_id=? AND COALESCE(stream,'')<>'' ORDER BY stream", (sid,)
-        ).fetchall()
+        # Populate the class and stream filters only from classes that have
+        # saved marks for the selected examination(s). Use marks.class_id rather
+        # than the learner's current class so historical exam participation is
+        # retained after promotion.
+        if selected_exam_ids:
+            exam_placeholders = ",".join("?" for _ in selected_exam_ids)
+            classes = cur.execute(
+                "SELECT DISTINCT c.name FROM marks m "
+                "JOIN classes c ON c.id=m.class_id AND c.school_id=m.school_id "
+                "WHERE m.school_id=? AND m.exam_id IN (" + exam_placeholders + ") "
+                "AND m.marks IS NOT NULL ORDER BY c.name",
+                [sid] + selected_exam_ids
+            ).fetchall()
+            streams = cur.execute(
+                "SELECT DISTINCT c.stream FROM marks m "
+                "JOIN classes c ON c.id=m.class_id AND c.school_id=m.school_id "
+                "WHERE m.school_id=? AND m.exam_id IN (" + exam_placeholders + ") "
+                "AND m.marks IS NOT NULL AND COALESCE(c.stream,'')<>'' ORDER BY c.stream",
+                [sid] + selected_exam_ids
+            ).fetchall()
+        else:
+            classes = []
+            streams = []
         student_options = []
         for student in sorted(view_data["students"].values(), key=lambda x: x["name"].casefold()):
             student_options.append(
