@@ -13142,21 +13142,15 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % highest if highest is not None else "—",
                 stream_rank if mean is not None else "—",
             ])
-        writer.writerow([])
-        _msa_csv_heading("EXAMINATION TRENDS")
-        writer.writerow(["Examination", "Learners with marks", "Mean recorded mark %", "Highest %", "Lowest %"])
-        for exam_id in ids:
-            exam = cur.execute("SELECT name,year FROM exams WHERE school_id=? AND id=?", (sid, exam_id)).fetchone()
-            vals = [r["percentage"] for r in rows if r["exam_id"] == exam_id]
-            writer.writerow([
-                ((str(exam["name"] or "") + " " + str(exam["year"] or "")) if exam else str(exam_id)),
-                len({r["student_id"] for r in rows if r["exam_id"] == exam_id}),
-                "%.2f%%" % (sum(vals)/len(vals) if vals else 0),
-                "%.2f%%" % (max(vals) if vals else 0),
-                "%.2f%%" % (min(vals) if vals else 0),
-            ])
+        # Examination trends are intentionally omitted from analysis exports.
         teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
-        for key, heading in [("combined", "Combined classes"), ("class", "Class-wise")]:
+        classwise_teacher_classes = {str(item.get("class") or "") for item in teacher_performance["class"]}
+        teacher_sections = [("combined", "Combined classes")]
+        # Class-wise rankings add no information when only one class sat the
+        # selected examination(s), so omit that repeated section entirely.
+        if len(classwise_teacher_classes) > 1:
+            teacher_sections.append(("class", "Class-wise"))
+        for key, heading in teacher_sections:
             writer.writerow([])
             _msa_csv_heading("BEST TEACHERS BY SUBJECT")
             _msa_csv_heading(heading)
@@ -13311,7 +13305,6 @@ def class_marksheet_analysis_pdf(
                 "Summary": [0.50, 0.25, 0.25],
                 "Stream comparisons": [0.20, 0.16, 0.18, 0.20, 0.13, 0.13],
                 "Class rankings": [0.10, 0.25, 0.22, 0.25, 0.18],
-                "Examination trends": [0.40, 0.28, 0.32],
             }
             profile = compact_profiles.get(title)
             target_width = doc.width * 0.60 if profile else doc.width
@@ -13846,16 +13839,7 @@ def class_marksheet_analysis_pdf(
                     story.extend(left_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
-        trend_rows = []
-        for exam_id in ids:
-            exam_entry = next((e for e in all_exams if int(e["id"]) == exam_id), None)
-            vals = [r["percentage"] for r in rows if r["exam_id"] == exam_id]
-            trend_rows.append([
-                (str(exam_entry["name"]) + " " + str(exam_entry["year"])) if exam_entry else str(exam_id),
-                len({r["student_id"] for r in rows if r["exam_id"] == exam_id}),
-                "%.2f%%" % (sum(vals)/len(vals) if vals else 0)
-            ])
-        pdf_table("Examination trends", ["Examination", "Learners with marks", "Mean recorded mark %"], trend_rows, compact=True)
+        # Examination trends are intentionally omitted from the PDF export.
 
         # Continue on a dedicated page with the ten highest-performing learners
         # in each class, followed by the ten highest-performing learners overall.
@@ -13933,11 +13917,12 @@ def class_marksheet_analysis_pdf(
         ]
         pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
 
-        story.append(Paragraph("<u>Class-wise</u>", styles["MSASection"]))
-        # Show one compact table per subject, with the best teacher for each class.
-        # Pair subject tables horizontally to use the landscape page width efficiently.
-        # Subject names remain as the individual table labels below.
         class_teacher_records = teacher_performance["class"]
+        classwise_teacher_classes = {str(item.get("class") or "") for item in class_teacher_records}
+        # Suppress the duplicate class-wise ranking section when only one class
+        # participated in the selected exam(s); combined results remain available.
+        if len(classwise_teacher_classes) > 1:
+            story.append(Paragraph("<u>Class-wise</u>", styles["MSASection"]))
         class_subject_tables = []
         header_style = styles["MSAMatrixHeader"]
         cell_style = ParagraphStyle(
