@@ -13315,12 +13315,21 @@ def class_marksheet_analysis_pdf(
             }
             profile = compact_profiles.get(title)
             target_width = doc.width * (0.78 if title == "Summary" else 0.60) if profile else doc.width
-            if title.startswith("Best 10 students") and len(headers) == 7:
-                # Shrink Rank by 70%, preserve Student at a normal base width,
-                # and keep Class, Stream, Mean, Total and Grade compact.
-                profile = [0.30, 1.0, 0.30, 0.30, 0.30, 0.30, 0.30]
+            if title == "EXAMINATION DETAILS" and len(headers) == 4:
+                # Reduce every Examination Details column to 60% of its prior
+                # equal-width allocation.
+                col_widths = [doc.width / 4 * 0.60] * 4
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif title == "Subject Pass/Fail Analysis" and len(headers) == 6:
+                # Keep Subject unchanged and reduce each remaining column by 70%.
+                base_width = doc.width / 6
+                col_widths = [base_width] + [base_width * 0.30] * 5
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+            elif title.startswith("Best 10 students") and len(headers) == 7:
+                # Reduce all seven ranking columns by 50% from their prior
+                # equal-width baseline.
                 base_width = doc.width / len(headers)
-                col_widths = [base_width * weight for weight in profile]
+                col_widths = [base_width * 0.50] * len(headers)
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
                 # Keep Subject readable; reduce Mean, Recorded entries and Insight
@@ -14458,8 +14467,9 @@ def class_marksheet_analysis_pdf(
                 for row in class_top_ten
             ])
             class_rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
+            # Each ranking column is half its previous width.
             class_rank_widths = [
-                class_left_width * weight / sum(class_rank_weights)
+                class_left_width * weight / sum(class_rank_weights) * 0.50
                 for weight in class_rank_weights
             ]
             class_rank_table = Table(
@@ -14588,7 +14598,8 @@ def class_marksheet_analysis_pdf(
                 for row in overall_top_ten
             ])
             rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
-            rank_widths = [left_width * weight / sum(rank_weights) for weight in rank_weights]
+            # Each ranking column is half its previous width.
+            rank_widths = [left_width * weight / sum(rank_weights) * 0.50 for weight in rank_weights]
             rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="LEFT")
             rank_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14689,8 +14700,25 @@ def class_marksheet_analysis_pdf(
                 "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
             )
             for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+                all_subject_records = [
+                    item for item in class_teacher_records if item["subject"] == subject_name
+                ]
+                # Show exactly one best teacher/stream for each class and subject:
+                # compare all stream winners within the class, then keep the highest mean.
+                best_by_class = {}
+                for candidate in all_subject_records:
+                    class_key = str(candidate.get("class") or "")
+                    previous = best_by_class.get(class_key)
+                    if previous is None or (
+                        float(candidate.get("mean") or 0) > float(previous.get("mean") or 0)
+                        or (
+                            abs(float(candidate.get("mean") or 0) - float(previous.get("mean") or 0)) <= 0.000001
+                            and str(candidate.get("teacher") or "").casefold() < str(previous.get("teacher") or "").casefold()
+                        )
+                    ):
+                        best_by_class[class_key] = candidate
                 subject_records = sorted(
-                    [item for item in class_teacher_records if item["subject"] == subject_name],
+                    best_by_class.values(),
                     key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
                 )
                 table_data = [[
