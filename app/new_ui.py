@@ -14259,7 +14259,8 @@ def class_marksheet_analysis_pdf(
 
         # Put student rankings directly after per-subject grade distribution, on their own page.
         story.append(PageBreak())
-        story.append(Paragraph("<u>Student rankings</u>", styles["MSASection"]))
+        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
+        story.append(Paragraph("<u>Student rankings</u>", centered_page_heading))
         ranked_learners = []
         for learner_id, learner_summary in data["summaries"].items():
             learner_info = data["students"].get(learner_id, {})
@@ -14540,7 +14541,7 @@ def class_marksheet_analysis_pdf(
             story.append(Spacer(1, 1.5 * mm))
 
         story.append(PageBreak())
-        story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
+        story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
         # classes, so class and stream columns are not applicable here.
