@@ -12517,7 +12517,7 @@ def class_marksheet_analysis(
         )
         export_links = (
             "<div class='msa-export'><a href='/app/academics/marksheet-analysis/csv?%s'>Download CSV</a>"
-            "<a href='/app/academics/marksheet-analysis/pdf?%s'>Download PDF</a>"
+            "<a href='/app/academics/marksheet-analysis/pdf?%s' download='DaviSchool_MarkSheet_Analysis.pdf'>Download PDF</a>"
             "<button type='button' onclick='window.print()'>Print report</button></div>"
         ) % (export_query, export_query)
         body = (
