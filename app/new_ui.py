@@ -1869,6 +1869,26 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         for history_class_id,cycles in cycles_by_class.items():
                             future_cycles=[year for year in cycles if year>=exam_year]
                             chosen_cycle_by_class[history_class_id]=min(future_cycles) if future_cycles else max(cycles)
+                        # A class can have TWO snapshots in the same promotion cycle:
+                        # its original staffing archived before an incoming cohort replaces
+                        # it, and staffing archived again when that class is processed as a
+                        # source. In a cascading promotion, the source snapshot may already
+                        # contain the incoming cohort's teachers. Prefer the destination-
+                        # replacement snapshot for that class/cycle because it preserves the
+                        # teachers that belonged to the class before it was overwritten.
+                        chosen_reason_by_class_cycle={}
+                        for allocation in historical_allocations:
+                            if allocation["class_id"] is None:
+                                continue
+                            history_class_id=int(allocation["class_id"])
+                            history_cycle=int(allocation["cycle_year"] or 0)
+                            if chosen_cycle_by_class.get(history_class_id)!=history_cycle:
+                                continue
+                            reason=str(allocation["reason"] or "")
+                            key=(history_class_id,history_cycle)
+                            priority=2 if reason=="Destination class staffing replaced by promoted cohort" else (1 if reason=="Cohort promoted to next class" else 0)
+                            if priority>chosen_reason_by_class_cycle.get(key,0):
+                                chosen_reason_by_class_cycle[key]=priority
                         historical_subjects_by_class={}
                         historical_teachers_by_class_subject={}
                         for allocation in historical_allocations:
@@ -1878,6 +1898,10 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                             history_cycle=int(allocation["cycle_year"] or 0)
                             chosen=chosen_cycle_by_class.get(history_class_id)
                             if chosen is None or chosen!=history_cycle:
+                                continue
+                            reason=str(allocation["reason"] or "")
+                            priority=2 if reason=="Destination class staffing replaced by promoted cohort" else (1 if reason=="Cohort promoted to next class" else 0)
+                            if priority!=chosen_reason_by_class_cycle.get((history_class_id,history_cycle),0):
                                 continue
                             key=(history_class_id,int(allocation["subject_id"]))
                             historical_subjects_by_class.setdefault(key[0],set()).add(key[1])
