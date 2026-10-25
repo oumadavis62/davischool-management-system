@@ -14553,6 +14553,7 @@ def class_marksheet_analysis_pdf(
             for item in teacher_performance["combined"]
         ]
         pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
+        story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
 
         class_teacher_records = teacher_performance["class"]
         classwise_teacher_classes = {str(item.get("class") or "") for item in class_teacher_records}
@@ -14645,7 +14646,8 @@ def class_marksheet_analysis_pdf(
                     story.append(paired_class_tables)
                 else:
                     story.append(left_stack)
-                story.append(Spacer(1, 3*mm))
+                story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
+                story.append(Spacer(1, 1.5*mm))
 
         def add_footer(canvas, document):
             canvas.saveState()
