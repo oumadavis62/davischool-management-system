@@ -8465,80 +8465,19 @@ def teacher_allocations_delete(request: Request,allocation_id:int):
     return RedirectResponse("/app/academics/allocations" + (("?ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""),303)
 
 @router.get("/app/academics/analysis", response_class=HTMLResponse)
-def new_analysis(request: Request, exam_id:str="", exam_ids:str="", class_id:str=""):
-    sid=_school_session(request)
-    if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "reports.view"):
-        return HTMLResponse("You do not have permission to view academic analysis.", 403)
-    con=_db();cur=con.cursor()
-    try:
-        _ensure_grading_table(cur)
-    except Exception as exc:
-        print("DAVISCHOOL ANALYSIS GRADING TABLE FALLBACK:", repr(exc), flush=True)
-    try:
-        _ensure_academic_locks_table(cur)
-    except Exception as exc:
-        print("DAVISCHOOL ANALYSIS LOCK TABLE FALLBACK:", repr(exc), flush=True)
-    try:
-        exams=cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
-        classes=cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-    except Exception as exc:
-        print("DAVISCHOOL ANALYSIS CONTEXT FAILED:", repr(exc), flush=True)
-        try: con.rollback()
-        except Exception: pass
-        exams=[]; classes=[]
-    selected_exam_ids=_parse_assessment_ids(exam_ids, exam_id)
-    if not selected_exam_ids and exams:
-        selected_exam_ids=[int(exams[0]["id"])]
-    eid=selected_exam_ids[0] if selected_exam_ids else 0
-    cid=int(class_id) if class_id.isdigit() else (int(classes[0]["id"]) if classes else 0)
-    try: grading_rules = _load_grading_rules(cur, sid)
-    except Exception as exc:
-        print("DAVISCHOOL ANALYSIS GRADING RULES FALLBACK:", repr(exc), flush=True); grading_rules=[]
-    try: overall_rules = _load_overall_grading_rules(cur, sid)
-    except Exception as exc:
-        print("DAVISCHOOL ANALYSIS OVERALL RULES FALLBACK:", repr(exc), flush=True); overall_rules=[]
-    stats=[]; student_results=[]
-    if eid:
-        placeholders=",".join("?" for _ in selected_exam_ids)
-        q="""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) avg_mark,
-          COALESCE(MAX(m.marks),0) high,COALESCE(MIN(m.marks),0) low
-          FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=?
-            AND EXISTS (SELECT 1 FROM students eligible WHERE eligible.id=m.student_id AND eligible.school_id=m.school_id AND lower(coalesce(eligible.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=eligible.school_id AND sg.student_id=eligible.id))
-          LEFT JOIN students sm ON sm.id=m.student_id AND sm.school_id=m.school_id AND lower(coalesce(sm.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=sm.school_id AND sg.student_id=sm.id)"""
-        q=q.replace("PLACEHOLDERS",placeholders)
-        params=list(selected_exam_ids)+[sid]
-        if cid:q+=" AND sm.class_id=?";params.append(cid)
-        q+=" WHERE sub.school_id=? GROUP BY sub.id,sub.name ORDER BY sub.name";params.append(sid)
-        try: stats=cur.execute(q,params).fetchall()
-        except Exception as exc:
-            print("DAVISCHOOL SUBJECT ANALYSIS QUERY FALLBACK:", repr(exc), flush=True)
-            try: con.rollback()
-            except Exception: pass
-            stats=[]
-        students=cur.execute("SELECT id,name,admission_no,class_id FROM students WHERE school_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id) "+("AND class_id=? " if cid else "")+"ORDER BY name",([sid,cid] if cid else [sid])).fetchall()
-        bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
-        try:
-            lock_rows=cur.execute(
-                "SELECT class_id,COUNT(*) c FROM academic_locks WHERE school_id=? AND exam_id=? GROUP BY class_id",
-                (sid,eid)
-            ).fetchall()
-            lock_counts={int(row["class_id"]):int(row["c"] or 0) for row in lock_rows}
-        except Exception as exc:
-            print("DAVISCHOOL ANALYSIS LOCK COUNT FALLBACK:", repr(exc), flush=True)
-            lock_counts={}
-        for st in students:
-            result=bulk_results.get(int(st["id"]),{"details":[],"total":0.0,"points":0.0,"count":0,"average":0.0,"overall_grade":"—"})
-            student_results.append((st,result,lock_counts.get(int(st["class_id"] or 0),0)))
-    eopts="".join(f"<option value='{e['id']}' {'selected' if int(e['id']) in selected_exam_ids else ''}>{escape(str(e['name']))}</option>" for e in exams)
-    copts="".join(f"<option value='{c['id']}' {'selected' if c['id']==cid else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    rows="".join(f"<tr><td>{escape(str(x['subject']))}</td><td>{x['entries']}</td><td>{float(x['avg_mark'] or 0):.2f}</td><td>{x['high']}</td><td>{x['low']}</td></tr>" for x in stats)
-    ranked=sorted(student_results,key=lambda z:(-float(z[1]["total"]),str(z[0]["name"])))
-    rank_map={int(z[0]["id"]):i+1 for i,z in enumerate(ranked)}
-    student_rows="".join(f"<tr><td>{escape(str(st['admission_no'] or ''))}</td><td>{escape(str(st['name']))}</td><td>{res['count']}</td><td>{res['total']:.1f}</td><td>{res['average']:.1f}%</td><td>{escape(str(res['overall_grade']))}</td><td>{rank_map.get(int(st['id']),'—')} / {len(ranked)}</td></tr>" for st,res,_ in student_results)
-    con.close()
-    body=f"""<div class='page'><h1>Academic Analysis</h1><div class='card section' style='display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-left:5px solid #08783f'><div><h2 style='margin:0 0 6px'>Class MarkSheet Analysis</h2><div class='muted'>Full class MarkSheet analysis, including grade distributions, subject performance, teacher rankings and student rankings.</div></div><a class='btn' href='/app/academics/marksheet-analysis'>Open MarkSheet Analysis →</a></div><style>.btn{{display:inline-block;padding:11px 16px;border:0;border-radius:9px;background:#08783f;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}}</style></div>"""
-    return _school_page(request,"Academic Analysis",body)
+def new_analysis(
+    request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "",
+    year: str = "", term: str = "", class_name: str = "", stream: str = "",
+    student_id: str = "", view: str = "summary"
+):
+    # Academic Analysis is the full Class MarkSheet Analysis page, not a separate
+    # landing page. Reuse the same report logic and keep its filters/views intact.
+    selected_ids = exam_ids or exam_id
+    return class_marksheet_analysis(
+        request, exam_ids=selected_ids, year=year, term=term,
+        class_name=class_name, stream=stream, student_id=student_id, view=view
+    )
+
 
 @router.post("/app/report-cards/overall-grade-comments")
 async def save_overall_grade_comments(request: Request):
@@ -12217,7 +12156,9 @@ def class_marksheet_analysis(
                 ("student_id", student_id),
             ] if value
         )
-        base = "/app/academics/marksheet-analysis"
+        embedded_in_academic_analysis = request.url.path == "/app/academics/analysis"
+        base = "/app/academics/analysis" if embedded_in_academic_analysis else "/app/academics/marksheet-analysis"
+        page_heading = "Academic Analysis" if embedded_in_academic_analysis else "Class MarkSheet Analysis"
         nav = "".join(
             "<a class='msa-nav %s' href='%s?view=%s%s'>%s</a>" % (
                 "active" if view == key else "", base, key, ("&" + filter_query) if filter_query else "", label
@@ -12412,12 +12353,12 @@ def class_marksheet_analysis(
             ] if v
         )
         export_links = (
-            "<div class='msa-export'><a href='/app/academics/marksheet-analysis/csv?%s'>Download CSV</a>"
-            "<a href='/app/academics/marksheet-analysis/pdf?%s'>Download PDF</a>"
+            "<div class='msa-export'><a href='%s/csv?%s'>Download CSV</a>"
+            "<a href='%s/pdf?%s'>Download PDF</a>"
             "<button type='button' onclick='window.print()'>Print report</button></div>"
-        ) % (export_query, export_query)
+        ) % (base, export_query, base, export_query)
         body = (
-            "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>Class MarkSheet Analysis</h1>"
+            "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>" + escape(page_heading) + "</h1>"
             "<p class='muted'>Explore class results, subject strengths, student performance and examination trends.</p></header>"
             + "<section class='msa-school-card'>" + report_brand + "</section>"
             + "<section class='msa-filter-panel'><div class='msa-panel-heading'><h2>Report filters</h2><p>Choose the examinations and group you want to analyse.</p></div>" + form + "</section>"
@@ -12428,7 +12369,7 @@ def class_marksheet_analysis(
 .msa-page{max-width:1440px;margin:0 auto;padding-bottom:28px;color:#20382b}.msa-page-head{position:relative;overflow:hidden;padding:26px 28px 24px;margin:0 0 18px;border-radius:18px;background:linear-gradient(125deg,#0b5c35 0%,#08783f 58%,#159653 100%);color:#fff;box-shadow:0 12px 28px rgba(8,120,63,.15)}.msa-page-head:after{content:'';position:absolute;width:220px;height:220px;border:1px solid rgba(255,255,255,.15);border-radius:50%;right:-65px;top:-100px;pointer-events:none}.msa-page-head h1{position:relative;z-index:1;margin:5px 0 7px;color:#fff;font-size:clamp(25px,3vw,34px);letter-spacing:-.035em;line-height:1.15}.msa-page-head .muted{position:relative;z-index:1;margin:0;color:#e0f4e7;font-size:14px;max-width:680px}.msa-eyebrow{font-size:10px;letter-spacing:.16em;font-weight:900;color:#c6f2d5}.msa-school-card,.msa-filter-panel,.msa-export-panel,.msa-results{margin:14px 0;padding:18px;border:1px solid #e0eae3;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(23,58,37,.035)}.msa-brand{display:flex;align-items:center;justify-content:center;gap:18px;text-align:center;padding:8px 12px;margin:0;background:transparent;border:0;border-radius:0}.msa-brand img{max-width:76px;max-height:68px;object-fit:contain}.msa-brand h2{margin:0;color:#145a34;font-size:21px;letter-spacing:-.02em}.msa-brand p{margin:3px;color:#65766b;font-size:12px}.msa-panel-heading{margin:0 0 12px}.msa-panel-heading h2,.msa-export-panel h2{font-size:16px;line-height:1.3;margin:0;color:#193e29}.msa-panel-heading p,.msa-export-panel p{font-size:12px;color:#748277;margin:4px 0 0}.msa-filters{display:grid;grid-template-columns:minmax(180px,2fr) repeat(4,minmax(110px,1fr)) auto;gap:12px;padding:0;background:transparent;border:0;border-radius:0;margin:0}.msa-filters label,.msa-student-select label{font-size:11px;font-weight:800;color:#435c4b;display:flex;flex-direction:column;gap:6px}.msa-filters select,.msa-student-select select{min-width:0;width:100%;min-height:42px;padding:10px 11px;border:1px solid #d3e0d7;border-radius:9px;background:#fbfdfb;color:#20382b;font-size:13px;outline:none}.msa-filters select:focus,.msa-student-select select:focus{border-color:#16834a;box-shadow:0 0 0 3px rgba(22,131,74,.12)}.msa-button{align-self:end;min-height:42px;background:#08783f;color:#fff;border:1px solid #08783f;border-radius:9px;padding:11px 16px;font-weight:800;font-size:12px;cursor:pointer;box-shadow:0 4px 10px rgba(8,120,63,.12)}.msa-button:hover{background:#075e32}.msa-nav{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0;padding:5px;border-radius:13px;background:#edf5ef;border:1px solid #dfeae2}.msa-nav a,.msa-export a,.msa-export button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:9px 13px;border:1px solid #d8e4db;border-radius:9px;background:#fff;color:#315c40;text-decoration:none;font-weight:800;font-size:12px;transition:background .15s,border-color .15s}.msa-nav a:hover,.msa-export a:hover,.msa-export button:hover{border-color:#9dc9ab;background:#f7fcf8}.msa-nav a.active{background:#08783f;color:#fff;border-color:#08783f;box-shadow:0 3px 8px rgba(8,120,63,.16)}.msa-export-panel{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;background:#f8fbf8}.msa-export{display:flex;gap:8px;flex-wrap:wrap;margin:0}.msa-export button{cursor:pointer}.msa-results{padding:22px;margin-top:14px}.msa-results>h2{font-size:21px;line-height:1.3;color:#183e29;letter-spacing:-.025em;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #e5eee8}.msa-results>h3{font-size:15px;color:#28543a;margin:22px 0 10px}.msa-results>p{color:#68796e;font-size:13px}.msa-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0 24px}.msa-kpis>div{position:relative;overflow:hidden;min-width:0;padding:17px 16px;border:1px solid #e0eae3;border-radius:13px;background:linear-gradient(145deg,#fff,#f8fcf9);box-shadow:0 4px 12px rgba(23,58,37,.035)}.msa-kpis>div:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#159653}.msa-kpis small{display:block;color:#697a6e;font-size:11px;font-weight:700;line-height:1.4}.msa-kpis strong{display:block;font-size:clamp(19px,2vw,25px);line-height:1.2;color:#08783f;margin-top:8px;font-weight:900;letter-spacing:-.03em;overflow-wrap:anywhere}.msa-table-wrap{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch;margin:12px 0 22px;border:1px solid #e0e8e2;border-radius:12px;background:#fff}.msa-table{border-collapse:separate;border-spacing:0;width:100%;min-width:650px;background:#fff}.msa-table th{position:sticky;top:0;background:#eaf4ed;color:#245239;text-align:left;font-weight:800;white-space:normal}.msa-table th,.msa-table td{padding:11px 12px;border:0;border-bottom:1px solid #e7eee9;border-right:1px solid #edf2ee;font-size:12px;vertical-align:top}.msa-table th:last-child,.msa-table td:last-child{border-right:0}.msa-table tbody tr:last-child td{border-bottom:0}.msa-table tbody tr:nth-child(even){background:#f8fbf9}.msa-table tbody tr:hover{background:#eef8f1}.msa-table td{color:#354c3d;line-height:1.45}.msa-student-head{padding:17px;background:#f2faf4;border:1px solid #deeee2;border-radius:12px;margin:16px 0}.msa-student-head h3{margin:0;color:#185c35}.msa-student-head p{margin:5px 0;color:#5e7264}.msa-student-select{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:12px;background:#f8fbf8;border-radius:11px;margin:12px 0}.msa-student-select label{min-width:230px;flex:1}.msa-results .msa-table-wrap{max-width:100%}@media(max-width:1100px){.msa-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.msa-filters label:first-child{grid-column:span 2}.msa-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.msa-page-head{padding:22px 19px;border-radius:14px}.msa-school-card,.msa-filter-panel,.msa-export-panel,.msa-results{padding:14px;border-radius:13px}.msa-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.msa-filters label:first-child{grid-column:1/-1}.msa-filters select[multiple]{min-height:92px}.msa-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.msa-kpis>div{padding:14px 12px}.msa-brand{gap:10px}.msa-brand h2{font-size:18px}.msa-nav{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding:5px;scrollbar-width:thin}.msa-nav a{white-space:nowrap;flex:0 0 auto}.msa-results{padding:14px}.msa-results>h2{font-size:19px}.msa-table{min-width:620px}.msa-export-panel{align-items:flex-start}.msa-export{width:100%}}@media(max-width:440px){.msa-filters{grid-template-columns:1fr}.msa-filters label:first-child{grid-column:auto}.msa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.msa-kpis strong{font-size:19px}.msa-brand{flex-direction:column}.msa-export a,.msa-export button{flex:1 1 120px}.msa-table th,.msa-table td{padding:9px;font-size:11px}}@media(prefers-reduced-motion:reduce){.msa-nav a,.msa-export a,.msa-export button{transition:none}}@media print{.side,.top,.msa-page-head,.msa-filter-panel,.msa-nav,.msa-export-panel,.page>h1,.page>.muted{display:none!important}.main{margin:0!important;padding:0!important}.msa-page{max-width:none;padding:0}.msa-school-card,.msa-results{border:0;box-shadow:none;padding:0;margin:0}.msa-results{margin-top:8px}.msa-table-wrap{overflow:visible;border:0}.msa-table{min-width:0}.msa-table th,.msa-table td{font-size:8px;padding:4px}.msa-kpis>div{box-shadow:none}}
 </style>"""
         )
-        return _school_page(request, "Class MarkSheet Analysis", body)
+        return _school_page(request, page_heading, body)
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET ANALYSIS FAILED:", repr(exc), flush=True)
         try:
