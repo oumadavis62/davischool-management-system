@@ -1782,7 +1782,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         current_ds_tab=""
     action_html="".join("<a class='action academic-manager-tile' data-academic-prefetch='1' href='%s%s'><span>%s</span>%s<small>%s</small></a>"%(x[0],("?ds_tab="+quote(current_ds_tab,safe="")) if current_ds_tab else "",x[1],x[2],x[3]) for x in actions)
     if tracker_page:
-        body="<div class='page'><a class='back-link' href='/app/academics'>← Back to Academic Management</a><h1>Examination Submission Tracker</h1><div class='muted'>Track subject submissions for each examination, including historical class/stream allocations.</div>"
+        body="<div class='page'><h1>Examination Submission Tracker</h1><div class='muted'>Track subject submissions for each examination, including historical class/stream allocations.</div>"
     else:
         body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Entries</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams),len(classes),int(stat["entries"] or 0))
         body+="<div class='section'><div class='actions'>"+action_html+"</div></div>"
