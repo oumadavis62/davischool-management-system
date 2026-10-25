@@ -12309,13 +12309,13 @@ def class_marksheet_analysis(
             ]
         )
         form = (
-            "<form class='msa-filters' method='get' action='%s'>"
+            "<form id='msa-filter-form' class='msa-filters' method='get' action='%s' data-allow-repeat-submit='true'>"
             "<label>Examinations<details class='msa-exam-picker'><summary>%s</summary><div class='msa-exam-options'>%s</div></details></label>"
             "<label>Academic year<select name='year'>%s</select></label>"
             "<label>Term<select name='term'>%s</select></label>"
             "<label>Class<select name='class_name'><option value=''>All classes</option>%s</select></label>"
             "<label>Stream<select name='stream'><option value=''>All streams</option>%s</select></label>"
-            "<input type='hidden' name='view' value='%s'><button class='msa-button' type='submit'>Apply filters</button></form>"
+            "<input type='hidden' name='view' value='%s'><button class='msa-button' type='submit' name='apply_filters' value='1'>Apply filters</button></form>"
         ) % (base, exam_picker_label, exam_options, year_options, term_options, class_options, stream_options, escape(view))
         # Summary cards use only learners with at least one recorded subject mark.
         eligible = list(view_data["summaries"].values())
