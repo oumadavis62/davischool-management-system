@@ -1828,35 +1828,53 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         teacher_names=teachers_by_class_subject.setdefault((allocation_class_id,allocation_subject_id),[])
                         if teacher_name and teacher_name not in teacher_names:
                             teacher_names.append(teacher_name)
-                # Staffing moves with promoted cohorts. For an exam in the year
-                # immediately preceding promotion, prefer the archived staffing
-                # snapshot over the current allocation now assigned to a new cohort.
+                # Resolve teacher staffing against the exam year, not just the
+                # current active allocation. Promotion history is recorded in the
+                # promotion cycle year, which may be the year AFTER the exam year.
+                # For each participating class, use the first archived promotion
+                # snapshot from the exam year or a later cycle, so a later promotion
+                # cannot overwrite the staffing that belonged to this exam cohort.
                 if exam_year:
                     try:
-                        historical_allocations=tracker_cur.execute("""SELECT DISTINCT h.class_id,h.subject_id,h.teacher_id,
+                        historical_allocations=tracker_cur.execute("""SELECT h.cycle_year,h.class_id,h.subject_id,h.teacher_id,
                             COALESCE(NULLIF(trim(h.teacher_name),''),'Unassigned teacher') AS teacher_name
                             FROM teacher_allocation_history h
-                            WHERE h.school_id=? AND h.cycle_year=? AND h.reason='Cohort promoted to next class'
-                            ORDER BY h.class_id,h.subject_id,teacher_name""",(sid,exam_year)).fetchall()
+                            WHERE h.school_id=? AND h.cycle_year>=?
+                              AND h.reason='Cohort promoted to next class'
+                            ORDER BY h.class_id,h.cycle_year,h.subject_id,teacher_name""",(sid,exam_year)).fetchall()
+                        earliest_cycle_by_class={}
+                        for allocation in historical_allocations:
+                            if allocation["class_id"] is None or allocation["subject_id"] is None:
+                                continue
+                            history_class_id=int(allocation["class_id"])
+                            history_cycle=int(allocation["cycle_year"] or 0)
+                            if history_class_id not in participating_ids if participating_ids is not None else False:
+                                continue
+                            earliest_cycle_by_class[history_class_id]=min(
+                                earliest_cycle_by_class.get(history_class_id,history_cycle),history_cycle)
                         historical_subjects_by_class={}
                         historical_teachers_by_class_subject={}
                         for allocation in historical_allocations:
                             if allocation["class_id"] is None or allocation["subject_id"] is None:
                                 continue
-                            key=(int(allocation["class_id"]),int(allocation["subject_id"]))
+                            history_class_id=int(allocation["class_id"])
+                            history_cycle=int(allocation["cycle_year"] or 0)
+                            if history_class_id not in earliest_cycle_by_class or earliest_cycle_by_class[history_class_id]!=history_cycle:
+                                continue
+                            key=(history_class_id,int(allocation["subject_id"]))
                             historical_subjects_by_class.setdefault(key[0],set()).add(key[1])
                             teacher_name=str(allocation["teacher_name"] or "Unassigned teacher").strip()
                             teacher_names=historical_teachers_by_class_subject.setdefault(key,[])
                             if teacher_name and teacher_name not in teacher_names:
                                 teacher_names.append(teacher_name)
-                        # Replace current staffing for any class with an archived
-                        # snapshot: its active allocations now belong to a newer cohort.
+                        # Archived rows replace current allocations only for classes
+                        # actually covered by that historical snapshot.
                         for historical_class_id,historical_subject_ids in historical_subjects_by_class.items():
                             subjects_by_class[historical_class_id]=historical_subject_ids
                         for key,teacher_names in historical_teachers_by_class_subject.items():
                             teachers_by_class_subject[key]=teacher_names
-                    except Exception:
-                        pass
+                    except Exception as history_exc:
+                        print("DAVISCHOOL TRACKER HISTORICAL STAFFING WARNING:",repr(history_exc),flush=True)
                 all_subject_rows=tracker_cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
                 subject_names={int(x["id"]):str(x["name"] or "Subject") for x in all_subject_rows}
                 for tracker_class in participating_classes:
