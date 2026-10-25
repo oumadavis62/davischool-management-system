@@ -13598,7 +13598,7 @@ def class_marksheet_analysis_pdf(
             stream_ranks.append(stream_rank)
         stream_headers = [
             "Rank", "Class", "Stream", "Learners assessed", "Learners not assessed"
-        ] + [label for subject in ranking_subject_names for label in (subject, subject + " Grd")] + [
+        ] + [label for subject in ranking_subject_names for label in (subject, "GRADE")] + [
             "Overall mean %", "Overall grade"
         ]
         _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
@@ -13618,7 +13618,7 @@ def class_marksheet_analysis_pdf(
             ])
             class_ranks.append(item["rank"])
         class_headers = ["Rank", "Class", "Learners assessed"] + [
-            label for subject in ranking_subject_names for label in (subject, subject + " Grd")
+            label for subject in ranking_subject_names for label in (subject, "GRADE")
         ] + ["Overall mean %", "Overall grade"]
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
 
