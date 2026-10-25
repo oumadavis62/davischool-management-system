@@ -1845,8 +1845,12 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                             h.reason,h.recorded_at
                             FROM teacher_allocation_history h
                             WHERE h.school_id=?
-                              AND h.reason IN ('Cohort promoted to next class',
-                                             'Destination class staffing replaced by promoted cohort')
+                              AND h.reason IN (
+                                  'Cohort promoted to next class',
+                                  'Destination class staffing replaced by promoted cohort',
+                                  'Prior allocation retained for cohort promoted to next class',
+                                  'Class cohort graduated'
+                              )
                             ORDER BY h.class_id,h.cycle_year,h.subject_id,h.recorded_at,teacher_name""",(sid,)).fetchall()
                         # The first promotion snapshot ON OR AFTER the exam year is
                         # the staffing that belonged to the cohort sitting that exam.
@@ -1886,7 +1890,9 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                                 continue
                             reason=str(allocation["reason"] or "")
                             key=(history_class_id,history_cycle)
-                            priority=2 if reason=="Destination class staffing replaced by promoted cohort" else (1 if reason=="Cohort promoted to next class" else 0)
+                            priority=(3 if reason=="Destination class staffing replaced by promoted cohort" else
+                                      2 if reason=="Prior allocation retained for cohort promoted to next class" else
+                                      1 if reason in ("Cohort promoted to next class","Class cohort graduated") else 0)
                             if priority>chosen_reason_by_class_cycle.get(key,0):
                                 chosen_reason_by_class_cycle[key]=priority
                         historical_subjects_by_class={}
@@ -1900,7 +1906,9 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                             if chosen is None or chosen!=history_cycle:
                                 continue
                             reason=str(allocation["reason"] or "")
-                            priority=2 if reason=="Destination class staffing replaced by promoted cohort" else (1 if reason=="Cohort promoted to next class" else 0)
+                            priority=(3 if reason=="Destination class staffing replaced by promoted cohort" else
+                                      2 if reason=="Prior allocation retained for cohort promoted to next class" else
+                                      1 if reason in ("Cohort promoted to next class","Class cohort graduated") else 0)
                             if priority!=chosen_reason_by_class_cycle.get((history_class_id,history_cycle),0):
                                 continue
                             key=(history_class_id,int(allocation["subject_id"]))
