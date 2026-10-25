@@ -14041,7 +14041,8 @@ def class_marksheet_analysis_pdf(
         # Start subject-by-class/stream performance on a separate page after insights.
         story.append(PageBreak())
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
-        story.append(Paragraph("<u>Subject performance by class and stream</u>", styles["MSASection"]))
+        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
+        story.append(Paragraph("<u>Subject performance by class and stream</u>", centered_page_heading))
         grades_per_subject = len(grade_labels)
         subject_width = grades_per_subject + 3
         subject_matrix_tables = []
@@ -14103,7 +14104,6 @@ def class_marksheet_analysis_pdf(
             else:
                 story.append(left_stack)
             story.append(Spacer(1, 3*mm))
-        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
         # Start the combined-class Top Students per Subject section on its own page.
         story.append(PageBreak())
         combined_by_subject = {}
