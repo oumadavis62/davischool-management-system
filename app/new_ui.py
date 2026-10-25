@@ -12603,17 +12603,28 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
         group_key = (str(info.get("class_name") or "Unassigned"), str(info.get("stream") or "No stream"))
         if group_key in group_students:
             group_students[group_key].add(int(student_id))
+    # Use one canonical dash column for all missing/unassessed labels.
+    # Some schools have a configured grade of "-" or "—"; adding that as a
+    # normal grade beside the synthetic missing-mark column creates duplicate
+    # dash columns throughout the analysis tables.
+    def _msa_is_dash_grade(value):
+        return str(value or "").strip() in {"", "-", "—", "–", "−", "N/A", "NA"}
+
     all_grades.add("-")
     for subject_rules in data["grading_rules"].values():
         for rule in subject_rules:
-            all_grades.add(str(rule["grade"] or "—"))
+            configured_grade = str(rule["grade"] or "").strip()
+            if not _msa_is_dash_grade(configured_grade):
+                all_grades.add(configured_grade)
     for (group_key, student_id, subject_id), attempts in student_subject_rows.items():
         percentages = [float(x["percentage"]) for x in attempts]
         percentage = sum(percentages) / len(percentages) if percentages else 0.0
         grade, _, _ = _subject_grade_details(
             cur, school_id, subject_id, percentage, data["grading_rules"], 100
         )
-        grade = str(grade or "—")
+        grade = str(grade or "").strip()
+        if _msa_is_dash_grade(grade):
+            grade = "-"
         all_grades.add(grade)
         stats = per_group_subject.setdefault((group_key, subject_id), {"grades": {}, "values": []})
         stats["grades"][grade] = stats["grades"].get(grade, 0) + 1
@@ -12633,10 +12644,16 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
     grade_order = []
     for subject_id in subjects:
         for rule in data["grading_rules"].get(subject_id, []):
-            grade = str(rule["grade"] or "—")
+            grade = str(rule["grade"] or "").strip()
+            if _msa_is_dash_grade(grade):
+                continue
             if grade not in grade_order:
                 grade_order.append(grade)
     grade_order.extend(sorted(all_grades - set(grade_order), key=str.casefold))
+    # Guarantee exactly one dash column even if multiple grading rules use
+    # different dash glyphs or blank placeholders.
+    grade_order = [grade for grade in grade_order if not _msa_is_dash_grade(grade)]
+    grade_order.append("-")
 
     subject_means = {}
     positions = {}
