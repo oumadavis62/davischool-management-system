@@ -12320,8 +12320,7 @@ def class_marksheet_analysis(
         else:
             individual_head = "<p>Select a learner with recorded marks to see subject strengths and weaknesses.</p>"
         content_by_view = {
-            "summary": "<h2>Class Performance Summary</h2>" + summary_cards +
-                       "<h3>Class averages</h3>" + _msa_html_table(["Class", "Mean percentage", "Learners assessed"], class_summary),
+            "summary": summary_cards,
             "subjects": "<h2>Subject Performance Analysis</h2>" + subject_table,
             "students": "<h2>Individual Student Performance</h2>" +
                         "<form class='msa-student-select' method='get'><input type='hidden' name='view' value='students'>" +
