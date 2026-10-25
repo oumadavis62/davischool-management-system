@@ -12361,7 +12361,6 @@ def class_marksheet_analysis(
             "<p class='muted'>Explore class results, subject strengths, student performance and examination trends.</p></header>"
             + "<section class='msa-school-card'>" + report_brand + "</section>"
             + "<section class='msa-filter-panel'><div class='msa-panel-heading'><h2>Report filters</h2><p>Choose the examinations and group you want to analyse.</p></div>" + form + "</section>"
-            + "<nav class='msa-nav' aria-label='Analysis sections'>" + nav + "</nav>"
             + "<section class='msa-export-panel'><div><h2>Export report</h2><p>Download or print the current selection.</p></div>" + export_links + "</section>"
             + "<section class='msa-results'>" + content_by_view[view] + "</section></div>"
             + """<style>
