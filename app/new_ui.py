@@ -13654,10 +13654,11 @@ def class_marksheet_analysis_pdf(
                     for value in headers[:len(fixed_widths)]
                 ]
                 subject_names = headers[len(fixed_widths):-len(tail_widths)]
-                first_header.extend(
-                    Paragraph("<b>%s</b>" % escape(str(subject_names[i])), header_style)
-                    for i in range(0, len(subject_names), 2)
-                )
+                for i in range(0, len(subject_names), 2):
+                    first_header.append(
+                        Paragraph("<b>%s</b>" % escape(str(subject_names[i])), header_style)
+                    )
+                    first_header.append("")
                 first_header.extend(
                     Paragraph("<b>%s</b>" % escape(str(value)), header_style)
                     for value in headers[-len(tail_widths):]
