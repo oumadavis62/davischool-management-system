@@ -13466,23 +13466,21 @@ def class_marksheet_analysis_pdf(
                     return (0, index, normalized)
             return (1, len(ranking_subject_order), normalized)
         ranking_subject_ids = sorted(ranking_data["subjects"], key=_msa_rank_subject_key)
-        # Use compact subject initials in the wide Class/Stream Analysis tables.
-        ranking_subject_initials = {
-            "english": "ENG",
-            "kiswahili": "KIS",
-            "mathematics": "MATH",
-            "integrated science": "IS",
-            "agriculture": "AGR",
-            "creative arts and sports": "CAS",
-            "social studies": "SS",
-            "christian religious education": "CRE",
-            "pre technical studies": "PTS",
-        }
+        # Use each subject's configured Initial from the Subjects settings page.
+        configured_subject_initials = {}
+        try:
+            configured_initial_rows = cur.execute(
+                "SELECT id, initial FROM subjects WHERE school_id=?", (sid,)
+            ).fetchall()
+            configured_subject_initials = {
+                int(row["id"]): str(row["initial"] or "").strip()
+                for row in configured_initial_rows
+            }
+        except Exception:
+            configured_subject_initials = {}
         ranking_subject_names = [
-            ranking_subject_initials.get(
-                re.sub(r"[^a-z0-9]+", " ", str(ranking_data["subjects"][subject_id]).casefold()).strip(),
-                str(ranking_data["subjects"][subject_id]).strip().upper()
-            )
+            configured_subject_initials.get(int(subject_id), "")
+            or str(ranking_data["subjects"][subject_id]).strip().upper()
             for subject_id in ranking_subject_ids
         ]
 
