@@ -13822,14 +13822,18 @@ def class_marksheet_analysis_pdf(
             ]
             pdf_table("Best 10 students — " + ranked_class, ranking_headers, class_top_ten, compact=True)
 
-        overall_top_ten = [
-            [rank, learner["name"], learner["class_name"],
-             learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-            for rank, learner in _msa_rank_students(ranked_learners)[:10]
-        ]
-        pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
+        # A combined ranking adds no information when the selected exam data
+        # contains only one class: it would repeat that class's Best 10 table.
+        # Keep it for multi-class comparisons, including multi-exam selections.
+        if len(class_names) > 1:
+            overall_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in _msa_rank_students(ranked_learners)[:10]
+            ]
+            pdf_table("Best 10 students — combined classes", ranking_headers, overall_top_ten, compact=True)
 
-        teacher_performance = _msa_teacher_performance(cur, sid, data)
+        teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", styles["MSASection"]))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
