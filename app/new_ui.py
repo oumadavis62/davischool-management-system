@@ -1848,7 +1848,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                                 continue
                             history_class_id=int(allocation["class_id"])
                             history_cycle=int(allocation["cycle_year"] or 0)
-                            if history_class_id not in participating_ids if participating_ids is not None else False:
+                            if participating_ids is not None and history_class_id not in participating_ids:
                                 continue
                             earliest_cycle_by_class[history_class_id]=min(
                                 earliest_cycle_by_class.get(history_class_id,history_cycle),history_cycle)
