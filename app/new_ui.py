@@ -14022,7 +14022,7 @@ def class_marksheet_analysis_pdf(
                 chart_data,
                 colWidths=[
                     doc.width * 0.24, doc.width * 0.08,
-                    doc.width * 0.58, doc.width * 0.10,
+                    doc.width * 0.464, doc.width * 0.10,
                 ],
                 repeatRows=1, hAlign="LEFT"
             )
