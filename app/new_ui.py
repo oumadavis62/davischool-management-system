@@ -12573,9 +12573,14 @@ def _msa_subject_performance_matrix(cur, school_id, rows, data):
     return subject_order, [subjects[sid] for sid in subject_order], grade_order, matrix_rows
 
 
-def _msa_teacher_performance(cur, school_id, data):
-    """Rank allocated teachers by mean recorded marks in the selected exams."""
-    allocation_rows = cur.execute(
+def _msa_teacher_performance(cur, school_id, data, report_rows=None):
+    """Rank teachers using the allocation that applied when each exam was sat."""
+    report_rows = list(report_rows or [])
+    selected_years = {
+        int(str(row.get("exam_year") or 0))
+        for row in report_rows if str(row.get("exam_year") or "").isdigit()
+    }
+    current_rows = cur.execute(
         """SELECT a.teacher_id, t.name AS teacher_name, a.class_id,
                   c.name AS class_name, c.stream AS class_stream,
                   a.subject_id, sub.name AS subject_name
@@ -12583,33 +12588,77 @@ def _msa_teacher_performance(cur, school_id, data):
            JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
            JOIN subjects sub ON sub.id=a.subject_id AND sub.school_id=a.school_id
-           WHERE a.school_id=?
-           ORDER BY sub.name, t.name, c.name, c.stream""",
-        (school_id,)
+           WHERE a.school_id=?""", (school_id,)
     ).fetchall()
+    history_rows = []
+    try:
+        _ensure_teacher_assignment_history_tables(cur)
+        if selected_years:
+            placeholders = ",".join("?" for _ in selected_years)
+            history_rows = cur.execute(
+                """SELECT h.teacher_id, COALESCE(h.teacher_name,t.name,'Unassigned') AS teacher_name,
+                          h.class_id, COALESCE(c.name,'Archived class') AS class_name,
+                          COALESCE(c.stream,'') AS class_stream, h.subject_id,
+                          COALESCE(h.subject_name,sub.name,'Unknown subject') AS subject_name,
+                          h.cycle_year
+                   FROM teacher_allocation_history h
+                   LEFT JOIN teachers t ON t.id=h.teacher_id AND t.school_id=h.school_id
+                   LEFT JOIN classes c ON c.id=h.class_id AND c.school_id=h.school_id
+                   LEFT JOIN subjects sub ON sub.id=h.subject_id AND sub.school_id=h.school_id
+                   WHERE h.school_id=? AND h.cycle_year IN (""" + placeholders + ")",
+                [school_id] + sorted(selected_years)
+            ).fetchall()
+    except Exception as history_exc:
+        print("DAVISCHOOL MSA HISTORICAL TEACHER ALLOCATION WARNING:", repr(history_exc), flush=True)
+        history_rows = []
+
+    historical_keys = {
+        (int(a["class_id"]), int(a["subject_id"]), int(a["cycle_year"]))
+        for a in history_rows
+        if a["class_id"] is not None and a["subject_id"] is not None and a["cycle_year"] is not None
+    }
+    allocations = []
+    for a in history_rows:
+        allocations.append({
+            "teacher_id": int(a["teacher_id"]), "teacher_name": str(a["teacher_name"] or "Unassigned"),
+            "class_id": int(a["class_id"]), "class_name": str(a["class_name"] or "Archived class"),
+            "subject_id": int(a["subject_id"]), "subject_name": str(a["subject_name"] or "Unknown subject"),
+            "cycle_year": int(a["cycle_year"]), "historical": True,
+        })
+    for a in current_rows:
+        allocations.append({
+            "teacher_id": int(a["teacher_id"]), "teacher_name": str(a["teacher_name"] or "Unassigned"),
+            "class_id": int(a["class_id"]), "class_name": str(a["class_name"] or "Unassigned"),
+            "subject_id": int(a["subject_id"]), "subject_name": str(a["subject_name"] or "Unknown subject"),
+            "cycle_year": None, "historical": False,
+        })
+
     combined = {}
     by_class = {}
-    for allocation in allocation_rows:
-        teacher_id = int(allocation["teacher_id"])
-        class_id = int(allocation["class_id"])
-        subject_id = int(allocation["subject_id"])
-        teacher_name = str(allocation["teacher_name"] or "Unassigned")
-        subject_name = str(allocation["subject_name"] or "Unknown subject")
-        class_label = str(allocation["class_name"] or "Unassigned")
+    # Use raw marks rows: one learner may have been in different classes across
+    # selected exams, and the teacher must be matched to each exam-year snapshot.
+    for allocation in allocations:
+        teacher_id = allocation["teacher_id"]
+        class_id = allocation["class_id"]
+        subject_id = allocation["subject_id"]
         scores = []
-        for (student_id, aggregated_subject_id), item in data["aggregated"].items():
-            if int(aggregated_subject_id) != subject_id:
+        for row in report_rows:
+            if int(row.get("class_id") or 0) != class_id or int(row.get("subject_id") or 0) != subject_id:
                 continue
-            info = data["students"].get(int(student_id), {})
-            if int(info.get("class_id") or 0) != class_id:
+            year_text = str(row.get("exam_year") or "")
+            row_year = int(year_text) if year_text.isdigit() else 0
+            if allocation["historical"]:
+                if row_year != allocation["cycle_year"]:
+                    continue
+            elif (class_id, subject_id, row_year) in historical_keys:
                 continue
-            scores.append(float(item.get("percentage") or 0))
+            scores.append(float(row.get("percentage") or 0))
         if not scores:
             continue
         base = {
-            "teacher_id": teacher_id, "teacher": teacher_name,
-            "subject_id": subject_id, "subject": subject_name,
-            "class_id": class_id, "class": class_label,
+            "teacher_id": teacher_id, "teacher": allocation["teacher_name"],
+            "subject_id": subject_id, "subject": allocation["subject_name"],
+            "class_id": class_id, "class": allocation["class_name"],
         }
         combined.setdefault(
             (teacher_id, subject_id),
@@ -12775,6 +12824,20 @@ def class_marksheet_analysis_csv(
                 str(enrolled["stream"] or "No stream"),
             )
             enrolled_by_class_stream.setdefault(group_key, set()).add(int(enrolled["id"]))
+        # The class_id on each saved marks row records the cohort at exam time.
+        # Include these learners even when they have since been promoted or
+        # graduated and no longer appear in the active-student roster.
+        for row in rows:
+            try:
+                student_id = int(row["student_id"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            group_key = (
+                str(row.get("class_name") or "Unassigned"),
+                str(row.get("stream") or "No stream"),
+            )
+            enrolled_student_ids.add(student_id)
+            enrolled_by_class_stream.setdefault(group_key, set()).add(student_id)
         assessed_student_ids = {
             int(row["student_id"]) for row in rows
             if row.get("student_id") is not None
@@ -13004,7 +13067,7 @@ def class_marksheet_analysis_csv(
                 "%.2f%%" % (max(vals) if vals else 0),
                 "%.2f%%" % (min(vals) if vals else 0),
             ])
-        teacher_performance = _msa_teacher_performance(cur, sid, data)
+        teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
         for key, heading in [("combined", "Combined classes"), ("class", "Class-wise")]:
             writer.writerow([])
             _msa_csv_heading("BEST TEACHERS BY SUBJECT")
@@ -13247,13 +13310,23 @@ def class_marksheet_analysis_pdf(
                 "WHERE st.school_id=?",
                 (sid,)
             ).fetchall()
-            total_learners = sum(
-                1 for learner in exam_roster
+            # Count current roster members plus learners represented by saved
+            # marks for this historical exam, including graduates.
+            roster_ids = {
+                int(learner["id"]) for learner in exam_roster
                 if (str(learner["class_name"] or "Unassigned"),
                     str(learner["stream"] or "No stream")) in exam_group_keys
                 and (not class_name or str(learner["class_name"] or "") == class_name)
                 and (not stream or str(learner["stream"] or "") == stream)
+            }
+            roster_ids.update(
+                int(row["student_id"]) for row in exam_rows
+                if (str(row.get("class_name") or "Unassigned"),
+                    str(row.get("stream") or "No stream")) in exam_group_keys
+                and (not class_name or str(row.get("class_name") or "") == class_name)
+                and (not stream or str(row.get("stream") or "") == stream)
             )
+            total_learners = len(roster_ids)
             learners_not_assessed = max(0, total_learners - learners_assessed)
             summary_rows.append([exam_label, learners_assessed, learners_not_assessed])
         pdf_table(
