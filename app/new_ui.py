@@ -14357,7 +14357,7 @@ def class_marksheet_analysis_pdf(
             ]))
             class_dist_data = [[
                 Paragraph("<b>Stream</b>", class_dist_style),
-                Paragraph("<b>No.</b>", class_dist_style),
+                Paragraph("<b>No. of Students</b>", class_dist_style),
                 Paragraph("<b>Share</b>", class_dist_style),
             ]]
             class_dist_data.extend([
@@ -14482,7 +14482,7 @@ def class_marksheet_analysis_pdf(
 
             distribution_data = [[
                 Paragraph("<b>Class / Stream</b>", distribution_cell_style),
-                Paragraph("<b>No.</b>", distribution_cell_style),
+                Paragraph("<b>No. of Students</b>", distribution_cell_style),
                 Paragraph("<b>Share</b>", distribution_cell_style),
             ]]
             distribution_data.extend([
