@@ -14139,6 +14139,87 @@ def class_marksheet_analysis_pdf(
             ]))
             story.append(paired_subjects)
         story.append(Spacer(1, 1.5 * mm))
+
+        # Start class-wise Top Students per Subject on its own page.
+        # Merge stream-level top-five candidates to calculate the top five per class.
+        story.append(PageBreak())
+        classwise_candidates = {}
+        for entry in data["top_stream"]:
+            subject_name = entry[0]
+            class_label = student_class_by_admission.get(str(entry[4] or ""), "Unassigned")
+            classwise_candidates.setdefault((subject_name, class_label), []).append(entry)
+        story.append(Paragraph("<u>Top Students per Subject — class-wise</u>", centered_page_heading))
+        for subject_index, subject_name in enumerate(msa_subject_names_by_position):
+            if subject_index > 0:
+                story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
+            story.append(Paragraph("<u>" + escape(str(subject_name)) + "</u>", styles["MSASection"]))
+            class_names = sorted(
+                {class_label for subject, class_label in classwise_candidates if subject == subject_name},
+                key=str.casefold,
+            )
+            class_cards = []
+            for class_label in class_names:
+                candidates = classwise_candidates.get((subject_name, class_label), [])
+                unique_candidates = {}
+                for entry in candidates:
+                    unique_candidates[str(entry[4] or entry[3])] = entry
+                ranked_candidates = sorted(
+                    unique_candidates.values(),
+                    key=lambda entry: (-float(str(entry[7]).rstrip("%") or 0), str(entry[3]).casefold()),
+                )
+                cell_style = ParagraphStyle("MSAClasswiseTopCell", parent=styles["MSACell"], fontSize=6, leading=6.5)
+                header_style = ParagraphStyle("MSAClasswiseTopHeader", parent=cell_style, fontName="Helvetica-Bold")
+                table_data = [[
+                    Paragraph("Rank", header_style), Paragraph("Student", header_style),
+                    Paragraph("Stream", header_style), Paragraph("Mark", header_style),
+                    Paragraph("Grade", header_style),
+                ]]
+                previous_pct = None
+                rank = 0
+                for index, entry in enumerate(ranked_candidates[:5], 1):
+                    percentage = float(str(entry[7]).rstrip("%") or 0)
+                    if previous_pct is None or abs(percentage - previous_pct) > 0.000001:
+                        rank = index
+                    table_data.append([
+                        Paragraph(escape(str(rank)), cell_style),
+                        Paragraph(escape(str(entry[3])), cell_style),
+                        Paragraph(escape(str(entry[5] or "No stream")), cell_style),
+                        Paragraph(escape(str(entry[6])), cell_style),
+                        Paragraph(escape(str(entry[8])), cell_style),
+                    ])
+                    previous_pct = percentage
+                if len(table_data) == 1:
+                    table_data.append([Paragraph("No eligible students", cell_style)] + [Paragraph("", cell_style) for _ in range(4)])
+                table = Table(table_data, colWidths=[9*mm, doc.width/2-48*mm, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="LEFT")
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.white),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                    ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 1),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 1),
+                    ("TOPPADDING", (0,0), (-1,-1), 1),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+                ]))
+                class_cards.append([Paragraph("<b>" + escape(class_label) + "</b>", header_style), table])
+            if not class_cards:
+                cell_style = styles["MSACell"]
+                class_cards = [[Paragraph("<b>No eligible class</b>", styles["MSACell"]), Paragraph("No students sat this subject", cell_style)]]
+            for pair_start in range(0, len(class_cards), 2):
+                left_card = class_cards[pair_start]
+                right_card = class_cards[pair_start + 1] if pair_start + 1 < len(class_cards) else []
+                paired_class_cards = Table([[left_card, right_card]], colWidths=[doc.width/2, doc.width/2], hAlign="LEFT")
+                paired_class_cards.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 3*mm),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 2*mm),
+                ]))
+                story.append(paired_class_cards)
+            story.append(Spacer(1, 1.5*mm))
+
         # Start the stream-wise Top Students per Subject section on its own page.
         story.append(PageBreak())
         stream_by_subject = {}
