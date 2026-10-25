@@ -13444,15 +13444,16 @@ def class_marksheet_analysis_pdf(
             for learner_summary in exam_data["summaries"].values():
                 if int(learner_summary.get("subject_count") or 0) <= 0:
                     continue
+                assessed += 1
                 grade = str(learner_summary.get("overall_grade") or "").strip().upper()
                 outcome = _msa_pass_fail_grade(grade)
-                if outcome is None:
-                    continue
-                assessed += 1
                 if outcome == "pass":
                     passed += 1
-                else:
+                elif outcome == "fail":
                     failed += 1
+            exam_roster_data = _msa_historical_roster(cur, sid, exam_rows)
+            total_learners = len(set(exam_roster_data.get("student_ids", set())))
+            not_assessed = max(0, total_learners - assessed)
             classified = passed + failed
             pass_pct = (passed / classified * 100) if classified else None
             fail_pct = (failed / classified * 100) if classified else None
@@ -13460,10 +13461,11 @@ def class_marksheet_analysis_pdf(
                 exam_label, assessed, passed,
                 f"{pass_pct:.1f}%" if pass_pct is not None else "—",
                 failed, f"{fail_pct:.1f}%" if fail_pct is not None else "—",
+                not_assessed,
             ])
         pdf_table(
             "Overall Examination Pass/Fail",
-            ["Examination", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)"],
+            ["Examination", "Assessed", "Passed", "Pass (%)", "Failed", "Fail (%)", "Not assessed"],
             overall_pass_fail_rows, compact=True
         )
 
