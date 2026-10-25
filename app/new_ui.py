@@ -13285,8 +13285,7 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<b>BROAD-MARKSHEET ANALYSIS</b>", analysis_title_style))
         story.append(Spacer(1, 4*mm))
         def pdf_table(title, headers, values, compact=False, column_profile=None):
-            if title:
-                story.append(Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]))
+            heading = Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]) if title else None
             cell_style = styles["MSACell"]
             if compact:
                 cell_style = ParagraphStyle(
@@ -13355,7 +13354,12 @@ def class_marksheet_analysis_pdf(
                 ("TOPPADDING", (0,0), (-1,-1), vert_pad),
                 ("BOTTOMPADDING", (0,0), (-1,-1), vert_pad),
             ]))
-            story.append(tbl)
+            # Keep each heading attached to its table so a page break never
+            # leaves headings such as "Mathematics" stranded above the table.
+            if heading:
+                story.append(KeepTogether([heading, tbl]))
+            else:
+                story.append(tbl)
             story.append(Spacer(1, 1.5*mm if compact else 3*mm))
         def _msa_pdf_grade(value):
             raw = str(value or "").strip().upper()
@@ -13513,8 +13517,8 @@ def class_marksheet_analysis_pdf(
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
                 ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#c5d8cb")),
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("ALIGN", (0,0), (0,-1), "CENTER"),
-                ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                # Center every cell, including text labels, across all ranking rows.
+                ("ALIGN", (0,0), (-1,-1), "CENTER"),
                 ("LEFTPADDING", (0,0), (-1,-1), 2),
                 ("RIGHTPADDING", (0,0), (-1,-1), 2),
                 ("TOPPADDING", (0,0), (-1,-1), 3),
@@ -13534,8 +13538,10 @@ def class_marksheet_analysis_pdf(
                     commands.append(("BACKGROUND", (0,row_index), (-1,row_index), podium[rank_number-1]))
                     commands.append(("FONTNAME", (0,row_index), (-1,row_index), "Helvetica-Bold"))
             table.setStyle(TableStyle(commands))
-            story.append(Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]))
-            story.append(table)
+            story.append(KeepTogether([
+                Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]),
+                table,
+            ]))
             story.append(Spacer(1, 2*mm))
 
         # Stream rankings retain the existing mean/tie calculation, but omit
@@ -13560,7 +13566,7 @@ def class_marksheet_analysis_pdf(
         stream_headers = [
             "Class", "Stream", "Learners assessed", "Learners not assessed", "Overall mean %", "Rank"
         ] + ranking_subject_names
-        _msa_ranking_table("Stream rankings", stream_headers, stream_rows, stream_ranks, 6)
+        _msa_ranking_table("Stream Analysis", stream_headers, stream_rows, stream_ranks, 6)
 
         # Class ranking order and ties are supplied by _msa_ranked_rows. Its
         # overall mean continues to use the common-subject fairness rule.
@@ -13577,7 +13583,7 @@ def class_marksheet_analysis_pdf(
             ] + class_subjects)
             class_ranks.append(item["rank"])
         class_headers = ["Rank", "Class", "Overall mean %", "Learners assessed"] + ranking_subject_names
-        _msa_ranking_table("Class rankings", class_headers, class_rows, class_ranks, 4)
+        _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
 
         msa_overall_counts = {grade: 0 for grade in msa_grade_order}
         for student_id in enrolled_student_ids:
