@@ -12320,7 +12320,7 @@ def class_marksheet_analysis(
         else:
             individual_head = "<p>Select a learner with recorded marks to see subject strengths and weaknesses.</p>"
         content_by_view = {
-            "summary": summary_cards,
+            "summary": "" if embedded_in_academic_analysis else summary_cards,
             "subjects": "<h2>Subject Performance Analysis</h2>" + subject_table,
             "students": "<h2>Individual Student Performance</h2>" +
                         "<form class='msa-student-select' method='get'><input type='hidden' name='view' value='students'>" +
