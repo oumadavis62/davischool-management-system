@@ -14513,9 +14513,9 @@ def class_marksheet_analysis_pdf(
                 continue
             learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
             raw_gender = str(learner_info.get("gender") or "").strip().casefold()
-            if raw_gender in ("male", "m"):
+            if raw_gender in ("male", "m", "boy", "man"):
                 gender_label = "Male"
-            elif raw_gender in ("female", "f"):
+            elif raw_gender in ("female", "f", "girl", "woman"):
                 gender_label = "Female"
             elif raw_gender in ("other", "non-binary", "nonbinary"):
                 gender_label = "Other"
@@ -14533,18 +14533,38 @@ def class_marksheet_analysis_pdf(
                 entry["below"] += 1
             entry["highest"] = learner_mean if entry["highest"] is None else max(entry["highest"], learner_mean)
 
-            for item in (learner_summary.get("items") or []):
-                subject_name = str(item.get("subject_name") or data["subjects"].get(item.get("subject_id"), "Subject"))
-                try:
-                    subject_pct = float(item.get("percentage"))
-                except (TypeError, ValueError):
-                    continue
-                subject_gender = gender_subjects.setdefault(subject_name, {})
-                subject_entry = subject_gender.setdefault(gender_label, {"sum": 0.0, "count": 0})
-                subject_entry["sum"] += subject_pct
-                subject_entry["count"] += 1
 
-        story.append(PageBreak())
+
+        # Build subject-by-gender means from the canonical aggregated marks data.
+        # This avoids empty cells caused by differences in summary-item shapes.
+        for (key, item) in data.get("aggregated", {}).items():
+            try:
+                learner_id, subject_id = key
+                learner_id = int(learner_id)
+                subject_id = int(subject_id)
+                subject_pct = float(item.get("percentage", item.get("percent")))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            learner_info = data["students"].get(learner_id, data["students"].get(str(learner_id), {})) or {}
+            raw_gender = str(learner_info.get("gender") or "").strip().casefold()
+            if raw_gender in ("male", "m", "boy", "man"):
+                gender_label = "Male"
+            elif raw_gender in ("female", "f", "girl", "woman"):
+                gender_label = "Female"
+            elif raw_gender in ("other", "non-binary", "nonbinary"):
+                gender_label = "Other"
+            else:
+                gender_label = "Unspecified"
+            subject_name = str(
+                data["subjects"].get(subject_id, data["subjects"].get(str(subject_id), item.get("subject_name", "Subject")))
+                or item.get("subject_name") or "Subject"
+            )
+            subject_gender = gender_subjects.setdefault(subject_name, {})
+            subject_entry = subject_gender.setdefault(gender_label, {"sum": 0.0, "count": 0})
+            subject_entry["sum"] += subject_pct
+            subject_entry["count"] += 1
+
+        # Keep gender analysis directly below the priority summary on the same page.
         story.append(Paragraph("<u>Gender Performance Analysis</u>", centered_page_heading))
         story.append(Paragraph(
             "Summary of assessed learners' mean percentages by recorded gender for the selected examination filters. "
@@ -14588,8 +14608,8 @@ def class_marksheet_analysis_pdf(
         )
 
         subject_gender_rows = []
-        for subject_name in sorted(gender_subjects, key=str.casefold):
-            subject_gender = gender_subjects[subject_name]
+        for subject_name in sorted(set(str(v) for v in data["subjects"].values()) | set(gender_subjects), key=str.casefold):
+            subject_gender = gender_subjects.get(subject_name, {})
             def _gender_subject_mean(label):
                 item = subject_gender.get(label)
                 return ("%.2f%%" % (item["sum"] / item["count"])) if item and item["count"] else "—"
