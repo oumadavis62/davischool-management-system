@@ -12814,13 +12814,26 @@ def _msa_teacher_performance(cur, school_id, data, report_rows=None):
         base={"teacher_id":teacher_id,"teacher":str(selected["teacher_name"] or "Unassigned"),
             "subject_id":subject_id,"subject":subject_name,"class_id":class_id,"class":class_name}
         score=float(row.get("percentage") or 0)
-        combined.setdefault((teacher_id,subject_id),{**base,"class":"All classes","stream":"All streams","scores":[]})["scores"].append(score)
+        combined_bucket = combined.setdefault(
+            (teacher_id, subject_id),
+            {**base, "class":"All classes", "stream":"All streams", "scores":[], "class_streams":set()}
+        )
+        combined_bucket["scores"].append(score)
+        combined_bucket["class_streams"].add((class_name, stream_name))
         by_class.setdefault((teacher_id,subject_id,class_id,stream_name),{**base,"stream":stream_name,"scores":[]})["scores"].append(score)
     def ranked(buckets,grouping):
         records=[]
         for source in buckets.values():
             item=dict(source); values=item.pop("scores")
             if not values: continue
+            class_streams = item.pop("class_streams", None)
+            if class_streams is not None:
+                item["classes_streams"] = "; ".join(
+                    "%s — %s" % (class_label, stream_label)
+                    for class_label, stream_label in sorted(
+                        class_streams, key=lambda pair: (str(pair[0]).casefold(), str(pair[1]).casefold())
+                    )
+                )
             item["entries"]=len(values); item["mean"]=sum(values)/len(values); records.append(item)
         records.sort(key=lambda item:(tuple(str(item.get(f) or "").casefold() for f in grouping),-item["mean"],item["teacher"].casefold()))
         previous_key=None; previous_mean=None; rank=0
@@ -14686,12 +14699,20 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
         # classes, so class and stream columns are not applicable here.
-        teacher_headers = ["Rank", "Subject", "Teacher", "Entries", "Mean %"]
-        combined_teacher_rows = [
-            [item["rank"], item["subject"], item["teacher"],
-             item["entries"], "%.2f%%" % item["mean"]]
-            for item in teacher_performance["combined"]
-        ]
+        teacher_headers = ["Rank", "Subject", "Teacher", "Classes and Streams", "Entries", "Mean %", "Mean Grade"]
+        combined_teacher_rows = []
+        for item in teacher_performance["combined"]:
+            try:
+                mean_grade, _, _ = _subject_grade_details(
+                    cur, sid, item["subject_id"], item["mean"], data["grading_rules"], 100
+                )
+            except Exception:
+                mean_grade, _ = _default_grade_points(item["mean"])
+            combined_teacher_rows.append([
+                item["rank"], item["subject"], item["teacher"],
+                item.get("classes_streams") or "—", item["entries"],
+                "%.2f%%" % item["mean"], str(mean_grade or "—")
+            ])
         pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
         story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
 
