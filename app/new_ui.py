@@ -11762,7 +11762,7 @@ def _msa_load_rows(cur, school_id, exam_ids):
     placeholders = ",".join("?" for _ in exam_ids)
     sql = """
         SELECT m.student_id, m.subject_id, m.exam_id, m.marks,
-               st.name AS student_name, st.admission_no,
+               st.name AS student_name, st.admission_no, st.gender AS student_gender,
                c.id AS class_id, c.name AS class_name, c.stream,
                sub.name AS subject_name, e.name AS exam_name,
                e.year AS exam_year, e.term AS exam_term,
@@ -11792,6 +11792,7 @@ def _msa_load_rows(cur, school_id, exam_ids):
                 "student_id": int(row["student_id"]),
                 "student_name": str(row["student_name"] or ""),
                 "admission_no": str(row["admission_no"] or ""),
+                "student_gender": str(row["student_gender"] or ""),
                 "subject_id": int(row["subject_id"]),
                 "subject_name": str(row["subject_name"] or ""),
                 "exam_id": int(row["exam_id"]),
@@ -11935,8 +11936,8 @@ def _msa_aggregate(rows):
         subjects[row["subject_id"]] = row["subject_name"]
         students[row["student_id"]] = {
             "id": row["student_id"], "name": row["student_name"],
-            "admission_no": row["admission_no"], "class_id": row["class_id"],
-            "class_name": row["class_name"], "stream": row["stream"],
+            "admission_no": row["admission_no"], "gender": row.get("student_gender", ""),
+            "class_id": row["class_id"], "class_name": row["class_name"], "stream": row["stream"],
         }
         exams[row["exam_id"]] = {
             "id": row["exam_id"], "name": row["exam_name"],
@@ -14417,6 +14418,87 @@ def class_marksheet_analysis_pdf(
                     story.extend(left_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
+
+        # Low Achievers and Priority Students Summary — retained as its own page
+        # immediately before the Gender Performance Analysis page.
+        priority_counts = {"High": 0, "Medium": 0, "Monitor": 0, "On track": 0}
+        priority_groups = {}
+        assessed_priority_total = 0
+        low_achiever_total = 0
+        for learner_id, learner_summary in data["summaries"].items():
+            try:
+                if int(learner_summary.get("subject_count") or 0) <= 0:
+                    continue
+                learner_key = int(learner_id)
+            except (TypeError, ValueError):
+                continue
+            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
+            learner_mean = float(learner_summary.get("average") or 0)
+            subject_items = learner_summary.get("items") or []
+            weak_count = 0
+            for subject_item in subject_items:
+                try:
+                    if float(subject_item.get("percentage") or 0) < 40.0:
+                        weak_count += 1
+                except (TypeError, ValueError):
+                    continue
+            subject_count = len(subject_items)
+            if learner_mean < 30.0 or (subject_count and weak_count / subject_count >= 0.5):
+                priority_level = "High"
+            elif learner_mean < 40.0 or weak_count >= 2:
+                priority_level = "Medium"
+            elif learner_mean < 50.0 or weak_count == 1:
+                priority_level = "Monitor"
+            else:
+                priority_level = "On track"
+            priority_counts[priority_level] += 1
+            assessed_priority_total += 1
+            if learner_mean < 40.0:
+                low_achiever_total += 1
+            group_key = (
+                str(learner_info.get("class_name") or "Unassigned"),
+                str(learner_info.get("stream") or "No stream")
+            )
+            group = priority_groups.setdefault(group_key, {"assessed": 0, "high": 0, "medium": 0, "monitor": 0})
+            group["assessed"] += 1
+            if priority_level == "High":
+                group["high"] += 1
+            elif priority_level == "Medium":
+                group["medium"] += 1
+            elif priority_level == "Monitor":
+                group["monitor"] += 1
+
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Low Achievers and Priority Students — Summary</u>", centered_page_heading))
+        story.append(Paragraph(
+            "Priority guide: High = mean below 30% or at least half of assessed subjects below 40%; "
+            "Medium = mean below 40% or two or more subjects below 40%; Monitor = mean below 50% "
+            "or one subject below 40%; On track = otherwise. Non-assessed subjects are excluded.",
+            styles["MSACell"]
+        ))
+        pdf_table(
+            "Priority Students Summary",
+            ["Learners Assessed", "Mean Below 40%", "High Priority", "Medium Priority", "Monitor", "On Track"],
+            [[assessed_priority_total, low_achiever_total, priority_counts["High"], priority_counts["Medium"],
+              priority_counts["Monitor"], priority_counts["On track"]]],
+            compact=True
+        )
+        priority_group_rows = []
+        for (class_name, stream_name), counts in sorted(
+            priority_groups.items(),
+            key=lambda item: (-(item[1]["high"] + item[1]["medium"] + item[1]["monitor"]),
+                              item[0][0].casefold(), item[0][1].casefold())
+        ):
+            priority_group_rows.append([
+                class_name, stream_name, counts["assessed"], counts["high"],
+                counts["medium"], counts["monitor"],
+                counts["high"] + counts["medium"] + counts["monitor"]
+            ])
+        pdf_table(
+            "Classes and Streams Requiring Support",
+            ["Class", "Stream", "Assessed", "High", "Medium", "Monitor", "Need Support"],
+            priority_group_rows, compact=True
+        )
 
         # Gender Performance Analysis: a single-page, exam-filter-aware summary.
         # Use only learners with actual examination entries and only subjects each learner sat.
