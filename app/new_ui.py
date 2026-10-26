@@ -14708,7 +14708,7 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
         # classes, so class and stream columns are not applicable here.
-        teacher_headers = ["Rank", "Subject", "Teacher", "Classes and Streams", "Entries", "Mean %", "Mean Grade"]
+        teacher_headers = ["Rank", "Subject", "Best Teacher", "Classes and Streams", "Combined Entries", "Mean %", "Mean Grade"]
         combined_teacher_rows = []
         for item in teacher_performance["combined"]:
             try:
