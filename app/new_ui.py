@@ -14835,58 +14835,116 @@ def class_marksheet_analysis_pdf(
                     story.append(left_stack)
                 story.append(Spacer(1, 1.5*mm))
 
-        # End the analysis with a dedicated declaration page for formal release.
+        # Final standalone page for formal declaration and institutional approval.
         story.append(PageBreak())
-        declaration_title = ParagraphStyle(
-            "MSADeclarationTitle", parent=styles["MSASection"], alignment=1,
-            fontSize=16, leading=20, spaceAfter=12*mm
+        declaration_main_title = ParagraphStyle(
+            "MSADeclarationMainTitle", parent=styles["MSASection"], alignment=1,
+            fontName="Helvetica-Bold", fontSize=15, leading=18, spaceAfter=2*mm
+        )
+        declaration_subtitle = ParagraphStyle(
+            "MSADeclarationSubtitle", parent=styles["MSASection"], alignment=1,
+            fontName="Helvetica-Bold", fontSize=11, leading=14, spaceAfter=4*mm
+        )
+        declaration_section = ParagraphStyle(
+            "MSADeclarationSection", parent=styles["MSACell"],
+            fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=1*mm, spaceAfter=1.5*mm
         )
         declaration_body = ParagraphStyle(
             "MSADeclarationBody", parent=styles["MSACell"], alignment=4,
-            fontSize=11, leading=17, spaceAfter=8*mm
+            fontSize=8, leading=10, spaceAfter=2*mm
         )
-        declaration_role = ParagraphStyle(
-            "MSADeclarationRole", parent=styles["MSACell"], alignment=1,
-            fontSize=10, leading=13
+        declaration_label = ParagraphStyle(
+            "MSADeclarationLabel", parent=styles["MSACell"],
+            fontSize=7.5, leading=9
         )
-        story.append(Spacer(1, 22*mm))
-        story.append(Paragraph("<u>DECLARATION</u>", declaration_title))
+        declaration_table_header = ParagraphStyle(
+            "MSADeclarationTableHeader", parent=declaration_label,
+            fontName="Helvetica-Bold", alignment=1
+        )
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph("ACADEMIC ANALYSIS REPORT", declaration_main_title))
+        story.append(Paragraph("DECLARATION AND OFFICIAL APPROVAL", declaration_subtitle))
+        story.append(Paragraph("DECLARATION", declaration_section))
         story.append(Paragraph(
-            "We hereby declare that this Broad-Marksheet Academic Analysis has been reviewed "
-            "by the School Administration and is officially approved for release by the "
-            "Head of Institution and the Academic Council. The analysis is intended to serve "
-            "as an official record of the academic performance reflected in the selected "
-            "examination data.",
+            "We hereby declare that this Academic Analysis Report presents the examination "
+            "performance and academic assessment results of the institution for the selected "
+            "academic year, term, examination, classes and streams.",
             declaration_body
         ))
-        story.append(Spacer(1, 12*mm))
-        declaration_signatures = Table([
-            [
-                Paragraph("<b>Head of Institution</b>", declaration_role),
-                Paragraph("<b>Academic Council</b>", declaration_role),
-            ],
-            [
-                Paragraph("Name: __________________________________", declaration_role),
-                Paragraph("Representative: __________________________", declaration_role),
-            ],
-            [
-                Paragraph("Signature: _______________________________", declaration_role),
-                Paragraph("Signature: _______________________________", declaration_role),
-            ],
-            [
-                Paragraph("Date: ___________________________________", declaration_role),
-                Paragraph("Date: ___________________________________", declaration_role),
-            ],
-        ], colWidths=[doc.width * 0.48, doc.width * 0.48], hAlign="CENTER")
-        declaration_signatures.setStyle(TableStyle([
+        story.append(Paragraph(
+            "The report has been reviewed for accuracy, completeness and suitability for official "
+            "academic reporting. Approval by the School Administration and Academic Council confirms "
+            "its acceptance for official release, subject to the institution's applicable review procedures.",
+            declaration_body
+        ))
+
+        story.append(Paragraph("1. HEAD OF INSTITUTION", declaration_section))
+        story.append(Paragraph(
+            "I confirm that I have reviewed and approved this Academic Analysis Report for official release by the institution.",
+            declaration_body
+        ))
+        head_signature_table = Table([
+            [Paragraph("<b>Name</b>: __________________________________________",
+                       declaration_label),
+             Paragraph("<b>Signature</b>: ______________________________________",
+                       declaration_label)],
+            [Paragraph("<b>Date</b>: ___________________________________________",
+                       declaration_label),
+             Paragraph("<b>Official stamp</b>: __________________________________",
+                       declaration_label)],
+        ], colWidths=[doc.width * 0.49, doc.width * 0.49], hAlign="LEFT")
+        head_signature_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "TOP"),
-            ("ALIGN", (0,0), (-1,-1), "CENTER"),
-            ("LEFTPADDING", (0,0), (-1,-1), 8),
-            ("RIGHTPADDING", (0,0), (-1,-1), 8),
-            ("TOPPADDING", (0,0), (-1,-1), 7),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+            ("LEFTPADDING", (0,0), (-1,-1), 2),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
         ]))
-        story.append(declaration_signatures)
+        story.append(head_signature_table)
+
+        story.append(Paragraph("2. ACADEMIC COUNCIL", declaration_section))
+        story.append(Paragraph(
+            "The undersigned members of the Academic Council confirm that the report has been presented "
+            "for review and approved for official academic release.",
+            declaration_body
+        ))
+        council_headers = [
+            Paragraph("<b>Academic Council member</b>", declaration_table_header),
+            Paragraph("<b>Designation</b>", declaration_table_header),
+            Paragraph("<b>Signature</b>", declaration_table_header),
+            Paragraph("<b>Date</b>", declaration_table_header),
+        ]
+        council_rows = [council_headers]
+        for member_number in range(1, 5):
+            council_rows.append([
+                Paragraph(str(member_number) + ". __________________________________", declaration_label),
+                Paragraph("________________________", declaration_label),
+                Paragraph("________________________", declaration_label),
+                Paragraph("________________", declaration_label),
+            ])
+        council_table = Table(
+            council_rows,
+            colWidths=[doc.width * 0.34, doc.width * 0.22, doc.width * 0.24, doc.width * 0.16],
+            repeatRows=1, hAlign="LEFT"
+        )
+        council_table.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.white),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#777777")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 4),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        story.append(council_table)
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph(
+            "This page is reserved for authorized signatures and institutional approval. Approval is effective only "
+            "after the designated officials have reviewed and signed the report.",
+            declaration_body
+        ))
 
         def add_footer(canvas, document):
             canvas.saveState()
