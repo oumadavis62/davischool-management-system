@@ -14822,61 +14822,6 @@ def class_marksheet_analysis_pdf(
         ]
         pdf_table("Most Common Subject Learning Gaps", ["Subject", "Learners below 40%"], subject_priority_rows, compact=True)
 
-        # Page 2 of 4: learner-by-learner priority list.
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Low Achievers — Detailed Student Analysis</u>", centered_page_heading))
-        priority_detail_rows = []
-        for index, item in enumerate(priority_students, 1):
-            priority_detail_rows.append([
-                index, item["name"], item["admission"] or "—",
-                item["class_name"], item["stream"], item["subjects_sat"],
-                "%.2f%%" % item["mean"], item["grade"], item["priority"]
-            ])
-        pdf_table("Priority Student Register",
-                  ["No.", "Student", "Admission No.", "Class", "Stream", "Subjects sat", "Mean %", "Grade", "Priority"],
-                  priority_detail_rows, compact=True)
-
-        # Page 3 of 4: subject-level gaps; only subjects actually assessed are listed.
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Subject-Based Learning Gaps</u>", centered_page_heading))
-        story.append(Paragraph(
-            "This table lists assessed subjects below the suggested 40% support threshold. "
-            "A subject with no recorded mark is not counted as a zero or as a failed subject.",
-            styles["MSACell"]
-        ))
-        priority_subject_gaps.sort(key=lambda row: (
-            {"High": 0, "Medium": 1, "Monitor": 2}.get(row[6], 3),
-            row[3].casefold(), row[1].casefold(), row[0].casefold()
-        ))
-        pdf_table("Learner Subject Gaps",
-                  ["Student", "Class", "Stream", "Subject", "Mean %", "Grade", "Priority"],
-                  priority_subject_gaps, compact=True)
-
-        # Page 4 of 4: actionable, suggested support plan (not a record of actions taken).
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Recommended Intervention Plan</u>", centered_page_heading))
-        story.append(Paragraph(
-            "These are suggested follow-up actions for school staff to assign and record. "
-            "Responsible persons, targets and review dates should be completed by the institution.",
-            styles["MSACell"]
-        ))
-        intervention_rows = []
-        for item in priority_students:
-            if item["priority"] == "On track":
-                continue
-            weak_subject_names = sorted({
-                str(gap.get("subject_name") or data["subjects"].get(gap.get("subject_id"), "Subject"))
-                for gap in item["weak_items"]
-            }, key=str.casefold)
-            focus = ", ".join(weak_subject_names) if weak_subject_names else "Overall performance"
-            intervention_rows.append([
-                item["name"], item["class_name"], item["stream"], item["priority"],
-                focus, item["action"], "Class/subject teacher", "________________", "________________"
-            ])
-        pdf_table("Suggested Learner Support Actions",
-                  ["Student", "Class", "Stream", "Priority", "Focus area(s)", "Suggested action", "Responsible", "Target", "Review date"],
-                  intervention_rows, compact=True)
-
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
