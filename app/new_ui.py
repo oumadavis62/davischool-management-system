@@ -14909,18 +14909,20 @@ def class_marksheet_analysis_pdf(
             declaration_body
         ))
         council_headers = [
-            Paragraph("<b>Academic Council member</b>", declaration_table_header),
+            Paragraph("<b>Member</b>", declaration_table_header),
             Paragraph("<b>Designation</b>", declaration_table_header),
             Paragraph("<b>Signature</b>", declaration_table_header),
             Paragraph("<b>Date</b>", declaration_table_header),
         ]
         council_rows = [council_headers]
         for member_number in range(1, 5):
+            # Keep the cells clear for handwritten entries; do not print
+            # underscore placeholders that look like stray lines in the table.
             council_rows.append([
-                Paragraph(str(member_number) + ". __________________________________", declaration_label),
-                Paragraph("________________________", declaration_label),
-                Paragraph("________________________", declaration_label),
-                Paragraph("________________", declaration_label),
+                Paragraph(str(member_number) + ".", declaration_label),
+                Paragraph("", declaration_label),
+                Paragraph("", declaration_label),
+                Paragraph("", declaration_label),
             ])
         council_table = Table(
             council_rows,
