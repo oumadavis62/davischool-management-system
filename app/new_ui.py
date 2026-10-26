@@ -14835,6 +14835,59 @@ def class_marksheet_analysis_pdf(
                     story.append(left_stack)
                 story.append(Spacer(1, 1.5*mm))
 
+        # End the analysis with a dedicated declaration page for formal release.
+        story.append(PageBreak())
+        declaration_title = ParagraphStyle(
+            "MSADeclarationTitle", parent=styles["MSASection"], alignment=1,
+            fontSize=16, leading=20, spaceAfter=12*mm
+        )
+        declaration_body = ParagraphStyle(
+            "MSADeclarationBody", parent=styles["MSACell"], alignment=4,
+            fontSize=11, leading=17, spaceAfter=8*mm
+        )
+        declaration_role = ParagraphStyle(
+            "MSADeclarationRole", parent=styles["MSACell"], alignment=1,
+            fontSize=10, leading=13
+        )
+        story.append(Spacer(1, 22*mm))
+        story.append(Paragraph("<u>DECLARATION</u>", declaration_title))
+        story.append(Paragraph(
+            "We hereby declare that this Broad-Marksheet Academic Analysis has been reviewed "
+            "by the School Administration and is officially approved for release by the "
+            "Head of Institution and the Academic Council. The analysis is intended to serve "
+            "as an official record of the academic performance reflected in the selected "
+            "examination data.",
+            declaration_body
+        ))
+        story.append(Spacer(1, 12*mm))
+        declaration_signatures = Table([
+            [
+                Paragraph("<b>Head of Institution</b>", declaration_role),
+                Paragraph("<b>Academic Council</b>", declaration_role),
+            ],
+            [
+                Paragraph("Name: __________________________________", declaration_role),
+                Paragraph("Representative: __________________________", declaration_role),
+            ],
+            [
+                Paragraph("Signature: _______________________________", declaration_role),
+                Paragraph("Signature: _______________________________", declaration_role),
+            ],
+            [
+                Paragraph("Date: ___________________________________", declaration_role),
+                Paragraph("Date: ___________________________________", declaration_role),
+            ],
+        ], colWidths=[doc.width * 0.48, doc.width * 0.48], hAlign="CENTER")
+        declaration_signatures.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
+            ("LEFTPADDING", (0,0), (-1,-1), 8),
+            ("RIGHTPADDING", (0,0), (-1,-1), 8),
+            ("TOPPADDING", (0,0), (-1,-1), 7),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+        ]))
+        story.append(declaration_signatures)
+
         def add_footer(canvas, document):
             canvas.saveState()
             # Thin green border on all four sides of every PDF page.
