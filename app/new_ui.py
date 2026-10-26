@@ -14703,6 +14703,180 @@ def class_marksheet_analysis_pdf(
             story.append(KeepTogether([combined_heading, paired_top_ten]))
             story.append(Spacer(1, 1.0 * mm))
 
+        # Low Achievers and Priority Students Analysis: four dedicated sections.
+        # Thresholds are based on normalized percentages so exams with different
+        # maximum marks can be compared consistently. Non-assessed subjects are
+        # absent from each learner's aggregated subject items and are not treated as zero.
+        priority_students = []
+        priority_subject_gaps = []
+        priority_group_counts = {}
+        priority_subject_counts = {}
+        for learner_id, learner_summary in data["summaries"].items():
+            try:
+                if int(learner_summary.get("subject_count") or 0) <= 0:
+                    continue
+                learner_key = int(learner_id)
+            except (TypeError, ValueError):
+                continue
+            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
+            learner_name = str(learner_info.get("name") or learner_info.get("student_name") or "")
+            learner_class = str(learner_info.get("class_name") or "Unassigned")
+            learner_stream = str(learner_info.get("stream") or "No stream")
+            learner_mean = float(learner_summary.get("average") or 0)
+            subject_items = learner_summary.get("items") or []
+            weak_items = [
+                item for item in subject_items
+                if float(item.get("percentage") or 0) < 40.0
+            ]
+            subject_count = len(subject_items)
+            if learner_mean < 30.0 or (subject_count and len(weak_items) / subject_count >= 0.5):
+                priority_level = "High"
+                recommended_action = "Urgent individual review; prepare a focused catch-up plan and arrange regular follow-up."
+            elif learner_mean < 40.0 or len(weak_items) >= 2:
+                priority_level = "Medium"
+                recommended_action = "Provide targeted practice in weak subjects and review progress with the class/subject teacher."
+            elif learner_mean < 50.0 or len(weak_items) == 1:
+                priority_level = "Monitor"
+                recommended_action = "Monitor progress and provide focused support in the identified subject(s)."
+            else:
+                priority_level = "On track"
+                recommended_action = "Maintain current learning support and monitor the next assessment."
+            priority_students.append({
+                "id": learner_key, "name": learner_name,
+                "admission": str(learner_info.get("admission_no") or ""),
+                "class_name": learner_class, "stream": learner_stream,
+                "mean": learner_mean,
+                "total": float(learner_summary.get("total") or 0),
+                "grade": str(learner_summary.get("overall_grade") or "—"),
+                "subjects_sat": subject_count, "weak_items": weak_items,
+                "priority": priority_level, "action": recommended_action,
+            })
+            group_key = (learner_class, learner_stream)
+            group_counts = priority_group_counts.setdefault(group_key, {"assessed": 0, "high": 0, "medium": 0, "monitor": 0})
+            group_counts["assessed"] += 1
+            if priority_level == "High":
+                group_counts["high"] += 1
+            elif priority_level == "Medium":
+                group_counts["medium"] += 1
+            elif priority_level == "Monitor":
+                group_counts["monitor"] += 1
+            for item in weak_items:
+                subject_name = str(item.get("subject_name") or data["subjects"].get(item.get("subject_id"), "Subject"))
+                pct = float(item.get("percentage") or 0)
+                priority_subject_counts[subject_name] = priority_subject_counts.get(subject_name, 0) + 1
+                try:
+                    subject_id = int(item.get("subject_id"))
+                    subject_grade, _, _ = _subject_grade_details(
+                        cur, sid, subject_id, pct, data["grading_rules"], 100
+                    )
+                except (TypeError, ValueError, Exception):
+                    subject_grade = "—"
+                priority_subject_gaps.append([
+                    learner_name, learner_class, learner_stream, subject_name,
+                    "%.2f%%" % pct, str(subject_grade or "—"),
+                    "High" if priority_level == "High" else ("Medium" if priority_level == "Medium" else "Monitor")
+                ])
+
+        priority_students.sort(key=lambda item: (
+            {"High": 0, "Medium": 1, "Monitor": 2, "On track": 3}.get(item["priority"], 4),
+            item["mean"], item["name"].casefold()
+        ))
+        assessed_priority_count = len(priority_students)
+        high_priority_count = sum(1 for item in priority_students if item["priority"] == "High")
+        medium_priority_count = sum(1 for item in priority_students if item["priority"] == "Medium")
+        monitor_priority_count = sum(1 for item in priority_students if item["priority"] == "Monitor")
+        on_track_count = sum(1 for item in priority_students if item["priority"] == "On track")
+        low_achiever_count = sum(1 for item in priority_students if item["mean"] < 40.0)
+        support_group_count = sum(
+            1 for counts in priority_group_counts.values()
+            if counts["high"] or counts["medium"] or counts["monitor"]
+        )
+
+        # Page 1 of 4: executive summary and classes/streams needing support.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Low Achievers and Priority Students — Summary</u>", centered_page_heading))
+        story.append(Paragraph(
+            "Priority guide: High = mean below 30% or at least half of assessed subjects below 40%; "
+            "Medium = mean below 40% or two or more subjects below 40%; Monitor = mean below 50% "
+            "or one subject below 40%; On track = otherwise. Subject percentages are normalized to 100%.",
+            styles["MSACell"]
+        ))
+        pdf_table("Priority Students Summary", ["Learners assessed", "Mean below 40%", "High priority", "Medium priority", "Monitor", "On track"],
+                  [[assessed_priority_count, low_achiever_count, high_priority_count, medium_priority_count, monitor_priority_count, on_track_count]], compact=True)
+        group_priority_rows = []
+        for (group_class, group_stream), counts in sorted(
+            priority_group_counts.items(),
+            key=lambda item: (-(item[1]["high"] + item[1]["medium"] + item[1]["monitor"]), item[0][0].casefold(), item[0][1].casefold())
+        ):
+            group_priority_rows.append([
+                group_class, group_stream, counts["assessed"], counts["high"],
+                counts["medium"], counts["monitor"],
+                counts["high"] + counts["medium"] + counts["monitor"]
+            ])
+        pdf_table("Classes and Streams Requiring Support",
+                  ["Class", "Stream", "Assessed", "High", "Medium", "Monitor", "Need support"],
+                  group_priority_rows, compact=True)
+        subject_priority_rows = [
+            [subject_name, count]
+            for subject_name, count in sorted(priority_subject_counts.items(), key=lambda item: (-item[1], item[0].casefold()))
+        ]
+        pdf_table("Most Common Subject Learning Gaps", ["Subject", "Learners below 40%"], subject_priority_rows, compact=True)
+
+        # Page 2 of 4: learner-by-learner priority list.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Low Achievers — Detailed Student Analysis</u>", centered_page_heading))
+        priority_detail_rows = []
+        for index, item in enumerate(priority_students, 1):
+            priority_detail_rows.append([
+                index, item["name"], item["admission"] or "—",
+                item["class_name"], item["stream"], item["subjects_sat"],
+                "%.2f%%" % item["mean"], item["grade"], item["priority"]
+            ])
+        pdf_table("Priority Student Register",
+                  ["No.", "Student", "Admission No.", "Class", "Stream", "Subjects sat", "Mean %", "Grade", "Priority"],
+                  priority_detail_rows, compact=True)
+
+        # Page 3 of 4: subject-level gaps; only subjects actually assessed are listed.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Subject-Based Learning Gaps</u>", centered_page_heading))
+        story.append(Paragraph(
+            "This table lists assessed subjects below the suggested 40% support threshold. "
+            "A subject with no recorded mark is not counted as a zero or as a failed subject.",
+            styles["MSACell"]
+        ))
+        priority_subject_gaps.sort(key=lambda row: (
+            {"High": 0, "Medium": 1, "Monitor": 2}.get(row[6], 3),
+            row[3].casefold(), row[1].casefold(), row[0].casefold()
+        ))
+        pdf_table("Learner Subject Gaps",
+                  ["Student", "Class", "Stream", "Subject", "Mean %", "Grade", "Priority"],
+                  priority_subject_gaps, compact=True)
+
+        # Page 4 of 4: actionable, suggested support plan (not a record of actions taken).
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Recommended Intervention Plan</u>", centered_page_heading))
+        story.append(Paragraph(
+            "These are suggested follow-up actions for school staff to assign and record. "
+            "Responsible persons, targets and review dates should be completed by the institution.",
+            styles["MSACell"]
+        ))
+        intervention_rows = []
+        for item in priority_students:
+            if item["priority"] == "On track":
+                continue
+            weak_subject_names = sorted({
+                str(gap.get("subject_name") or data["subjects"].get(gap.get("subject_id"), "Subject"))
+                for gap in item["weak_items"]
+            }, key=str.casefold)
+            focus = ", ".join(weak_subject_names) if weak_subject_names else "Overall performance"
+            intervention_rows.append([
+                item["name"], item["class_name"], item["stream"], item["priority"],
+                focus, item["action"], "Class/subject teacher", "________________", "________________"
+            ])
+        pdf_table("Suggested Learner Support Actions",
+                  ["Student", "Class", "Stream", "Priority", "Focus area(s)", "Suggested action", "Responsible", "Target", "Review date"],
+                  intervention_rows, compact=True)
+
         story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
