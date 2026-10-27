@@ -14357,8 +14357,8 @@ def class_marksheet_analysis_pdf(
             class_dist_style = ParagraphStyle(
                 "MSAClassTopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
             )
-            class_left_width = doc.width * 0.67
-            class_right_width = doc.width - class_left_width - 5 * mm
+            class_left_width = doc.width * 0.70
+            class_right_width = doc.width - class_left_width - 2 * mm
             class_rank_data = [[
                 Paragraph("<b>%s</b>" % escape(str(header)), class_rank_style)
                 for header in ranking_headers
@@ -14435,7 +14435,7 @@ def class_marksheet_analysis_pdf(
                         colWidths=[class_right_width], hAlign="CENTER"
                     )
                 ]],
-                colWidths=[class_left_width, class_right_width + 5 * mm],
+                colWidths=[class_left_width, class_right_width + 2 * mm],
                 hAlign="CENTER"
             )
             class_pair.setStyle(TableStyle([
@@ -14651,12 +14651,12 @@ def class_marksheet_analysis_pdf(
             for info in data["students"].values()
         }
         combined_subject_cards = []
-        combined_half_width = (doc.width - 6 * mm) / 2
+        combined_half_width = (doc.width - 2 * mm) / 2
         combined_profile = [0.15, 0.70, 0.30, 0.30, 0.30, 0.30]
         # Narrow every column in the combined-class subject tables by 20%
         # while preserving the existing relative widths and side-by-side layout.
         combined_col_widths = [
-            combined_half_width * 0.95 * weight / sum(combined_profile)
+            combined_half_width * 0.99 * weight / sum(combined_profile)
             for weight in combined_profile
         ]
         combined_cell_style = ParagraphStyle(
@@ -14715,7 +14715,7 @@ def class_marksheet_analysis_pdf(
             paired_subjects.setStyle(TableStyle([
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("LEFTPADDING", (0,0), (-1,-1), 0),
-                ("RIGHTPADDING", (0,0), (-1,-1), 3 * mm),
+                ("RIGHTPADDING", (0,0), (-1,-1), 1 * mm),
                 ("TOPPADDING", (0,0), (-1,-1), 0),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 2 * mm),
             ]))
@@ -14772,9 +14772,9 @@ def class_marksheet_analysis_pdf(
                     previous_pct = percentage
                 if len(table_data) == 1:
                     table_data.append([Paragraph("No eligible students", cell_style)] + [Paragraph("", cell_style) for _ in range(4)])
-                class_card_width = (doc.width - 8*mm) / 3
+                class_card_width = (doc.width - 3*mm) / 3
                 class_fixed_widths = [7*mm, 12*mm, 9*mm, 10*mm]
-                class_student_width = max(18*mm, class_card_width - sum(class_fixed_widths) - 4*mm)
+                class_student_width = max(18*mm, class_card_width - sum(class_fixed_widths) - 1*mm)
                 class_table_widths = [class_fixed_widths[0], class_student_width, class_fixed_widths[1], class_fixed_widths[2], class_fixed_widths[3]]
                 table = Table(table_data, colWidths=class_table_widths, repeatRows=1, hAlign="CENTER")
                 table.setStyle(TableStyle([
@@ -14799,8 +14799,8 @@ def class_marksheet_analysis_pdf(
                 )
                 paired_class_cards.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("LEFTPADDING", (0,0), (-1,-1), 0),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 3*mm),
+                    ("LEFTPADDING", (0,0), (-1,-1), 1*mm),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 1*mm),
                     ("TOPPADDING", (0,0), (-1,-1), 0),
                     ("BOTTOMPADDING", (0,0), (-1,-1), 2*mm),
                 ]))
@@ -14888,7 +14888,7 @@ def class_marksheet_analysis_pdf(
                             Paragraph(escape(str(row[5])), stream_cell_style),
                             Paragraph(escape(str(row[7])), stream_cell_style),
                         ])
-                    stream_table_width = doc.width / 3 - 5*mm
+                    stream_table_width = doc.width / 3 - 2*mm
                     teacher_col_width = 17*mm
                     student_col_width = max(14*mm, stream_table_width - 7*mm - teacher_col_width - 9*mm - 10*mm - 4*mm)
                     compact_table = Table(
@@ -14936,8 +14936,8 @@ def class_marksheet_analysis_pdf(
                 paired_table = Table([row_cells], colWidths=[doc.width / 3] * 3, hAlign="CENTER")
                 paired_table.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("LEFTPADDING", (0,0), (-1,-1), 1*mm),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 1*mm),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0.5*mm),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0.5*mm),
                     ("TOPPADDING", (0,0), (-1,-1), 0),
                     ("BOTTOMPADDING", (0,0), (-1,-1), 0),
                 ]))
