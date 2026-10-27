@@ -13161,6 +13161,502 @@ def class_marksheet_analysis_csv(
             ])
         # Examination trends are intentionally omitted from analysis exports.
         teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
+
+        # Keep these report pages directly after Performance Insights.
+        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
+        # Low Achievers and Priority Students Summary — retained as its own page
+        # immediately before the Gender Performance Analysis page.
+        priority_counts = {"High": 0, "Medium": 0, "Monitor": 0, "On track": 0}
+        priority_groups = {}
+        assessed_priority_total = 0
+        low_achiever_total = 0
+        for learner_id, learner_summary in data["summaries"].items():
+            try:
+                if int(learner_summary.get("subject_count") or 0) <= 0:
+                    continue
+                learner_key = int(learner_id)
+            except (TypeError, ValueError):
+                continue
+            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
+            learner_mean = float(learner_summary.get("average") or 0)
+            subject_items = learner_summary.get("items") or []
+            weak_count = 0
+            for subject_item in subject_items:
+                try:
+                    if float(subject_item.get("percentage") or 0) < 40.0:
+                        weak_count += 1
+                except (TypeError, ValueError):
+                    continue
+            subject_count = len(subject_items)
+            if learner_mean < 30.0 or (subject_count and weak_count / subject_count >= 0.5):
+                priority_level = "High"
+            elif learner_mean < 40.0 or weak_count >= 2:
+                priority_level = "Medium"
+            elif learner_mean < 50.0 or weak_count == 1:
+                priority_level = "Monitor"
+            else:
+                priority_level = "On track"
+            priority_counts[priority_level] += 1
+            assessed_priority_total += 1
+            if learner_mean < 40.0:
+                low_achiever_total += 1
+            group_key = (
+                str(learner_info.get("class_name") or "Unassigned"),
+                str(learner_info.get("stream") or "No stream")
+            )
+            group = priority_groups.setdefault(group_key, {"assessed": 0, "high": 0, "medium": 0, "monitor": 0})
+            group["assessed"] += 1
+            if priority_level == "High":
+                group["high"] += 1
+            elif priority_level == "Medium":
+                group["medium"] += 1
+            elif priority_level == "Monitor":
+                group["monitor"] += 1
+
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Low Achievers and Priority Students — Summary</u>", centered_page_heading))
+        story.append(Paragraph(
+            "Priority guide: High = mean below 30% or at least half of assessed subjects below 40%; "
+            "Medium = mean below 40% or two or more subjects below 40%; Monitor = mean below 50% "
+            "or one subject below 40%; On track = otherwise. Non-assessed subjects are excluded.",
+            styles["MSACell"]
+        ))
+        pdf_table(
+            "Priority Students Summary",
+            ["Learners Assessed", "Mean Below 40%", "High Priority", "Medium Priority", "Monitor", "On Track"],
+            [[assessed_priority_total, low_achiever_total, priority_counts["High"], priority_counts["Medium"],
+              priority_counts["Monitor"], priority_counts["On track"]]],
+            compact=True
+        )
+        priority_group_rows = []
+        for (class_name, stream_name), counts in sorted(
+            priority_groups.items(),
+            key=lambda item: (-(item[1]["high"] + item[1]["medium"] + item[1]["monitor"]),
+                              item[0][0].casefold(), item[0][1].casefold())
+        ):
+            priority_group_rows.append([
+                class_name, stream_name, counts["assessed"], counts["high"],
+                counts["medium"], counts["monitor"],
+                counts["high"] + counts["medium"] + counts["monitor"]
+            ])
+        pdf_table(
+            "Classes and Streams Requiring Support",
+            ["Class", "Stream", "Assessed", "High", "Medium", "Monitor", "Need Support"],
+            priority_group_rows, compact=True
+        )
+
+        # Gender Performance Analysis: a single-page, exam-filter-aware summary.
+        # Use only learners with actual examination entries and only subjects each learner sat.
+        gender_summary = {}
+        gender_subjects = {}
+        for learner_id, learner_summary in data["summaries"].items():
+            try:
+                if int(learner_summary.get("subject_count") or 0) <= 0:
+                    continue
+                learner_key = int(learner_id)
+            except (TypeError, ValueError):
+                continue
+            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
+            raw_gender = str(learner_info.get("gender") or "").strip().casefold()
+            if raw_gender in ("male", "m", "boy", "man"):
+                gender_label = "Male"
+            elif raw_gender in ("female", "f", "girl", "woman"):
+                gender_label = "Female"
+            elif raw_gender in ("other", "non-binary", "nonbinary"):
+                gender_label = "Other"
+            else:
+                gender_label = "Unspecified"
+            learner_mean = float(learner_summary.get("average") or 0)
+            entry = gender_summary.setdefault(gender_label, {
+                "learners": 0, "mean_sum": 0.0, "at_or_above": 0, "below": 0, "highest": None
+            })
+            entry["learners"] += 1
+            entry["mean_sum"] += learner_mean
+            if learner_mean >= 40.0:
+                entry["at_or_above"] += 1
+            else:
+                entry["below"] += 1
+            entry["highest"] = learner_mean if entry["highest"] is None else max(entry["highest"], learner_mean)
+
+
+
+        # Build subject-by-gender means from the canonical aggregated marks data.
+        # This avoids empty cells caused by differences in summary-item shapes.
+        for (key, item) in data.get("aggregated", {}).items():
+            try:
+                learner_id, subject_id = key
+                learner_id = int(learner_id)
+                subject_id = int(subject_id)
+                subject_pct = float(item.get("percentage", item.get("percent")))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            learner_info = data["students"].get(learner_id, data["students"].get(str(learner_id), {})) or {}
+            raw_gender = str(learner_info.get("gender") or "").strip().casefold()
+            if raw_gender in ("male", "m", "boy", "man"):
+                gender_label = "Male"
+            elif raw_gender in ("female", "f", "girl", "woman"):
+                gender_label = "Female"
+            elif raw_gender in ("other", "non-binary", "nonbinary"):
+                gender_label = "Other"
+            else:
+                gender_label = "Unspecified"
+            subject_name = str(
+                data["subjects"].get(subject_id, data["subjects"].get(str(subject_id), item.get("subject_name", "Subject")))
+                or item.get("subject_name") or "Subject"
+            )
+            subject_gender = gender_subjects.setdefault(subject_name, {})
+            subject_entry = subject_gender.setdefault(gender_label, {"sum": 0.0, "count": 0})
+            subject_entry["sum"] += subject_pct
+            subject_entry["count"] += 1
+
+        # Keep gender analysis directly below the priority summary on the same page.
+        story.append(Paragraph("<u>Gender Performance Analysis</u>", centered_page_heading))
+        story.append(Paragraph(
+            "Summary of assessed learners' mean percentages by recorded gender for the selected examination filters. "
+            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero. "
+            "The 40% indicator is a reporting benchmark for this summary, not a replacement for the school's grading rules.",
+            styles["MSACell"]
+        ))
+        gender_order = ["Female", "Male", "Other", "Unspecified"]
+        gender_rows = []
+        total_gender_learners = 0
+        total_gender_mean = 0.0
+        total_at_or_above = 0
+        total_below = 0
+        for gender_label in gender_order:
+            entry = gender_summary.get(gender_label)
+            if not entry:
+                continue
+            count = entry["learners"]
+            mean_pct = entry["mean_sum"] / count if count else 0.0
+            pass_pct = entry["at_or_above"] / count * 100 if count else 0.0
+            gender_rows.append([
+                gender_label, count, "%.2f%%" % mean_pct,
+                entry["at_or_above"], entry["below"], "%.1f%%" % pass_pct,
+                "%.2f%%" % (entry["highest"] or 0.0)
+            ])
+            total_gender_learners += count
+            total_gender_mean += entry["mean_sum"]
+            total_at_or_above += entry["at_or_above"]
+            total_below += entry["below"]
+        overall_mean = total_gender_mean / total_gender_learners if total_gender_learners else 0.0
+        gender_rows.append([
+            "All assessed", total_gender_learners, "%.2f%%" % overall_mean,
+            total_at_or_above, total_below,
+            "%.1f%%" % (total_at_or_above / total_gender_learners * 100 if total_gender_learners else 0.0),
+            "—"
+        ])
+        pdf_table(
+            "Performance Summary by Gender",
+            ["Gender", "Learners Assessed", "Mean %", "At/Above 40%", "Below 40%", "At/Above Rate", "Highest Mean %"],
+            gender_rows, compact=True
+        )
+
+        subject_gender_rows = []
+        for subject_name in sorted(set(str(v) for v in data["subjects"].values()) | set(gender_subjects), key=str.casefold):
+            subject_gender = gender_subjects.get(subject_name, {})
+            def _gender_subject_mean(label):
+                item = subject_gender.get(label)
+                return ("%.2f%%" % (item["sum"] / item["count"])) if item and item["count"] else "—"
+            subject_gender_rows.append([
+                subject_name, _gender_subject_mean("Female"), _gender_subject_mean("Male"),
+                _gender_subject_mean("Other"), _gender_subject_mean("Unspecified")
+            ])
+        if subject_gender_rows:
+            pdf_table(
+                "Subject Mean Percentage by Gender",
+                ["Subject", "Female Mean %", "Male Mean %", "Other Mean %", "Unspecified Mean %"],
+                subject_gender_rows, compact=True
+            )
+        if not gender_summary:
+            story.append(Paragraph("No assessed learners are available for gender performance analysis under the selected filters.", styles["MSACell"]))
+
+        # Put student rankings directly after per-subject grade distribution, on their own page.
+        story.append(PageBreak())
+        story.append(Paragraph("<u>Student rankings</u>", centered_page_heading))
+        ranked_learners = []
+        for learner_id, learner_summary in data["summaries"].items():
+            learner_info = data["students"].get(learner_id, {})
+            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
+                continue
+            ranked_learners.append({
+                "id": int(learner_id),
+                "name": str(learner_info.get("name") or ""),
+                "admission": str(learner_info.get("admission_no") or ""),
+                "class_name": str(learner_info.get("class_name") or "Unassigned"),
+                "stream": str(learner_info.get("stream") or "No stream"),
+                "mean": float(learner_summary.get("average") or 0),
+                "total": float(learner_summary.get("total") or 0),
+                "points": float(learner_summary.get("average_points") or 0),
+                "grade": str(learner_summary.get("overall_grade") or "—"),
+            })
+
+        def _msa_rank_students(learners):
+            # Rank these Top 10 lists by total marks, not average percentage:
+            # learners may have sat different numbers of exams/subjects.
+            ordered = sorted(
+                learners,
+                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
+            )
+            result = []
+            previous_total = None
+            rank_number = 0
+            for index, learner in enumerate(ordered, 1):
+                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
+                    rank_number = index
+                    previous_total = learner["total"]
+                result.append((rank_number, learner))
+            return result
+
+        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
+        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
+        for ranked_class in class_names:
+            class_ranked = _msa_rank_students([
+                learner for learner in ranked_learners if learner["class_name"] == ranked_class
+            ])
+            class_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in class_ranked[:10]
+            ]
+            # Add a matching class/stream distribution beside every class-level
+            # Top 10 table, using only the learners shown in that table.
+            class_top_ranked = class_ranked[:10]
+            class_stream_counts = {}
+            for _rank, learner in class_top_ranked:
+                stream_label = str(learner.get("stream") or "No stream").strip()
+                class_stream_counts[stream_label] = class_stream_counts.get(stream_label, 0) + 1
+            class_distribution_rows = [
+                [stream_label, count, "%.1f%%" % (100.0 * count / len(class_top_ranked))]
+                for stream_label, count in sorted(
+                    class_stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
+                )
+            ] if class_top_ranked else [["No eligible learners", 0, "0.0%"]]
+
+            class_rank_style = ParagraphStyle(
+                "MSAClassTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
+            )
+            class_dist_style = ParagraphStyle(
+                "MSAClassTopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
+            )
+            class_left_width = doc.width * 0.67
+            class_right_width = doc.width - class_left_width - 5 * mm
+            class_rank_data = [[
+                Paragraph("<b>%s</b>" % escape(str(header)), class_rank_style)
+                for header in ranking_headers
+            ]]
+            class_rank_data.extend([
+                [Paragraph(escape(str(value)), class_rank_style) for value in row]
+                for row in class_top_ten
+            ])
+            class_rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
+            # Each ranking column is half its previous width.
+            class_rank_widths = [
+                class_left_width * weight / sum(class_rank_weights) * 0.50
+                for weight in class_rank_weights
+            ]
+            class_rank_table = Table(
+                class_rank_data, colWidths=class_rank_widths, repeatRows=1, hAlign="LEFT"
+            )
+            class_rank_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            class_dist_data = [[
+                Paragraph("<b>Stream</b>", class_dist_style),
+                Paragraph("<b>No. of Students</b>", class_dist_style),
+                Paragraph("<b>Share</b>", class_dist_style),
+            ]]
+            class_dist_data.extend([
+                [
+                    Paragraph(escape(str(stream_label)), class_dist_style),
+                    Paragraph(str(count), class_dist_style),
+                    Paragraph(escape(str(share)), class_dist_style),
+                ]
+                for stream_label, count, share in class_distribution_rows
+            ])
+            class_dist_data.append([
+                Paragraph("<b>Total</b>", class_dist_style),
+                Paragraph("<b>%s</b>" % len(class_top_ranked), class_dist_style),
+                Paragraph("<b>100%</b>" if class_top_ranked else "<b>0.0%</b>", class_dist_style),
+            ])
+            class_dist_table = Table(
+                class_dist_data,
+                colWidths=[
+                    class_right_width * 0.58,
+                    class_right_width * 0.16,
+                    class_right_width * 0.26,
+                ],
+                repeatRows=1, hAlign="LEFT"
+            )
+            class_dist_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (1,1), (-1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            class_pair = Table(
+                [[
+                    class_rank_table,
+                    Table(
+                        [[Paragraph("<u>Stream Distribution</u>", styles["MSASection"])],
+                         [class_dist_table]],
+                        colWidths=[class_right_width], hAlign="LEFT"
+                    )
+                ]],
+                colWidths=[class_left_width, class_right_width + 5 * mm],
+                hAlign="LEFT"
+            )
+            class_pair.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 0),
+                ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                ("TOPPADDING", (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ]))
+            story.append(KeepTogether([
+                Paragraph("<u>Best 10 students — " + escape(ranked_class) + "</u>", styles["MSASection"]),
+                class_pair,
+            ]))
+            story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
+            story.append(Spacer(1, 1.0 * mm))
+
+        # A combined ranking adds no information when the selected exam data
+        # contains only one class: it would repeat that class's Best 10 table.
+        # Keep it for multi-class comparisons, including multi-exam selections.
+        if len(class_names) > 1:
+            # Use exactly the learners shown in the combined Best 10 table for
+            # the accompanying stream distribution, so the counts always agree.
+            combined_top_ten = _msa_rank_students(ranked_learners)[:10]
+            overall_top_ten = [
+                [rank, learner["name"], learner["class_name"],
+                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
+                for rank, learner in combined_top_ten
+            ]
+
+            # Count each class/stream combination represented in the displayed
+            # Top 10. The percentage is its share of the displayed learners.
+            stream_counts = {}
+            for _rank, learner in combined_top_ten:
+                class_label = str(learner.get("class_name") or "Unassigned").strip()
+                stream_label = str(learner.get("stream") or "No stream").strip()
+                group_label = "%s — %s" % (class_label, stream_label)
+                stream_counts[group_label] = stream_counts.get(group_label, 0) + 1
+            distribution_rows = [
+                [group, count, "%.1f%%" % (100.0 * count / len(combined_top_ten))]
+                for group, count in sorted(
+                    stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
+                )
+            ] if combined_top_ten else [["No eligible learners", 0, "0.0%"]]
+
+            # Keep both analyses together on the same page. Split the available
+            # width between the detailed ranking and a compact stream summary.
+            ranking_cell_style = ParagraphStyle(
+                "MSACombinedTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
+            )
+            distribution_cell_style = ParagraphStyle(
+                "MSATopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
+            )
+            left_width = doc.width * 0.67
+            right_width = doc.width - left_width - 5 * mm
+            rank_data = [[
+                Paragraph("<b>%s</b>" % escape(str(header)), ranking_cell_style)
+                for header in ranking_headers
+            ]]
+            rank_data.extend([
+                [Paragraph(escape(str(value)), ranking_cell_style) for value in row]
+                for row in overall_top_ten
+            ])
+            rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
+            # Each ranking column is half its previous width.
+            rank_widths = [left_width * weight / sum(rank_weights) * 0.50 for weight in rank_weights]
+            rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="LEFT")
+            rank_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+
+            distribution_data = [[
+                Paragraph("<b>Class / Stream</b>", distribution_cell_style),
+                Paragraph("<b>No. of Students</b>", distribution_cell_style),
+                Paragraph("<b>Share</b>", distribution_cell_style),
+            ]]
+            distribution_data.extend([
+                [
+                    Paragraph(escape(str(group)), distribution_cell_style),
+                    Paragraph(str(count), distribution_cell_style),
+                    Paragraph(escape(str(share)), distribution_cell_style),
+                ]
+                for group, count, share in distribution_rows
+            ])
+            distribution_data.append([
+                Paragraph("<b>Total</b>", distribution_cell_style),
+                Paragraph("<b>%s</b>" % len(combined_top_ten), distribution_cell_style),
+                Paragraph("<b>100%</b>" if combined_top_ten else "<b>0.0%</b>", distribution_cell_style),
+            ])
+            distribution_table = Table(
+                distribution_data,
+                colWidths=[right_width * 0.58, right_width * 0.16, right_width * 0.26],
+                repeatRows=1, hAlign="LEFT"
+            )
+            distribution_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("ALIGN", (1,1), (-1,-1), "CENTER"),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+
+            distribution_heading = Paragraph(
+                "<u>Stream Distribution</u>", styles["MSASection"]
+            )
+            paired_top_ten = Table(
+                [[rank_table, Table(
+                    [[distribution_heading], [distribution_table]],
+                    colWidths=[right_width], hAlign="LEFT"
+                )]],
+                colWidths=[left_width, right_width + 5 * mm],
+                hAlign="LEFT"
+            )
+            paired_top_ten.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("LEFTPADDING", (0,0), (-1,-1), 0),
+                ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                ("TOPPADDING", (0,0), (-1,-1), 0),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ]))
+            combined_heading = Paragraph(
+                "<u>Best 10 students — combined classes</u>", styles["MSASection"]
+            )
+            story.append(KeepTogether([combined_heading, paired_top_ten]))
+            story.append(Spacer(1, 1.0 * mm))
+
+        story.append(PageBreak())
         classwise_teacher_classes = {str(item.get("class") or "") for item in teacher_performance["class"]}
         teacher_sections = [("combined", "Combined classes")]
         # Class-wise rankings add no information when only one class sat the
@@ -14419,499 +14915,6 @@ def class_marksheet_analysis_pdf(
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
 
-        # Low Achievers and Priority Students Summary — retained as its own page
-        # immediately before the Gender Performance Analysis page.
-        priority_counts = {"High": 0, "Medium": 0, "Monitor": 0, "On track": 0}
-        priority_groups = {}
-        assessed_priority_total = 0
-        low_achiever_total = 0
-        for learner_id, learner_summary in data["summaries"].items():
-            try:
-                if int(learner_summary.get("subject_count") or 0) <= 0:
-                    continue
-                learner_key = int(learner_id)
-            except (TypeError, ValueError):
-                continue
-            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
-            learner_mean = float(learner_summary.get("average") or 0)
-            subject_items = learner_summary.get("items") or []
-            weak_count = 0
-            for subject_item in subject_items:
-                try:
-                    if float(subject_item.get("percentage") or 0) < 40.0:
-                        weak_count += 1
-                except (TypeError, ValueError):
-                    continue
-            subject_count = len(subject_items)
-            if learner_mean < 30.0 or (subject_count and weak_count / subject_count >= 0.5):
-                priority_level = "High"
-            elif learner_mean < 40.0 or weak_count >= 2:
-                priority_level = "Medium"
-            elif learner_mean < 50.0 or weak_count == 1:
-                priority_level = "Monitor"
-            else:
-                priority_level = "On track"
-            priority_counts[priority_level] += 1
-            assessed_priority_total += 1
-            if learner_mean < 40.0:
-                low_achiever_total += 1
-            group_key = (
-                str(learner_info.get("class_name") or "Unassigned"),
-                str(learner_info.get("stream") or "No stream")
-            )
-            group = priority_groups.setdefault(group_key, {"assessed": 0, "high": 0, "medium": 0, "monitor": 0})
-            group["assessed"] += 1
-            if priority_level == "High":
-                group["high"] += 1
-            elif priority_level == "Medium":
-                group["medium"] += 1
-            elif priority_level == "Monitor":
-                group["monitor"] += 1
-
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Low Achievers and Priority Students — Summary</u>", centered_page_heading))
-        story.append(Paragraph(
-            "Priority guide: High = mean below 30% or at least half of assessed subjects below 40%; "
-            "Medium = mean below 40% or two or more subjects below 40%; Monitor = mean below 50% "
-            "or one subject below 40%; On track = otherwise. Non-assessed subjects are excluded.",
-            styles["MSACell"]
-        ))
-        pdf_table(
-            "Priority Students Summary",
-            ["Learners Assessed", "Mean Below 40%", "High Priority", "Medium Priority", "Monitor", "On Track"],
-            [[assessed_priority_total, low_achiever_total, priority_counts["High"], priority_counts["Medium"],
-              priority_counts["Monitor"], priority_counts["On track"]]],
-            compact=True
-        )
-        priority_group_rows = []
-        for (class_name, stream_name), counts in sorted(
-            priority_groups.items(),
-            key=lambda item: (-(item[1]["high"] + item[1]["medium"] + item[1]["monitor"]),
-                              item[0][0].casefold(), item[0][1].casefold())
-        ):
-            priority_group_rows.append([
-                class_name, stream_name, counts["assessed"], counts["high"],
-                counts["medium"], counts["monitor"],
-                counts["high"] + counts["medium"] + counts["monitor"]
-            ])
-        pdf_table(
-            "Classes and Streams Requiring Support",
-            ["Class", "Stream", "Assessed", "High", "Medium", "Monitor", "Need Support"],
-            priority_group_rows, compact=True
-        )
-
-        # Gender Performance Analysis: a single-page, exam-filter-aware summary.
-        # Use only learners with actual examination entries and only subjects each learner sat.
-        gender_summary = {}
-        gender_subjects = {}
-        for learner_id, learner_summary in data["summaries"].items():
-            try:
-                if int(learner_summary.get("subject_count") or 0) <= 0:
-                    continue
-                learner_key = int(learner_id)
-            except (TypeError, ValueError):
-                continue
-            learner_info = data["students"].get(learner_key, data["students"].get(str(learner_key), {})) or {}
-            raw_gender = str(learner_info.get("gender") or "").strip().casefold()
-            if raw_gender in ("male", "m", "boy", "man"):
-                gender_label = "Male"
-            elif raw_gender in ("female", "f", "girl", "woman"):
-                gender_label = "Female"
-            elif raw_gender in ("other", "non-binary", "nonbinary"):
-                gender_label = "Other"
-            else:
-                gender_label = "Unspecified"
-            learner_mean = float(learner_summary.get("average") or 0)
-            entry = gender_summary.setdefault(gender_label, {
-                "learners": 0, "mean_sum": 0.0, "at_or_above": 0, "below": 0, "highest": None
-            })
-            entry["learners"] += 1
-            entry["mean_sum"] += learner_mean
-            if learner_mean >= 40.0:
-                entry["at_or_above"] += 1
-            else:
-                entry["below"] += 1
-            entry["highest"] = learner_mean if entry["highest"] is None else max(entry["highest"], learner_mean)
-
-
-
-        # Build subject-by-gender means from the canonical aggregated marks data.
-        # This avoids empty cells caused by differences in summary-item shapes.
-        for (key, item) in data.get("aggregated", {}).items():
-            try:
-                learner_id, subject_id = key
-                learner_id = int(learner_id)
-                subject_id = int(subject_id)
-                subject_pct = float(item.get("percentage", item.get("percent")))
-            except (TypeError, ValueError, AttributeError):
-                continue
-            learner_info = data["students"].get(learner_id, data["students"].get(str(learner_id), {})) or {}
-            raw_gender = str(learner_info.get("gender") or "").strip().casefold()
-            if raw_gender in ("male", "m", "boy", "man"):
-                gender_label = "Male"
-            elif raw_gender in ("female", "f", "girl", "woman"):
-                gender_label = "Female"
-            elif raw_gender in ("other", "non-binary", "nonbinary"):
-                gender_label = "Other"
-            else:
-                gender_label = "Unspecified"
-            subject_name = str(
-                data["subjects"].get(subject_id, data["subjects"].get(str(subject_id), item.get("subject_name", "Subject")))
-                or item.get("subject_name") or "Subject"
-            )
-            subject_gender = gender_subjects.setdefault(subject_name, {})
-            subject_entry = subject_gender.setdefault(gender_label, {"sum": 0.0, "count": 0})
-            subject_entry["sum"] += subject_pct
-            subject_entry["count"] += 1
-
-        # Keep gender analysis directly below the priority summary on the same page.
-        story.append(Paragraph("<u>Gender Performance Analysis</u>", centered_page_heading))
-        story.append(Paragraph(
-            "Summary of assessed learners' mean percentages by recorded gender for the selected examination filters. "
-            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero. "
-            "The 40% indicator is a reporting benchmark for this summary, not a replacement for the school's grading rules.",
-            styles["MSACell"]
-        ))
-        gender_order = ["Female", "Male", "Other", "Unspecified"]
-        gender_rows = []
-        total_gender_learners = 0
-        total_gender_mean = 0.0
-        total_at_or_above = 0
-        total_below = 0
-        for gender_label in gender_order:
-            entry = gender_summary.get(gender_label)
-            if not entry:
-                continue
-            count = entry["learners"]
-            mean_pct = entry["mean_sum"] / count if count else 0.0
-            pass_pct = entry["at_or_above"] / count * 100 if count else 0.0
-            gender_rows.append([
-                gender_label, count, "%.2f%%" % mean_pct,
-                entry["at_or_above"], entry["below"], "%.1f%%" % pass_pct,
-                "%.2f%%" % (entry["highest"] or 0.0)
-            ])
-            total_gender_learners += count
-            total_gender_mean += entry["mean_sum"]
-            total_at_or_above += entry["at_or_above"]
-            total_below += entry["below"]
-        overall_mean = total_gender_mean / total_gender_learners if total_gender_learners else 0.0
-        gender_rows.append([
-            "All assessed", total_gender_learners, "%.2f%%" % overall_mean,
-            total_at_or_above, total_below,
-            "%.1f%%" % (total_at_or_above / total_gender_learners * 100 if total_gender_learners else 0.0),
-            "—"
-        ])
-        pdf_table(
-            "Performance Summary by Gender",
-            ["Gender", "Learners Assessed", "Mean %", "At/Above 40%", "Below 40%", "At/Above Rate", "Highest Mean %"],
-            gender_rows, compact=True
-        )
-
-        subject_gender_rows = []
-        for subject_name in sorted(set(str(v) for v in data["subjects"].values()) | set(gender_subjects), key=str.casefold):
-            subject_gender = gender_subjects.get(subject_name, {})
-            def _gender_subject_mean(label):
-                item = subject_gender.get(label)
-                return ("%.2f%%" % (item["sum"] / item["count"])) if item and item["count"] else "—"
-            subject_gender_rows.append([
-                subject_name, _gender_subject_mean("Female"), _gender_subject_mean("Male"),
-                _gender_subject_mean("Other"), _gender_subject_mean("Unspecified")
-            ])
-        if subject_gender_rows:
-            pdf_table(
-                "Subject Mean Percentage by Gender",
-                ["Subject", "Female Mean %", "Male Mean %", "Other Mean %", "Unspecified Mean %"],
-                subject_gender_rows, compact=True
-            )
-        if not gender_summary:
-            story.append(Paragraph("No assessed learners are available for gender performance analysis under the selected filters.", styles["MSACell"]))
-
-        # Put student rankings directly after per-subject grade distribution, on their own page.
-        story.append(PageBreak())
-        story.append(Paragraph("<u>Student rankings</u>", centered_page_heading))
-        ranked_learners = []
-        for learner_id, learner_summary in data["summaries"].items():
-            learner_info = data["students"].get(learner_id, {})
-            if not learner_info or int(learner_summary.get("subject_count") or 0) <= 0:
-                continue
-            ranked_learners.append({
-                "id": int(learner_id),
-                "name": str(learner_info.get("name") or ""),
-                "admission": str(learner_info.get("admission_no") or ""),
-                "class_name": str(learner_info.get("class_name") or "Unassigned"),
-                "stream": str(learner_info.get("stream") or "No stream"),
-                "mean": float(learner_summary.get("average") or 0),
-                "total": float(learner_summary.get("total") or 0),
-                "points": float(learner_summary.get("average_points") or 0),
-                "grade": str(learner_summary.get("overall_grade") or "—"),
-            })
-
-        def _msa_rank_students(learners):
-            # Rank these Top 10 lists by total marks, not average percentage:
-            # learners may have sat different numbers of exams/subjects.
-            ordered = sorted(
-                learners,
-                key=lambda item: (-item["total"], item["name"].casefold(), item["admission"].casefold())
-            )
-            result = []
-            previous_total = None
-            rank_number = 0
-            for index, learner in enumerate(ordered, 1):
-                if previous_total is None or abs(learner["total"] - previous_total) > 0.000001:
-                    rank_number = index
-                    previous_total = learner["total"]
-                result.append((rank_number, learner))
-            return result
-
-        ranking_headers = ["Rank", "Student", "Class", "Stream", "Mean %", "Total", "Grade"]
-        class_names = sorted({learner["class_name"] for learner in ranked_learners}, key=str.casefold)
-        for ranked_class in class_names:
-            class_ranked = _msa_rank_students([
-                learner for learner in ranked_learners if learner["class_name"] == ranked_class
-            ])
-            class_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in class_ranked[:10]
-            ]
-            # Add a matching class/stream distribution beside every class-level
-            # Top 10 table, using only the learners shown in that table.
-            class_top_ranked = class_ranked[:10]
-            class_stream_counts = {}
-            for _rank, learner in class_top_ranked:
-                stream_label = str(learner.get("stream") or "No stream").strip()
-                class_stream_counts[stream_label] = class_stream_counts.get(stream_label, 0) + 1
-            class_distribution_rows = [
-                [stream_label, count, "%.1f%%" % (100.0 * count / len(class_top_ranked))]
-                for stream_label, count in sorted(
-                    class_stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
-                )
-            ] if class_top_ranked else [["No eligible learners", 0, "0.0%"]]
-
-            class_rank_style = ParagraphStyle(
-                "MSAClassTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
-            )
-            class_dist_style = ParagraphStyle(
-                "MSAClassTopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
-            )
-            class_left_width = doc.width * 0.67
-            class_right_width = doc.width - class_left_width - 5 * mm
-            class_rank_data = [[
-                Paragraph("<b>%s</b>" % escape(str(header)), class_rank_style)
-                for header in ranking_headers
-            ]]
-            class_rank_data.extend([
-                [Paragraph(escape(str(value)), class_rank_style) for value in row]
-                for row in class_top_ten
-            ])
-            class_rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
-            # Each ranking column is half its previous width.
-            class_rank_widths = [
-                class_left_width * weight / sum(class_rank_weights) * 0.50
-                for weight in class_rank_weights
-            ]
-            class_rank_table = Table(
-                class_rank_data, colWidths=class_rank_widths, repeatRows=1, hAlign="LEFT"
-            )
-            class_rank_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("LEFTPADDING", (0,0), (-1,-1), 2),
-                ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-            class_dist_data = [[
-                Paragraph("<b>Stream</b>", class_dist_style),
-                Paragraph("<b>No. of Students</b>", class_dist_style),
-                Paragraph("<b>Share</b>", class_dist_style),
-            ]]
-            class_dist_data.extend([
-                [
-                    Paragraph(escape(str(stream_label)), class_dist_style),
-                    Paragraph(str(count), class_dist_style),
-                    Paragraph(escape(str(share)), class_dist_style),
-                ]
-                for stream_label, count, share in class_distribution_rows
-            ])
-            class_dist_data.append([
-                Paragraph("<b>Total</b>", class_dist_style),
-                Paragraph("<b>%s</b>" % len(class_top_ranked), class_dist_style),
-                Paragraph("<b>100%</b>" if class_top_ranked else "<b>0.0%</b>", class_dist_style),
-            ])
-            class_dist_table = Table(
-                class_dist_data,
-                colWidths=[
-                    class_right_width * 0.58,
-                    class_right_width * 0.16,
-                    class_right_width * 0.26,
-                ],
-                repeatRows=1, hAlign="LEFT"
-            )
-            class_dist_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("ALIGN", (1,1), (-1,-1), "CENTER"),
-                ("LEFTPADDING", (0,0), (-1,-1), 2),
-                ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-            class_pair = Table(
-                [[
-                    class_rank_table,
-                    Table(
-                        [[Paragraph("<u>Stream Distribution</u>", styles["MSASection"])],
-                         [class_dist_table]],
-                        colWidths=[class_right_width], hAlign="LEFT"
-                    )
-                ]],
-                colWidths=[class_left_width, class_right_width + 5 * mm],
-                hAlign="LEFT"
-            )
-            class_pair.setStyle(TableStyle([
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("LEFTPADDING", (0,0), (-1,-1), 0),
-                ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                ("TOPPADDING", (0,0), (-1,-1), 0),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-            ]))
-            story.append(KeepTogether([
-                Paragraph("<u>Best 10 students — " + escape(ranked_class) + "</u>", styles["MSASection"]),
-                class_pair,
-            ]))
-            story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=0.5 * mm))
-            story.append(Spacer(1, 1.0 * mm))
-
-        # A combined ranking adds no information when the selected exam data
-        # contains only one class: it would repeat that class's Best 10 table.
-        # Keep it for multi-class comparisons, including multi-exam selections.
-        if len(class_names) > 1:
-            # Use exactly the learners shown in the combined Best 10 table for
-            # the accompanying stream distribution, so the counts always agree.
-            combined_top_ten = _msa_rank_students(ranked_learners)[:10]
-            overall_top_ten = [
-                [rank, learner["name"], learner["class_name"],
-                 learner["stream"], "%.2f%%" % learner["mean"], "%.2f" % learner["total"], learner["grade"]]
-                for rank, learner in combined_top_ten
-            ]
-
-            # Count each class/stream combination represented in the displayed
-            # Top 10. The percentage is its share of the displayed learners.
-            stream_counts = {}
-            for _rank, learner in combined_top_ten:
-                class_label = str(learner.get("class_name") or "Unassigned").strip()
-                stream_label = str(learner.get("stream") or "No stream").strip()
-                group_label = "%s — %s" % (class_label, stream_label)
-                stream_counts[group_label] = stream_counts.get(group_label, 0) + 1
-            distribution_rows = [
-                [group, count, "%.1f%%" % (100.0 * count / len(combined_top_ten))]
-                for group, count in sorted(
-                    stream_counts.items(), key=lambda item: (-item[1], item[0].casefold())
-                )
-            ] if combined_top_ten else [["No eligible learners", 0, "0.0%"]]
-
-            # Keep both analyses together on the same page. Split the available
-            # width between the detailed ranking and a compact stream summary.
-            ranking_cell_style = ParagraphStyle(
-                "MSACombinedTopTenCell", parent=styles["MSACell"], fontSize=5.7, leading=6.2
-            )
-            distribution_cell_style = ParagraphStyle(
-                "MSATopTenDistributionCell", parent=styles["MSACell"], fontSize=6.5, leading=7
-            )
-            left_width = doc.width * 0.67
-            right_width = doc.width - left_width - 5 * mm
-            rank_data = [[
-                Paragraph("<b>%s</b>" % escape(str(header)), ranking_cell_style)
-                for header in ranking_headers
-            ]]
-            rank_data.extend([
-                [Paragraph(escape(str(value)), ranking_cell_style) for value in row]
-                for row in overall_top_ten
-            ])
-            rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
-            # Each ranking column is half its previous width.
-            rank_widths = [left_width * weight / sum(rank_weights) * 0.50 for weight in rank_weights]
-            rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="LEFT")
-            rank_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("LEFTPADDING", (0,0), (-1,-1), 2),
-                ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-
-            distribution_data = [[
-                Paragraph("<b>Class / Stream</b>", distribution_cell_style),
-                Paragraph("<b>No. of Students</b>", distribution_cell_style),
-                Paragraph("<b>Share</b>", distribution_cell_style),
-            ]]
-            distribution_data.extend([
-                [
-                    Paragraph(escape(str(group)), distribution_cell_style),
-                    Paragraph(str(count), distribution_cell_style),
-                    Paragraph(escape(str(share)), distribution_cell_style),
-                ]
-                for group, count, share in distribution_rows
-            ])
-            distribution_data.append([
-                Paragraph("<b>Total</b>", distribution_cell_style),
-                Paragraph("<b>%s</b>" % len(combined_top_ten), distribution_cell_style),
-                Paragraph("<b>100%</b>" if combined_top_ten else "<b>0.0%</b>", distribution_cell_style),
-            ])
-            distribution_table = Table(
-                distribution_data,
-                colWidths=[right_width * 0.58, right_width * 0.16, right_width * 0.26],
-                repeatRows=1, hAlign="LEFT"
-            )
-            distribution_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("ALIGN", (1,1), (-1,-1), "CENTER"),
-                ("LEFTPADDING", (0,0), (-1,-1), 2),
-                ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-
-            distribution_heading = Paragraph(
-                "<u>Stream Distribution</u>", styles["MSASection"]
-            )
-            paired_top_ten = Table(
-                [[rank_table, Table(
-                    [[distribution_heading], [distribution_table]],
-                    colWidths=[right_width], hAlign="LEFT"
-                )]],
-                colWidths=[left_width, right_width + 5 * mm],
-                hAlign="LEFT"
-            )
-            paired_top_ten.setStyle(TableStyle([
-                ("VALIGN", (0,0), (-1,-1), "TOP"),
-                ("LEFTPADDING", (0,0), (-1,-1), 0),
-                ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                ("TOPPADDING", (0,0), (-1,-1), 0),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-            ]))
-            combined_heading = Paragraph(
-                "<u>Best 10 students — combined classes</u>", styles["MSASection"]
-            )
-            story.append(KeepTogether([combined_heading, paired_top_ten]))
-            story.append(Spacer(1, 1.0 * mm))
-
-        story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
