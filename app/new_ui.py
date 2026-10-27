@@ -13338,7 +13338,7 @@ def class_marksheet_analysis_pdf(
                 # Keep Subject unchanged and reduce each remaining column by 70%.
                 base_width = doc.width / 6
                 col_widths = [base_width] + [base_width * 0.30] * 5
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title.startswith("Best 10 students") and len(headers) == 7:
                 # Reduce all seven ranking columns by 50% from their prior
                 # equal-width baseline.
@@ -13353,7 +13353,7 @@ def class_marksheet_analysis_pdf(
                     base_width, base_width * 0.42, base_width * 0.56,
                     base_width * 0.42, base_width * 0.60,
                 ]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Grade Distribution Analysis — Per Subject" and len(headers) > 1:
                 # Give Subject a wider label column; compress grade/count/mean/
                 # position columns evenly while keeping the table within page width.
@@ -13365,7 +13365,7 @@ def class_marksheet_analysis_pdf(
                 # Keep the combined-teacher table compact while allowing the
                 # contributing class/stream list enough room to wrap cleanly.
                 col_widths = [
-                    doc.width * 0.035, doc.width * 0.15, doc.width * 0.14,
+                    max(4 * mm, doc.width * 0.007), doc.width * 0.15, doc.width * 0.14,
                     doc.width * 0.36, doc.width * 0.055, doc.width * 0.075,
                     doc.width * 0.07,
                 ]
@@ -13974,7 +13974,7 @@ def class_marksheet_analysis_pdf(
                 doc.width * 0.16, doc.width * 0.14, doc.width * 0.084,
                 doc.width * 0.224, doc.width * 0.084,
                 doc.width * 0.224, doc.width * 0.084,
-            ], hAlign="CENTER")
+            ], hAlign="LEFT")
             insight_cards.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
                 ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
@@ -14048,7 +14048,7 @@ def class_marksheet_analysis_pdf(
                     doc.width * 0.24, doc.width * 0.08,
                     doc.width * 0.48256, doc.width * 0.10,
                 ],
-                repeatRows=1, hAlign="CENTER"
+                repeatRows=1, hAlign="LEFT"
             )
             chart_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14564,7 +14564,6 @@ def class_marksheet_analysis_pdf(
             story.append(KeepTogether([combined_heading, paired_top_ten]))
             story.append(Spacer(1, 1.0 * mm))
 
-        story.append(PageBreak())
         # Start subject-by-class/stream performance on a separate page after insights.
         story.append(PageBreak())
         subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
@@ -14861,21 +14860,30 @@ def class_marksheet_analysis_pdf(
                     compact_data = [[
                         Paragraph("Rank", stream_header_style),
                         Paragraph("Student", stream_header_style),
+                        Paragraph("Teacher", stream_header_style),
                         Paragraph("Mark", stream_header_style),
                         Paragraph("Grade", stream_header_style),
                     ]]
+                    teacher_item = stream_teacher_lookup.get((
+                        str(subject_name).casefold(),
+                        str(group_key[0]).casefold(),
+                        str(group_key[1] or "No stream").casefold(),
+                    ))
+                    teacher_name = str((teacher_item or {}).get("teacher") or "—")
                     for row in rows_for_group:
                         compact_data.append([
                             Paragraph(escape(str(row[0])), stream_cell_style),
                             Paragraph(escape(str(row[1])), stream_cell_style),
+                            Paragraph(escape(teacher_name), stream_cell_style),
                             Paragraph(escape(str(row[5])), stream_cell_style),
                             Paragraph(escape(str(row[7])), stream_cell_style),
                         ])
                     stream_table_width = doc.width / 3 - 5*mm
-                    student_col_width = max(14*mm, stream_table_width - 7*mm - 9*mm - 10*mm - 4*mm)
+                    teacher_col_width = 17*mm
+                    student_col_width = max(14*mm, stream_table_width - 7*mm - teacher_col_width - 9*mm - 10*mm - 4*mm)
                     compact_table = Table(
                         compact_data,
-                        colWidths=[7*mm, student_col_width, 9*mm, 10*mm],
+                        colWidths=[7*mm, student_col_width, teacher_col_width, 9*mm, 10*mm],
                         repeatRows=1, hAlign="CENTER"
                     )
                     compact_table.setStyle(TableStyle([
@@ -14927,6 +14935,8 @@ def class_marksheet_analysis_pdf(
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
 
+        # Give Best Teachers by Subject a dedicated page.
+        story.append(PageBreak())
         story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
         story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
         # Combined results identify one leading teacher per subject across all
