@@ -14844,6 +14844,9 @@ def class_marksheet_analysis_pdf(
                         textColor=colors.black,
                         alignment=0,
                     )
+                    stream_cell_style = ParagraphStyle(
+                        "MSAStreamTopCell", parent=styles["MSACell"], fontSize=5.5, leading=6.0
+                    )
                     compact_data = [[
                         Paragraph("Rank", stream_header_style),
                         Paragraph("Student", stream_header_style),
@@ -14859,9 +14862,6 @@ def class_marksheet_analysis_pdf(
                         ])
                     stream_table_width = doc.width / 3 - 5*mm
                     student_col_width = max(14*mm, stream_table_width - 7*mm - 9*mm - 10*mm - 4*mm)
-                    stream_cell_style = ParagraphStyle(
-                        "MSAStreamTopCell", parent=styles["MSACell"], fontSize=5.5, leading=6.0
-                    )
                     compact_table = Table(
                         compact_data,
                         colWidths=[7*mm, student_col_width, 9*mm, 10*mm],
