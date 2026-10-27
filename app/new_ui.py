@@ -13333,7 +13333,7 @@ def class_marksheet_analysis_pdf(
                 # Reduce every Examination Details column to 60% of its prior
                 # equal-width allocation.
                 col_widths = [doc.width / 4 * 0.60] * 4
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Subject Pass/Fail Analysis" and len(headers) == 6:
                 # Keep Subject unchanged and reduce each remaining column by 70%.
                 base_width = doc.width / 6
@@ -14803,6 +14803,17 @@ def class_marksheet_analysis_pdf(
         stream_by_subject = {}
         for entry in data["top_stream"]:
             stream_by_subject.setdefault(entry[0], []).append(entry)
+        # Resolve the teacher for each subject/class/stream from filtered exam data.
+        stream_teacher_lookup = {}
+        for teacher_item in teacher_performance["class"]:
+            teacher_key = (
+                str(teacher_item.get("subject") or "").casefold(),
+                str(teacher_item.get("class") or "").casefold(),
+                str(teacher_item.get("stream") or "No stream").casefold(),
+            )
+            previous_teacher = stream_teacher_lookup.get(teacher_key)
+            if previous_teacher is None or float(teacher_item.get("mean") or 0) > float(previous_teacher.get("mean") or 0):
+                stream_teacher_lookup[teacher_key] = teacher_item
         story.append(Paragraph("<u>Top Students per Subject — stream-wise</u>", centered_page_heading))
         # Organize the report by subject: one heading, followed by that
         # subject's class/stream tables. Never pair tables from different subjects.
