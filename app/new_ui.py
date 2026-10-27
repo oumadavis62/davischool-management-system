@@ -13304,7 +13304,7 @@ def class_marksheet_analysis_pdf(
             "MSAReportTitle", parent=styles["MSASection"], alignment=1,
             fontSize=11, leading=13, spaceBefore=2, spaceAfter=3,
         )
-        story.append(Paragraph("<b>BROAD-MARKSHEET ANALYSIS</b>", analysis_title_style))
+        story.append(Paragraph("<b>ACADEMIC ANALYSIS REPORT</b>", analysis_title_style))
         story.append(Spacer(1, 4*mm))
         def pdf_table(title, headers, values, compact=False, column_profile=None):
             heading = Paragraph("<u>" + escape(title) + "</u>", styles["MSASection"]) if title else None
@@ -14277,13 +14277,12 @@ def class_marksheet_analysis_pdf(
                 item = subject_gender.get(label)
                 return ("%.2f%%" % (item["sum"] / item["count"])) if item and item["count"] else "—"
             subject_gender_rows.append([
-                subject_name, _gender_subject_mean("Female"), _gender_subject_mean("Male"),
-                _gender_subject_mean("Other"), _gender_subject_mean("Unspecified")
+                subject_name, _gender_subject_mean("Female"), _gender_subject_mean("Male")
             ])
         if subject_gender_rows:
             pdf_table(
                 "Subject Mean Percentage by Gender",
-                ["Subject", "Female Mean %", "Male Mean %", "Other Mean %", "Unspecified Mean %"],
+                ["Subject", "Female Mean %", "Male Mean %"],
                 subject_gender_rows, compact=True
             )
         if not gender_summary:
@@ -15102,7 +15101,6 @@ def class_marksheet_analysis_pdf(
             fontName="Helvetica-Bold", alignment=1
         )
         story.append(Spacer(1, 3*mm))
-        story.append(Paragraph("ACADEMIC ANALYSIS REPORT", declaration_main_title))
         story.append(Paragraph("DECLARATION AND OFFICIAL APPROVAL", declaration_subtitle))
         story.append(Paragraph("DECLARATION", declaration_section))
         story.append(Paragraph(
@@ -15149,20 +15147,20 @@ def class_marksheet_analysis_pdf(
             declaration_body
         ))
         council_headers = [
-            Paragraph("<b>Member</b>", declaration_table_header),
+            Paragraph("<b>Name</b>", declaration_table_header),
             Paragraph("<b>Designation</b>", declaration_table_header),
             Paragraph("<b>Signature</b>", declaration_table_header),
             Paragraph("<b>Date</b>", declaration_table_header),
         ]
+        # Keep the signing area open and printable: headings remain, but the
+        # boxed table/grid is replaced with plain handwritten-entry lines.
         council_rows = [council_headers]
-        for member_number in range(1, 5):
-            # Keep the cells clear for handwritten entries; do not print
-            # underscore placeholders that look like stray lines in the table.
+        for _member_number in range(1, 5):
             council_rows.append([
-                Paragraph(str(member_number) + ".", declaration_label),
-                Paragraph("", declaration_label),
-                Paragraph("", declaration_label),
-                Paragraph("", declaration_label),
+                Paragraph("________________________", declaration_label),
+                Paragraph("______________", declaration_label),
+                Paragraph("__________________", declaration_label),
+                Paragraph("____________", declaration_label),
             ])
         council_table = Table(
             council_rows,
@@ -15170,11 +15168,8 @@ def class_marksheet_analysis_pdf(
             repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.white),
-            ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#777777")),
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("ALIGN", (0,0), (-1,-1), "LEFT"),
             ("LEFTPADDING", (0,0), (-1,-1), 4),
             ("RIGHTPADDING", (0,0), (-1,-1), 4),
             ("TOPPADDING", (0,0), (-1,-1), 5),
