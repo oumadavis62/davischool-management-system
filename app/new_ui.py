@@ -13162,7 +13162,270 @@ def class_marksheet_analysis_csv(
         # Examination trends are intentionally omitted from analysis exports.
         teacher_performance = _msa_teacher_performance(cur, sid, data, rows)
 
-        # Keep these report pages directly after Performance Insights.
+        story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
+        story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
+        # Combined results identify one leading teacher per subject across all
+        # classes, so class and stream columns are not applicable here.
+        teacher_headers = ["Rank", "Subject", "Best Teacher", "Classes and Streams", "Combined Entries", "Mean %", "Mean Grade"]
+        combined_teacher_rows = []
+        for item in teacher_performance["combined"]:
+            try:
+                mean_grade, _, _ = _subject_grade_details(
+                    cur, sid, item["subject_id"], item["mean"], data["grading_rules"], 100
+                )
+            except Exception:
+                mean_grade, _ = _default_grade_points(item["mean"])
+            combined_teacher_rows.append([
+                item["rank"], item["subject"], item["teacher"],
+                item.get("classes_streams") or "—", item["entries"],
+                "%.2f%%" % item["mean"], str(mean_grade or "—")
+            ])
+        pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
+        story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
+
+        class_teacher_records = teacher_performance["class"]
+        classwise_teacher_classes = {str(item.get("class") or "") for item in class_teacher_records}
+        # Suppress the duplicate class-wise ranking section when only one class
+        # participated in the selected exam(s); combined results remain available.
+        if len(classwise_teacher_classes) > 1:
+            story.append(Paragraph("<u>Class-wise</u>", styles["MSASection"]))
+        if len(classwise_teacher_classes) > 1:
+            class_subject_tables = []
+            header_style = styles["MSAMatrixHeader"]
+            cell_style = ParagraphStyle(
+                "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
+            )
+            for subject_name in sorted(data["subjects"].values(), key=str.casefold):
+                all_subject_records = [
+                    item for item in class_teacher_records if item["subject"] == subject_name
+                ]
+                # Show exactly one best teacher/stream for each class and subject:
+                # compare all stream winners within the class, then keep the highest mean.
+                best_by_class = {}
+                for candidate in all_subject_records:
+                    class_key = str(candidate.get("class") or "")
+                    previous = best_by_class.get(class_key)
+                    if previous is None or (
+                        float(candidate.get("mean") or 0) > float(previous.get("mean") or 0)
+                        or (
+                            abs(float(candidate.get("mean") or 0) - float(previous.get("mean") or 0)) <= 0.000001
+                            and str(candidate.get("teacher") or "").casefold() < str(previous.get("teacher") or "").casefold()
+                        )
+                    ):
+                        best_by_class[class_key] = candidate
+                subject_records = sorted(
+                    best_by_class.values(),
+                    key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
+                )
+                table_data = [[
+                    Paragraph("<b>Class</b>", header_style),
+                    Paragraph("<b>Best Teacher</b>", header_style),
+                    Paragraph("<b>Stream</b>", header_style),
+                    Paragraph("<b>Entries</b>", header_style),
+                    Paragraph("<b>Mean %</b>", header_style),
+                ]]
+                if subject_records:
+                    for item in subject_records:
+                        table_data.append([
+                            Paragraph(escape(str(item["class"])), cell_style),
+                            Paragraph(escape(str(item["teacher"])), cell_style),
+                            Paragraph(escape(str(item.get("stream") or "Unspecified")), cell_style),
+                            Paragraph(escape(str(item["entries"])), cell_style),
+                            Paragraph("%.2f%%" % item["mean"], cell_style),
+                        ])
+                else:
+                    table_data.append([
+                        Paragraph("No eligible class", cell_style),
+                        Paragraph("No teacher performance data", cell_style),
+                        Paragraph("—", cell_style),
+                        Paragraph("0", cell_style),
+                        Paragraph("—", cell_style),
+                    ])
+                # The widths total half the page, keeping each table compact enough
+                # to sit beside another subject table on landscape A4.
+                class_table = Table(
+                    table_data,
+                    colWidths=[doc.width * 0.095, doc.width * 0.105, doc.width * 0.075, doc.width * 0.055, doc.width * 0.065],
+                    repeatRows=1, hAlign="LEFT"
+                )
+                class_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.white),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                    ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                    ("FONTSIZE", (0,0), (-1,-1), 5.5),
+                    ("LEFTPADDING", (0,0), (-1,-1), 1.5),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 1.5),
+                    ("TOPPADDING", (0,0), (-1,-1), 1),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 1),
+                ]))
+                class_subject_tables.append((str(subject_name), class_table))
+
+            for pair_start in range(0, len(class_subject_tables), 2):
+                left_subject, left_table = class_subject_tables[pair_start]
+                half_width = doc.width / 2
+                # Keep each subject heading together with its corresponding table.
+                left_stack = Table(
+                    [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
+                    colWidths=[half_width], hAlign="LEFT"
+                )
+                if pair_start + 1 < len(class_subject_tables):
+                    right_subject, right_table = class_subject_tables[pair_start + 1]
+                    right_stack = Table(
+                        [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
+                        colWidths=[half_width], hAlign="LEFT"
+                    )
+                    paired_class_tables = Table(
+                        [[left_stack, right_stack]],
+                        colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
+                    )
+                    paired_class_tables.setStyle(TableStyle([
+                        ("VALIGN", (0,0), (-1,-1), "TOP"),
+                        ("LEFTPADDING", (0,0), (-1,-1), 0),
+                        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                        ("TOPPADDING", (0,0), (-1,-1), 0),
+                        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                    ]))
+                    story.append(paired_class_tables)
+                else:
+                    story.append(left_stack)
+                story.append(Spacer(1, 1.5*mm))
+
+        # Final standalone page for formal declaration and institutional approval.
+        story.append(PageBreak())
+        declaration_main_title = ParagraphStyle(
+            "MSADeclarationMainTitle", parent=styles["MSASection"], alignment=1,
+            fontName="Helvetica-Bold", fontSize=15, leading=18, spaceAfter=2*mm
+        )
+        declaration_subtitle = ParagraphStyle(
+            "MSADeclarationSubtitle", parent=styles["MSASection"], alignment=1,
+            fontName="Helvetica-Bold", fontSize=11, leading=14, spaceAfter=4*mm
+        )
+        declaration_section = ParagraphStyle(
+            "MSADeclarationSection", parent=styles["MSACell"],
+            fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=1*mm, spaceAfter=1.5*mm
+        )
+        declaration_body = ParagraphStyle(
+            "MSADeclarationBody", parent=styles["MSACell"], alignment=4,
+            fontSize=8, leading=10, spaceAfter=2*mm
+        )
+        declaration_label = ParagraphStyle(
+            "MSADeclarationLabel", parent=styles["MSACell"],
+            fontSize=7.5, leading=9
+        )
+        declaration_table_header = ParagraphStyle(
+            "MSADeclarationTableHeader", parent=declaration_label,
+            fontName="Helvetica-Bold", alignment=1
+        )
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph("ACADEMIC ANALYSIS REPORT", declaration_main_title))
+        story.append(Paragraph("DECLARATION AND OFFICIAL APPROVAL", declaration_subtitle))
+        story.append(Paragraph("DECLARATION", declaration_section))
+        story.append(Paragraph(
+            "We hereby declare that this Academic Analysis Report presents the examination "
+            "performance and academic assessment results of the institution for the selected "
+            "academic year, term, examination, classes and streams.",
+            declaration_body
+        ))
+        story.append(Paragraph(
+            "The report has been reviewed for accuracy, completeness and suitability for official "
+            "academic reporting. Approval by the School Administration and Academic Council confirms "
+            "its acceptance for official release, subject to the institution's applicable review procedures.",
+            declaration_body
+        ))
+
+        story.append(Paragraph("1. HEAD OF INSTITUTION", declaration_section))
+        story.append(Paragraph(
+            "I confirm that I have reviewed and approved this Academic Analysis Report for official release by the institution.",
+            declaration_body
+        ))
+        head_signature_table = Table([
+            [Paragraph("<b>Name</b>: __________________________________________",
+                       declaration_label),
+             Paragraph("<b>Signature</b>: ______________________________________",
+                       declaration_label)],
+            [Paragraph("<b>Date</b>: ___________________________________________",
+                       declaration_label),
+             Paragraph("<b>Official stamp</b>: __________________________________",
+                       declaration_label)],
+        ], colWidths=[doc.width * 0.49, doc.width * 0.49], hAlign="LEFT")
+        head_signature_table.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("LEFTPADDING", (0,0), (-1,-1), 2),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ]))
+        story.append(head_signature_table)
+
+        story.append(Paragraph("2. ACADEMIC COUNCIL", declaration_section))
+        story.append(Paragraph(
+            "The undersigned members of the Academic Council confirm that the report has been presented "
+            "for review and approved for official academic release.",
+            declaration_body
+        ))
+        council_headers = [
+            Paragraph("<b>Member</b>", declaration_table_header),
+            Paragraph("<b>Designation</b>", declaration_table_header),
+            Paragraph("<b>Signature</b>", declaration_table_header),
+            Paragraph("<b>Date</b>", declaration_table_header),
+        ]
+        council_rows = [council_headers]
+        for member_number in range(1, 5):
+            # Keep the cells clear for handwritten entries; do not print
+            # underscore placeholders that look like stray lines in the table.
+            council_rows.append([
+                Paragraph(str(member_number) + ".", declaration_label),
+                Paragraph("", declaration_label),
+                Paragraph("", declaration_label),
+                Paragraph("", declaration_label),
+            ])
+        council_table = Table(
+            council_rows,
+            colWidths=[doc.width * 0.34, doc.width * 0.22, doc.width * 0.24, doc.width * 0.16],
+            repeatRows=1, hAlign="LEFT"
+        )
+        council_table.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.white),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#777777")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 4),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        story.append(council_table)
+        story.append(Spacer(1, 3*mm))
+        story.append(Paragraph(
+            "This page is reserved for authorized signatures and institutional approval. Approval is effective only "
+            "after the designated officials have reviewed and signed the report.",
+            declaration_body
+        ))
+
+        def add_footer(canvas, document):
+            canvas.saveState()
+            # Thin green border on all four sides of every PDF page.
+            page_width, page_height = landscape(A4)
+            canvas.setStrokeColor(colors.HexColor("#176b3a"))
+            canvas.setLineWidth(0.8)
+            canvas.rect(4*mm, 4*mm, page_width - 8*mm, page_height - 8*mm, stroke=1, fill=0)
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor("#176b3a"))
+            canvas.drawCentredString(page_width/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
+            canvas.restoreState()
+        doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
+        response = Response(content=buffer.getvalue(), media_type="application/pdf")
+        response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.pdf"'
+        return response
+    except Exception as exc:
+        print("DAVISCHOOL MARKSHEET ANALYSIS PDF FAILED:", repr(exc), flush=True)
+        return HTMLResponse("Unable to export analysis PDF: " + escape(str(exc))[:300], status_code=500)
+    finally:
+        con.close()        # Keep these report pages directly after Performance Insights.
         centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
         # Low Achievers and Priority Students Summary — retained as its own page
         # immediately before the Gender Performance Analysis page.
@@ -14915,267 +15178,5 @@ def class_marksheet_analysis_pdf(
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
 
-        story.append(Paragraph("<u>Best Teachers by Subject</u>", centered_page_heading))
-        story.append(Paragraph("<u>Combined classes</u>", styles["MSASection"]))
-        # Combined results identify one leading teacher per subject across all
-        # classes, so class and stream columns are not applicable here.
-        teacher_headers = ["Rank", "Subject", "Best Teacher", "Classes and Streams", "Combined Entries", "Mean %", "Mean Grade"]
-        combined_teacher_rows = []
-        for item in teacher_performance["combined"]:
-            try:
-                mean_grade, _, _ = _subject_grade_details(
-                    cur, sid, item["subject_id"], item["mean"], data["grading_rules"], 100
-                )
-            except Exception:
-                mean_grade, _ = _default_grade_points(item["mean"])
-            combined_teacher_rows.append([
-                item["rank"], item["subject"], item["teacher"],
-                item.get("classes_streams") or "—", item["entries"],
-                "%.2f%%" % item["mean"], str(mean_grade or "—")
-            ])
-        pdf_table("", teacher_headers, combined_teacher_rows, compact=True)
-        story.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor("#176b3a"), spaceBefore=0.5 * mm, spaceAfter=1.0 * mm))
 
-        class_teacher_records = teacher_performance["class"]
-        classwise_teacher_classes = {str(item.get("class") or "") for item in class_teacher_records}
-        # Suppress the duplicate class-wise ranking section when only one class
-        # participated in the selected exam(s); combined results remain available.
-        if len(classwise_teacher_classes) > 1:
-            story.append(Paragraph("<u>Class-wise</u>", styles["MSASection"]))
-        if len(classwise_teacher_classes) > 1:
-            class_subject_tables = []
-            header_style = styles["MSAMatrixHeader"]
-            cell_style = ParagraphStyle(
-                "MSAClassTeacherTableCell", parent=styles["MSACell"], fontSize=6, leading=7
-            )
-            for subject_name in sorted(data["subjects"].values(), key=str.casefold):
-                all_subject_records = [
-                    item for item in class_teacher_records if item["subject"] == subject_name
-                ]
-                # Show exactly one best teacher/stream for each class and subject:
-                # compare all stream winners within the class, then keep the highest mean.
-                best_by_class = {}
-                for candidate in all_subject_records:
-                    class_key = str(candidate.get("class") or "")
-                    previous = best_by_class.get(class_key)
-                    if previous is None or (
-                        float(candidate.get("mean") or 0) > float(previous.get("mean") or 0)
-                        or (
-                            abs(float(candidate.get("mean") or 0) - float(previous.get("mean") or 0)) <= 0.000001
-                            and str(candidate.get("teacher") or "").casefold() < str(previous.get("teacher") or "").casefold()
-                        )
-                    ):
-                        best_by_class[class_key] = candidate
-                subject_records = sorted(
-                    best_by_class.values(),
-                    key=lambda item: (str(item["class"]).casefold(), str(item["teacher"]).casefold())
-                )
-                table_data = [[
-                    Paragraph("<b>Class</b>", header_style),
-                    Paragraph("<b>Best Teacher</b>", header_style),
-                    Paragraph("<b>Stream</b>", header_style),
-                    Paragraph("<b>Entries</b>", header_style),
-                    Paragraph("<b>Mean %</b>", header_style),
-                ]]
-                if subject_records:
-                    for item in subject_records:
-                        table_data.append([
-                            Paragraph(escape(str(item["class"])), cell_style),
-                            Paragraph(escape(str(item["teacher"])), cell_style),
-                            Paragraph(escape(str(item.get("stream") or "Unspecified")), cell_style),
-                            Paragraph(escape(str(item["entries"])), cell_style),
-                            Paragraph("%.2f%%" % item["mean"], cell_style),
-                        ])
-                else:
-                    table_data.append([
-                        Paragraph("No eligible class", cell_style),
-                        Paragraph("No teacher performance data", cell_style),
-                        Paragraph("—", cell_style),
-                        Paragraph("0", cell_style),
-                        Paragraph("—", cell_style),
-                    ])
-                # The widths total half the page, keeping each table compact enough
-                # to sit beside another subject table on landscape A4.
-                class_table = Table(
-                    table_data,
-                    colWidths=[doc.width * 0.095, doc.width * 0.105, doc.width * 0.075, doc.width * 0.055, doc.width * 0.065],
-                    repeatRows=1, hAlign="LEFT"
-                )
-                class_table.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), colors.white),
-                    ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                    ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
-                    ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("ALIGN", (2,1), (-1,-1), "CENTER"),
-                    ("FONTSIZE", (0,0), (-1,-1), 5.5),
-                    ("LEFTPADDING", (0,0), (-1,-1), 1.5),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 1.5),
-                    ("TOPPADDING", (0,0), (-1,-1), 1),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 1),
-                ]))
-                class_subject_tables.append((str(subject_name), class_table))
 
-            for pair_start in range(0, len(class_subject_tables), 2):
-                left_subject, left_table = class_subject_tables[pair_start]
-                half_width = doc.width / 2
-                # Keep each subject heading together with its corresponding table.
-                left_stack = Table(
-                    [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
-                    colWidths=[half_width], hAlign="LEFT"
-                )
-                if pair_start + 1 < len(class_subject_tables):
-                    right_subject, right_table = class_subject_tables[pair_start + 1]
-                    right_stack = Table(
-                        [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
-                        colWidths=[half_width], hAlign="LEFT"
-                    )
-                    paired_class_tables = Table(
-                        [[left_stack, right_stack]],
-                        colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
-                    )
-                    paired_class_tables.setStyle(TableStyle([
-                        ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("LEFTPADDING", (0,0), (-1,-1), 0),
-                        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                        ("TOPPADDING", (0,0), (-1,-1), 0),
-                        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-                    ]))
-                    story.append(paired_class_tables)
-                else:
-                    story.append(left_stack)
-                story.append(Spacer(1, 1.5*mm))
-
-        # Final standalone page for formal declaration and institutional approval.
-        story.append(PageBreak())
-        declaration_main_title = ParagraphStyle(
-            "MSADeclarationMainTitle", parent=styles["MSASection"], alignment=1,
-            fontName="Helvetica-Bold", fontSize=15, leading=18, spaceAfter=2*mm
-        )
-        declaration_subtitle = ParagraphStyle(
-            "MSADeclarationSubtitle", parent=styles["MSASection"], alignment=1,
-            fontName="Helvetica-Bold", fontSize=11, leading=14, spaceAfter=4*mm
-        )
-        declaration_section = ParagraphStyle(
-            "MSADeclarationSection", parent=styles["MSACell"],
-            fontName="Helvetica-Bold", fontSize=9, leading=11, spaceBefore=1*mm, spaceAfter=1.5*mm
-        )
-        declaration_body = ParagraphStyle(
-            "MSADeclarationBody", parent=styles["MSACell"], alignment=4,
-            fontSize=8, leading=10, spaceAfter=2*mm
-        )
-        declaration_label = ParagraphStyle(
-            "MSADeclarationLabel", parent=styles["MSACell"],
-            fontSize=7.5, leading=9
-        )
-        declaration_table_header = ParagraphStyle(
-            "MSADeclarationTableHeader", parent=declaration_label,
-            fontName="Helvetica-Bold", alignment=1
-        )
-        story.append(Spacer(1, 3*mm))
-        story.append(Paragraph("ACADEMIC ANALYSIS REPORT", declaration_main_title))
-        story.append(Paragraph("DECLARATION AND OFFICIAL APPROVAL", declaration_subtitle))
-        story.append(Paragraph("DECLARATION", declaration_section))
-        story.append(Paragraph(
-            "We hereby declare that this Academic Analysis Report presents the examination "
-            "performance and academic assessment results of the institution for the selected "
-            "academic year, term, examination, classes and streams.",
-            declaration_body
-        ))
-        story.append(Paragraph(
-            "The report has been reviewed for accuracy, completeness and suitability for official "
-            "academic reporting. Approval by the School Administration and Academic Council confirms "
-            "its acceptance for official release, subject to the institution's applicable review procedures.",
-            declaration_body
-        ))
-
-        story.append(Paragraph("1. HEAD OF INSTITUTION", declaration_section))
-        story.append(Paragraph(
-            "I confirm that I have reviewed and approved this Academic Analysis Report for official release by the institution.",
-            declaration_body
-        ))
-        head_signature_table = Table([
-            [Paragraph("<b>Name</b>: __________________________________________",
-                       declaration_label),
-             Paragraph("<b>Signature</b>: ______________________________________",
-                       declaration_label)],
-            [Paragraph("<b>Date</b>: ___________________________________________",
-                       declaration_label),
-             Paragraph("<b>Official stamp</b>: __________________________________",
-                       declaration_label)],
-        ], colWidths=[doc.width * 0.49, doc.width * 0.49], hAlign="LEFT")
-        head_signature_table.setStyle(TableStyle([
-            ("VALIGN", (0,0), (-1,-1), "TOP"),
-            ("LEFTPADDING", (0,0), (-1,-1), 2),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
-            ("TOPPADDING", (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-        ]))
-        story.append(head_signature_table)
-
-        story.append(Paragraph("2. ACADEMIC COUNCIL", declaration_section))
-        story.append(Paragraph(
-            "The undersigned members of the Academic Council confirm that the report has been presented "
-            "for review and approved for official academic release.",
-            declaration_body
-        ))
-        council_headers = [
-            Paragraph("<b>Member</b>", declaration_table_header),
-            Paragraph("<b>Designation</b>", declaration_table_header),
-            Paragraph("<b>Signature</b>", declaration_table_header),
-            Paragraph("<b>Date</b>", declaration_table_header),
-        ]
-        council_rows = [council_headers]
-        for member_number in range(1, 5):
-            # Keep the cells clear for handwritten entries; do not print
-            # underscore placeholders that look like stray lines in the table.
-            council_rows.append([
-                Paragraph(str(member_number) + ".", declaration_label),
-                Paragraph("", declaration_label),
-                Paragraph("", declaration_label),
-                Paragraph("", declaration_label),
-            ])
-        council_table = Table(
-            council_rows,
-            colWidths=[doc.width * 0.34, doc.width * 0.22, doc.width * 0.24, doc.width * 0.16],
-            repeatRows=1, hAlign="LEFT"
-        )
-        council_table.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.white),
-            ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#777777")),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("LEFTPADDING", (0,0), (-1,-1), 4),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
-            ("TOPPADDING", (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ]))
-        story.append(council_table)
-        story.append(Spacer(1, 3*mm))
-        story.append(Paragraph(
-            "This page is reserved for authorized signatures and institutional approval. Approval is effective only "
-            "after the designated officials have reviewed and signed the report.",
-            declaration_body
-        ))
-
-        def add_footer(canvas, document):
-            canvas.saveState()
-            # Thin green border on all four sides of every PDF page.
-            page_width, page_height = landscape(A4)
-            canvas.setStrokeColor(colors.HexColor("#176b3a"))
-            canvas.setLineWidth(0.8)
-            canvas.rect(4*mm, 4*mm, page_width - 8*mm, page_height - 8*mm, stroke=1, fill=0)
-            canvas.setFont("Helvetica", 7)
-            canvas.setFillColor(colors.HexColor("#176b3a"))
-            canvas.drawCentredString(page_width/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
-            canvas.restoreState()
-        doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
-        response = Response(content=buffer.getvalue(), media_type="application/pdf")
-        response.headers["Content-Disposition"] = 'attachment; filename="DaviSchool_MarkSheet_Analysis.pdf"'
-        return response
-    except Exception as exc:
-        print("DAVISCHOOL MARKSHEET ANALYSIS PDF FAILED:", repr(exc), flush=True)
-        return HTMLResponse("Unable to export analysis PDF: " + escape(str(exc))[:300], status_code=500)
-    finally:
-        con.close()
