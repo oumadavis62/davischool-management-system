@@ -13361,11 +13361,21 @@ def class_marksheet_analysis_pdf(
                 other_width = (doc.width - subject_width) / (len(headers) - 1)
                 col_widths = [subject_width] + [other_width] * (len(headers) - 1)
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+            elif headers == ["Rank", "Subject", "Best Teacher", "Classes and Streams", "Combined Entries", "Mean %", "Mean Grade"]:
+                # The combined-classes table uses equal columns by default; make
+                # Rank 20% of that baseline (an 80% width reduction) and allocate
+                # the released space to the descriptive columns.
+                col_widths = [
+                    doc.width * 0.0286, doc.width * 0.14, doc.width * 0.14,
+                    doc.width * 0.35, doc.width * 0.10, doc.width * 0.10,
+                    doc.width * 0.10,
+                ]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif headers == ["Rank", "Subject", "Teacher", "Classes and Streams", "Entries", "Mean %", "Mean Grade"]:
                 # Keep the combined-teacher table compact while allowing the
                 # contributing class/stream list enough room to wrap cleanly.
                 col_widths = [
-                    max(4 * mm, doc.width * 0.007), doc.width * 0.15, doc.width * 0.14,
+                    doc.width * 0.035, doc.width * 0.15, doc.width * 0.14,
                     doc.width * 0.36, doc.width * 0.055, doc.width * 0.075,
                     doc.width * 0.07,
                 ]
