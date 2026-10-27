@@ -4101,7 +4101,7 @@ def class_marksheets_pdf(
         for metric in overall_metric_list:
             col_widths.append(15 * mm if metric == "avg" else 12 * mm if metric == "grade" else 13 * mm if metric == "pos" else 11 * mm)
 
-        table = Table(table_rows, colWidths=col_widths, repeatRows=2, hAlign="LEFT")
+        table = Table(table_rows, colWidths=col_widths, repeatRows=2, hAlign="CENTER")
         table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.45, colors.black),
             ("BACKGROUND", (0, 0), (-1, 1), colors.white),
@@ -13289,7 +13289,7 @@ def class_marksheet_analysis_pdf(
         header_table = Table(
             [[logo_cell, school_block, logo_right_cell]],
             colWidths=[25*mm, doc.width - 50*mm, 25*mm],
-            hAlign="LEFT"
+            hAlign="CENTER"
         )
         header_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
@@ -13333,18 +13333,18 @@ def class_marksheet_analysis_pdf(
                 # Reduce every Examination Details column to 60% of its prior
                 # equal-width allocation.
                 col_widths = [doc.width / 4 * 0.60] * 4
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title == "Subject Pass/Fail Analysis" and len(headers) == 6:
                 # Keep Subject unchanged and reduce each remaining column by 70%.
                 base_width = doc.width / 6
                 col_widths = [base_width] + [base_width * 0.30] * 5
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title.startswith("Best 10 students") and len(headers) == 7:
                 # Reduce all seven ranking columns by 50% from their prior
                 # equal-width baseline.
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * 0.50] * len(headers)
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
                 # Keep Subject readable; reduce Mean, Recorded entries and Insight
                 # to 60% of their former equal-width allocation.
@@ -13353,14 +13353,14 @@ def class_marksheet_analysis_pdf(
                     base_width, base_width * 0.42, base_width * 0.56,
                     base_width * 0.42, base_width * 0.60,
                 ]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title == "Grade Distribution Analysis — Per Subject" and len(headers) > 1:
                 # Give Subject a wider label column; compress grade/count/mean/
                 # position columns evenly while keeping the table within page width.
                 subject_width = doc.width * 0.24
                 other_width = (doc.width - subject_width) / (len(headers) - 1)
                 col_widths = [subject_width] + [other_width] * (len(headers) - 1)
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif headers == ["Rank", "Subject", "Teacher", "Classes and Streams", "Entries", "Mean %", "Mean Grade"]:
                 # Keep the combined-teacher table compact while allowing the
                 # contributing class/stream list enough room to wrap cleanly.
@@ -13369,7 +13369,7 @@ def class_marksheet_analysis_pdf(
                     doc.width * 0.36, doc.width * 0.055, doc.width * 0.075,
                     doc.width * 0.07,
                 ]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif headers == ["Rank", "Subject", "Teacher", "Entries", "Mean %"]:
                 # Keep Subject at its previous width and reduce the other
                 # combined-class columns by 70% to make the table more compact.
@@ -13377,19 +13377,19 @@ def class_marksheet_analysis_pdf(
                     doc.width * 0.024, doc.width * 0.24, doc.width * 0.096,
                     doc.width * 0.048, doc.width * 0.060,
                 ]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif column_profile and len(column_profile) == len(headers):
                 # In combined-class Top Students per Subject tables, keep the
                 # Student column at its normal width and reduce every other
                 # column to 30% of that width.
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * weight for weight in column_profile]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif profile and len(profile) == len(headers):
                 col_widths = [target_width * weight / sum(profile) for weight in profile]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             else:
-                tbl = Table(table_data, repeatRows=1, hAlign="LEFT")
+                tbl = Table(table_data, repeatRows=1, hAlign="CENTER")
             pad = 1 if title in compact_profiles else (2 if compact else 4)
             vert_pad = 1 if compact else 3
             tbl.setStyle(TableStyle([
@@ -13712,7 +13712,7 @@ def class_marksheet_analysis_pdf(
             if total_width > doc.width:
                 scale = doc.width / total_width
                 widths = [width * scale for width in widths]
-            table = Table(table_data, colWidths=widths, repeatRows=(2 if grouped_subject_headers else 1), hAlign="LEFT")
+            table = Table(table_data, colWidths=widths, repeatRows=(2 if grouped_subject_headers else 1), hAlign="CENTER")
             commands = [
                 ("BACKGROUND", (0,0), (-1,-1), colors.white),
                 ("TEXTCOLOR", (0,0), (-1,-1), colors.black),
@@ -13974,7 +13974,7 @@ def class_marksheet_analysis_pdf(
                 doc.width * 0.16, doc.width * 0.14, doc.width * 0.084,
                 doc.width * 0.224, doc.width * 0.084,
                 doc.width * 0.224, doc.width * 0.084,
-            ], hAlign="LEFT")
+            ], hAlign="CENTER")
             insight_cards.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f4ec")),
                 ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#cbd5d1")),
@@ -14048,7 +14048,7 @@ def class_marksheet_analysis_pdf(
                     doc.width * 0.24, doc.width * 0.08,
                     doc.width * 0.48256, doc.width * 0.10,
                 ],
-                repeatRows=1, hAlign="LEFT"
+                repeatRows=1, hAlign="CENTER"
             )
             chart_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14360,11 +14360,11 @@ def class_marksheet_analysis_pdf(
             class_rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
             # Each ranking column is half its previous width.
             class_rank_widths = [
-                class_left_width * weight / sum(class_rank_weights) * 0.50
+                class_left_width * weight / sum(class_rank_weights)
                 for weight in class_rank_weights
             ]
             class_rank_table = Table(
-                class_rank_data, colWidths=class_rank_widths, repeatRows=1, hAlign="LEFT"
+                class_rank_data, colWidths=class_rank_widths, repeatRows=1, hAlign="CENTER"
             )
             class_rank_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14402,7 +14402,7 @@ def class_marksheet_analysis_pdf(
                     class_right_width * 0.16,
                     class_right_width * 0.26,
                 ],
-                repeatRows=1, hAlign="LEFT"
+                repeatRows=1, hAlign="CENTER"
             )
             class_dist_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14422,11 +14422,11 @@ def class_marksheet_analysis_pdf(
                     Table(
                         [[Paragraph("<u>Stream Distribution</u>", styles["MSASection"])],
                          [class_dist_table]],
-                        colWidths=[class_right_width], hAlign="LEFT"
+                        colWidths=[class_right_width], hAlign="CENTER"
                     )
                 ]],
                 colWidths=[class_left_width, class_right_width + 5 * mm],
-                hAlign="LEFT"
+                hAlign="CENTER"
             )
             class_pair.setStyle(TableStyle([
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -14490,8 +14490,8 @@ def class_marksheet_analysis_pdf(
             ])
             rank_weights = [0.40, 1.55, 0.75, 0.70, 0.62, 0.55, 0.45]
             # Each ranking column is half its previous width.
-            rank_widths = [left_width * weight / sum(rank_weights) * 0.50 for weight in rank_weights]
-            rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="LEFT")
+            rank_widths = [left_width * weight / sum(rank_weights) for weight in rank_weights]
+            rank_table = Table(rank_data, colWidths=rank_widths, repeatRows=1, hAlign="CENTER")
             rank_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.black),
@@ -14525,7 +14525,7 @@ def class_marksheet_analysis_pdf(
             distribution_table = Table(
                 distribution_data,
                 colWidths=[right_width * 0.58, right_width * 0.16, right_width * 0.26],
-                repeatRows=1, hAlign="LEFT"
+                repeatRows=1, hAlign="CENTER"
             )
             distribution_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14546,10 +14546,10 @@ def class_marksheet_analysis_pdf(
             paired_top_ten = Table(
                 [[rank_table, Table(
                     [[distribution_heading], [distribution_table]],
-                    colWidths=[right_width], hAlign="LEFT"
+                    colWidths=[right_width], hAlign="CENTER"
                 )]],
                 colWidths=[left_width, right_width + 5 * mm],
-                hAlign="LEFT"
+                hAlign="CENTER"
             )
             paired_top_ten.setStyle(TableStyle([
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -14591,7 +14591,7 @@ def class_marksheet_analysis_pdf(
                      Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
                     + [Paragraph(escape(str(v)), styles["MSACell"]) for v in subject_values]
                 )
-            matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="LEFT")
+            matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="CENTER")
             matrix_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.black),
@@ -14610,16 +14610,16 @@ def class_marksheet_analysis_pdf(
             left_name, left_table = subject_matrix_tables[pair_start]
             left_stack = Table(
                 [[Paragraph(escape(left_name), styles["Heading3"])], [left_table]],
-                colWidths=[doc.width / 2 - 3*mm], hAlign="LEFT"
+                colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
             )
             if pair_start + 1 < len(subject_matrix_tables):
                 right_name, right_table = subject_matrix_tables[pair_start + 1]
                 right_stack = Table(
                     [[Paragraph(escape(right_name), styles["Heading3"])], [right_table]],
-                    colWidths=[doc.width / 2 - 3*mm], hAlign="LEFT"
+                    colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
                 )
                 paired_table = Table([[left_stack, right_stack]],
-                                     colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
+                                     colWidths=[sum(matrix_col_widths) + 2*mm, sum(matrix_col_widths) + 2*mm], hAlign="CENTER")
                 paired_table.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
                     ("LEFTPADDING", (0,0), (-1,-1), 0),
@@ -14647,7 +14647,7 @@ def class_marksheet_analysis_pdf(
         # Narrow every column in the combined-class subject tables by 20%
         # while preserving the existing relative widths and side-by-side layout.
         combined_col_widths = [
-            combined_half_width * 0.80 * weight / sum(combined_profile)
+            combined_half_width * 0.95 * weight / sum(combined_profile)
             for weight in combined_profile
         ]
         combined_cell_style = ParagraphStyle(
@@ -14678,7 +14678,7 @@ def class_marksheet_analysis_pdf(
                     Paragraph("No eligible students", combined_cell_style)
                 ] + [Paragraph("", combined_cell_style) for _ in range(5)])
             subject_table = Table(
-                subject_table_data, colWidths=combined_col_widths, repeatRows=1, hAlign="LEFT"
+                subject_table_data, colWidths=combined_col_widths, repeatRows=1, hAlign="CENTER"
             )
             subject_table.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14701,7 +14701,7 @@ def class_marksheet_analysis_pdf(
             paired_subjects = Table(
                 [[left_card, right_card]],
                 colWidths=[combined_half_width, combined_half_width],
-                hAlign="LEFT",
+                hAlign="CENTER",
             )
             paired_subjects.setStyle(TableStyle([
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -14763,7 +14763,7 @@ def class_marksheet_analysis_pdf(
                     previous_pct = percentage
                 if len(table_data) == 1:
                     table_data.append([Paragraph("No eligible students", cell_style)] + [Paragraph("", cell_style) for _ in range(4)])
-                table = Table(table_data, colWidths=[9*mm, (doc.width/2-48*mm)*0.40, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="LEFT")
+                table = Table(table_data, colWidths=[9*mm, (doc.width/2-48*mm)*0.40, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="CENTER")
                 table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
                     ("TEXTCOLOR", (0,0), (-1,0), colors.black),
@@ -14782,7 +14782,8 @@ def class_marksheet_analysis_pdf(
             for pair_start in range(0, len(class_cards), 2):
                 left_card = class_cards[pair_start]
                 right_card = class_cards[pair_start + 1] if pair_start + 1 < len(class_cards) else []
-                paired_class_cards = Table([[left_card, right_card]], colWidths=[doc.width/2, doc.width/2], hAlign="LEFT")
+                class_card_width = 9*mm + (doc.width/2-48*mm)*0.40 + 15*mm + 11*mm + 13*mm
+                paired_class_cards = Table([[left_card, right_card]], colWidths=[class_card_width + 3*mm, class_card_width + 3*mm], hAlign="CENTER")
                 paired_class_cards.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
                     ("LEFTPADDING", (0,0), (-1,-1), 0),
@@ -14811,7 +14812,7 @@ def class_marksheet_analysis_pdf(
                 empty_table = Table(
                     [[Paragraph("<b>Status</b>", styles["MSAMatrixHeader"])],
                      [Paragraph("No students sat this subject", styles["MSACell"])]],
-                    colWidths=[doc.width / 2 - 6*mm], hAlign="LEFT"
+                    colWidths=[doc.width / 2 - 6*mm], hAlign="CENTER"
                 )
                 empty_table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14857,7 +14858,7 @@ def class_marksheet_analysis_pdf(
                     compact_table = Table(
                         compact_data,
                         colWidths=[9*mm, student_col_width, 11*mm, 13*mm],
-                        repeatRows=1, hAlign="LEFT"
+                        repeatRows=1, hAlign="CENTER"
                     )
                     compact_table.setStyle(TableStyle([
                         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef3f0")),
@@ -14899,7 +14900,7 @@ def class_marksheet_analysis_pdf(
                     # Each table contains its own class/stream heading row, so
                     # the heading cannot be separated from the student rows.
                     paired_table = Table([[left_table, right_table]],
-                                         colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT")
+                                         colWidths=[doc.width / 2, doc.width / 2], hAlign="CENTER")
                     paired_table.setStyle(TableStyle([
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
                         ("LEFTPADDING", (0,0), (-1,-1), 0),
@@ -14999,7 +15000,7 @@ def class_marksheet_analysis_pdf(
                 class_table = Table(
                     table_data,
                     colWidths=[doc.width * 0.095, doc.width * 0.105, doc.width * 0.075, doc.width * 0.055, doc.width * 0.065],
-                    repeatRows=1, hAlign="LEFT"
+                    repeatRows=1, hAlign="CENTER"
                 )
                 class_table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -15022,17 +15023,17 @@ def class_marksheet_analysis_pdf(
                 # Keep each subject heading together with its corresponding table.
                 left_stack = Table(
                     [[Paragraph(escape(left_subject), styles["MSACell"])], [left_table]],
-                    colWidths=[half_width], hAlign="LEFT"
+                    colWidths=[half_width], hAlign="CENTER"
                 )
                 if pair_start + 1 < len(class_subject_tables):
                     right_subject, right_table = class_subject_tables[pair_start + 1]
                     right_stack = Table(
                         [[Paragraph(escape(right_subject), styles["MSACell"])], [right_table]],
-                        colWidths=[half_width], hAlign="LEFT"
+                        colWidths=[half_width], hAlign="CENTER"
                     )
                     paired_class_tables = Table(
                         [[left_stack, right_stack]],
-                        colWidths=[doc.width / 2, doc.width / 2], hAlign="LEFT"
+                        colWidths=[doc.width / 2, doc.width / 2], hAlign="CENTER"
                     )
                     paired_class_tables.setStyle(TableStyle([
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -15103,7 +15104,7 @@ def class_marksheet_analysis_pdf(
                        declaration_label),
              Paragraph("<b>Official stamp</b>: __________________________________",
                        declaration_label)],
-        ], colWidths=[doc.width * 0.49, doc.width * 0.49], hAlign="LEFT")
+        ], colWidths=[doc.width * 0.49, doc.width * 0.49], hAlign="CENTER")
         head_signature_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("LEFTPADDING", (0,0), (-1,-1), 2),
@@ -15138,7 +15139,7 @@ def class_marksheet_analysis_pdf(
         council_table = Table(
             council_rows,
             colWidths=[doc.width * 0.34, doc.width * 0.22, doc.width * 0.24, doc.width * 0.16],
-            repeatRows=1, hAlign="LEFT"
+            repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
             ("BACKGROUND", (0,0), (-1,0), colors.white),
