@@ -14653,8 +14653,8 @@ def class_marksheet_analysis_pdf(
         combined_subject_cards = []
         combined_half_width = (doc.width - 2 * mm) / 2
         combined_profile = [0.15, 0.70, 0.30, 0.30, 0.30, 0.30]
-        # Narrow every column in the combined-class subject tables by 20%
-        # while preserving the existing relative widths and side-by-side layout.
+        # Use nearly the full half-page width for each combined-class subject table,
+        # leaving only a narrow separation between the two centered tables.
         combined_col_widths = [
             combined_half_width * 0.99 * weight / sum(combined_profile)
             for weight in combined_profile
@@ -14890,7 +14890,7 @@ def class_marksheet_analysis_pdf(
                         ])
                     stream_table_width = doc.width / 3 - 2*mm
                     teacher_col_width = 17*mm
-                    student_col_width = max(14*mm, stream_table_width - 7*mm - teacher_col_width - 9*mm - 10*mm - 4*mm)
+                    student_col_width = max(14*mm, stream_table_width - 7*mm - teacher_col_width - 9*mm - 10*mm - 1*mm)
                     compact_table = Table(
                         compact_data,
                         colWidths=[7*mm, student_col_width, teacher_col_width, 9*mm, 10*mm],
