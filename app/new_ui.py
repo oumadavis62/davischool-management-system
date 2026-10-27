@@ -14763,7 +14763,11 @@ def class_marksheet_analysis_pdf(
                     previous_pct = percentage
                 if len(table_data) == 1:
                     table_data.append([Paragraph("No eligible students", cell_style)] + [Paragraph("", cell_style) for _ in range(4)])
-                table = Table(table_data, colWidths=[9*mm, (doc.width/2-48*mm)*0.40, 15*mm, 11*mm, 13*mm], repeatRows=1, hAlign="CENTER")
+                class_card_width = (doc.width - 8*mm) / 3
+                class_fixed_widths = [7*mm, 12*mm, 9*mm, 10*mm]
+                class_student_width = max(18*mm, class_card_width - sum(class_fixed_widths) - 4*mm)
+                class_table_widths = [class_fixed_widths[0], class_student_width, class_fixed_widths[1], class_fixed_widths[2], class_fixed_widths[3]]
+                table = Table(table_data, colWidths=class_table_widths, repeatRows=1, hAlign="CENTER")
                 table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
                     ("TEXTCOLOR", (0,0), (-1,0), colors.black),
@@ -14779,11 +14783,11 @@ def class_marksheet_analysis_pdf(
             if not class_cards:
                 cell_style = styles["MSACell"]
                 class_cards = [[Paragraph("<b>No eligible class</b>", styles["MSACell"]), Paragraph("No students sat this subject", cell_style)]]
-            for pair_start in range(0, len(class_cards), 2):
-                left_card = class_cards[pair_start]
-                right_card = class_cards[pair_start + 1] if pair_start + 1 < len(class_cards) else []
-                class_card_width = 9*mm + (doc.width/2-48*mm)*0.40 + 15*mm + 11*mm + 13*mm
-                paired_class_cards = Table([[left_card, right_card]], colWidths=[class_card_width + 3*mm, class_card_width + 3*mm], hAlign="CENTER")
+            for pair_start in range(0, len(class_cards), 3):
+                paired_class_cards = Table(
+                    [[class_cards[i] if i < len(class_cards) else [] for i in range(pair_start, pair_start + 3)]],
+                    colWidths=[doc.width / 3] * 3, hAlign="CENTER"
+                )
                 paired_class_cards.setStyle(TableStyle([
                     ("VALIGN", (0,0), (-1,-1), "TOP"),
                     ("LEFTPADDING", (0,0), (-1,-1), 0),
@@ -14812,7 +14816,7 @@ def class_marksheet_analysis_pdf(
                 empty_table = Table(
                     [[Paragraph("<b>Status</b>", styles["MSAMatrixHeader"])],
                      [Paragraph("No students sat this subject", styles["MSACell"])]],
-                    colWidths=[doc.width / 2 - 6*mm], hAlign="CENTER"
+                    colWidths=[doc.width / 3 - 5*mm], hAlign="CENTER"
                 )
                 empty_table.setStyle(TableStyle([
                     ("BACKGROUND", (0,0), (-1,0), colors.white),
@@ -14848,16 +14852,19 @@ def class_marksheet_analysis_pdf(
                     ]]
                     for row in rows_for_group:
                         compact_data.append([
-                            Paragraph(escape(str(row[0])), styles["MSACell"]),
-                            Paragraph(escape(str(row[1])), styles["MSACell"]),
-                            Paragraph(escape(str(row[5])), styles["MSACell"]),
-                            Paragraph(escape(str(row[7])), styles["MSACell"]),
+                            Paragraph(escape(str(row[0])), stream_cell_style),
+                            Paragraph(escape(str(row[1])), stream_cell_style),
+                            Paragraph(escape(str(row[5])), stream_cell_style),
+                            Paragraph(escape(str(row[7])), stream_cell_style),
                         ])
-                    stream_table_width = doc.width / 2 - 3*mm
-                    student_col_width = (stream_table_width - 9*mm - 11*mm - 13*mm) * 0.40
+                    stream_table_width = doc.width / 3 - 5*mm
+                    student_col_width = max(14*mm, stream_table_width - 7*mm - 9*mm - 10*mm - 4*mm)
+                    stream_cell_style = ParagraphStyle(
+                        "MSAStreamTopCell", parent=styles["MSACell"], fontSize=5.5, leading=6.0
+                    )
                     compact_table = Table(
                         compact_data,
-                        colWidths=[9*mm, student_col_width, 11*mm, 13*mm],
+                        colWidths=[7*mm, student_col_width, 9*mm, 10*mm],
                         repeatRows=1, hAlign="CENTER"
                     )
                     compact_table.setStyle(TableStyle([
@@ -14893,26 +14900,19 @@ def class_marksheet_analysis_pdf(
 
             # A single subject heading labels all following class/stream tables.
             story.append(Paragraph("<u>" + escape(str(subject_name)) + "</u>", styles["MSASection"]))
-            for pair_start in range(0, len(subject_stream_tables), 2):
-                left_name, left_table = subject_stream_tables[pair_start]
-                if pair_start + 1 < len(subject_stream_tables):
-                    right_name, right_table = subject_stream_tables[pair_start + 1]
-                    # Each table contains its own class/stream heading row, so
-                    # the heading cannot be separated from the student rows.
-                    paired_table = Table([[left_table, right_table]],
-                                         colWidths=[doc.width / 2, doc.width / 2], hAlign="CENTER")
-                    paired_table.setStyle(TableStyle([
-                        ("VALIGN", (0,0), (-1,-1), "TOP"),
-                        ("LEFTPADDING", (0,0), (-1,-1), 0),
-                        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                        ("TOPPADDING", (0,0), (-1,-1), 0),
-                        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-                    ]))
-                    story.append(paired_table)
-                else:
-                    # The stream table already contains its class/stream heading;
-                    # append it directly to avoid a second wrapper and undefined width.
-                    story.extend(left_table)
+            # Three compact stream tables per row. Empty cells keep the final row
+            # aligned, and widths track the printable page area automatically.
+            for pair_start in range(0, len(subject_stream_tables), 3):
+                row_cells = [subject_stream_tables[i][1] if i < len(subject_stream_tables) else "" for i in range(pair_start, pair_start + 3)]
+                paired_table = Table([row_cells], colWidths=[doc.width / 3] * 3, hAlign="CENTER")
+                paired_table.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 1*mm),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 1*mm),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(paired_table)
                 story.append(Spacer(1, 3*mm))
         # Stream comparisons and class rankings are already placed below Summary on page one.
 
