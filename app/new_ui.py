@@ -14289,6 +14289,72 @@ def class_marksheet_analysis_pdf(
         if not gender_summary:
             story.append(Paragraph("No assessed learners are available for gender performance analysis under the selected filters.", styles["MSACell"]))
 
+        # Start subject-by-class/stream performance on a separate page after insights.
+        story.append(PageBreak())
+        subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
+        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
+        story.append(Paragraph("<u>Subject performance by class and stream</u>", centered_page_heading))
+        grades_per_subject = len(grade_labels)
+        subject_width = grades_per_subject + 3
+        subject_matrix_tables = []
+        matrix_col_widths = [21*mm, 13*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
+        for subject_index, subject_id in enumerate(subject_order):
+            subject_name = subject_names[subject_index]
+            table_data = [[
+                Paragraph("<b>Class</b>", styles["MSAMatrixHeader"]),
+                Paragraph("<b>Stream</b>", styles["MSAMatrixHeader"]),
+            ] + [Paragraph("<b>%s</b>" % escape(str(grade)), styles["MSAMatrixHeader"]) for grade in grade_labels]
+              + [Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
+                 Paragraph("<b>Mean</b>", styles["MSAMatrixHeader"]),
+                 Paragraph("<b>Pos.</b>", styles["MSAMatrixHeader"])]]
+            start = 2 + subject_index * subject_width
+            for matrix_row in performance_rows:
+                subject_values = matrix_row[start:start + subject_width]
+                table_data.append(
+                    [Paragraph(escape(str(matrix_row[0])), styles["MSACell"]),
+                     Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
+                    + [Paragraph(escape(str(v)), styles["MSACell"]) for v in subject_values]
+                )
+            matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="CENTER")
+            matrix_table.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.white),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("ALIGN", (2,1), (-1,-1), "CENTER"),
+                ("FONTSIZE", (0,0), (-1,-1), 5.5),
+                ("LEFTPADDING", (0,0), (-1,-1), 2),
+                ("RIGHTPADDING", (0,0), (-1,-1), 2),
+                ("TOPPADDING", (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ]))
+            subject_matrix_tables.append((subject_name, matrix_table))
+        for pair_start in range(0, len(subject_matrix_tables), 2):
+            left_name, left_table = subject_matrix_tables[pair_start]
+            left_stack = Table(
+                [[Paragraph(escape(left_name), styles["Heading3"])], [left_table]],
+                colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
+            )
+            if pair_start + 1 < len(subject_matrix_tables):
+                right_name, right_table = subject_matrix_tables[pair_start + 1]
+                right_stack = Table(
+                    [[Paragraph(escape(right_name), styles["Heading3"])], [right_table]],
+                    colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
+                )
+                paired_table = Table([[left_stack, right_stack]],
+                                     colWidths=[sum(matrix_col_widths) + 2*mm, sum(matrix_col_widths) + 2*mm], hAlign="CENTER")
+                paired_table.setStyle(TableStyle([
+                    ("VALIGN", (0,0), (-1,-1), "TOP"),
+                    ("LEFTPADDING", (0,0), (-1,-1), 0),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
+                    ("TOPPADDING", (0,0), (-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+                ]))
+                story.append(paired_table)
+            else:
+                story.append(left_stack)
+            story.append(Spacer(1, 3*mm))
         # Put student rankings directly after per-subject grade distribution, on their own page.
         story.append(PageBreak())
         story.append(Paragraph("<u>Student rankings</u>", centered_page_heading))
@@ -14574,72 +14640,6 @@ def class_marksheet_analysis_pdf(
             story.append(KeepTogether([combined_heading, paired_top_ten]))
             story.append(Spacer(1, 1.0 * mm))
 
-        # Start subject-by-class/stream performance on a separate page after insights.
-        story.append(PageBreak())
-        subject_order, subject_names, grade_labels, performance_rows = _msa_subject_performance_matrix(cur, sid, rows, data)
-        centered_page_heading = ParagraphStyle("MSACenteredPageHeading", parent=styles["MSASection"], alignment=1)
-        story.append(Paragraph("<u>Subject performance by class and stream</u>", centered_page_heading))
-        grades_per_subject = len(grade_labels)
-        subject_width = grades_per_subject + 3
-        subject_matrix_tables = []
-        matrix_col_widths = [21*mm, 13*mm] + [5.5*mm] * grades_per_subject + [8*mm, 10*mm, 7*mm]
-        for subject_index, subject_id in enumerate(subject_order):
-            subject_name = subject_names[subject_index]
-            table_data = [[
-                Paragraph("<b>Class</b>", styles["MSAMatrixHeader"]),
-                Paragraph("<b>Stream</b>", styles["MSAMatrixHeader"]),
-            ] + [Paragraph("<b>%s</b>" % escape(str(grade)), styles["MSAMatrixHeader"]) for grade in grade_labels]
-              + [Paragraph("<b>Entries</b>", styles["MSAMatrixHeader"]),
-                 Paragraph("<b>Mean</b>", styles["MSAMatrixHeader"]),
-                 Paragraph("<b>Pos.</b>", styles["MSAMatrixHeader"])]]
-            start = 2 + subject_index * subject_width
-            for matrix_row in performance_rows:
-                subject_values = matrix_row[start:start + subject_width]
-                table_data.append(
-                    [Paragraph(escape(str(matrix_row[0])), styles["MSACell"]),
-                     Paragraph(escape(str(matrix_row[1])), styles["MSACell"])]
-                    + [Paragraph(escape(str(v)), styles["MSACell"]) for v in subject_values]
-                )
-            matrix_table = Table(table_data, colWidths=matrix_col_widths, repeatRows=1, hAlign="CENTER")
-            matrix_table.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.white),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#cbd5d1")),
-                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("ALIGN", (2,1), (-1,-1), "CENTER"),
-                ("FONTSIZE", (0,0), (-1,-1), 5.5),
-                ("LEFTPADDING", (0,0), (-1,-1), 2),
-                ("RIGHTPADDING", (0,0), (-1,-1), 2),
-                ("TOPPADDING", (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ]))
-            subject_matrix_tables.append((subject_name, matrix_table))
-        for pair_start in range(0, len(subject_matrix_tables), 2):
-            left_name, left_table = subject_matrix_tables[pair_start]
-            left_stack = Table(
-                [[Paragraph(escape(left_name), styles["Heading3"])], [left_table]],
-                colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
-            )
-            if pair_start + 1 < len(subject_matrix_tables):
-                right_name, right_table = subject_matrix_tables[pair_start + 1]
-                right_stack = Table(
-                    [[Paragraph(escape(right_name), styles["Heading3"])], [right_table]],
-                    colWidths=[doc.width / 2 - 3*mm], hAlign="CENTER"
-                )
-                paired_table = Table([[left_stack, right_stack]],
-                                     colWidths=[sum(matrix_col_widths) + 2*mm, sum(matrix_col_widths) + 2*mm], hAlign="CENTER")
-                paired_table.setStyle(TableStyle([
-                    ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("LEFTPADDING", (0,0), (-1,-1), 0),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 0),
-                    ("TOPPADDING", (0,0), (-1,-1), 0),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-                ]))
-                story.append(paired_table)
-            else:
-                story.append(left_stack)
-            story.append(Spacer(1, 3*mm))
         # Start the combined-class Top Students per Subject section on its own page.
         story.append(PageBreak())
         combined_by_subject = {}
@@ -14854,7 +14854,6 @@ def class_marksheet_analysis_pdf(
                 current_group = None
                 group_rows = []
                 def _append_stream_top_table(group_key, rows_for_group):
-                    title = "Class: " + group_key[0] + " — Stream: " + group_key[1]
                     stream_header_style = ParagraphStyle(
                         "MSAStreamTopHeader",
                         parent=styles["MSACell"],
@@ -14867,33 +14866,31 @@ def class_marksheet_analysis_pdf(
                     stream_cell_style = ParagraphStyle(
                         "MSAStreamTopCell", parent=styles["MSACell"], fontSize=5.5, leading=6.0
                     )
-                    compact_data = [[
-                        Paragraph("Rank", stream_header_style),
-                        Paragraph("Student", stream_header_style),
-                        Paragraph("Teacher", stream_header_style),
-                        Paragraph("Mark", stream_header_style),
-                        Paragraph("Grade", stream_header_style),
-                    ]]
                     teacher_item = stream_teacher_lookup.get((
                         str(subject_name).casefold(),
                         str(group_key[0]).casefold(),
                         str(group_key[1] or "No stream").casefold(),
                     ))
                     teacher_name = str((teacher_item or {}).get("teacher") or "—")
+                    title = "Class: " + group_key[0] + " — Stream: " + group_key[1] + " — Subject Teacher: " + teacher_name
+                    compact_data = [[
+                        Paragraph("Rank", stream_header_style),
+                        Paragraph("Student", stream_header_style),
+                        Paragraph("Mark", stream_header_style),
+                        Paragraph("Grade", stream_header_style),
+                    ]]
                     for row in rows_for_group:
                         compact_data.append([
                             Paragraph(escape(str(row[0])), stream_cell_style),
                             Paragraph(escape(str(row[1])), stream_cell_style),
-                            Paragraph(escape(teacher_name), stream_cell_style),
                             Paragraph(escape(str(row[5])), stream_cell_style),
                             Paragraph(escape(str(row[7])), stream_cell_style),
                         ])
                     stream_table_width = doc.width / 3 - 2*mm
-                    teacher_col_width = 17*mm
-                    student_col_width = max(14*mm, stream_table_width - 7*mm - teacher_col_width - 9*mm - 10*mm - 1*mm)
+                    student_col_width = max(14*mm, stream_table_width - 7*mm - 9*mm - 10*mm - 1*mm)
                     compact_table = Table(
                         compact_data,
-                        colWidths=[7*mm, student_col_width, teacher_col_width, 9*mm, 10*mm],
+                        colWidths=[7*mm, student_col_width, 9*mm, 10*mm],
                         repeatRows=1, hAlign="CENTER"
                     )
                     compact_table.setStyle(TableStyle([
@@ -14903,7 +14900,7 @@ def class_marksheet_analysis_pdf(
                         ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5d1")),
                         ("VALIGN", (0,0), (-1,-1), "TOP"),
                         ("ALIGN", (0,1), (0,-1), "CENTER"),
-                        ("ALIGN", (2,2), (-1,-1), "CENTER"),
+                        ("ALIGN", (2,1), (-1,-1), "CENTER"),
                         ("FONTSIZE", (0,0), (-1,-1), 5.5),
                         ("LEFTPADDING", (0,0), (-1,-1), 2),
                         ("RIGHTPADDING", (0,0), (-1,-1), 2),
