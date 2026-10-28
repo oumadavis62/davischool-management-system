@@ -8464,6 +8464,524 @@ def teacher_allocations_delete(request: Request,allocation_id:int):
     con.close()
     return RedirectResponse("/app/academics/allocations" + (("?ds_tab=" + quote(request.query_params.get("ds_tab"),safe="")) if request.query_params.get("ds_tab") else ""),303)
 
+
+# External examination analysis is deliberately stored separately from internal
+# DaviSchool marks so national assessment grades never alter CBC/internal grades.
+_EXTERNAL_EXAM_TYPES = ("KCSE", "KJSEA", "KCBE")
+
+def _ensure_external_exam_results_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS external_exam_results (
+            school_id INTEGER NOT NULL,
+            exam_type TEXT NOT NULL,
+            exam_year TEXT NOT NULL,
+            exam_name TEXT NOT NULL DEFAULT '',
+            candidate_no TEXT NOT NULL,
+            candidate_name TEXT NOT NULL,
+            gender TEXT NOT NULL DEFAULT '',
+            school_code TEXT NOT NULL DEFAULT '',
+            subject_name TEXT NOT NULL,
+            score REAL,
+            max_score REAL,
+            official_grade TEXT NOT NULL DEFAULT '',
+            grade_points REAL,
+            recorded_at TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (school_id, exam_type, exam_year, exam_name, candidate_no, subject_name)
+        )
+    """)
+
+def _external_exam_scope_rows(cur, sid, exam_type="", year="", exam_name=""):
+    _ensure_external_exam_results_table(cur)
+    rows = cur.execute(
+        "SELECT * FROM external_exam_results WHERE school_id=? ORDER BY exam_year DESC, exam_name, candidate_name, subject_name",
+        (sid,)
+    ).fetchall()
+    return [
+        dict(row) for row in rows
+        if (not exam_type or str(row["exam_type"] or "") == exam_type)
+        and (not year or str(row["exam_year"] or "") == year)
+        and (not exam_name or str(row["exam_name"] or "") == exam_name)
+    ]
+
+def _external_exam_points(row):
+    try:
+        if row.get("grade_points") not in (None, ""):
+            return float(row["grade_points"])
+    except (TypeError, ValueError):
+        pass
+    # The conventional KCSE subject-grade point mapping is used only as a
+    # convenience for supplied official KCSE grades; KJSEA/KCBE levels are
+    # never forced into this scale.
+    if str(row.get("exam_type") or "") == "KCSE":
+        points = {"A":12, "A-":11, "B+":10, "B":9, "B-":8, "C+":7, "C":6,
+                  "C-":5, "D+":4, "D":3, "D-":2, "E":1}
+        return points.get(str(row.get("official_grade") or "").strip().upper())
+    return None
+
+def _external_exam_report_summary(rows):
+    candidates = {}
+    subjects = {}
+    grades = {}
+    for row in rows:
+        key = (str(row.get("candidate_no") or ""), str(row.get("candidate_name") or ""))
+        cand = candidates.setdefault(key, {"candidate_no":key[0],"candidate_name":key[1],"gender":str(row.get("gender") or ""),
+                                           "school_code":str(row.get("school_code") or ""),"percentages":[],"points":[],"subjects":0})
+        score = row.get("score")
+        max_score = row.get("max_score")
+        try:
+            if score not in (None, "") and max_score not in (None, "") and float(max_score) > 0:
+                percentage = float(score) / float(max_score) * 100.0
+                cand["percentages"].append(percentage)
+                subject = subjects.setdefault(str(row.get("subject_name") or ""), {"name":str(row.get("subject_name") or ""),"percentages":[],"scores":0})
+                subject["percentages"].append(percentage)
+                subject["scores"] += 1
+        except (TypeError, ValueError):
+            pass
+        points = _external_exam_points(row)
+        if points is not None:
+            cand["points"].append(points)
+        cand["subjects"] += 1
+        grade = str(row.get("official_grade") or "").strip()
+        if grade:
+            grades[grade] = grades.get(grade, 0) + 1
+    candidate_rows = []
+    for cand in candidates.values():
+        values = cand["percentages"]
+        pts = cand["points"]
+        candidate_rows.append({
+            "candidate_no":cand["candidate_no"],"candidate_name":cand["candidate_name"],"gender":cand["gender"],
+            "school_code":cand["school_code"],"subjects":cand["subjects"],
+            "average":sum(values)/len(values) if values else None,
+            "grade_points":sum(pts)/len(pts) if pts else None
+        })
+    candidate_rows.sort(key=lambda x: (x["average"] is None, -(x["average"] or 0), x["candidate_name"].casefold()))
+    subject_rows = []
+    for subject in subjects.values():
+        vals = subject["percentages"]
+        subject_rows.append({"name":subject["name"],"sat":len(vals),"mean":sum(vals)/len(vals) if vals else None,
+                             "highest":max(vals) if vals else None,"lowest":min(vals) if vals else None})
+    subject_rows.sort(key=lambda x: (x["mean"] is None, -(x["mean"] or 0), x["name"].casefold()))
+    percentages = [x["average"] for x in candidate_rows if x["average"] is not None]
+    point_values = [x["grade_points"] for x in candidate_rows if x["grade_points"] is not None]
+    return {
+        "candidate_rows":candidate_rows,"subject_rows":subject_rows,"grades":sorted(grades.items(), key=lambda x:x[0]),
+        "candidates":len(candidates),"assessed":len(percentages),
+        "school_mean":sum(percentages)/len(percentages) if percentages else None,
+        "mean_points":sum(point_values)/len(point_values) if point_values else None
+    }
+
+def _external_exam_school_mean_grade(mean_points):
+    if mean_points is None:
+        return ""
+    bands = [(11.5,"A"),(10.5,"A-"),(9.5,"B+"),(8.5,"B"),(7.5,"B-"),(6.5,"C+"),
+             (5.5,"C"),(4.5,"C-"),(3.5,"D+"),(2.5,"D"),(1.5,"D-"),(0.5,"E")]
+    return next((grade for threshold,grade in bands if mean_points >= threshold), "E")
+
+def _external_exam_csv_response(rows, filename):
+    output = io.StringIO()
+    fields = ["exam_type","exam_year","exam_name","candidate_no","candidate_name","gender","school_code",
+              "subject_name","score","max_score","official_grade","grade_points"]
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key:row.get(key,"") for key in fields})
+    return Response(output.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="%s"' % filename})
+
+@router.get("/app/academics/external-analysis/template.csv")
+def external_exam_analysis_template(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    sample = [{
+        "exam_type":"KCSE","exam_year":"2026","exam_name":"KCSE 2026",
+        "candidate_no":"CAND-001","candidate_name":"Example Candidate","gender":"F",
+        "school_code":"","subject_name":"English","score":"72","max_score":"100",
+        "official_grade":"B+","grade_points":"10"
+    }]
+    return _external_exam_csv_response(sample, "DaviSchool_External_Exam_Import_Template.csv")
+
+@router.post("/app/academics/external-analysis/save")
+async def external_exam_analysis_save(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    try:
+        form = await request.form()
+        exam_type = str(form.get("exam_type") or "").strip().upper()
+        exam_year = str(form.get("exam_year") or "").strip()
+        exam_name = str(form.get("exam_name") or "").strip()
+        candidate_no = str(form.get("candidate_no") or "").strip()
+        candidate_name = str(form.get("candidate_name") or "").strip()
+        subject_name = str(form.get("subject_name") or "").strip()
+        if exam_type not in _EXTERNAL_EXAM_TYPES:
+            return HTMLResponse("Choose KCSE, KJSEA or KCBE. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        if not exam_year.isdigit() or len(exam_year) != 4:
+            return HTMLResponse("Enter a valid four-digit examination year. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        if not all((exam_name, candidate_no, candidate_name, subject_name)):
+            return HTMLResponse("Examination name, candidate number, candidate name and subject are required. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        score_raw = str(form.get("score") or "").strip()
+        max_raw = str(form.get("max_score") or "").strip()
+        score = float(score_raw) if score_raw else None
+        max_score = float(max_raw) if max_raw else None
+        points_raw = str(form.get("grade_points") or "").strip()
+        points = float(points_raw) if points_raw else None
+        if score is not None and (score < 0 or (max_score is not None and (max_score <= 0 or score > max_score))):
+            return HTMLResponse("Score must be non-negative and cannot exceed a positive maximum score. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        if max_score is not None and max_score <= 0:
+            return HTMLResponse("Maximum score must be greater than zero. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        con = _db()
+        cur = con.cursor()
+        _ensure_external_exam_results_table(cur)
+        cur.execute("""
+            INSERT INTO external_exam_results
+            (school_id,exam_type,exam_year,exam_name,candidate_no,candidate_name,gender,school_code,
+             subject_name,score,max_score,official_grade,grade_points,recorded_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(school_id,exam_type,exam_year,exam_name,candidate_no,subject_name)
+            DO UPDATE SET candidate_name=excluded.candidate_name,gender=excluded.gender,school_code=excluded.school_code,
+             score=excluded.score,max_score=excluded.max_score,official_grade=excluded.official_grade,
+             grade_points=excluded.grade_points,recorded_at=excluded.recorded_at
+        """, (sid,exam_type,exam_year,exam_name,candidate_no,candidate_name,
+              str(form.get("gender") or "").strip().upper(),str(form.get("school_code") or "").strip(),
+              subject_name,score,max_score,str(form.get("official_grade") or "").strip().upper(),points,
+              datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+        con.commit()
+        con.close()
+        return RedirectResponse("/app/academics/external-analysis?exam_type=%s&year=%s&exam_name=%s&notice=saved" %
+                                (quote(exam_type,safe=""),quote(exam_year,safe=""),quote(exam_name,safe="")),303)
+    except Exception as exc:
+        try:
+            con.rollback()
+            con.close()
+        except Exception:
+            pass
+        print("DAVISCHOOL EXTERNAL EXAM SAVE FAILED:", repr(exc), flush=True)
+        return HTMLResponse("Unable to save external examination result. Please check the entered values and try again. <a href='/app/academics/external-analysis'>Back</a>", 500)
+
+@router.post("/app/academics/external-analysis/import")
+async def external_exam_analysis_import(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    con = None
+    try:
+        form = await request.form()
+        default_type = str(form.get("exam_type") or "KCSE").strip().upper()
+        default_year = str(form.get("exam_year") or "").strip()
+        default_name = str(form.get("exam_name") or "").strip()
+        upload = form.get("csv_file")
+        if default_type not in _EXTERNAL_EXAM_TYPES:
+            return HTMLResponse("Choose KCSE, KJSEA or KCBE for this import. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        if not upload or not hasattr(upload, "read") or not getattr(upload, "filename", ""):
+            return HTMLResponse("Choose a CSV file to import. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        raw = await upload.read()
+        text_data = raw.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text_data))
+        if not reader.fieldnames:
+            return HTMLResponse("The CSV file has no header row. Use the provided import template. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        def value(row, *names):
+            normalized = {str(k or "").strip().lower().replace(" ","_"):str(v or "").strip() for k,v in row.items()}
+            for name in names:
+                if normalized.get(name):
+                    return normalized[name]
+            return ""
+        con = _db()
+        cur = con.cursor()
+        _ensure_external_exam_results_table(cur)
+        saved = 0
+        skipped = 0
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        for row in reader:
+            exam_type = value(row,"exam_type").upper() or default_type
+            exam_year = value(row,"exam_year","year") or default_year
+            exam_name = value(row,"exam_name","examination") or default_name or (exam_type + " " + exam_year)
+            candidate_no = value(row,"candidate_no","candidate_number","admission_no","index_number","index_no")
+            candidate_name = value(row,"candidate_name","name","learner_name")
+            subject_name = value(row,"subject_name","subject")
+            if exam_type not in _EXTERNAL_EXAM_TYPES or not exam_year.isdigit() or len(exam_year)!=4 or not candidate_no or not candidate_name or not subject_name:
+                skipped += 1
+                continue
+            score_raw = value(row,"score","mark","marks")
+            max_raw = value(row,"max_score","max_marks","maximum_score")
+            points_raw = value(row,"grade_points","points")
+            try:
+                score = float(score_raw) if score_raw else None
+                max_score = float(max_raw) if max_raw else None
+                points = float(points_raw) if points_raw else None
+                if score is not None and (score < 0 or (max_score is not None and (max_score <= 0 or score > max_score))):
+                    skipped += 1
+                    continue
+                if max_score is not None and max_score <= 0:
+                    skipped += 1
+                    continue
+            except ValueError:
+                skipped += 1
+                continue
+            cur.execute("""
+                INSERT INTO external_exam_results
+                (school_id,exam_type,exam_year,exam_name,candidate_no,candidate_name,gender,school_code,
+                 subject_name,score,max_score,official_grade,grade_points,recorded_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(school_id,exam_type,exam_year,exam_name,candidate_no,subject_name)
+                DO UPDATE SET candidate_name=excluded.candidate_name,gender=excluded.gender,school_code=excluded.school_code,
+                 score=excluded.score,max_score=excluded.max_score,official_grade=excluded.official_grade,
+                 grade_points=excluded.grade_points,recorded_at=excluded.recorded_at
+            """, (sid,exam_type,exam_year,exam_name,candidate_no,candidate_name,
+                  value(row,"gender").upper(),value(row,"school_code","school_code_number"),
+                  subject_name,score,max_score,value(row,"official_grade","grade","level").upper(),points,now))
+            saved += 1
+        con.commit()
+        con.close()
+        return RedirectResponse("/app/academics/external-analysis?exam_type=%s&year=%s&notice=imported&saved=%s&skipped=%s" %
+                                (quote(default_type,safe=""),quote(default_year,safe=""),saved,skipped),303)
+    except Exception as exc:
+        try:
+            if con:
+                con.rollback()
+                con.close()
+        except Exception:
+            pass
+        print("DAVISCHOOL EXTERNAL EXAM IMPORT FAILED:", repr(exc), flush=True)
+        return HTMLResponse("Unable to import this CSV. Check that it follows the provided template. <a href='/app/academics/external-analysis'>Back</a>", 400)
+
+@router.get("/app/academics/external-analysis", response_class=HTMLResponse)
+def external_exam_analysis_page(request: Request, exam_type: str = "", year: str = "", exam_name: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    con = _db()
+    try:
+        cur = con.cursor()
+        all_rows = _external_exam_scope_rows(cur,sid)
+        con.close()
+    except Exception as exc:
+        try: con.close()
+        except Exception: pass
+        print("DAVISCHOOL EXTERNAL EXAM PAGE FAILED:",repr(exc),flush=True)
+        return HTMLResponse("External examination analysis could not be loaded. Please try again.",500)
+    exam_type = exam_type.upper() if exam_type in _EXTERNAL_EXAM_TYPES else ""
+    years = sorted({str(r.get("exam_year") or "") for r in all_rows if r.get("exam_year")}, reverse=True)
+    exam_names = sorted({str(r.get("exam_name") or "") for r in all_rows if (not exam_type or r.get("exam_type")==exam_type) and (not year or str(r.get("exam_year"))==year)})
+    rows = [r for r in all_rows if (not exam_type or r.get("exam_type")==exam_type) and (not year or str(r.get("exam_year"))==year) and (not exam_name or r.get("exam_name")==exam_name)]
+    data = _external_exam_report_summary(rows)
+    all_year_data = {}
+    for row in all_rows:
+        if exam_type and row.get("exam_type") != exam_type:
+            continue
+        key = (str(row.get("exam_year") or ""),str(row.get("exam_name") or ""))
+        all_year_data.setdefault(key,[]).append(row)
+    year_rows = []
+    for (yr,name), group in sorted(all_year_data.items(), key=lambda x:(x[0][0],x[0][1]),reverse=True):
+        summary = _external_exam_report_summary(group)
+        year_rows.append([yr,name,summary["candidates"],summary["assessed"],
+                          ("%.2f%%" % summary["school_mean"]) if summary["school_mean"] is not None else "—",
+                          ("%.2f" % summary["mean_points"]) if summary["mean_points"] is not None else "—"])
+    school = None
+    try:
+        con = _db()
+        school = con.cursor().execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+        con.close()
+    except Exception:
+        try: con.close()
+        except Exception: pass
+    school_name = escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+    logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+    postal = escape(str(school["postal_address"] or "")) if school and "postal_address" in school.keys() else ""
+    code = escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() else ""
+    email = escape(str(school["email"] or "")) if school else ""
+    phone = escape(str(school["phone"] or "")) if school else ""
+    type_options = "".join("<option value='%s' %s>%s</option>"%(t,"selected" if t==exam_type else "",t) for t in _EXTERNAL_EXAM_TYPES)
+    year_options = "<option value=''>All years</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(y),"selected" if y==year else "",escape(y)) for y in years)
+    name_options = "<option value=''>All examinations</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(n),"selected" if n==exam_name else "",escape(n)) for n in exam_names)
+    notice = ""
+    qp = request.query_params
+    if qp.get("notice")=="saved":
+        notice = "<div class='ee-notice'>Result saved or updated successfully.</div>"
+    elif qp.get("notice")=="imported":
+        notice = "<div class='ee-notice'>CSV import completed: %s row(s) saved or updated; %s row(s) skipped.</div>"%(escape(qp.get("saved","0")),escape(qp.get("skipped","0")))
+    def table(headers, body_rows, empty):
+        if not body_rows:
+            return "<p class='ee-empty'>%s</p>"%empty
+        return "<div class='ee-table-wrap'><table><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>"%(
+            "".join("<th>%s</th>"%escape(str(h)) for h in headers),
+            "".join("<tr>%s</tr>"% "".join("<td>%s</td>"%escape(str(cell if cell not in (None,"") else "—")) for cell in row) for row in body_rows))
+    def fmt(value, suffix=""):
+        return ("%.2f%s"%(value,suffix)) if value is not None else "—"
+    subject_table = table(["Subject","Candidates with scores","Mean percentage","Highest","Lowest"],
+        [[r["name"],r["sat"],fmt(r["mean"],"%"),fmt(r["highest"],"%"),fmt(r["lowest"],"%")] for r in data["subject_rows"]],
+        "No scored subject results in this selection.")
+    candidate_table = table(["Position","Candidate No.","Candidate","Gender","Subjects recorded","Average percentage","Average grade points"],
+        [[i,r["candidate_no"],r["candidate_name"],r["gender"],r["subjects"],fmt(r["average"],"%"),fmt(r["grade_points"])]
+         for i,r in enumerate(data["candidate_rows"],1)],"No candidates found for this selection.")
+    grade_table = table(["Official grade / level","Subject entries"],data["grades"],"No official grades or levels have been entered yet.")
+    trend_table = table(["Year","Examination","Candidates","Candidates with scores","Mean candidate percentage","Mean grade points"],
+                        year_rows,"No historical results available for comparison.")
+    mean_grade = _external_exam_school_mean_grade(data["mean_points"])
+    mean_grade_text = mean_grade if mean_grade else "—"
+    selected_title = (exam_type or "All examination types") + ((" · "+year) if year else "") + ((" · "+exam_name) if exam_name else "")
+    export_query = "&".join("%s=%s"%(k,quote(v,safe="")) for k,v in [("exam_type",exam_type),("year",year),("exam_name",exam_name)] if v)
+    export_base = "/app/academics/external-analysis"
+    brand = ("<img src='%s' alt='School logo'>"%escape(logo) if logo else "") + "<div><h2>%s</h2><p>%s %s</p><p>%s · %s</p></div>"%(school_name,postal,code,email,phone)
+    body = """<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>External Examination Analysis | DaviSchool</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f5faf6;color:#20382b;font-family:Arial,Helvetica,sans-serif;line-height:1.5}
+.ee-page{max-width:1440px;margin:auto;padding:22px}.ee-head{padding:24px 26px;border-radius:17px;background:linear-gradient(125deg,#0b5c35,#08783f 58%,#159653);color:white;box-shadow:0 10px 26px #08783f20}
+.ee-head a{color:white;text-decoration:none;font-size:12px;font-weight:800}.ee-head h1{font-size:clamp(24px,3vw,34px);margin:10px 0 4px;line-height:1.2}.ee-head p{margin:0;color:#e0f4e7;font-size:13px}
+.ee-brand{display:flex;align-items:center;justify-content:center;gap:16px;text-align:center;padding:16px;background:white;border:1px solid #e0eae3;border-radius:14px;margin:14px 0}.ee-brand img{max-width:70px;max-height:62px;object-fit:contain}.ee-brand h2{font-size:20px;color:#145a34;margin:0}.ee-brand p{font-size:11px;color:#65766b;margin:3px}
+.ee-panel{background:white;border:1px solid #e0eae3;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 4px 15px #173a2508}.ee-panel h2{font-size:17px;color:#193e29;margin:0 0 12px}.ee-panel h3{font-size:14px;color:#28543a;margin:16px 0 8px}
+.ee-filters,.ee-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.ee-filters label,.ee-form-grid label,.ee-import label{font-size:11px;font-weight:800;color:#435c4b;display:flex;flex-direction:column;gap:5px;min-width:0}
+input,select{width:100%;min-width:0;min-height:40px;padding:9px 10px;border:1px solid #d3e0d7;border-radius:8px;background:#fbfdfb;color:#20382b;font:inherit;font-size:13px}
+.ee-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}.ee-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:10px 14px;border:1px solid #08783f;border-radius:9px;background:#08783f;color:#fff;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}.ee-btn.secondary{background:#fff;color:#20583a;border-color:#d4e5d9}.ee-btn:hover{filter:brightness(.96);transform:translateY(-1px)}
+.ee-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.ee-kpis>div{padding:14px;border:1px solid #e0eae3;border-radius:11px;background:linear-gradient(145deg,#fff,#f8fcf9);min-width:0}.ee-kpis small{display:block;color:#697a6e;font-size:11px;font-weight:700}.ee-kpis strong{display:block;color:#08783f;font-size:22px;overflow-wrap:anywhere;margin-top:5px}
+.ee-table-wrap{overflow:auto;border:1px solid #e0e8e2;border-radius:10px;margin:10px 0 18px;background:#fff}table{width:100%;border-collapse:collapse;min-width:620px}th,td{text-align:left;padding:10px;border-bottom:1px solid #e7eee9;border-right:1px solid #edf2ee;font-size:12px;vertical-align:top}th{background:#eaf4ed;color:#245239;font-weight:800}td{color:#354c3d}tbody tr:nth-child(even){background:#f8fbf9}tbody tr:last-child td{border-bottom:0}.ee-empty{font-size:12px;color:#748277}
+.ee-notice{margin:12px 0;padding:12px 14px;border:1px solid #a7d8b7;border-radius:10px;background:#effaf2;color:#145a34;font-size:13px;font-weight:700}.ee-note{font-size:12px;color:#68796e;background:#f8fbf8;border-radius:9px;padding:11px;margin-top:10px}.ee-back{display:inline-flex;margin-top:14px;color:#1d7040;text-decoration:none;font-weight:800;font-size:12px}
+@media(max-width:850px){.ee-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.ee-page{padding:12px}.ee-panel{padding:13px}.ee-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:1fr}.ee-brand{flex-direction:column}.ee-head{padding:20px}.ee-actions .ee-btn{flex:1 1 140px}}
+@media print{body{background:#fff}.ee-page{max-width:none;padding:0}.ee-head,.ee-filters-panel,.ee-entry-panel,.ee-import-panel,.ee-actions,.ee-back{display:none!important}.ee-panel,.ee-brand{box-shadow:none;border:0;padding:5px}.ee-table-wrap{overflow:visible}table{min-width:0}th,td{font-size:8px;padding:4px}}
+</style></head><body><main class='ee-page'>
+<header class='ee-head'><a href='/app/academics/analysis'>← Back to Academic Analysis</a><h1>External Examination Analysis</h1><p>Separate analysis workspace for KCSE, KJSEA and KCBE results. External results are stored separately from internal school marks.</p></header>
+<section class='ee-brand'>""" + brand + """</section>""" + notice + """
+<section class='ee-panel ee-filters-panel'><h2>Analysis filters</h2><form class='ee-filters' method='get' action='/app/academics/external-analysis'>
+<label>Examination type<select name='exam_type'><option value=''>All types</option>""" + type_options + """</select></label>
+<label>Year<select name='year'>""" + year_options + """</select></label><label>Examination name<select name='exam_name'>""" + name_options + """</select></label>
+<div class='ee-actions'><button class='ee-btn' type='submit'>Apply filters</button><a class='ee-btn secondary' href='/app/academics/external-analysis'>Clear</a></div></form></section>
+<section class='ee-panel'><h2>Performance overview · """ + escape(selected_title) + """</h2><div class='ee-kpis'>
+<div><small>Unique candidates</small><strong>""" + str(data["candidates"]) + """</strong></div>
+<div><small>Candidates with scores</small><strong>""" + str(data["assessed"]) + """</strong></div>
+<div><small>Mean candidate percentage</small><strong>""" + fmt(data["school_mean"],"%") + """</strong></div>
+<div><small>Mean grade points where supplied</small><strong>""" + fmt(data["mean_points"]) + """</strong></div>
+<div><small>Indicative KCSE mean grade</small><strong>""" + escape(mean_grade_text) + """</strong></div></div>
+<p class='ee-note'>Official grade/level values are retained as entered or imported. KCSE points can be derived from the standard subject grade-point mapping when the official grade is supplied; KJSEA and KCBE are not forced onto the KCSE scale. The indicative KCSE mean grade is a summary of recorded grade points, not a substitute for KNEC's official calculation rules or eligibility checks.</p></section>
+<section class='ee-panel'><h2>Subject performance and ranking</h2>""" + subject_table + """</section>
+<section class='ee-panel'><h2>Candidate performance</h2><p class='ee-note'>Candidate averages use only subjects with numeric scores and a valid maximum score. Missing subject marks are not treated as zero.</p>""" + candidate_table + """</section>
+<section class='ee-panel'><h2>Grade / achievement-level distribution</h2>""" + grade_table + """</section>
+<section class='ee-panel'><h2>Year-to-year comparison</h2><p class='ee-note'>Comparison rows are grouped by examination name and year for the selected exam type. Percentages compare score/max-score values; grade points are only averaged where supplied or available from KCSE official grades.</p>""" + trend_table + """</section>
+<section class='ee-panel ee-entry-panel'><h2>Enter one candidate subject result</h2><form method='post' action='/app/academics/external-analysis/save'><div class='ee-form-grid'>
+<label>Examination type<select name='exam_type' required><option value='KCSE'>KCSE</option><option value='KJSEA'>KJSEA</option><option value='KCBE'>KCBE</option></select></label>
+<label>Examination year<input name='exam_year' inputmode='numeric' pattern='[0-9]{4}' placeholder='2026' required></label>
+<label>Examination name<input name='exam_name' placeholder='e.g. KCSE 2026' required></label>
+<label>Candidate / index number<input name='candidate_no' required></label><label>Candidate name<input name='candidate_name' required></label>
+<label>Gender<select name='gender'><option value=''>Not specified</option><option value='F'>Female</option><option value='M'>Male</option><option value='OTHER'>Other / not stated</option></select></label>
+<label>School code (optional)<input name='school_code'></label><label>Subject name<input name='subject_name' placeholder='e.g. English / Mathematics' required></label>
+<label>Score (optional)<input type='number' step='any' min='0' name='score'></label><label>Maximum score (optional)<input type='number' step='any' min='0.0001' name='max_score' value='100'></label>
+<label>Official grade / level<input name='official_grade' placeholder='e.g. B+ or official achievement level'></label><label>Grade points (optional)<input type='number' step='any' min='0' name='grade_points'></label>
+</div><div class='ee-actions'><button class='ee-btn' type='submit'>Save / update result</button></div><p class='ee-note'>A saved row is one subject result. Re-saving the same examination, year, candidate number and subject updates that result rather than creating a duplicate. Enter the official grade/level from the official results; do not rely on inferred grades.</p></form></section>
+<section class='ee-panel ee-import-panel'><h2>Import results from Excel / CSV</h2><p class='ee-empty'>Save your spreadsheet as CSV UTF-8, then import it here. Use the template to keep column names consistent. Importing the same candidate/subject key updates the existing row.</p>
+<form class='ee-import' method='post' enctype='multipart/form-data' action='/app/academics/external-analysis/import'><div class='ee-form-grid'>
+<label>Default examination type<select name='exam_type'><option>KCSE</option><option>KJSEA</option><option>KCBE</option></select></label>
+<label>Default year<input name='exam_year' inputmode='numeric' placeholder='2026'></label><label>Default examination name<input name='exam_name' placeholder='e.g. KCSE 2026'></label>
+<label>CSV file<input type='file' name='csv_file' accept='.csv,text/csv' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import CSV</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form></section>
+<section class='ee-panel'><h2>Export report</h2><p class='ee-empty'>Export the currently filtered external examination data and analysis, or print this report to PDF using your browser's Print → Save as PDF.</p><div class='ee-actions'>
+<a class='ee-btn' href='""" + export_base + """/csv?""" + export_query + """'>Download results CSV</a>
+<a class='ee-btn secondary' href='""" + export_base + """/pdf?""" + export_query + """'>Download analysis PDF</a>
+<button class='ee-btn secondary' type='button' onclick='window.print()'>Print / Save as PDF</button>
+</div></section><a class='ee-back' href='/app/academics/analysis'>← Back to Academic Analysis</a></main></body></html>"""
+    return HTMLResponse(body)
+
+@router.get("/app/academics/external-analysis/csv")
+def external_exam_analysis_csv(request: Request, exam_type: str = "", year: str = "", exam_name: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    con = _db()
+    try:
+        rows = _external_exam_scope_rows(con.cursor(),sid,exam_type.upper(),year,exam_name)
+        con.close()
+        return _external_exam_csv_response(rows,"DaviSchool_External_Examination_Results.csv")
+    except Exception as exc:
+        try: con.close()
+        except Exception: pass
+        print("DAVISCHOOL EXTERNAL EXAM CSV FAILED:",repr(exc),flush=True)
+        return HTMLResponse("Unable to export external examination results.",500)
+
+@router.get("/app/academics/external-analysis/pdf")
+def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str = "", exam_name: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", status_code=303)
+    if not _msa_require_school_admin(request, sid):
+        return HTMLResponse("External examination analysis is available to the School Admin only.", status_code=403)
+    con = _db()
+    try:
+        rows = _external_exam_scope_rows(con.cursor(),sid,exam_type.upper(),year,exam_name)
+        school = con.cursor().execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+        con.close()
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name="ExternalTitle",parent=styles["Title"],alignment=TA_CENTER,textColor=colors.HexColor("#145a34"),fontSize=16,leading=20))
+        styles.add(ParagraphStyle(name="ExternalSmall",parent=styles["BodyText"],fontSize=7,leading=9))
+        school_name = str(school["name"] or "DaviSchool") if school else "DaviSchool"
+        title = "External Examination Analysis" + ((" - "+exam_type.upper()) if exam_type else "")
+        story = [Paragraph(escape(school_name),styles["Heading2"]),Paragraph(escape(title),styles["ExternalTitle"]),
+                 Paragraph(escape("Year: "+(year or "All years")+" · Examination: "+(exam_name or "All examinations")),styles["Normal"]),Spacer(1,10)]
+        summary = _external_exam_report_summary(rows)
+        story.append(Paragraph(escape("Unique candidates: %d · Candidates with scores: %d · Mean candidate percentage: %s"%
+            (summary["candidates"],summary["assessed"],("%.2f%%"%summary["school_mean"]) if summary["school_mean"] is not None else "—")),styles["Normal"]))
+        if summary["mean_points"] is not None:
+            story.append(Paragraph(escape("Mean grade points: %.2f · Indicative KCSE mean grade: %s"%
+                (summary["mean_points"],_external_exam_school_mean_grade(summary["mean_points"]))),styles["Normal"]))
+        story.append(Spacer(1,8))
+        story.append(Paragraph("Subject Performance",styles["Heading2"]))
+        table_data = [["Subject","Candidates with scores","Mean %","Highest %","Lowest %"]]
+        for item in summary["subject_rows"]:
+            table_data.append([Paragraph(escape(item["name"]),styles["ExternalSmall"]),str(item["sat"]),
+                ("%.2f%%"%item["mean"]) if item["mean"] is not None else "—",
+                ("%.2f%%"%item["highest"]) if item["highest"] is not None else "—",
+                ("%.2f%%"%item["lowest"]) if item["lowest"] is not None else "—"])
+        subject_table = Table(table_data,repeatRows=1,colWidths=[250,115,100,100,100])
+        subject_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eaf4ed")),("TEXTCOLOR",(0,0),(-1,0),colors.HexColor("#245239")),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#d9e5dc")),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f8fbf9")]),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5)]))
+        story.append(subject_table)
+        story.append(Spacer(1,12))
+        story.append(Paragraph("Candidate Performance",styles["Heading2"]))
+        cand_data = [["Pos.","Candidate No.","Candidate","Gender","Subjects","Average %","Avg. points"]]
+        for i,item in enumerate(summary["candidate_rows"],1):
+            cand_data.append([str(i),Paragraph(escape(item["candidate_no"]),styles["ExternalSmall"]),
+                Paragraph(escape(item["candidate_name"]),styles["ExternalSmall"]),item["gender"],str(item["subjects"]),
+                ("%.2f%%"%item["average"]) if item["average"] is not None else "—",
+                ("%.2f"%item["grade_points"]) if item["grade_points"] is not None else "—"])
+        cand_table = Table(cand_data,repeatRows=1,colWidths=[35,95,180,50,55,80,70])
+        cand_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eaf4ed")),("TEXTCOLOR",(0,0),(-1,0),colors.HexColor("#245239")),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#d9e5dc")),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f8fbf9")])]))
+        story.append(cand_table)
+        story.append(Spacer(1,10))
+        story.append(Paragraph("Official grade / achievement-level distribution",styles["Heading2"]))
+        gd = [["Official grade / level","Subject entries"]]+[[g,str(n)] for g,n in summary["grades"]]
+        gt = Table(gd,repeatRows=1,colWidths=[180,110])
+        gt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#eaf4ed")),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+            ("FONTSIZE",(0,0),(-1,-1),8),("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#d9e5dc"))]))
+        story.append(gt)
+        story.append(Spacer(1,8))
+        story.append(Paragraph("Official grades/levels are retained as entered or imported. This report is an analysis aid and does not replace official KNEC grade calculations or candidate eligibility rules.",styles["ExternalSmall"]))
+        doc.build(story)
+        return Response(buffer.getvalue(),media_type="application/pdf",
+                        headers={"Content-Disposition":'attachment; filename="DaviSchool_External_Examination_Analysis.pdf"'})
+    except Exception as exc:
+        try: con.close()
+        except Exception: pass
+        print("DAVISCHOOL EXTERNAL EXAM PDF FAILED:",repr(exc),flush=True)
+        return HTMLResponse("Unable to generate the external examination analysis PDF. Please check the application logs.",500)
+
+
 @router.get("/app/academics/analysis", response_class=HTMLResponse)
 def new_analysis(
     request: Request, exam_id: str = "", exam_ids: str = "", class_id: str = "",
@@ -12521,16 +13039,33 @@ def class_marksheet_analysis(
             "<a href='/app/academics/marksheet-analysis/pdf?%s' download='DaviSchool_MarkSheet_Analysis.pdf'>Download PDF</a>"
             "<button type='button' onclick='window.print()'>Print report</button></div>"
         ) % (export_query, export_query)
+        external_analysis_tile = (
+            "<section class='msa-external-tile'><a class='msa-external-tile-link' href='/app/academics/external-analysis'>"
+            "<span class='msa-external-tile-icon' aria-hidden='true'>↗</span><span class='msa-external-tile-copy'>"
+            "<strong>External Examination Analysis</strong><small>Analyse KCSE, KJSEA and KCBE results using manual entry or Excel/CSV import, candidate and subject insights, year comparisons and branded exports.</small>"
+            "</span><span class='msa-external-tile-arrow' aria-hidden='true'>→</span></a></section>"
+        )
         body = (
             "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>" + escape(page_heading) + "</h1>"
             "<p class='muted'>Explore class results, subject strengths, student performance and actionable improvement priorities.</p></header>"
             + "<section class='msa-school-card'>" + report_brand + "</section>"
             + "<section class='msa-filter-panel'><div class='msa-panel-heading'><h2>Report filters</h2><p>Choose the examinations and group you want to analyse.</p></div>" + form + "</section>"
             + "<section class='msa-export-panel'><div><h2>Export report</h2><p>Download or print the current selection.</p></div>" + export_links + "</section>"
+            + external_analysis_tile
             + "<section class='msa-results'>" + content_by_view[view] + "</section></div>"
             + """<style>
 .msa-page{max-width:1440px;margin:0 auto;padding-bottom:28px;color:#20382b}.msa-page-head{position:relative;overflow:hidden;padding:26px 28px 24px;margin:0 0 18px;border-radius:18px;background:linear-gradient(125deg,#0b5c35 0%,#08783f 58%,#159653 100%);color:#fff;box-shadow:0 12px 28px rgba(8,120,63,.15)}.msa-page-head:after{content:'';position:absolute;width:220px;height:220px;border:1px solid rgba(255,255,255,.15);border-radius:50%;right:-65px;top:-100px;pointer-events:none}.msa-page-head h1{position:relative;z-index:1;margin:5px 0 7px;color:#fff;font-size:clamp(25px,3vw,34px);letter-spacing:-.035em;line-height:1.15}.msa-page-head .muted{position:relative;z-index:1;margin:0;color:#e0f4e7;font-size:14px;max-width:680px}.msa-eyebrow{font-size:10px;letter-spacing:.16em;font-weight:900;color:#c6f2d5}.msa-school-card,.msa-filter-panel,.msa-export-panel,.msa-results{margin:14px 0;padding:18px;border:1px solid #e0eae3;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(23,58,37,.035)}.msa-brand{display:flex;align-items:center;justify-content:center;gap:18px;text-align:center;padding:8px 12px;margin:0;background:transparent;border:0;border-radius:0}.msa-brand img{max-width:76px;max-height:68px;object-fit:contain}.msa-brand h2{margin:0;color:#145a34;font-size:21px;letter-spacing:-.02em}.msa-brand p{margin:3px;color:#65766b;font-size:12px}.msa-panel-heading{margin:0 0 12px}.msa-panel-heading h2,.msa-export-panel h2{font-size:16px;line-height:1.3;margin:0;color:#193e29}.msa-panel-heading p,.msa-export-panel p{font-size:12px;color:#748277;margin:4px 0 0}.msa-filters{display:grid;grid-template-columns:minmax(180px,2fr) repeat(4,minmax(110px,1fr)) auto;gap:12px;padding:0;background:transparent;border:0;border-radius:0;margin:0}.msa-filters label,.msa-student-select label{font-size:11px;font-weight:800;color:#435c4b;display:flex;flex-direction:column;gap:6px}.msa-exam-picker{position:relative;min-width:0}.msa-exam-picker>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:42px;padding:10px 11px;border:1px solid #d3e0d7;border-radius:9px;background:#fbfdfb;color:#20382b;font-size:13px;font-weight:600;cursor:pointer;list-style:none}.msa-exam-picker>summary::-webkit-details-marker{display:none}.msa-exam-picker>summary:after{content:'▾';color:#08783f}.msa-exam-picker[open]>summary{border-color:#16834a;border-radius:9px 9px 0 0}.msa-exam-options{position:absolute;z-index:30;top:100%;left:0;right:0;max-height:260px;overflow:auto;padding:6px;background:#fff;border:1px solid #cbded0;border-top:0;border-radius:0 0 9px 9px;box-shadow:0 12px 24px rgba(23,58,37,.15)}.msa-exam-option{display:flex!important;flex-direction:row!important;align-items:flex-start;gap:9px!important;padding:9px 7px;border-radius:6px;font-size:12px!important;font-weight:600!important;line-height:1.4;cursor:pointer}.msa-exam-option:hover{background:#eef8f1}.msa-exam-option input{width:16px;height:16px;min-width:16px;margin:1px 0 0;accent-color:#08783f}.msa-exam-option span{overflow-wrap:anywhere}.msa-exam-options:empty:after{content:'No examinations available';display:block;padding:10px;color:#748277;font-size:12px}.msa-filters select,.msa-student-select select{min-width:0;width:100%;min-height:42px;padding:10px 11px;border:1px solid #d3e0d7;border-radius:9px;background:#fbfdfb;color:#20382b;font-size:13px;outline:none}.msa-filters select:focus,.msa-student-select select:focus{border-color:#16834a;box-shadow:0 0 0 3px rgba(22,131,74,.12)}.msa-button{align-self:end;min-height:42px;background:#08783f;color:#fff;border:1px solid #08783f;border-radius:9px;padding:11px 16px;font-weight:800;font-size:12px;cursor:pointer;box-shadow:0 4px 10px rgba(8,120,63,.12)}.msa-button:hover{background:#075e32}.msa-nav{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0;padding:5px;border-radius:13px;background:#edf5ef;border:1px solid #dfeae2}.msa-nav a,.msa-export a,.msa-export button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:9px 13px;border:1px solid #d8e4db;border-radius:9px;background:#fff;color:#315c40;text-decoration:none;font-weight:800;font-size:12px;transition:background .15s,border-color .15s}.msa-nav a:hover,.msa-export a:hover,.msa-export button:hover{border-color:#9dc9ab;background:#f7fcf8}.msa-nav a.active{background:#08783f;color:#fff;border-color:#08783f;box-shadow:0 3px 8px rgba(8,120,63,.16)}.msa-export-panel{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;background:#f8fbf8}.msa-export{display:flex;gap:8px;flex-wrap:wrap;margin:0}.msa-export button{cursor:pointer}.msa-results{padding:22px;margin-top:14px}.msa-results>h2{font-size:21px;line-height:1.3;color:#183e29;letter-spacing:-.025em;margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid #e5eee8}.msa-results>h3{font-size:15px;color:#28543a;margin:22px 0 10px}.msa-results>p{color:#68796e;font-size:13px}.msa-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0 24px}.msa-kpis>div{position:relative;overflow:hidden;min-width:0;padding:17px 16px;border:1px solid #e0eae3;border-radius:13px;background:linear-gradient(145deg,#fff,#f8fcf9);box-shadow:0 4px 12px rgba(23,58,37,.035)}.msa-kpis>div:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#159653}.msa-kpis small{display:block;color:#697a6e;font-size:11px;font-weight:700;line-height:1.4}.msa-kpis strong{display:block;font-size:clamp(19px,2vw,25px);line-height:1.2;color:#08783f;margin-top:8px;font-weight:900;letter-spacing:-.03em;overflow-wrap:anywhere}.msa-table-wrap{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch;margin:12px 0 22px;border:1px solid #e0e8e2;border-radius:12px;background:#fff}.msa-table{border-collapse:separate;border-spacing:0;width:100%;min-width:650px;background:#fff}.msa-table th{position:sticky;top:0;background:#eaf4ed;color:#245239;text-align:left;font-weight:800;white-space:normal}.msa-table th,.msa-table td{padding:11px 12px;border:0;border-bottom:1px solid #e7eee9;border-right:1px solid #edf2ee;font-size:12px;vertical-align:top}.msa-table th:last-child,.msa-table td:last-child{border-right:0}.msa-table tbody tr:last-child td{border-bottom:0}.msa-table tbody tr:nth-child(even){background:#f8fbf9}.msa-table tbody tr:hover{background:#eef8f1}.msa-table td{color:#354c3d;line-height:1.45}.msa-student-head{padding:17px;background:#f2faf4;border:1px solid #deeee2;border-radius:12px;margin:16px 0}.msa-student-head h3{margin:0;color:#185c35}.msa-student-head p{margin:5px 0;color:#5e7264}.msa-student-select{display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:12px;background:#f8fbf8;border-radius:11px;margin:12px 0}.msa-student-select label{min-width:230px;flex:1}.msa-results .msa-table-wrap{max-width:100%}@media(max-width:1100px){.msa-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.msa-filters label:first-child{grid-column:span 2}.msa-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.msa-page-head{padding:22px 19px;border-radius:14px}.msa-school-card,.msa-filter-panel,.msa-export-panel,.msa-results{padding:14px;border-radius:13px}.msa-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.msa-filters label:first-child{grid-column:1/-1}.msa-filters select[multiple]{min-height:92px}.msa-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.msa-kpis>div{padding:14px 12px}.msa-brand{gap:10px}.msa-brand h2{font-size:18px}.msa-nav{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding:5px;scrollbar-width:thin}.msa-nav a{white-space:nowrap;flex:0 0 auto}.msa-results{padding:14px}.msa-results>h2{font-size:19px}.msa-table{min-width:620px}.msa-export-panel{align-items:flex-start}.msa-export{width:100%}}@media(max-width:440px){.msa-filters{grid-template-columns:1fr}.msa-filters label:first-child{grid-column:auto}.msa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.msa-kpis strong{font-size:19px}.msa-brand{flex-direction:column}.msa-export a,.msa-export button{flex:1 1 120px}.msa-table th,.msa-table td{padding:9px;font-size:11px}}@media(prefers-reduced-motion:reduce){.msa-nav a,.msa-export a,.msa-export button{transition:none}}@media print{.side,.top,.msa-page-head,.msa-filter-panel,.msa-nav,.msa-export-panel,.page>h1,.page>.muted{display:none!important}.main{margin:0!important;padding:0!important}.msa-page{max-width:none;padding:0}.msa-school-card,.msa-results{border:0;box-shadow:none;padding:0;margin:0}.msa-results{margin-top:8px}.msa-table-wrap{overflow:visible;border:0}.msa-table{min-width:0}.msa-table th,.msa-table td{font-size:8px;padding:4px}.msa-kpis>div{box-shadow:none}}
 
+/* External examination tile, visually consistent with existing Academic Analysis controls */
+.msa-external-tile{margin:14px 0 18px}
+.msa-external-tile-link{display:flex;align-items:center;gap:14px;padding:16px 18px;border:1px solid #cfe5d5;border-radius:14px;background:linear-gradient(115deg,#f2fbf4,#fff);color:#20583a;text-decoration:none;box-shadow:0 3px 10px rgba(23,58,37,.06);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.msa-external-tile-link:hover{transform:translateY(-2px);border-color:#69b586;box-shadow:0 8px 18px rgba(8,120,63,.12)}
+.msa-external-tile-icon{display:grid;place-items:center;width:44px;height:44px;flex:none;border-radius:12px;background:#08783f;color:#fff;font-size:23px;font-weight:900}
+.msa-external-tile-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.msa-external-tile-copy strong{font-size:15px;color:#145a34}
+.msa-external-tile-copy small{font-size:12px;line-height:1.5;color:#64766a}
+.msa-external-tile-arrow{font-size:22px;font-weight:900;color:#08783f}
+@media(max-width:520px){.msa-external-tile-link{padding:13px;gap:10px}.msa-external-tile-copy strong{font-size:14px}}
 /* Interactive tile treatment for all Academic Analysis actions */
 .msa-page .msa-nav a,
 .msa-page .msa-export a,
