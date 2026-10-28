@@ -13345,6 +13345,12 @@ def class_marksheet_analysis_pdf(
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * 0.50] * len(headers)
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+            elif title == "Subject Mean Percentage by Gender" and len(headers) == 3:
+                # Subject is half its former equal-width size; Female and Male
+                # mean columns are each 80% narrower than their former widths.
+                base_width = doc.width / 3
+                col_widths = [base_width * 0.50, base_width * 0.20, base_width * 0.20]
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
                 # Keep Subject readable; reduce Mean, Recorded entries and Insight
                 # to 60% of their former equal-width allocation.
@@ -15157,19 +15163,20 @@ def class_marksheet_analysis_pdf(
         council_rows = [council_headers]
         for _member_number in range(1, 5):
             council_rows.append([
-                Paragraph("________________________", declaration_label),
+                Paragraph("________________________________", declaration_label),
+                Paragraph("________________", declaration_label),
+                Paragraph("____________________", declaration_label),
                 Paragraph("______________", declaration_label),
-                Paragraph("__________________", declaration_label),
-                Paragraph("____________", declaration_label),
             ])
         council_table = Table(
             council_rows,
-            colWidths=[doc.width * 0.34, doc.width * 0.22, doc.width * 0.24, doc.width * 0.16],
+            colWidths=[doc.width * 0.36, doc.width * 0.22, doc.width * 0.24, doc.width * 0.14],
             repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("ALIGN", (0,0), (-1,-1), "LEFT"),
+            # Center each header and its handwritten line within the same column.
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
             ("LEFTPADDING", (0,0), (-1,-1), 4),
             ("RIGHTPADDING", (0,0), (-1,-1), 4),
             ("TOPPADDING", (0,0), (-1,-1), 5),
@@ -15193,6 +15200,7 @@ def class_marksheet_analysis_pdf(
             canvas.setFont("Helvetica", 7)
             canvas.setFillColor(colors.HexColor("#176b3a"))
             canvas.drawCentredString(page_width/2, 6*mm, "DaviSchool Management System · Generated " + datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d/%m/%Y %H:%M EAT"))
+            canvas.drawRightString(page_width - 8*mm, 6*mm, "Page %d" % canvas.getPageNumber())
             canvas.restoreState()
         doc.build(story, onFirstPage=add_footer, onLaterPages=add_footer)
         response = Response(content=buffer.getvalue(), media_type="application/pdf")
