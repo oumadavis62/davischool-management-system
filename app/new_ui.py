@@ -15163,26 +15163,31 @@ def class_marksheet_analysis_pdf(
         # boxed table/grid is replaced with plain handwritten-entry lines.
         council_rows = [council_headers]
         for member_number in range(1, 5):
+            # Use blank cells with drawn underlines rather than underscore text.
+            # This makes each writing line span its own column and sit directly
+            # beneath the matching Name/Designation/Signature/Date header.
             council_rows.append([
                 Paragraph(str(member_number), declaration_label),
-                Paragraph("________________________________", declaration_label),
-                Paragraph("________________", declaration_label),
-                Paragraph("____________________", declaration_label),
-                Paragraph("______________", declaration_label),
+                Paragraph(" ", declaration_label),
+                Paragraph(" ", declaration_label),
+                Paragraph(" ", declaration_label),
+                Paragraph(" ", declaration_label),
             ])
         council_table = Table(
             council_rows,
             colWidths=[doc.width * 0.05, doc.width * 0.32, doc.width * 0.21, doc.width * 0.23, doc.width * 0.13],
+            rowHeights=[None, 10*mm, 10*mm, 10*mm, 10*mm],
             repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            # Center each header and its handwritten line within the same column.
+            # Center each header over its matching full-width writing line.
             ("ALIGN", (0,0), (-1,-1), "CENTER"),
             ("LEFTPADDING", (0,0), (-1,-1), 4),
             ("RIGHTPADDING", (0,0), (-1,-1), 4),
-            ("TOPPADDING", (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("TOPPADDING", (0,0), (-1,-1), 2),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ("LINEBELOW", (1,1), (4,4), 0.6, colors.black),
         ]))
         story.append(council_table)
         story.append(Spacer(1, 3*mm))
