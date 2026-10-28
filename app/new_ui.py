@@ -13502,13 +13502,13 @@ def class_marksheet_analysis_pdf(
             fail_pct = failed / classified * 100 if classified else None
             overall_summary_rows.append([
                 exam_name or str(exam_id),
-                assessed,
+                f"{assessed} Learners",
                 f"{assessed_pct:.1f}%" if assessed_pct is not None else "—",
-                not_assessed,
+                f"{not_assessed} Learners",
                 f"{not_assessed_pct:.1f}%" if not_assessed_pct is not None else "—",
-                passed,
+                f"{passed} Learners",
                 f"{pass_pct:.1f}%" if pass_pct is not None else "—",
-                failed,
+                f"{failed} Learners",
                 f"{fail_pct:.1f}%" if fail_pct is not None else "—",
             ])
 
@@ -13550,9 +13550,11 @@ def class_marksheet_analysis_pdf(
             pass_pct = (stats["passed"] / classified * 100) if classified else None
             fail_pct = (stats["failed"] / classified * 100) if classified else None
             subject_pass_fail_rows.append([
-                subject_name, stats["assessed"], stats["passed"],
+                subject_name, f'{stats["assessed"]} Learners',
+                f'{stats["passed"]} Learners',
                 f"{pass_pct:.1f}%" if pass_pct is not None else "—",
-                stats["failed"], f"{fail_pct:.1f}%" if fail_pct is not None else "—",
+                f'{stats["failed"]} Learners',
+                f"{fail_pct:.1f}%" if fail_pct is not None else "—",
             ])
         # Pass/fail categories follow the configured CBC grades: E/M are passes,
         # A/B are fails. X and ungraded marks are excluded from the percentages.
@@ -13849,7 +13851,8 @@ def class_marksheet_analysis_pdf(
             for subject_id in ranking_subject_ids:
                 subject_cells.extend(_msa_subject_group_result(group_subject_values, group_key, subject_id))
             stream_rows.append([
-                stream_rank, group_key[0], group_key[1], assessed_count, not_assessed_count,
+                stream_rank, group_key[0], group_key[1],
+                f"{assessed_count} Learners", f"{not_assessed_count} Learners",
                 *subject_cells, "%.2f%%" % mean, _msa_overall_grade(mean)
             ])
             stream_ranks.append(stream_rank)
@@ -13878,7 +13881,8 @@ def class_marksheet_analysis_pdf(
             for subject_id in ranking_subject_ids:
                 class_subjects.extend(_msa_subject_group_result(class_subject_values, (class_label,), subject_id))
             class_rows.append([
-                item["rank"], class_label, learners_assessed, learners_not_assessed, *class_subjects,
+                item["rank"], class_label, f"{learners_assessed} Learners",
+                f"{learners_not_assessed} Learners", *class_subjects,
                 "%.2f%%" % item["mean"], _msa_overall_grade(item["mean"])
             ])
             class_ranks.append(item["rank"])
