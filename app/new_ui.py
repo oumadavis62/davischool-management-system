@@ -14322,7 +14322,9 @@ def class_marksheet_analysis_pdf(
         story.append(Paragraph("<u>Gender Performance Index</u>", centered_page_heading))
         story.append(Paragraph(
             "Summary of assessed learners' mean percentages by recorded gender for the selected examination filters. "
-            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero.",
+            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero. "
+            "The 40% pass mark is used as the reporting benchmark: learners scoring at or above 40% meet the benchmark, "
+            "while learners scoring below 40% are below the benchmark.",
             styles["MSACell"]
         ))
         gender_order = ["Female", "Male", "Other", "Unspecified"]
