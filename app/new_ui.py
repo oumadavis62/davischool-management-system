@@ -13352,7 +13352,7 @@ def class_marksheet_analysis_pdf(
                 col_widths = [base_width * 0.50, base_width * 0.20,
                               base_width * 0.20, base_width * 0.20,
                               base_width * 0.20]
-                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+                tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
             elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
                 # Keep Subject readable; reduce Mean, Recorded entries and Insight
                 # to 60% of their former equal-width allocation.
@@ -13880,7 +13880,7 @@ def class_marksheet_analysis_pdf(
         ]
         msa_overall_values = [x["average"] for x in data["summaries"].values() if int(x.get("subject_count") or 0) > 0]
         overall_class_mean = sum(msa_overall_values) / len(msa_overall_values) if msa_overall_values else None
-        overall_distribution_headers = msa_grade_order + ["Entries", "Class Mean %", "Mean Grade"]
+        overall_distribution_headers = msa_grade_order + ["Entries", "Examination Mean", "Mean Grade"]
         overall_distribution_values = [[msa_overall_counts[g] for g in msa_grade_order] + [
             len(enrolled_student_ids),
             "%.2f" % overall_class_mean if overall_class_mean is not None else "—",
@@ -15140,7 +15140,7 @@ def class_marksheet_analysis_pdf(
             fontName="Helvetica-Bold", alignment=1
         )
         story.append(Spacer(1, 3*mm))
-        story.append(Paragraph("DECLARATION AND OFFICIAL APPROVAL", declaration_subtitle))
+        story.append(Paragraph("<u>DECLARATION AND OFFICIAL APPROVAL</u>", declaration_subtitle))
         story.append(Paragraph("DECLARATION", declaration_section))
         story.append(Paragraph(
             "We hereby declare that this Academic Analysis Report presents the examination "
