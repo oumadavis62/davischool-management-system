@@ -13667,9 +13667,34 @@ def class_marksheet_analysis_pdf(
 
         def _msa_overall_grade(mean_percentage):
             try:
-                return str(_overall_grade(cur, sid, float(mean_percentage), ranking_data["overall_rules"]) or "—")
+                grade = _overall_grade(cur, sid, float(mean_percentage), ranking_data["overall_rules"])
+                # Retry through the database-backed loader when the preloaded
+                # rule set is absent/stale, so valid configured bands aren't
+                # displayed as dashes in the PDF.
+                if not grade or str(grade).strip() in ("—", "-"):
+                    grade = _overall_grade(cur, sid, float(mean_percentage), None)
+                return str(grade or "—")
             except Exception:
                 return "—"
+
+        def _msa_subject_mean_grade(subject_id, mean_percentage, grading_rules=None):
+            """Resolve a subject mean grade using preloaded rules, then DB-backed rules."""
+            if mean_percentage is None:
+                return "—"
+            try:
+                grade, _, _ = _subject_grade_details(
+                    cur, sid, int(subject_id), float(mean_percentage), grading_rules, 100
+                )
+            except Exception:
+                grade = None
+            if not grade or str(grade).strip() in ("—", "-"):
+                try:
+                    grade, _, _ = _subject_grade_details(
+                        cur, sid, int(subject_id), float(mean_percentage), None, 100
+                    )
+                except Exception:
+                    grade = None
+            return str(grade or "—")
 
         def _msa_ranking_table(title, headers, values, ranks, subject_start):
             # Keep the existing plain-white header and grid styling, but group
@@ -13937,13 +13962,9 @@ def class_marksheet_analysis_pdf(
         per_subject_distribution_rows = []
         for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: (msa_subject_positions.get(int(item[0]), 10**9), str(item[1]).casefold())):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
-            mean_grade = "—"
-            if mean is not None:
-                try:
-                    mean_grade, _, _ = _subject_grade_details(cur, sid, int(subject_id), float(mean), data["grading_rules"], 100)
-                    mean_grade = str(mean_grade or "—")
-                except Exception:
-                    mean_grade = "—"
+            mean_grade = _msa_subject_mean_grade(
+                int(subject_id), mean, data.get("grading_rules")
+            )
             per_subject_distribution_rows.append([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
                 len(enrolled_student_ids),
                 "%.2f" % mean if mean is not None else "—",
@@ -13968,8 +13989,9 @@ def class_marksheet_analysis_pdf(
         def _insight_grade(item):
             subject_id = item.get("subject_id")
             if subject_id is not None:
-                grade, _, _ = _subject_grade_details(cur, sid, subject_id, item["mean"], data["grading_rules"], 100)
-                return str(grade or "—")
+                return _msa_subject_mean_grade(
+                    subject_id, item.get("mean"), data.get("grading_rules")
+                )
             grade, _ = _default_grade_points(item["mean"])
             return str(grade or "—")
         subject_insights.sort(key=lambda item: (-item["mean"], item["subject"].casefold()))
@@ -14305,11 +14327,9 @@ def class_marksheet_analysis_pdf(
                 if mean_value is None:
                     return "—"
                 if subject_id_for_grade is not None:
-                    grade, _, _ = _subject_grade_details(
-                        cur, sid, subject_id_for_grade, mean_value,
-                        data.get("grading_rules"), 100
+                    return _msa_subject_mean_grade(
+                        subject_id_for_grade, mean_value, data.get("grading_rules")
                     )
-                    return str(grade or "—")
                 return str(_default_grade_points(mean_value)[0] or "—")
             subject_gender_rows.append([
                 subject_name,
