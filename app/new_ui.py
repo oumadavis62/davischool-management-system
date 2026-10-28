@@ -13937,12 +13937,20 @@ def class_marksheet_analysis_pdf(
         per_subject_distribution_rows = []
         for subject_id, subject_name in sorted(data["subjects"].items(), key=lambda item: (msa_subject_positions.get(int(item[0]), 10**9), str(item[1]).casefold())):
             mean = msa_subject_totals[int(subject_id)] / msa_subject_entries[int(subject_id)] if msa_subject_entries[int(subject_id)] else None
+            mean_grade = "—"
+            if mean is not None:
+                try:
+                    mean_grade, _, _ = _subject_grade_details(cur, sid, int(subject_id), float(mean), data["grading_rules"], 100)
+                    mean_grade = str(mean_grade or "—")
+                except Exception:
+                    mean_grade = "—"
             per_subject_distribution_rows.append([subject_name] + [msa_subject_counts[int(subject_id)][g] for g in msa_grade_order] + [
                 len(enrolled_student_ids),
                 "%.2f" % mean if mean is not None else "—",
+                mean_grade,
                 msa_subject_positions.get(int(subject_id), "—")
             ])
-        pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Position"], per_subject_distribution_rows)
+        pdf_table("Grade Distribution Analysis — Per Subject", ["Subject"] + msa_grade_order + ["Entries", "Mean %", "Mean Grade", "Position"], per_subject_distribution_rows)
         # Continue with actionable, subject-level Performance Insights after student rankings.
         # Only recorded subject marks contribute to these means.
         subject_insight_values = {}
