@@ -14225,8 +14225,9 @@ def class_marksheet_analysis_pdf(
         pdf_table(
             "Priority Students Summary",
             ["Learners Assessed", "Mean Below 40%", "High Priority", "Medium Priority", "Monitor", "On Track"],
-            [[assessed_priority_total, low_achiever_total, priority_counts["High"], priority_counts["Medium"],
-              priority_counts["Monitor"], priority_counts["On track"]]],
+            [["%s Learners" % assessed_priority_total, "%s Learners" % low_achiever_total,
+              "%s Learners" % priority_counts["High"], "%s Learners" % priority_counts["Medium"],
+              "%s Learners" % priority_counts["Monitor"], "%s Learners" % priority_counts["On track"]]],
             compact=True
         )
         priority_group_rows = []
