@@ -8845,6 +8845,9 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
 <label>Default examination type<select name='exam_type'><option>KCSE</option><option>KJSEA</option><option>KCBE</option></select></label>
 <label>Default year<input name='exam_year' inputmode='numeric' placeholder='2026'></label><label>Default examination name<input name='exam_name' placeholder='e.g. KCSE 2026'></label>
 <label>CSV / Excel file<input type='file' name='csv_file' accept='.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import results</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form><a class='ee-back' href='/app/academics/external-analysis'>← Back to External Examination Analysis</a></section>"""
+    # Build export links before constructing the default landing view, which uses them.
+    export_query = "&".join("%s=%s"%(k,quote(v,safe="")) for k,v in [("exam_type",exam_type),("year",year),("exam_name",exam_name)] if v)
+    export_base = "/app/academics/external-analysis"
     if view == "entry":
         workspace_content = entry_form
     elif view == "import":
@@ -8880,8 +8883,6 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
     mean_grade = _external_exam_school_mean_grade(data["mean_points"]) if exam_type == "KCSE" else ""
     mean_grade_text = mean_grade if mean_grade else ("Not applicable" if exam_type in ("KJSEA", "KCBE") else "—")
     selected_title = (exam_type or "All examination types") + ((" · "+year) if year else "") + ((" · "+exam_name) if exam_name else "")
-    export_query = "&".join("%s=%s"%(k,quote(v,safe="")) for k,v in [("exam_type",exam_type),("year",year),("exam_name",exam_name)] if v)
-    export_base = "/app/academics/external-analysis"
     brand = ("<img src='%s' alt='School logo'>"%escape(logo) if logo else "") + "<div><h2>%s</h2><p>%s %s</p><p>%s · %s</p></div>"%(school_name,postal,code,email,phone)
     body = """<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>External Examination Analysis | DaviSchool</title><style>
