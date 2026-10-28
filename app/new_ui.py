@@ -14350,11 +14350,12 @@ def class_marksheet_analysis_pdf(
             total_at_or_above += entry["at_or_above"]
             total_below += entry["below"]
         overall_mean = total_gender_mean / total_gender_learners if total_gender_learners else 0.0
+        # The All assessed aggregate has no single-gender highest-mean value;
+        # omit that final cell instead of displaying a dash.
         gender_rows.append([
             "All assessed", "%s Learners" % total_gender_learners, "%.2f%%" % overall_mean,
             "%s Learners" % total_at_or_above, "%s Learners" % total_below,
             "%.1f%%" % (total_at_or_above / total_gender_learners * 100 if total_gender_learners else 0.0),
-            "—"
         ])
         pdf_table(
             "Performance Summary by Gender",
