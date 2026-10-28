@@ -15130,9 +15130,9 @@ def class_marksheet_analysis_pdf(
         head_signature_table = Table([
             [Paragraph("<b>Name</b>: __________________________________________",
                        declaration_label),
-             Paragraph("<b>Signature</b>: ______________________________________",
+             Paragraph("<b>Signature</b>: __________________________",
                        declaration_label)],
-            [Paragraph("<b>Date</b>: ___________________________________________",
+            [Paragraph("<b>Date</b>: __________________________",
                        declaration_label),
              Paragraph("<b>Official stamp</b>: __________________________________",
                        declaration_label)],
@@ -15176,9 +15176,9 @@ def class_marksheet_analysis_pdf(
         council_table = Table(
             council_rows,
             colWidths=[
-                doc.width * 0.06, doc.width * 0.29, doc.width * 0.025,
-                doc.width * 0.19, doc.width * 0.025, doc.width * 0.21,
-                doc.width * 0.025, doc.width * 0.175,
+                doc.width * 0.06, doc.width * 0.29, doc.width * 0.04,
+                doc.width * 0.18, doc.width * 0.04, doc.width * 0.18,
+                doc.width * 0.04, doc.width * 0.17,
             ],
             rowHeights=[None, 12*mm, 12*mm, 12*mm, 12*mm],
             repeatRows=1, hAlign="CENTER"
