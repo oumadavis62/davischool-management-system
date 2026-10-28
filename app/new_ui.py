@@ -14237,9 +14237,12 @@ def class_marksheet_analysis_pdf(
                               item[0][0].casefold(), item[0][1].casefold())
         ):
             priority_group_rows.append([
-                class_name, stream_name, counts["assessed"], counts["high"],
-                counts["medium"], counts["monitor"],
-                counts["high"] + counts["medium"] + counts["monitor"]
+                class_name, stream_name,
+                "%s Learners" % counts["assessed"],
+                "%s Learners" % counts["high"],
+                "%s Learners" % counts["medium"],
+                "%s Learners" % counts["monitor"],
+                "%s Learners" % (counts["high"] + counts["medium"] + counts["monitor"])
             ])
         pdf_table(
             "Classes and Streams Requiring Support",
