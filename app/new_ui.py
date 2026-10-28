@@ -13345,11 +13345,13 @@ def class_marksheet_analysis_pdf(
                 base_width = doc.width / len(headers)
                 col_widths = [base_width * 0.50] * len(headers)
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
-            elif title == "Subject Mean Percentage by Gender" and len(headers) == 3:
-                # Subject is half its former equal-width size; Female and Male
-                # mean columns are each 80% narrower than their former widths.
+            elif title == "Subject Mean Percentage by Gender" and len(headers) == 5:
+                # Keep Subject at half its former equal-width baseline; compact
+                # each gender mean and grade column for the expanded table.
                 base_width = doc.width / 3
-                col_widths = [base_width * 0.50, base_width * 0.20, base_width * 0.20]
+                col_widths = [base_width * 0.50, base_width * 0.20,
+                              base_width * 0.20, base_width * 0.20,
+                              base_width * 0.20]
                 tbl = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
             elif title == "Subject strengths and improvement priorities" and len(headers) == 5:
                 # Keep Subject readable; reduce Mean, Recorded entries and Insight
@@ -13506,7 +13508,7 @@ def class_marksheet_analysis_pdf(
             exam_details_rows, compact=True
         )
         pdf_table(
-            "Overall Examination Summary & Pass/Fail",
+            "Overall Examination Summary",
             ["Examination", "Learners assessed", "Assessed (%)",
              "Learners not assessed", "Not assessed (%)",
              "Passed", "Pass Rate (%)", "Failed", "Fail Rate (%)"],
@@ -13877,10 +13879,12 @@ def class_marksheet_analysis_pdf(
             )
         ]
         msa_overall_values = [x["average"] for x in data["summaries"].values() if int(x.get("subject_count") or 0) > 0]
-        overall_distribution_headers = msa_grade_order + ["Entries", "Class Mean %"]
+        overall_class_mean = sum(msa_overall_values) / len(msa_overall_values) if msa_overall_values else None
+        overall_distribution_headers = msa_grade_order + ["Entries", "Class Mean %", "Mean Grade"]
         overall_distribution_values = [[msa_overall_counts[g] for g in msa_grade_order] + [
             len(enrolled_student_ids),
-            "%.2f" % (sum(msa_overall_values) / len(msa_overall_values)) if msa_overall_values else "—"
+            "%.2f" % overall_class_mean if overall_class_mean is not None else "—",
+            _msa_overall_grade(overall_class_mean) if overall_class_mean is not None else "—"
         ]]
         pdf_table("Grade Distribution Analysis — Overall", overall_distribution_headers, overall_distribution_values)
         class_stream_overall = []
@@ -13915,11 +13919,12 @@ def class_marksheet_analysis_pdf(
                 [group_key[0], group_key[1]]
                 + [counts[g] for g in msa_grade_order]
                 + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
-                   position if mean is not None else "—"]
+                   position if mean is not None else "—",
+                   _msa_overall_grade(mean) if mean is not None else "—"]
             )
         pdf_table(
             "Grade Distribution Analysis — Overall by Class and Stream",
-            ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank"],
+            ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank", "Mean Grade"],
             class_stream_overall_rows
         )
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
@@ -14281,14 +14286,34 @@ def class_marksheet_analysis_pdf(
             subject_gender = gender_subjects.get(subject_name, {})
             def _gender_subject_mean(label):
                 item = subject_gender.get(label)
-                return ("%.2f%%" % (item["sum"] / item["count"])) if item and item["count"] else "—"
+                return (item["sum"] / item["count"]) if item and item["count"] else None
+            female_mean = _gender_subject_mean("Female")
+            male_mean = _gender_subject_mean("Male")
+            subject_id_for_grade = next(
+                (int(subject_id) for subject_id, name in data["subjects"].items()
+                 if str(name) == subject_name), None
+            )
+            def _gender_subject_grade(mean_value):
+                if mean_value is None:
+                    return "—"
+                if subject_id_for_grade is not None:
+                    grade, _, _ = _subject_grade_details(
+                        cur, sid, subject_id_for_grade, mean_value,
+                        data.get("grading_rules"), 100
+                    )
+                    return str(grade or "—")
+                return str(_default_grade_points(mean_value)[0] or "—")
             subject_gender_rows.append([
-                subject_name, _gender_subject_mean("Female"), _gender_subject_mean("Male")
+                subject_name,
+                "%.2f%%" % female_mean if female_mean is not None else "—",
+                _gender_subject_grade(female_mean),
+                "%.2f%%" % male_mean if male_mean is not None else "—",
+                _gender_subject_grade(male_mean),
             ])
         if subject_gender_rows:
             pdf_table(
                 "Subject Mean Percentage by Gender",
-                ["Subject", "Female Mean %", "Male Mean %"],
+                ["Subject", "Female Mean %", "Female Mean Grade", "Male Mean %", "Male Mean Grade"],
                 subject_gender_rows, compact=True
             )
         if not gender_summary:
