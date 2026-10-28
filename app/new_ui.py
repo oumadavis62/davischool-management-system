@@ -8523,8 +8523,10 @@ def _external_exam_report_summary(rows):
     subjects = {}
     grades = {}
     for row in rows:
-        key = (str(row.get("candidate_no") or ""), str(row.get("candidate_name") or ""))
-        cand = candidates.setdefault(key, {"candidate_no":key[0],"candidate_name":key[1],"gender":str(row.get("gender") or ""),
+        candidate_no = str(row.get("candidate_no") or "").strip()
+        candidate_name = str(row.get("candidate_name") or "").strip()
+        key = candidate_no or candidate_name
+        cand = candidates.setdefault(key, {"candidate_no":candidate_no,"candidate_name":candidate_name,"gender":str(row.get("gender") or ""),
                                            "school_code":str(row.get("school_code") or ""),"percentages":[],"points":[],"subjects":0})
         score = row.get("score")
         max_score = row.get("max_score")
