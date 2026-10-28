@@ -14336,8 +14336,8 @@ def class_marksheet_analysis_pdf(
             mean_pct = entry["mean_sum"] / count if count else 0.0
             pass_pct = entry["at_or_above"] / count * 100 if count else 0.0
             gender_rows.append([
-                gender_label, count, "%.2f%%" % mean_pct,
-                entry["at_or_above"], entry["below"], "%.1f%%" % pass_pct,
+                gender_label, "%s Learners" % count, "%.2f%%" % mean_pct,
+                "%s Learners" % entry["at_or_above"], "%s Learners" % entry["below"], "%.1f%%" % pass_pct,
                 "%.2f%%" % (entry["highest"] or 0.0)
             ])
             total_gender_learners += count
@@ -14346,8 +14346,8 @@ def class_marksheet_analysis_pdf(
             total_below += entry["below"]
         overall_mean = total_gender_mean / total_gender_learners if total_gender_learners else 0.0
         gender_rows.append([
-            "All assessed", total_gender_learners, "%.2f%%" % overall_mean,
-            total_at_or_above, total_below,
+            "All assessed", "%s Learners" % total_gender_learners, "%.2f%%" % overall_mean,
+            "%s Learners" % total_at_or_above, "%s Learners" % total_below,
             "%.1f%%" % (total_at_or_above / total_gender_learners * 100 if total_gender_learners else 0.0),
             "—"
         ])
