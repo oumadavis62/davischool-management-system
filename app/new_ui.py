@@ -15152,42 +15152,49 @@ def class_marksheet_analysis_pdf(
             "for review and approved for official academic release.",
             declaration_body
         ))
+        # Insert narrow blank gutter columns between writing fields so each
+        # handwritten line is visibly separate instead of joining its neighbors.
         council_headers = [
             Paragraph("<b>No.</b>", declaration_table_header),
             Paragraph("<b>Name</b>", declaration_table_header),
+            "",
             Paragraph("<b>Designation</b>", declaration_table_header),
+            "",
             Paragraph("<b>Signature</b>", declaration_table_header),
+            "",
             Paragraph("<b>Date</b>", declaration_table_header),
         ]
-        # Keep the signing area open and printable: headings remain, but the
-        # boxed table/grid is replaced with plain handwritten-entry lines.
         council_rows = [council_headers]
         for member_number in range(1, 5):
-            # Use blank cells with drawn underlines rather than underscore text.
-            # This makes each writing line span its own column and sit directly
-            # beneath the matching Name/Designation/Signature/Date header.
             council_rows.append([
                 Paragraph(str(member_number), declaration_label),
-                Paragraph(" ", declaration_label),
-                Paragraph(" ", declaration_label),
-                Paragraph(" ", declaration_label),
+                Paragraph(" ", declaration_label), "",
+                Paragraph(" ", declaration_label), "",
+                Paragraph(" ", declaration_label), "",
                 Paragraph(" ", declaration_label),
             ])
         council_table = Table(
             council_rows,
-            colWidths=[doc.width * 0.05, doc.width * 0.32, doc.width * 0.21, doc.width * 0.23, doc.width * 0.13],
-            rowHeights=[None, 10*mm, 10*mm, 10*mm, 10*mm],
+            colWidths=[
+                doc.width * 0.06, doc.width * 0.29, doc.width * 0.025,
+                doc.width * 0.19, doc.width * 0.025, doc.width * 0.21,
+                doc.width * 0.025, doc.width * 0.175,
+            ],
+            rowHeights=[None, 12*mm, 12*mm, 12*mm, 12*mm],
             repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            # Center each header over its matching full-width writing line.
             ("ALIGN", (0,0), (-1,-1), "CENTER"),
-            ("LEFTPADDING", (0,0), (-1,-1), 4),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING", (0,0), (-1,-1), 2),
+            ("RIGHTPADDING", (0,0), (-1,-1), 2),
             ("TOPPADDING", (0,0), (-1,-1), 2),
             ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-            ("LINEBELOW", (1,1), (4,4), 0.6, colors.black),
+            # Draw only beneath the four writing columns; gutters create clear gaps.
+            ("LINEBELOW", (1,1), (1,4), 0.6, colors.black),
+            ("LINEBELOW", (3,1), (3,4), 0.6, colors.black),
+            ("LINEBELOW", (5,1), (5,4), 0.6, colors.black),
+            ("LINEBELOW", (7,1), (7,4), 0.6, colors.black),
         ]))
         story.append(council_table)
         story.append(Spacer(1, 3*mm))
