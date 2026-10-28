@@ -8901,9 +8901,9 @@ input,select{width:100%;min-width:0;min-height:40px;padding:9px 10px;border:1px 
 @media(max-width:560px){.ee-tiles{grid-template-columns:1fr}.ee-page{padding:12px}.ee-panel{padding:13px}.ee-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:1fr}.ee-brand{flex-direction:column}.ee-head{padding:20px}.ee-actions .ee-btn{flex:1 1 140px}}
 @media print{body{background:#fff}.ee-page{max-width:none;padding:0}.ee-head,.ee-filters-panel,.ee-entry-panel,.ee-import-panel,.ee-actions,.ee-back{display:none!important}.ee-panel,.ee-brand{box-shadow:none;border:0;padding:5px}.ee-table-wrap{overflow:visible}table{min-width:0}th,td{font-size:8px;padding:4px}}
 </style></head><body><main class='ee-page'>
-<header class='ee-head'><a href='/app/academics/analysis'>← Back to Academic Analysis</a><h1>External Examination Analysis</h1><p>Separate analysis workspace for KCSE, KJSEA and KCBE results. External results are stored separately from internal school marks.</p></header>
+<header class='ee-head'><h1>External Examination Analysis</h1><p>External results are stored separately from internal school marks.</p></header>
 <section class='ee-brand'>""" + brand + """</section>""" + notice + """
-""" + (landing_filters if view == "" else "") + workspace_content + """<a class='ee-back' href='/app/academics/analysis'>← Back to Academic Analysis</a></main></body></html>"""
+""" + (landing_filters if view == "" else "") + workspace_content + """</main></body></html>"""
     return HTMLResponse(body)
 
 @router.get("/app/academics/external-analysis/csv")
