@@ -8773,7 +8773,7 @@ async def external_exam_analysis_import(request: Request):
         return HTMLResponse("Unable to import this CSV. Check that it follows the provided template. <a href='/app/academics/external-analysis'>Back</a>", 400)
 
 @router.get("/app/academics/external-analysis", response_class=HTMLResponse)
-def external_exam_analysis_page(request: Request, exam_type: str = "", year: str = "", exam_name: str = ""):
+def external_exam_analysis_page(request: Request, exam_type: str = "", year: str = "", exam_name: str = "", view: str = ""):
     sid = _school_session(request)
     if not sid:
         return RedirectResponse("/", status_code=303)
@@ -8825,6 +8825,35 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
     type_options = "".join("<option value='%s' %s>%s</option>"%(t,"selected" if t==exam_type else "",t) for t in _EXTERNAL_EXAM_TYPES)
     year_options = "<option value=''>All years</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(y),"selected" if y==year else "",escape(y)) for y in years)
     name_options = "<option value=''>All examinations</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(n),"selected" if n==exam_name else "",escape(n)) for n in exam_names)
+    view = view if view in ("", "entry", "import") else ""
+    landing_filters = """<section class='ee-panel ee-filters-panel'><h2>Analysis filters</h2><form class='ee-filters' method='get' action='/app/academics/external-analysis'>
+<label>Examination type<select name='exam_type'><option value=''>All types</option>""" + type_options + """</select></label>
+<label>Year<select name='year'>""" + year_options + """</select></label><label>Examination name<select name='exam_name'>""" + name_options + """</select></label>
+<div class='ee-actions'><button class='ee-btn' type='submit'>Apply filters</button><a class='ee-btn secondary' href='/app/academics/external-analysis'>Clear</a></div></form></section>"""
+    entry_form = """<section class='ee-panel ee-entry-panel'><h2>Enter one candidate result</h2><form method='post' action='/app/academics/external-analysis/save'><div class='ee-form-grid'>
+<label>Examination type<select name='exam_type' required><option value='KCSE'>KCSE</option><option value='KJSEA'>KJSEA</option><option value='KCBE'>KCBE</option></select></label>
+<label>Examination year<input name='exam_year' inputmode='numeric' pattern='[0-9]{4}' placeholder='2026' required></label>
+<label>Examination name<input name='exam_name' placeholder='e.g. KCSE 2026' required></label>
+<label>Candidate / index number<input name='candidate_no' required></label><label>Candidate name<input name='candidate_name' required></label>
+<label>Gender<select name='gender'><option value=''>Not specified</option><option value='F'>Female</option><option value='M'>Male</option><option value='OTHER'>Other / not stated</option></select></label>
+<label>School code (optional)<input name='school_code'></label><label>Subject name<input name='subject_name' placeholder='e.g. English / Mathematics' required></label>
+<label>Score (optional)<input type='number' step='any' min='0' name='score'></label><label>Maximum score (optional)<input type='number' step='any' min='0.0001' name='max_score' value='100'></label>
+<label>Official grade / level<input name='official_grade' placeholder='e.g. B+ or official achievement level'></label><label>Grade points (optional)<input type='number' step='any' min='0' name='grade_points'></label>
+</div><div class='ee-actions'><button class='ee-btn' type='submit'>Save / update result</button></div><p class='ee-note'>Each saved row is one subject result. Re-saving the same examination, year, candidate number and subject updates the existing result. Enter the official grade or achievement level from the official results.</p></form><a class='ee-back' href='/app/academics/external-analysis'>← Back to External Examination Analysis</a></section>"""
+    import_form = """<section class='ee-panel ee-import-panel'><h2>Import results from Excel / CSV</h2><p class='ee-empty'>Upload an .xlsx workbook or UTF-8 CSV file. Use the template to keep column names consistent. Importing the same candidate/subject key updates the existing row.</p>
+<form class='ee-import' method='post' enctype='multipart/form-data' action='/app/academics/external-analysis/import'><div class='ee-form-grid'>
+<label>Default examination type<select name='exam_type'><option>KCSE</option><option>KJSEA</option><option>KCBE</option></select></label>
+<label>Default year<input name='exam_year' inputmode='numeric' placeholder='2026'></label><label>Default examination name<input name='exam_name' placeholder='e.g. KCSE 2026'></label>
+<label>CSV / Excel file<input type='file' name='csv_file' accept='.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import results</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form><a class='ee-back' href='/app/academics/external-analysis'>← Back to External Examination Analysis</a></section>"""
+    if view == "entry":
+        workspace_content = entry_form
+    elif view == "import":
+        workspace_content = import_form
+    else:
+        workspace_content = """<section class='ee-panel'><h2>External examination results</h2><p class='ee-empty'>Choose how you want to add results. Each option opens its own page.</p><div class='ee-tiles'>
+<a class='ee-tile' href='/app/academics/external-analysis?view=entry'><span class='ee-tile-icon'>＋</span><strong>Enter one candidate result</strong><small>Record a candidate's subject result manually.</small><span class='ee-tile-link'>Open entry page →</span></a>
+<a class='ee-tile' href='/app/academics/external-analysis?view=import'><span class='ee-tile-icon'>⇧</span><strong>Import results</strong><small>Upload results from an Excel workbook or CSV file.</small><span class='ee-tile-link'>Open import page →</span></a>
+</div></section><section class='ee-panel'><h2>Export results</h2><p class='ee-empty'>Download the currently filtered external examination records as a CSV file or analysis PDF.</p><div class='ee-actions'><a class='ee-btn' href='""" + export_base + """/csv?""" + export_query + """'>Download results CSV</a><a class='ee-btn secondary' href='""" + export_base + """/pdf?""" + export_query + """'>Download analysis PDF</a></div></section>"""
     notice = ""
     qp = request.query_params
     if qp.get("notice")=="saved":
@@ -8864,50 +8893,16 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
 .ee-filters,.ee-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.ee-filters label,.ee-form-grid label,.ee-import label{font-size:11px;font-weight:800;color:#435c4b;display:flex;flex-direction:column;gap:5px;min-width:0}
 input,select{width:100%;min-width:0;min-height:40px;padding:9px 10px;border:1px solid #d3e0d7;border-radius:8px;background:#fbfdfb;color:#20382b;font:inherit;font-size:13px}
 .ee-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}.ee-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:10px 14px;border:1px solid #08783f;border-radius:9px;background:#08783f;color:#fff;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}.ee-btn.secondary{background:#fff;color:#20583a;border-color:#d4e5d9}.ee-btn:hover{filter:brightness(.96);transform:translateY(-1px)}
-.ee-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.ee-kpis>div{padding:14px;border:1px solid #e0eae3;border-radius:11px;background:linear-gradient(145deg,#fff,#f8fcf9);min-width:0}.ee-kpis small{display:block;color:#697a6e;font-size:11px;font-weight:700}.ee-kpis strong{display:block;color:#08783f;font-size:22px;overflow-wrap:anywhere;margin-top:5px}
+.ee-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ee-tile{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:20px;border:1px solid #d7e8dc;border-radius:13px;background:linear-gradient(145deg,#fff,#f5fbf7);color:#20382b;text-decoration:none;transition:transform .15s,box-shadow .15s,border-color .15s}.ee-tile:hover{transform:translateY(-3px);border-color:#159653;box-shadow:0 8px 20px #08783f18}.ee-tile strong{font-size:16px;color:#145a34}.ee-tile small{font-size:12px;color:#65766b}.ee-tile-icon{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:#e7f6eb;color:#08783f;font-size:27px;font-weight:700}.ee-tile-link{margin-top:5px;color:#08783f;font-size:12px;font-weight:800}.ee-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.ee-kpis>div{padding:14px;border:1px solid #e0eae3;border-radius:11px;background:linear-gradient(145deg,#fff,#f8fcf9);min-width:0}.ee-kpis small{display:block;color:#697a6e;font-size:11px;font-weight:700}.ee-kpis strong{display:block;color:#08783f;font-size:22px;overflow-wrap:anywhere;margin-top:5px}
 .ee-table-wrap{overflow:auto;border:1px solid #e0e8e2;border-radius:10px;margin:10px 0 18px;background:#fff}table{width:100%;border-collapse:collapse;min-width:620px}th,td{text-align:left;padding:10px;border-bottom:1px solid #e7eee9;border-right:1px solid #edf2ee;font-size:12px;vertical-align:top}th{background:#eaf4ed;color:#245239;font-weight:800}td{color:#354c3d}tbody tr:nth-child(even){background:#f8fbf9}tbody tr:last-child td{border-bottom:0}.ee-empty{font-size:12px;color:#748277}
 .ee-notice{margin:12px 0;padding:12px 14px;border:1px solid #a7d8b7;border-radius:10px;background:#effaf2;color:#145a34;font-size:13px;font-weight:700}.ee-note{font-size:12px;color:#68796e;background:#f8fbf8;border-radius:9px;padding:11px;margin-top:10px}.ee-back{display:inline-flex;margin-top:14px;color:#1d7040;text-decoration:none;font-weight:800;font-size:12px}
 @media(max-width:850px){.ee-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.ee-page{padding:12px}.ee-panel{padding:13px}.ee-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:1fr}.ee-brand{flex-direction:column}.ee-head{padding:20px}.ee-actions .ee-btn{flex:1 1 140px}}
+@media(max-width:560px){.ee-tiles{grid-template-columns:1fr}.ee-page{padding:12px}.ee-panel{padding:13px}.ee-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ee-filters,.ee-form-grid{grid-template-columns:1fr}.ee-brand{flex-direction:column}.ee-head{padding:20px}.ee-actions .ee-btn{flex:1 1 140px}}
 @media print{body{background:#fff}.ee-page{max-width:none;padding:0}.ee-head,.ee-filters-panel,.ee-entry-panel,.ee-import-panel,.ee-actions,.ee-back{display:none!important}.ee-panel,.ee-brand{box-shadow:none;border:0;padding:5px}.ee-table-wrap{overflow:visible}table{min-width:0}th,td{font-size:8px;padding:4px}}
 </style></head><body><main class='ee-page'>
 <header class='ee-head'><a href='/app/academics/analysis'>← Back to Academic Analysis</a><h1>External Examination Analysis</h1><p>Separate analysis workspace for KCSE, KJSEA and KCBE results. External results are stored separately from internal school marks.</p></header>
 <section class='ee-brand'>""" + brand + """</section>""" + notice + """
-<section class='ee-panel ee-filters-panel'><h2>Analysis filters</h2><form class='ee-filters' method='get' action='/app/academics/external-analysis'>
-<label>Examination type<select name='exam_type'><option value=''>All types</option>""" + type_options + """</select></label>
-<label>Year<select name='year'>""" + year_options + """</select></label><label>Examination name<select name='exam_name'>""" + name_options + """</select></label>
-<div class='ee-actions'><button class='ee-btn' type='submit'>Apply filters</button><a class='ee-btn secondary' href='/app/academics/external-analysis'>Clear</a></div></form></section>
-<section class='ee-panel'><h2>Performance overview · """ + escape(selected_title) + """</h2><div class='ee-kpis'>
-<div><small>Unique candidates</small><strong>""" + str(data["candidates"]) + """</strong></div>
-<div><small>Candidates with scores</small><strong>""" + str(data["assessed"]) + """</strong></div>
-<div><small>Mean candidate percentage</small><strong>""" + fmt(data["school_mean"],"%") + """</strong></div>
-<div><small>Mean grade points where supplied</small><strong>""" + fmt(data["mean_points"]) + """</strong></div>
-<div><small>Indicative KCSE mean grade</small><strong>""" + escape(mean_grade_text) + """</strong></div></div>
-<p class='ee-note'>Official grade/level values are retained as entered or imported. KCSE points can be derived from the standard subject grade-point mapping when the official grade is supplied; KJSEA and KCBE are not forced onto the KCSE scale. The indicative KCSE mean grade is a summary of recorded grade points, not a substitute for KNEC's official calculation rules or eligibility checks.</p></section>
-<section class='ee-panel'><h2>Subject performance and ranking</h2>""" + subject_table + """</section>
-<section class='ee-panel'><h2>Candidate performance</h2><p class='ee-note'>Candidate averages use only subjects with numeric scores and a valid maximum score. Missing subject marks are not treated as zero.</p>""" + candidate_table + """</section>
-<section class='ee-panel'><h2>Grade / achievement-level distribution</h2>""" + grade_table + """</section>
-<section class='ee-panel'><h2>Year-to-year comparison</h2><p class='ee-note'>Comparison rows are grouped by examination name and year for the selected exam type. Percentages compare score/max-score values; grade points are only averaged where supplied or available from KCSE official grades.</p>""" + trend_table + """</section>
-<section class='ee-panel ee-entry-panel'><h2>Enter one candidate subject result</h2><form method='post' action='/app/academics/external-analysis/save'><div class='ee-form-grid'>
-<label>Examination type<select name='exam_type' required><option value='KCSE'>KCSE</option><option value='KJSEA'>KJSEA</option><option value='KCBE'>KCBE</option></select></label>
-<label>Examination year<input name='exam_year' inputmode='numeric' pattern='[0-9]{4}' placeholder='2026' required></label>
-<label>Examination name<input name='exam_name' placeholder='e.g. KCSE 2026' required></label>
-<label>Candidate / index number<input name='candidate_no' required></label><label>Candidate name<input name='candidate_name' required></label>
-<label>Gender<select name='gender'><option value=''>Not specified</option><option value='F'>Female</option><option value='M'>Male</option><option value='OTHER'>Other / not stated</option></select></label>
-<label>School code (optional)<input name='school_code'></label><label>Subject name<input name='subject_name' placeholder='e.g. English / Mathematics' required></label>
-<label>Score (optional)<input type='number' step='any' min='0' name='score'></label><label>Maximum score (optional)<input type='number' step='any' min='0.0001' name='max_score' value='100'></label>
-<label>Official grade / level<input name='official_grade' placeholder='e.g. B+ or official achievement level'></label><label>Grade points (optional)<input type='number' step='any' min='0' name='grade_points'></label>
-</div><div class='ee-actions'><button class='ee-btn' type='submit'>Save / update result</button></div><p class='ee-note'>A saved row is one subject result. Re-saving the same examination, year, candidate number and subject updates that result rather than creating a duplicate. Enter the official grade/level from the official results; do not rely on inferred grades.</p></form></section>
-<section class='ee-panel ee-import-panel'><h2>Import results from Excel / CSV</h2><p class='ee-empty'>Upload an .xlsx workbook or a CSV UTF-8 file. Use the template to keep column names consistent. Importing the same candidate/subject key updates the existing row.</p>
-<form class='ee-import' method='post' enctype='multipart/form-data' action='/app/academics/external-analysis/import'><div class='ee-form-grid'>
-<label>Default examination type<select name='exam_type'><option>KCSE</option><option>KJSEA</option><option>KCBE</option></select></label>
-<label>Default year<input name='exam_year' inputmode='numeric' placeholder='2026'></label><label>Default examination name<input name='exam_name' placeholder='e.g. KCSE 2026'></label>
-<label>CSV file<input type='file' name='csv_file' accept='.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import CSV</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form></section>
-<section class='ee-panel'><h2>Export report</h2><p class='ee-empty'>Export the currently filtered external examination data and analysis, or print this report to PDF using your browser's Print → Save as PDF.</p><div class='ee-actions'>
-<a class='ee-btn' href='""" + export_base + """/csv?""" + export_query + """'>Download results CSV</a>
-<a class='ee-btn secondary' href='""" + export_base + """/pdf?""" + export_query + """'>Download analysis PDF</a>
-<button class='ee-btn secondary' type='button' onclick='window.print()'>Print / Save as PDF</button>
-</div></section><a class='ee-back' href='/app/academics/analysis'>← Back to Academic Analysis</a></main></body></html>"""
+""" + (landing_filters if view == "" else "") + workspace_content + """<a class='ee-back' href='/app/academics/analysis'>← Back to Academic Analysis</a></main></body></html>"""
     return HTMLResponse(body)
 
 @router.get("/app/academics/external-analysis/csv")
