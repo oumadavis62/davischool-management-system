@@ -13652,29 +13652,76 @@ def class_marksheet_analysis_pdf(
             group_subject_values.setdefault((class_label, stream_label, int(subject_id)), []).append(percentage)
             class_subject_values.setdefault((class_label, int(subject_id)), []).append(percentage)
 
+        def _msa_resolve_subject_mean_grade(subject_id, mean_percentage, grading_rules=None):
+            """Resolve a grade for a percentage mean across configured grading scales.
+
+            Prefer the subject's configured bands. Some older schools saved bands
+            against the raw maximum mark (for example 0–50) rather than 0–100%;
+            in that case convert the mean percentage to that scale before matching.
+            Only use the automatic scale when this subject has no configured bands.
+            """
+            if mean_percentage is None:
+                return "—"
+            try:
+                subject_id = int(subject_id)
+                percentage = float(mean_percentage)
+            except (TypeError, ValueError):
+                return "—"
+            rules = (grading_rules or {}).get(subject_id, []) if grading_rules is not None else []
+            if not rules:
+                try:
+                    rules = _msa_load_grading_rules_readonly(cur, sid).get(subject_id, [])
+                except Exception:
+                    rules = []
+            valid_rules = []
+            for rule in rules:
+                try:
+                    low = float(rule["min_mark"])
+                    high = float(rule["max_mark"])
+                    grade = str(rule["grade"] or "").strip()
+                    if grade and grade not in {"-", "—", "–", "−"} and high >= low:
+                        valid_rules.append((low, high, grade))
+                except (TypeError, ValueError, KeyError):
+                    continue
+            # First match against the standard percentage scale.
+            for low, high, grade in sorted(valid_rules, key=lambda x: (x[0], x[1]), reverse=True):
+                if low <= percentage <= high:
+                    return grade
+            # Compatibility with grading bands stored on a raw-mark scale.
+            max_band = max((high for _, high, _ in valid_rules), default=100.0)
+            if valid_rules and 0 < max_band < 100:
+                scaled_mean = percentage * max_band / 100.0
+                for low, high, grade in sorted(valid_rules, key=lambda x: (x[0], x[1]), reverse=True):
+                    if low <= scaled_mean <= high:
+                        return grade
+                # Decimal gaps between adjacent configured bands should not
+                # produce a dash: choose the nearest lower configured band.
+                lower = [rule for rule in valid_rules if rule[0] <= scaled_mean]
+                if lower:
+                    return max(lower, key=lambda x: x[0])[2]
+                return min(valid_rules, key=lambda x: x[0])[2]
+            if valid_rules:
+                # Preserve configured grades across small decimal gaps.
+                lower = [rule for rule in valid_rules if rule[0] <= percentage]
+                if lower:
+                    return max(lower, key=lambda x: x[0])[2]
+                return min(valid_rules, key=lambda x: x[0])[2]
+            # With no subject-specific rules, use the standard automatic scale.
+            try:
+                grade, _ = _default_grade_points(percentage)
+                return str(grade or "—")
+            except Exception:
+                return "—"
+
         def _msa_subject_group_result(values, group_key, subject_id):
             entries = values.get(group_key + (int(subject_id),), [])
             if not entries:
                 return "—", "—"
             mean_percentage = sum(entries) / len(entries)
-            grade = None
-            try:
-                grade, _, _ = _subject_grade_details(
-                    cur, sid, int(subject_id), mean_percentage,
-                    ranking_data["grading_rules"], 100
-                )
-            except Exception:
-                grade = None
-            # Retry against the database-backed grading lookup if the preloaded
-            # rule map is stale or does not contain this subject's grade bands.
-            if not grade or str(grade).strip() in ("—", "-"):
-                try:
-                    grade, _, _ = _subject_grade_details(
-                        cur, sid, int(subject_id), mean_percentage, None, 100
-                    )
-                except Exception:
-                    grade = None
-            return "%.2f%%" % mean_percentage, str(grade or "—")
+            grade = _msa_resolve_subject_mean_grade(
+                int(subject_id), mean_percentage, ranking_data["grading_rules"]
+            )
+            return "%.2f%%" % mean_percentage, grade
 
         def _msa_overall_grade(mean_percentage):
             try:
@@ -13689,23 +13736,7 @@ def class_marksheet_analysis_pdf(
                 return "—"
 
         def _msa_subject_mean_grade(subject_id, mean_percentage, grading_rules=None):
-            """Resolve a subject mean grade using preloaded rules, then DB-backed rules."""
-            if mean_percentage is None:
-                return "—"
-            try:
-                grade, _, _ = _subject_grade_details(
-                    cur, sid, int(subject_id), float(mean_percentage), grading_rules, 100
-                )
-            except Exception:
-                grade = None
-            if not grade or str(grade).strip() in ("—", "-"):
-                try:
-                    grade, _, _ = _subject_grade_details(
-                        cur, sid, int(subject_id), float(mean_percentage), None, 100
-                    )
-                except Exception:
-                    grade = None
-            return str(grade or "—")
+            return _msa_resolve_subject_mean_grade(subject_id, mean_percentage, grading_rules)
 
         def _msa_ranking_table(title, headers, values, ranks, subject_start):
             # Keep the existing plain-white header and grid styling, but group
