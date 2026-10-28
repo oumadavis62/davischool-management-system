@@ -8682,10 +8682,29 @@ async def external_exam_analysis_import(request: Request):
         if not upload or not hasattr(upload, "read") or not getattr(upload, "filename", ""):
             return HTMLResponse("Choose a CSV file to import. <a href='/app/academics/external-analysis'>Back</a>", 400)
         raw = await upload.read()
-        text_data = raw.decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(text_data))
-        if not reader.fieldnames:
-            return HTMLResponse("The CSV file has no header row. Use the provided import template. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        filename = str(getattr(upload, "filename", "") or "").lower()
+        if filename.endswith(".xlsx"):
+            try:
+                from openpyxl import load_workbook
+                workbook = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+                sheet = workbook.active
+                values = list(sheet.iter_rows(values_only=True))
+                workbook.close()
+                if not values or not values[0]:
+                    return HTMLResponse("The Excel file has no header row. Use the provided import template. <a href='/app/academics/external-analysis'>Back</a>", 400)
+                headers = [str(v or "").strip() for v in values[0]]
+                import_rows = [dict(zip(headers, row)) for row in values[1:] if any(v not in (None, "") for v in row)]
+            except Exception as exc:
+                print("DAVISCHOOL EXTERNAL EXAM XLSX READ FAILED:", repr(exc), flush=True)
+                return HTMLResponse("Unable to read this Excel file. Use a valid .xlsx workbook or save it as CSV UTF-8. <a href='/app/academics/external-analysis'>Back</a>", 400)
+        elif filename.endswith(".csv"):
+            text_data = raw.decode("utf-8-sig")
+            reader = csv.DictReader(io.StringIO(text_data))
+            if not reader.fieldnames:
+                return HTMLResponse("The CSV file has no header row. Use the provided import template. <a href='/app/academics/external-analysis'>Back</a>", 400)
+            import_rows = list(reader)
+        else:
+            return HTMLResponse("Upload a .csv or .xlsx file. <a href='/app/academics/external-analysis'>Back</a>", 400)
         def value(row, *names):
             normalized = {str(k or "").strip().lower().replace(" ","_"):str(v or "").strip() for k,v in row.items()}
             for name in names:
@@ -8698,7 +8717,7 @@ async def external_exam_analysis_import(request: Request):
         saved = 0
         skipped = 0
         now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        for row in reader:
+        for row in import_rows:
             exam_type = value(row,"exam_type").upper() or default_type
             exam_year = value(row,"exam_year","year") or default_year
             exam_name = value(row,"exam_name","examination") or default_name or (exam_type + " " + exam_year)
@@ -8825,8 +8844,8 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
     grade_table = table(["Official grade / level","Subject entries"],data["grades"],"No official grades or levels have been entered yet.")
     trend_table = table(["Year","Examination","Candidates","Candidates with scores","Mean candidate percentage","Mean grade points"],
                         year_rows,"No historical results available for comparison.")
-    mean_grade = _external_exam_school_mean_grade(data["mean_points"])
-    mean_grade_text = mean_grade if mean_grade else "—"
+    mean_grade = _external_exam_school_mean_grade(data["mean_points"]) if exam_type == "KCSE" else ""
+    mean_grade_text = mean_grade if mean_grade else ("Not applicable" if exam_type in ("KJSEA", "KCBE") else "—")
     selected_title = (exam_type or "All examination types") + ((" · "+year) if year else "") + ((" · "+exam_name) if exam_name else "")
     export_query = "&".join("%s=%s"%(k,quote(v,safe="")) for k,v in [("exam_type",exam_type),("year",year),("exam_name",exam_name)] if v)
     export_base = "/app/academics/external-analysis"
@@ -8875,11 +8894,11 @@ input,select{width:100%;min-width:0;min-height:40px;padding:9px 10px;border:1px 
 <label>Score (optional)<input type='number' step='any' min='0' name='score'></label><label>Maximum score (optional)<input type='number' step='any' min='0.0001' name='max_score' value='100'></label>
 <label>Official grade / level<input name='official_grade' placeholder='e.g. B+ or official achievement level'></label><label>Grade points (optional)<input type='number' step='any' min='0' name='grade_points'></label>
 </div><div class='ee-actions'><button class='ee-btn' type='submit'>Save / update result</button></div><p class='ee-note'>A saved row is one subject result. Re-saving the same examination, year, candidate number and subject updates that result rather than creating a duplicate. Enter the official grade/level from the official results; do not rely on inferred grades.</p></form></section>
-<section class='ee-panel ee-import-panel'><h2>Import results from Excel / CSV</h2><p class='ee-empty'>Save your spreadsheet as CSV UTF-8, then import it here. Use the template to keep column names consistent. Importing the same candidate/subject key updates the existing row.</p>
+<section class='ee-panel ee-import-panel'><h2>Import results from Excel / CSV</h2><p class='ee-empty'>Upload an .xlsx workbook or a CSV UTF-8 file. Use the template to keep column names consistent. Importing the same candidate/subject key updates the existing row.</p>
 <form class='ee-import' method='post' enctype='multipart/form-data' action='/app/academics/external-analysis/import'><div class='ee-form-grid'>
 <label>Default examination type<select name='exam_type'><option>KCSE</option><option>KJSEA</option><option>KCBE</option></select></label>
 <label>Default year<input name='exam_year' inputmode='numeric' placeholder='2026'></label><label>Default examination name<input name='exam_name' placeholder='e.g. KCSE 2026'></label>
-<label>CSV file<input type='file' name='csv_file' accept='.csv,text/csv' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import CSV</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form></section>
+<label>CSV file<input type='file' name='csv_file' accept='.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' required></label></div><div class='ee-actions'><button class='ee-btn' type='submit'>Import CSV</button><a class='ee-btn secondary' href='/app/academics/external-analysis/template.csv'>Download CSV template</a></div></form></section>
 <section class='ee-panel'><h2>Export report</h2><p class='ee-empty'>Export the currently filtered external examination data and analysis, or print this report to PDF using your browser's Print → Save as PDF.</p><div class='ee-actions'>
 <a class='ee-btn' href='""" + export_base + """/csv?""" + export_query + """'>Download results CSV</a>
 <a class='ee-btn secondary' href='""" + export_base + """/pdf?""" + export_query + """'>Download analysis PDF</a>
@@ -8935,8 +8954,9 @@ def external_exam_analysis_pdf(request: Request, exam_type: str = "", year: str 
         story.append(Paragraph(escape("Unique candidates: %d · Candidates with scores: %d · Mean candidate percentage: %s"%
             (summary["candidates"],summary["assessed"],("%.2f%%"%summary["school_mean"]) if summary["school_mean"] is not None else "—")),styles["Normal"]))
         if summary["mean_points"] is not None:
-            story.append(Paragraph(escape("Mean grade points: %.2f · Indicative KCSE mean grade: %s"%
-                (summary["mean_points"],_external_exam_school_mean_grade(summary["mean_points"]))),styles["Normal"]))
+            grade_label = _external_exam_school_mean_grade(summary["mean_points"]) if exam_type.upper() == "KCSE" else "not applicable to mixed / non-KCSE grading"
+            story.append(Paragraph(escape("Mean grade points: %.2f · Indicative mean grade: %s"%
+                (summary["mean_points"],grade_label)),styles["Normal"]))
         story.append(Spacer(1,8))
         story.append(Paragraph("Subject Performance",styles["Heading2"]))
         table_data = [["Subject","Candidates with scores","Mean %","Highest %","Lowest %"]]
