@@ -15153,6 +15153,7 @@ def class_marksheet_analysis_pdf(
             declaration_body
         ))
         council_headers = [
+            Paragraph("<b>No.</b>", declaration_table_header),
             Paragraph("<b>Name</b>", declaration_table_header),
             Paragraph("<b>Designation</b>", declaration_table_header),
             Paragraph("<b>Signature</b>", declaration_table_header),
@@ -15161,8 +15162,9 @@ def class_marksheet_analysis_pdf(
         # Keep the signing area open and printable: headings remain, but the
         # boxed table/grid is replaced with plain handwritten-entry lines.
         council_rows = [council_headers]
-        for _member_number in range(1, 5):
+        for member_number in range(1, 5):
             council_rows.append([
+                Paragraph(str(member_number), declaration_label),
                 Paragraph("________________________________", declaration_label),
                 Paragraph("________________", declaration_label),
                 Paragraph("____________________", declaration_label),
@@ -15170,7 +15172,7 @@ def class_marksheet_analysis_pdf(
             ])
         council_table = Table(
             council_rows,
-            colWidths=[doc.width * 0.36, doc.width * 0.22, doc.width * 0.24, doc.width * 0.14],
+            colWidths=[doc.width * 0.05, doc.width * 0.32, doc.width * 0.21, doc.width * 0.23, doc.width * 0.13],
             repeatRows=1, hAlign="CENTER"
         )
         council_table.setStyle(TableStyle([
