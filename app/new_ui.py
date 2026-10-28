@@ -15136,7 +15136,7 @@ def class_marksheet_analysis_pdf(
                        declaration_label),
              Paragraph("<b>Official stamp</b>: ........................................................",
                        declaration_label)],
-        ], colWidths=[doc.width * 0.49, doc.width * 0.49], rowHeights=[13*mm, 13*mm], hAlign="CENTER")
+        ], colWidths=[doc.width * 0.49, doc.width * 0.49], rowHeights=[18*mm, 18*mm], hAlign="CENTER")
         head_signature_table.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("LEFTPADDING", (0,0), (-1,-1), 2),
