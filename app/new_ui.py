@@ -15191,10 +15191,10 @@ def class_marksheet_analysis_pdf(
             ("TOPPADDING", (0,0), (-1,-1), 2),
             ("BOTTOMPADDING", (0,0), (-1,-1), 2),
             # Draw only beneath the four writing columns; gutters create clear gaps.
-            ("LINEBELOW", (1,1), (1,4), 0.6, colors.black),
-            ("LINEBELOW", (3,1), (3,4), 0.6, colors.black),
-            ("LINEBELOW", (5,1), (5,4), 0.6, colors.black),
-            ("LINEBELOW", (7,1), (7,4), 0.6, colors.black),
+            ("LINEBELOW", (1,1), (1,4), 0.6, colors.black, 0, [1, 2]),
+            ("LINEBELOW", (3,1), (3,4), 0.6, colors.black, 0, [1, 2]),
+            ("LINEBELOW", (5,1), (5,4), 0.6, colors.black, 0, [1, 2]),
+            ("LINEBELOW", (7,1), (7,4), 0.6, colors.black, 0, [1, 2]),
         ]))
         story.append(council_table)
         story.append(Spacer(1, 3*mm))
