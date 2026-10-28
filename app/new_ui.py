@@ -8796,6 +8796,8 @@ def external_exam_analysis_page(request: Request, exam_type: str = "", year: str
     for row in all_rows:
         if exam_type and row.get("exam_type") != exam_type:
             continue
+        if exam_name and row.get("exam_name") != exam_name:
+            continue
         key = (str(row.get("exam_year") or ""),str(row.get("exam_name") or ""))
         all_year_data.setdefault(key,[]).append(row)
     year_rows = []
@@ -13064,7 +13066,7 @@ def class_marksheet_analysis(
             "<span class='msa-external-tile-icon' aria-hidden='true'>↗</span><span class='msa-external-tile-copy'>"
             "<strong>External Examination Analysis</strong><small>Analyse KCSE, KJSEA and KCBE results using manual entry or Excel/CSV import, candidate and subject insights, year comparisons and branded exports.</small>"
             "</span><span class='msa-external-tile-arrow' aria-hidden='true'>→</span></a></section>"
-        )
+        ) if embedded_in_academic_analysis else ""
         body = (
             "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>" + escape(page_heading) + "</h1>"
             "<p class='muted'>Explore class results, subject strengths, student performance and actionable improvement priorities.</p></header>"
