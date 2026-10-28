@@ -13429,9 +13429,19 @@ def class_marksheet_analysis_pdf(
                 story.append(tbl)
             story.append(Spacer(1, 1.5*mm if compact else 3*mm))
         def _msa_pdf_grade(value):
+            """Normalize stored CBC grade spellings to the analysis table's grade columns."""
             raw = str(value or "").strip().upper()
             compact = re.sub(r"[^A-Z0-9]+", "", raw)
-            return {"EE1":"E.E1", "EE2":"E.E2", "ME1":"M.E1", "ME2":"M.E2", "AE1":"A.E1", "AE2":"A.E2", "BE1":"B.E1", "BE2":"B.E2", "X":"X"}.get(compact, "")
+            if compact.startswith("GRADE"):
+                compact = compact[5:]
+            aliases = {
+                "EE1":"E.E1", "E1":"E.E1", "EE2":"E.E2", "E2":"E.E2",
+                "ME1":"M.E1", "M1":"M.E1", "ME2":"M.E2", "M2":"M.E2",
+                "AE1":"A.E1", "A1":"A.E1", "AE2":"A.E2", "A2":"A.E2",
+                "BE1":"B.E1", "B1":"B.E1", "BE2":"B.E2", "B2":"B.E2",
+                "X":"X",
+            }
+            return aliases.get(compact, "")
 
         def _msa_pass_fail_grade(grade):
             """Use the school's existing CBC grade bands: E/M pass, A/B fail; X/ungraded are excluded."""
@@ -13647,22 +13657,23 @@ def class_marksheet_analysis_pdf(
             if not entries:
                 return "—", "—"
             mean_percentage = sum(entries) / len(entries)
-            grade, _, _ = _subject_grade_details(
-                cur, sid, int(subject_id), mean_percentage,
-                ranking_data["grading_rules"], 100
-            )
-            # Some subject rules may be absent from the report's preloaded rule
-            # map. Retry through the normal database-backed grading lookup so
-            # those subjects receive their configured/default grade instead of
-            # displaying a dash despite having assessed marks.
-            if not grade or str(grade).strip() in ("—", "-"):
+            grade = None
+            try:
                 grade, _, _ = _subject_grade_details(
-                    cur, sid, int(subject_id), mean_percentage, None, 100
+                    cur, sid, int(subject_id), mean_percentage,
+                    ranking_data["grading_rules"], 100
                 )
-            # Never replace a school's configured subject grading rules with
-            # the system-wide automatic scale. If the configured bands do not
-            # cover this stream/class mean, show an ungraded dash so the gap is
-            # visible and the school can correct its grading configuration.
+            except Exception:
+                grade = None
+            # Retry against the database-backed grading lookup if the preloaded
+            # rule map is stale or does not contain this subject's grade bands.
+            if not grade or str(grade).strip() in ("—", "-"):
+                try:
+                    grade, _, _ = _subject_grade_details(
+                        cur, sid, int(subject_id), mean_percentage, None, 100
+                    )
+                except Exception:
+                    grade = None
             return "%.2f%%" % mean_percentage, str(grade or "—")
 
         def _msa_overall_grade(mean_percentage):
