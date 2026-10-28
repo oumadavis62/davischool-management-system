@@ -15144,6 +15144,9 @@ def class_marksheet_analysis_pdf(
             ("TOPPADDING", (0,0), (-1,-1), 2),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
         ]))
+        # Add a little breathing room between the approval statement and the
+        # handwritten name/signature fields without changing their line lengths.
+        story.append(Spacer(1, 4*mm))
         story.append(head_signature_table)
 
         story.append(Paragraph("2. ACADEMIC COUNCIL", declaration_section))
