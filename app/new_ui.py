@@ -14319,11 +14319,10 @@ def class_marksheet_analysis_pdf(
             subject_entry["count"] += 1
 
         # Keep gender analysis directly below the priority summary on the same page.
-        story.append(Paragraph("<u>Gender Performance Analysis</u>", centered_page_heading))
+        story.append(Paragraph("<u>Gender Performance Index</u>", centered_page_heading))
         story.append(Paragraph(
             "Summary of assessed learners' mean percentages by recorded gender for the selected examination filters. "
-            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero. "
-            "The 40% indicator is a reporting benchmark for this summary, not a replacement for the school's grading rules.",
+            "Only learners with examination entries are included; subjects not sat are excluded, not counted as zero.",
             styles["MSACell"]
         ))
         gender_order = ["Female", "Male", "Other", "Unspecified"]
