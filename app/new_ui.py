@@ -13421,6 +13421,12 @@ def class_marksheet_analysis_pdf(
                 ("TOPPADDING", (0,0), (-1,-1), vert_pad),
                 ("BOTTOMPADDING", (0,0), (-1,-1), vert_pad),
             ]))
+            if title == "Performance Summary by Gender" and len(headers) == 7 and len(values):
+                # Keep the All assessed / Highest Mean cell blank, but shade it
+                # to distinguish the intentionally inapplicable aggregate value.
+                tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (-1,-1), (-1,-1), colors.HexColor("#e5e7eb")),
+                ]))
             # Keep each heading attached to its table so a page break never
             # leaves headings such as "Mathematics" stranded above the table.
             if heading:
@@ -14356,6 +14362,7 @@ def class_marksheet_analysis_pdf(
             "All assessed", "%s Learners" % total_gender_learners, "%.2f%%" % overall_mean,
             "%s Learners" % total_at_or_above, "%s Learners" % total_below,
             "%.1f%%" % (total_at_or_above / total_gender_learners * 100 if total_gender_learners else 0.0),
+            "",
         ])
         pdf_table(
             "Performance Summary by Gender",
