@@ -13919,12 +13919,12 @@ def class_marksheet_analysis_pdf(
                 [group_key[0], group_key[1]]
                 + [counts[g] for g in msa_grade_order]
                 + [sum(counts.values()), "%.2f%%" % mean if mean is not None else "—",
-                   position if mean is not None else "—",
-                   _msa_overall_grade(mean) if mean is not None else "—"]
+                   _msa_overall_grade(mean) if mean is not None else "—",
+                   position if mean is not None else "—"]
             )
         pdf_table(
             "Grade Distribution Analysis — Overall by Class and Stream",
-            ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Rank", "Mean Grade"],
+            ["Class", "Stream"] + msa_grade_order + ["Entries", "Mean %", "Mean Grade", "Rank"],
             class_stream_overall_rows
         )
         _msa_ranking_table("Class Analysis", class_headers, class_rows, class_ranks, 4)
