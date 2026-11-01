@@ -718,7 +718,7 @@ else setupDaviActionCells();
   }}
   window.toggleSidebar=toggleSidebar;
   function initSidebar(){{
-    try{{applySidebarState(!{str(teacher_locked).toLowerCase()} && localStorage.getItem('davischool_sidebar_hidden')==='1');}}catch(e){{}}
+    try{{applySidebarState(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1');}}catch(e){{}}
   }}
   // Delegate from document so the control keeps working after Academic Manager
   // tile navigation replaces the document using the prefetched HTML cache.
