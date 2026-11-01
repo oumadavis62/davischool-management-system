@@ -709,7 +709,7 @@ else setupDaviActionCells();
   function applySidebarState(hidden){{
     try{{document.body.classList.toggle('sidebar-hidden', !!hidden);}}catch(e){{}}
     var b=document.getElementById('sidebarToggle');
-    if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}
+    if(b){{b.textContent=hidden?'☰ Show sidebar':'☰ Hide sidebar';b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}
   }}
   function toggleSidebar(){{
     var hidden=!document.body.classList.contains('sidebar-hidden');
@@ -718,14 +718,19 @@ else setupDaviActionCells();
   }}
   window.toggleSidebar=toggleSidebar;
   function initSidebar(){{
-    try{{applySidebarState(!{str(teacher_locked).lower()} && localStorage.getItem('davischool_sidebar_hidden')==='1');}}catch(e){{}}
-    var b=document.getElementById('sidebarToggle');
-    if(b && b.dataset.sidebarBound!=='1'){{
-      b.dataset.sidebarBound='1';
-      b.addEventListener('click',function(event){{event.preventDefault();event.stopPropagation();toggleSidebar();}});
-    }}
+    try{{applySidebarState(!{str(teacher_locked).toLowerCase()} && localStorage.getItem('davischool_sidebar_hidden')==='1');}}catch(e){{}}
   }}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initSidebar);else initSidebar();
+  // Delegate from document so the control keeps working after Academic Manager
+  // tile navigation replaces the document using the prefetched HTML cache.
+  document.addEventListener('click',function(event){{
+    var target=event.target;
+    var button=target&&target.closest?target.closest('[data-sidebar-toggle="1"]'):null;
+    if(!button)return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSidebar();
+  }},true);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initSidebar,{{once:true}});else initSidebar();
 }})();</script>{"<script>function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});</script>" if teacher_locked else ""}<script>(function(){{
   // Warm the exact browser Back destinations in the HTTP cache while the
   // current page is being viewed. This keeps the existing two-step history
