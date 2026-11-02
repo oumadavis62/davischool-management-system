@@ -220,6 +220,7 @@ def davischool_login(request: Request, email: str = Form(...), password: str = F
     request.session["school_id"] = user["school_id"]
     request.session["user_id"] = user["id"]
     request.session["teacher_id"] = user["teacher_id"] if "teacher_id" in user.keys() and user["teacher_id"] else None
+    request.session["student_id"] = user["student_id"] if "student_id" in user.keys() and user["student_id"] else None
     if user["role"] == "teacher" and not request.session.get("teacher_id") and user["school_id"]:
         con = _db()
         try:
@@ -5281,10 +5282,102 @@ window.addEventListener('popstate',function(event){{
 }});
 </script>"""
 
+
+@router.get("/app/parent", response_class=HTMLResponse)
+def parent_portal(request: Request):
+    """Read-only parent workspace, restricted to the learner linked to this login."""
+    if "email" not in request.session or str(request.session.get("role") or "") != "parent":
+        return RedirectResponse("/login", status_code=303)
+    sid = int(request.session.get("school_id") or 0)
+    student_id = int(request.session.get("student_id") or 0)
+    if not sid or not student_id:
+        return HTMLResponse("This parent account is not linked to a learner. Please contact the school.", 403)
+    con = _db()
+    try:
+        cur = con.cursor()
+        student = cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
+            FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
+            WHERE s.id=? AND s.school_id=? LIMIT 1""", (student_id, sid)).fetchone()
+        if not student:
+            return HTMLResponse("The linked learner record could not be found. Please contact the school.", 404)
+        school = cur.execute("SELECT name,phone,email,logo_data FROM schools WHERE id=?", (sid,)).fetchone()
+        marks = cur.execute("""SELECT m.marks,m.term,m.year,e.name exam_name,sub.name subject_name
+            FROM marks m
+            LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+            LEFT JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
+            WHERE m.school_id=? AND m.student_id=?
+            ORDER BY CAST(COALESCE(NULLIF(m.year,''),'0') AS INTEGER) DESC,m.id DESC""",
+            (sid, student_id)).fetchall()
+        try:
+            attendance = cur.execute("""SELECT date,status
+                FROM attendance WHERE school_id=? AND student_id=?
+                ORDER BY date DESC LIMIT 30""", (sid, student_id)).fetchall()
+        except Exception:
+            attendance = []
+        try:
+            attendance_summary = cur.execute("""SELECT
+                COUNT(*) total,
+                SUM(CASE WHEN lower(COALESCE(status,'present'))='present' THEN 1 ELSE 0 END) present,
+                SUM(CASE WHEN lower(COALESCE(status,''))='absent' THEN 1 ELSE 0 END) absent
+                FROM attendance WHERE school_id=? AND student_id=?""", (sid, student_id)).fetchone()
+        except Exception:
+            attendance_summary = None
+    finally:
+        con.close()
+    learner_name = escape(str(student["name"] or "Learner"))
+    school_name = escape(str(school["name"] or "School")) if school else "School"
+    class_label = escape(str(student["class_name"] or "Unassigned"))
+    if student["class_stream"]:
+        class_label += " · " + escape(str(student["class_stream"]))
+    admission = escape(str(student["admission_no"] or "—"))
+    logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+    logo_html = "<img src='" + escape(logo, quote=True) + "' alt='School logo'>" if logo else "<span class='brand-mark'>D</span>"
+    mark_rows = "".join(
+        "<tr><td><b>" + escape(str(row["exam_name"] or "Assessment")) + "</b><small>" +
+        escape(" · ".join(x for x in [str(row["term"] or ""), str(row["year"] or "")] if x)) +
+        "</small></td><td>" + escape(str(row["subject_name"] or "Subject")) +
+        "</td><td class='number'>" + escape(str(row["marks"] if row["marks"] is not None else "—")) + "</td></tr>"
+        for row in marks
+    )
+    attendance_rows = "".join(
+        "<tr><td>" + escape(str(row["date"] or "—")) + "</td><td>" +
+        escape(str(row["status"] or "Present")) + "</td></tr>" for row in attendance
+    )
+    total_att = int(attendance_summary["total"] or 0) if attendance_summary else 0
+    present_att = int(attendance_summary["present"] or 0) if attendance_summary else 0
+    absent_att = int(attendance_summary["absent"] or 0) if attendance_summary else 0
+    attendance_pct = (present_att / total_att * 100) if total_att else 0
+    body = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
+<title>Parent Portal · DaviSchool</title><style>
+*{{box-sizing:border-box}}body{{margin:0;background:#f0f7f1;color:#183526;font-family:Inter,Arial,sans-serif}}
+header{{background:#fff;border-bottom:1px solid #dce9df;padding:14px 5%;display:flex;align-items:center;justify-content:space-between;gap:12px}}
+.brand{{display:flex;align-items:center;gap:11px;font-weight:900;color:#176b3a}}.brand img,.brand-mark{{width:42px;height:42px;object-fit:contain;border-radius:10px}}.brand-mark{{display:grid;place-items:center;background:#176b3a;color:#fff;font-size:23px}}
+header a{{color:#176b3a;text-decoration:none;font-weight:800;font-size:13px}}
+main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}}.welcome h1{{font-size:clamp(24px,4vw,34px);margin:0 0 6px;color:#12472b}}.muted{{color:#688071;font-size:13px}}
+.stats{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0}}
+.stat,.panel{{background:#fff;border:1px solid #dfebe2;border-radius:16px;padding:18px;box-shadow:0 5px 18px #173d2910}}
+.stat small{{display:block;color:#6d8173;font-weight:700}}.stat strong{{display:block;font-size:24px;color:#176b3a;margin-top:7px}}
+.columns{{display:grid;grid-template-columns:1.35fr .85fr;gap:16px}}.panel h2{{font-size:17px;margin:0 0 14px;color:#17452d}}
+.table-wrap{{overflow-x:auto}}table{{width:100%;border-collapse:collapse;font-size:13px;min-width:360px}}th,td{{padding:11px 9px;border-bottom:1px solid #e8efe9;text-align:left;white-space:nowrap}}th{{color:#557060;background:#f5faf6;font-size:11px;text-transform:uppercase;letter-spacing:.04em}}td small{{display:block;color:#7b8d80;margin-top:3px}}.number{{font-weight:900;color:#176b3a;text-align:center}}
+.attendance-list{{max-height:420px;overflow:auto}}.empty{{padding:20px;text-align:center;color:#718477;font-size:13px}}
+@media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
+</style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
+<main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
+<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div></section>
+<section class='stats'><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
+<div class='columns'><section class='panel'><h2>Academic results</h2><div class='table-wrap'><table><thead><tr><th>Examination</th><th>Subject</th><th style='text-align:center'>Marks</th></tr></thead><tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No examination results have been published for this learner yet.</td></tr>"}</tbody></table></div></section>
+<section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></div>
+<p class='muted' style='text-align:center;margin-top:22px'>For questions about results or attendance, please contact {school_name}.</p></main></body></html>"""
+    return HTMLResponse(body)
+
+
 @router.get("/app", response_class=HTMLResponse)
 def app_home(request: Request):
     if "email" not in request.session:
         return RedirectResponse("/")
+    if str(request.session.get("role") or "") == "parent":
+        return RedirectResponse("/app/parent", status_code=303)
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
@@ -11971,6 +12064,10 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
         if role not in ("teacher","registrar","student","parent") and (tid or stid):
             return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
 
+        if role == "parent" and stid:
+            parent_student=cur.execute("SELECT name,parent_name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
+            if parent_student:
+                full_name=str(parent_student["parent_name"] or "").strip() or ("Parent of " + str(parent_student["name"] or "Learner"))
         if role in ("teacher","registrar"):
             teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
             if teacher_row:
