@@ -1377,7 +1377,7 @@ def class_monitoring_page(request: Request):
                 JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
                 JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
                 WHERE a.school_id=? AND a.teacher_id=?
-                ORDER BY c.name,c.stream,s.name""",(sid,teacher_id)).fetchall()
+                ORDER BY class_name,stream,subject_name""",(sid,teacher_id)).fetchall()
             exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
             selected_raw=str(request.query_params.get("exam_id") or "").strip()
             selected_id=int(selected_raw) if selected_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
