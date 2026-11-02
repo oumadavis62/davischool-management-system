@@ -1317,6 +1317,7 @@ def class_monitoring_follow_up(
             return HTMLResponse("The class or examination could not be verified.",403)
         class_id=int(assignment["class_id"])
         _ensure_teacher_allocations_table(cur)
+        _ensure_teacher_assignment_history_tables(cur)
         allowed=cur.execute("""SELECT 1 FROM teacher_allocations
             WHERE school_id=? AND class_id=? AND subject_id=?
             UNION ALL
