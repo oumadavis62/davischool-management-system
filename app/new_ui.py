@@ -4954,7 +4954,7 @@ function toggleTeacherTile(event, tile){{
             admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
             try:
                 latest_term_row=cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
-                latest_term_label=str(latest_term_row["name"] or latest_term_row["term"] or "Term not set") if latest_term_row else "Term not set"
+                latest_term_label=str((latest_term_row["name"] if "name" in latest_term_row.keys() else latest_term_row["term"] if "term" in latest_term_row.keys() else "Term not set") or "Term not set") if latest_term_row else "Term not set"
             except Exception:
                 latest_term_label="Term not set"
             academic_cycle_label=f"{datetime.now(ZoneInfo('Africa/Nairobi')).year} · {latest_term_label}"
