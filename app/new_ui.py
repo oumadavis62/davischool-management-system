@@ -1755,13 +1755,13 @@ def teacher_performance_page(request: Request):
             return """<article class='tp-card'><div class='tp-head'><div><h3>%s</h3><p>%s · %s</p></div><span>%s</span></div>
               <div class='tp-metrics'>%s%s%s%s</div><div class='tp-bar-label'><b>Mean performance</b><b>%s</b></div>
               <div class='tp-bar'><i style='width:%s%%'></i></div><small class='tp-note'>%s assessed · %s not assessed · cohort %s</small>
-              <details><summary>View learner performance (%s)</summary><div class='tp-table'><table><thead><tr><th>Learner</th><th>Admission No.</th><th>Mark</th><th>Percentage</th></tr></thead><tbody>%s</tbody></table></div></details></article>"""%(
+              <a class='tp-learners-link' href='/app/teacher-performance/learners?exam_id=%s&amp;class_id=%s&amp;subject_id=%s'>View Learners Performance (%s) →</a></article>"""%(
                 escape(subjectname),escape(classname),escape(str(exam["name"] if exam else "No examination selected")),escape(scope),
                 metric("Mean mark","—" if mean is None else "%.2f / %.2f"%(mean,out)),
                 metric("Mean %","—" if pct is None else "%.1f%%"%pct),
                 metric("Highest","—" if highest is None else "%.2f"%highest),
                 metric("Lowest","—" if lowest is None else "%.2f"%lowest),
-                "—" if pct is None else "%.1f%%"%pct,max(0,min(100,pct or 0)),len(vals),missing,cohort(cid),len(vals),table)
+                "—" if pct is None else "%.1f%%"%pct,max(0,min(100,pct or 0)),len(vals),missing,cohort(cid),eid,cid,subid,len(vals))
 
         class_html=""
         if ca:
@@ -1797,7 +1797,7 @@ def teacher_performance_page(request: Request):
           .tp-filter{margin:18px 0}.tp-filter label{display:grid;gap:6px;max-width:340px;font-size:12px;font-weight:800;color:#45624d}.tp-filter select{padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
           .tp-section{margin:24px 0}.tp-section h2{font-size:19px;color:#1c5733;margin:0}.tp-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}.tp-overview>div,.tp-metric{padding:12px;border:1px solid #d9e8da;border-radius:11px;background:#eaf3e8;display:grid;gap:5px}.tp-overview small,.tp-metric small{font-size:10px;color:#5a725f;font-weight:800}.tp-overview strong{font-size:22px;color:#176b3a}
           .tp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.tp-card{min-width:0;padding:15px;border:1px solid #d9e8da;border-radius:13px;background:#fff}.tp-head{display:flex;justify-content:space-between;gap:10px}.tp-head h3{margin:0;color:#214b32;font-size:15px}.tp-head p{margin:4px 0;color:#708075;font-size:11px}.tp-head span{font-size:10px;color:#176b3a;background:#e4f3e7;padding:5px 8px;border-radius:99px;white-space:nowrap}
-          .tp-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}.tp-metric{padding:9px;background:#f5faf5}.tp-metric strong{font-size:14px;color:#176b3a;overflow-wrap:anywhere}.tp-bar-label{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;color:#536b59}.tp-bar{height:8px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:6px}.tp-bar i{display:block;height:100%%;background:#176b3a}.tp-note,.tp-footnote{display:block;color:#718075;font-size:10px;margin-top:8px}.tp-card details{margin-top:12px;border-top:1px solid #edf2ed;padding-top:10px}.tp-card summary{cursor:pointer;color:#176b3a;font-size:11px;font-weight:800}.tp-table{overflow-x:auto;margin-top:10px}.tp-table table{width:100%%;border-collapse:collapse;font-size:11px}.tp-table th,.tp-table td{padding:8px;border-bottom:1px solid #e8efe8;text-align:left;white-space:nowrap}.tp-table th{color:#45624d;background:#f3f8f3}.tp-empty{text-align:center;color:#7b8a7f;padding:15px;font-size:12px}
+          .tp-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}.tp-metric{padding:9px;background:#f5faf5}.tp-metric strong{font-size:14px;color:#176b3a;overflow-wrap:anywhere}.tp-bar-label{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;color:#536b59}.tp-bar{height:8px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:6px}.tp-bar i{display:block;height:100%%;background:#176b3a}.tp-note,.tp-footnote{display:block;color:#718075;font-size:10px;margin-top:8px}.tp-learners-link{display:inline-flex;margin-top:13px;padding:9px 12px;border-radius:9px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-size:11px;font-weight:800}.tp-learners-link:hover{background:#176b3a;color:#fff}.tp-table{overflow-x:auto;margin-top:10px}.tp-table table{width:100%%;border-collapse:collapse;font-size:11px}.tp-table th,.tp-table td{padding:8px;border-bottom:1px solid #e8efe8;text-align:left;white-space:nowrap}.tp-table th{color:#45624d;background:#f3f8f3}.tp-empty{text-align:center;color:#7b8a7f;padding:15px;font-size:12px}
           %%media(max-width:850px){.tp-grid{grid-template-columns:1fr}.tp-overview{grid-template-columns:repeat(2,1fr)}}%%media(max-width:480px){.tp-metrics{grid-template-columns:repeat(2,1fr)}}
           </style>"""%(options,class_html,subject_html)
         return _school_page(request,"Performance Monitoring",body)
@@ -1806,6 +1806,103 @@ def teacher_performance_page(request: Request):
         try: con.close()
         except Exception: pass
         return HTMLResponse("Performance Monitoring could not load. Existing teacher functions remain available.",500)
+
+
+@router.get("/app/teacher-performance/learners", response_class=HTMLResponse)
+def teacher_performance_learners_page(request: Request):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
+    def positive_id(key):
+        raw=str(request.query_params.get(key) or "").strip()
+        return int(raw) if raw.isdigit() and int(raw)>0 else 0
+    eid=positive_id("exam_id"); cid=positive_id("class_id"); subid=positive_id("subject_id")
+    if not (eid and cid and subid): return HTMLResponse("A valid examination, class and subject are required.",400)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        _ensure_teacher_allocations_table(cur)
+        _ensure_student_promotion_cohort_tables(cur)
+        exam=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? AND id=?",(sid,eid)).fetchone()
+        cls=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? AND id=?",(sid,cid)).fetchone()
+        subject=cur.execute("SELECT id,name FROM subjects WHERE school_id=? AND id=?",(sid,subid)).fetchone()
+        if not exam or not cls or not subject: return HTMLResponse("The selected examination, class or subject could not be found.",404)
+        is_class_teacher=cur.execute("SELECT 1 FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",(sid,teacher_id,cid)).fetchone()
+        is_subject_teacher=cur.execute("SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",(sid,teacher_id,cid,subid)).fetchone()
+        if not is_class_teacher and not is_subject_teacher: return HTMLResponse("You do not have access to this class and subject.",403)
+        try: exam_year=int(exam["year"] or "")
+        except (TypeError,ValueError): exam_year=0
+        if exam_year:
+            cohort_row=cur.execute("""SELECT COUNT(DISTINCT x.student_id) n FROM (
+                SELECT st.id student_id FROM students st WHERE st.school_id=? AND st.class_id=?
+                  AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)
+                  AND NOT EXISTS(SELECT 1 FROM student_class_history h WHERE h.school_id=st.school_id AND h.student_id=st.id
+                    AND h.to_class_id=? AND h.to_academic_year>?)
+                UNION SELECT h.student_id FROM student_class_history h WHERE h.school_id=? AND h.from_class_id=?
+                  AND h.from_academic_year=? AND h.to_academic_year>?) x""",
+                (sid,cid,cid,exam_year,sid,cid,exam_year,exam_year)).fetchone()
+        else:
+            cohort_row=cur.execute("""SELECT COUNT(*) n FROM students st WHERE st.school_id=? AND st.class_id=?
+                AND lower(coalesce(st.status,'active'))='active'
+                AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)""",(sid,cid)).fetchone()
+        cohort_count=int(cohort_row["n"] or 0) if cohort_row else 0
+        rows=cur.execute("""SELECT m.marks,st.name student_name,st.admission_no,
+            (SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id
+             AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1) out_of
+            FROM marks m JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+            WHERE m.school_id=? AND m.exam_id=? AND m.class_id=? AND m.subject_id=?
+            ORDER BY st.name""",(sid,eid,cid,subid)).fetchall()
+        out_of=100.0
+        for row in rows:
+            try:
+                if row["out_of"] not in (None,""): out_of=float(row["out_of"]); break
+            except (TypeError,ValueError): pass
+        if out_of<=0: out_of=100.0
+        learners=[]
+        for row in rows:
+            try: mark=float(row["marks"])
+            except (TypeError,ValueError): continue
+            learners.append((str(row["student_name"] or "Learner"),str(row["admission_no"] or ""),mark,mark*100/out_of))
+        learners.sort(key=lambda item:(-item[3],item[0].lower()))
+        mean=sum(x[2] for x in learners)/len(learners) if learners else None
+        mean_pct=mean*100/out_of if mean is not None else None
+        highest=max((x[2] for x in learners),default=None); lowest=min((x[2] for x in learners),default=None)
+        table_rows="".join("<tr><td>%s</td><td>%s</td><td><strong>%s</strong></td><td>%.2f</td><td>%.1f%%</td></tr>"%(index,escape(name),escape(admission or "—"),mark,pct) for index,(name,admission,mark,pct) in enumerate(learners,1))
+        if not table_rows: table_rows="<tr><td colspan='5' class='empty'>No saved learner marks are available for this subject and examination.</td></tr>"
+        class_name=str(cls["name"] or "Class")+((" · "+str(cls["stream"])) if cls["stream"] else "")
+        heading=escape(str(subject["name"] or "Subject"))
+        subtitle=escape(class_name)+" · "+escape(str(exam["name"] or "Examination"))+" · "+escape(str(exam["term"] or ""))+" "+escape(str(exam["year"] or ""))
+        missing=max(0,cohort_count-len(learners))
+        con.close()
+        body=f"""<div class='page tpd-page'>
+          <div class='tpd-top'><a href='/app/teacher-performance?exam_id={eid}'>← Back to Performance Monitoring</a><button type='button' onclick='window.print()'>Print / Save PDF</button></div>
+          <header class='tpd-header'><div><p>LEARNER PERFORMANCE REPORT</p><h1>{heading}</h1><div>{subtitle}</div></div></header>
+          <section class='tpd-summary'>
+            <div><small>Learners assessed</small><strong>{len(learners)}</strong></div><div><small>Not assessed</small><strong>{missing}</strong></div>
+            <div><small>Class cohort</small><strong>{cohort_count}</strong></div><div><small>Mean performance</small><strong>{"—" if mean_pct is None else "%.1f%%"%mean_pct}</strong></div>
+            <div><small>Highest mark</small><strong>{"—" if highest is None else "%.2f"%highest}</strong></div><div><small>Lowest mark</small><strong>{"—" if lowest is None else "%.2f"%lowest}</strong></div>
+          </section>
+          <div class='tpd-table-wrap'><table><thead><tr><th>Rank</th><th>Learner Name</th><th>Admission No.</th><th>Mark / {out_of:g}</th><th>Percentage</th></tr></thead><tbody>{table_rows}</tbody></table></div>
+          <p class='tpd-note'>Rankings are based on percentage. Only saved marks are included; unentered marks are not treated as zero.</p>
+        </div>
+        <style>
+        .tpd-page{{max-width:1180px;color:#244631}}.tpd-top{{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:18px}}.tpd-top a,.tpd-top button{{border:0;border-radius:9px;padding:10px 13px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}}.tpd-top button{{background:#176b3a;color:#fff}}
+        .tpd-header{{padding:20px;border-radius:14px;background:#eaf3e8;border:1px solid #d9e8da}}.tpd-header p{{margin:0 0 6px;font-size:10px;font-weight:900;letter-spacing:1px;color:#61816a}}.tpd-header h1{{margin:0;color:#174b2b;font-size:25px}}.tpd-header div div{{margin-top:6px;color:#64796a;font-size:13px}}
+        .tpd-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}}.tpd-summary>div{{padding:13px;border:1px solid #d9e8da;border-radius:11px;background:#f4f9f3;display:grid;gap:5px}}.tpd-summary small{{font-size:10px;font-weight:800;color:#657c69}}.tpd-summary strong{{font-size:20px;color:#176b3a}}
+        .tpd-table-wrap{{overflow-x:auto;border:1px solid #dce8dd;border-radius:12px;background:#fff}}.tpd-table-wrap table{{width:100%;border-collapse:collapse;min-width:620px}}.tpd-table-wrap th,.tpd-table-wrap td{{padding:11px 13px;border-bottom:1px solid #e7eee7;text-align:left;font-size:12px;white-space:nowrap}}.tpd-table-wrap th{{background:#eaf3e8;color:#315c3d;font-size:11px;text-transform:uppercase;letter-spacing:.3px}}.tpd-table-wrap tbody tr:nth-child(even){{background:#f8fbf7}}.tpd-table-wrap tbody tr:last-child td{{border-bottom:0}}.tpd-table-wrap td:first-child{{font-weight:800;color:#176b3a}}.tpd-table-wrap .empty{{text-align:center;padding:24px;color:#78877b}}.tpd-note{{font-size:11px;color:#748176;margin-top:12px}}
+        @media(max-width:600px){{.tpd-summary{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tpd-header h1{{font-size:21px}}}}
+        @media print{{.tpd-top{{display:none}}.tpd-page{{max-width:none}}.tpd-table-wrap{{overflow:visible}}.tpd-table-wrap table{{min-width:0}}}}
+        </style>"""
+        return _school_page(request,"Learner Performance",body)
+    except Exception as exc:
+        print("DAVISCHOOL TEACHER PERFORMANCE LEARNERS LOAD WARNING:",repr(exc),flush=True)
+        try: con.close()
+        except Exception: pass
+        return HTMLResponse("Learner Performance could not load. Existing teacher functions remain available.",500)
 
 @router.get("/app/students", response_class=HTMLResponse)
 def students_page(request: Request):
