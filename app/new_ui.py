@@ -539,6 +539,7 @@ def _shell(title, name, role, body, school_id=None):
         # Keep the entry visible in every teacher workspace. The page itself
         # verifies the teacher's current class-teacher assignment before showing class data.
         teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
+        teacher_nav.insert(5,("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring"))
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
         links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
@@ -1667,6 +1668,144 @@ def class_monitoring_page(request: Request):
     </style>"""
     return _school_page(request,"Class Monitoring",body)
 
+
+
+
+@router.get("/app/teacher-performance", response_class=HTMLResponse)
+def teacher_performance_page(request: Request):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        _ensure_teacher_allocations_table(cur)
+        _ensure_student_promotion_cohort_tables(cur)
+        ca=cur.execute("""SELECT a.class_id,c.name class_name,c.stream FROM class_teacher_assignments a
+            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id LIMIT 1""",(sid,teacher_id)).fetchone()
+        allocations=cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,
+            COALESCE(NULLIF(trim(c.name),''),'Class') class_name,COALESCE(NULLIF(trim(c.stream),''),'') stream,
+            COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
+            FROM teacher_allocations a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY class_name,stream,subject_name""",(sid,teacher_id)).fetchall()
+        exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        raw=str(request.query_params.get("exam_id") or "").strip()
+        eid=int(raw) if raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        exam=next((e for e in exams if int(e["id"])==eid),None)
+        if not exam and exams: exam=exams[0]; eid=int(exam["id"])
+        if not ca and not allocations:
+            con.close()
+            return _school_page(request,"Performance Monitoring","<div class='page'><h1>Performance Monitoring</h1><p class='muted'>No current class-teacher or subject-teacher allocations were found.</p></div>")
+        try: exam_year=int(exam["year"] or "") if exam else 0
+        except (TypeError,ValueError): exam_year=0
+
+        def cohort(cid):
+            if exam_year:
+                row=cur.execute("""SELECT COUNT(DISTINCT x.student_id) n FROM (
+                    SELECT st.id student_id FROM students st WHERE st.school_id=? AND st.class_id=?
+                    AND lower(coalesce(st.status,'active'))='active'
+                    AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)
+                    AND NOT EXISTS(SELECT 1 FROM student_class_history h WHERE h.school_id=st.school_id AND h.student_id=st.id
+                      AND h.to_class_id=? AND h.to_academic_year>?)
+                    UNION SELECT h.student_id FROM student_class_history h WHERE h.school_id=? AND h.from_class_id=?
+                      AND h.from_academic_year=? AND h.to_academic_year>?) x""",
+                    (sid,cid,cid,exam_year,sid,cid,exam_year,exam_year)).fetchone()
+            else:
+                row=cur.execute("""SELECT COUNT(*) n FROM students st WHERE st.school_id=? AND st.class_id=?
+                    AND lower(coalesce(st.status,'active'))='active'
+                    AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)""",(sid,cid)).fetchone()
+            return int(row["n"] or 0) if row else 0
+
+        def marks_for(cid,subid):
+            if not exam: return [],100.0
+            rows=cur.execute("""SELECT m.marks,st.name student_name,st.admission_no,
+                (SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id
+                 AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1) out_of
+                FROM marks m JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+                WHERE m.school_id=? AND m.exam_id=? AND m.class_id=? AND m.subject_id=? ORDER BY st.name""",
+                (sid,eid,cid,subid)).fetchall()
+            out_of=100.0
+            for x in rows:
+                try:
+                    if x["out_of"] not in (None,""): out_of=float(x["out_of"])
+                    break
+                except (TypeError,ValueError): pass
+            if out_of<=0: out_of=100.0
+            result=[]
+            for x in rows:
+                try: mark=float(x["marks"])
+                except (TypeError,ValueError): continue
+                result.append((str(x["student_name"] or "Learner"),str(x["admission_no"] or ""),mark,mark*100/out_of))
+            return result,out_of
+
+        def panel(cid,subid,classname,subjectname,scope):
+            vals,out=marks_for(cid,subid); nums=[x[2] for x in vals]
+            mean=sum(nums)/len(nums) if nums else None
+            pct=mean*100/out if mean is not None else None
+            highest=max(nums) if nums else None; lowest=min(nums) if nums else None
+            missing=max(0,cohort(cid)-len(vals))
+            metric=lambda label,value:"<div class='tp-metric'><small>%s</small><strong>%s</strong></div>"%(escape(label),escape(str(value)))
+            table="".join("<tr><td>%s</td><td>%s</td><td>%.2f / %.2f</td><td>%.1f%%</td></tr>"%(escape(n),escape(ad),m,out,p) for n,ad,m,p in sorted(vals,key=lambda z:z[3],reverse=True))
+            if not table: table="<tr><td colspan='4' class='tp-empty'>No saved marks for this examination.</td></tr>"
+            return """<article class='tp-card'><div class='tp-head'><div><h3>%s</h3><p>%s · %s</p></div><span>%s</span></div>
+              <div class='tp-metrics'>%s%s%s%s</div><div class='tp-bar-label'><b>Mean performance</b><b>%s</b></div>
+              <div class='tp-bar'><i style='width:%s%%'></i></div><small class='tp-note'>%s assessed · %s not assessed · cohort %s</small>
+              <details><summary>View learner performance (%s)</summary><div class='tp-table'><table><thead><tr><th>Learner</th><th>Admission No.</th><th>Mark</th><th>Percentage</th></tr></thead><tbody>%s</tbody></table></div></details></article>"""%(
+                escape(subjectname),escape(classname),escape(str(exam["name"] if exam else "No examination selected")),escape(scope),
+                metric("Mean mark","—" if mean is None else "%.2f / %.2f"%(mean,out)),
+                metric("Mean %","—" if pct is None else "%.1f%%"%pct),
+                metric("Highest","—" if highest is None else "%.2f"%highest),
+                metric("Lowest","—" if lowest is None else "%.2f"%lowest),
+                "—" if pct is None else "%.1f%%"%pct,max(0,min(100,pct or 0)),len(vals),missing,cohort(cid),len(vals),table)
+
+        class_html=""
+        if ca:
+            cid=int(ca["class_id"]); cname=str(ca["class_name"] or "Class")+((" · "+str(ca["stream"])) if ca["stream"] else "")
+            subjects=cur.execute("""SELECT sub.id,sub.name FROM subjects sub JOIN teacher_allocations a
+                ON a.subject_id=sub.id AND a.school_id=sub.school_id WHERE a.school_id=? AND a.class_id=?
+                UNION SELECT sub.id,sub.name FROM subjects sub JOIN marks m ON m.subject_id=sub.id AND m.school_id=sub.school_id
+                WHERE m.school_id=? AND m.class_id=? AND m.exam_id=? ORDER BY name""",
+                (sid,cid,sid,cid,eid)).fetchall() if exam else []
+            cards=[panel(cid,int(x["id"]),cname,str(x["name"] or "Subject"),"Class overview") for x in subjects]
+            averages=[]
+            for x in subjects:
+                vals,out=marks_for(cid,int(x["id"]))
+                if vals: averages.append(sum(v[2] for v in vals)/len(vals)*100/out)
+            overall=sum(averages)/len(averages) if averages else None
+            class_html="""<section class='tp-section'><h2>My Class Performance</h2><p>%s · Combined performance across subjects</p>
+              <div class='tp-overview'><div><small>Overall class mean</small><strong>%s</strong></div><div><small>Subjects assessed</small><strong>%s</strong></div><div><small>Learners in cohort</small><strong>%s</strong></div></div>
+              <div class='tp-grid'>%s</div></section>"""%(escape(cname),"—" if overall is None else "%.1f%%"%overall,len(averages),cohort(cid),"".join(cards) if cards else "<div class='tp-empty'>No subject marks are available.</div>")
+        subject_html=""
+        if allocations:
+            cards=[]
+            for a in allocations:
+                cname=str(a["class_name"] or "Class")+((" · "+str(a["stream"])) if a["stream"] else "")
+                cards.append(panel(int(a["class_id"]),int(a["subject_id"]),cname,str(a["subject_name"] or "Subject"),"My allocation"))
+            subject_html="<section class='tp-section'><h2>My Subject Performance</h2><p>Only your allocated classes, streams and subjects are shown.</p><div class='tp-grid'>%s</div></section>"%"".join(cards)
+        options="".join("<option value='%s' %s>%s — %s %s</option>"%(int(e["id"]),"selected" if int(e["id"])==eid else "",escape(str(e["name"] or "Exam")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
+        con.close()
+        body="""<div class='page tp-page'><div class='tp-title'><div><h1>Performance Monitoring</h1><p>Follow learner progress from saved assessment marks.</p></div><a href='/app/class-monitoring'>Submission Status</a></div>
+          <form method='get' action='/app/teacher-performance' class='tp-filter'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+          %s%s<div class='tp-footnote'>Calculations use saved marks only. Unentered marks are not treated as zero.</div></div>
+          <style>
+          .tp-page{max-width:1240px}.tp-title{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.tp-title h1{margin:0;color:#174b2b}.tp-title p,.tp-section p{color:#687a6d;font-size:13px;margin:5px 0 12px}.tp-title>a{padding:9px 13px;border-radius:9px;background:#e2f0e2;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
+          .tp-filter{margin:18px 0}.tp-filter label{display:grid;gap:6px;max-width:340px;font-size:12px;font-weight:800;color:#45624d}.tp-filter select{padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
+          .tp-section{margin:24px 0}.tp-section h2{font-size:19px;color:#1c5733;margin:0}.tp-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}.tp-overview>div,.tp-metric{padding:12px;border:1px solid #d9e8da;border-radius:11px;background:#eaf3e8;display:grid;gap:5px}.tp-overview small,.tp-metric small{font-size:10px;color:#5a725f;font-weight:800}.tp-overview strong{font-size:22px;color:#176b3a}
+          .tp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.tp-card{min-width:0;padding:15px;border:1px solid #d9e8da;border-radius:13px;background:#fff}.tp-head{display:flex;justify-content:space-between;gap:10px}.tp-head h3{margin:0;color:#214b32;font-size:15px}.tp-head p{margin:4px 0;color:#708075;font-size:11px}.tp-head span{font-size:10px;color:#176b3a;background:#e4f3e7;padding:5px 8px;border-radius:99px;white-space:nowrap}
+          .tp-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}.tp-metric{padding:9px;background:#f5faf5}.tp-metric strong{font-size:14px;color:#176b3a;overflow-wrap:anywhere}.tp-bar-label{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;color:#536b59}.tp-bar{height:8px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:6px}.tp-bar i{display:block;height:100%;background:#176b3a}.tp-note,.tp-footnote{display:block;color:#718075;font-size:10px;margin-top:8px}.tp-card details{margin-top:12px;border-top:1px solid #edf2ed;padding-top:10px}.tp-card summary{cursor:pointer;color:#176b3a;font-size:11px;font-weight:800}.tp-table{overflow-x:auto;margin-top:10px}.tp-table table{width:100%;border-collapse:collapse;font-size:11px}.tp-table th,.tp-table td{padding:8px;border-bottom:1px solid #e8efe8;text-align:left;white-space:nowrap}.tp-table th{color:#45624d;background:#f3f8f3}.tp-empty{text-align:center;color:#7b8a7f;padding:15px;font-size:12px}
+          @media(max-width:850px){.tp-grid{grid-template-columns:1fr}.tp-overview{grid-template-columns:repeat(2,1fr)}}@media(max-width:480px){.tp-metrics{grid-template-columns:repeat(2,1fr)}}
+          </style>"""%(options,class_html,subject_html)
+        return _school_page(request,"Performance Monitoring",body)
+    except Exception as exc:
+        print("DAVISCHOOL TEACHER PERFORMANCE LOAD WARNING:",repr(exc),flush=True)
+        try: con.close()
+        except Exception: pass
+        return HTMLResponse("Performance Monitoring could not load. Existing teacher functions remain available.",500)
 
 @router.get("/app/students", response_class=HTMLResponse)
 def students_page(request: Request):
