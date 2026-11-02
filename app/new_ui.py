@@ -4914,27 +4914,35 @@ function toggleTeacherTile(event, tile){{
                 class_color=class_size_colors[class_index % len(class_size_colors)]
                 class_size_bars += f"<div class='class-size-bar-column' title='{escape(label)}'><div class='class-size-bar-value'>{count} students</div><div class='class-size-bar-track'><div class='class-size-bar-fill' style='height:{pct:.1f}%;background:{class_color}'></div></div><div class='class-size-bar-label'>{escape(short_label)}</div></div>"
 
-            # Display only timestamped events from the actual school audit trail.
+            recent_activity=[]
             try:
-                recent_activity=cur.execute("SELECT timestamp,user_email,action,details FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 8",(school_id,)).fetchall()
+                row=cur.execute("SELECT name FROM students WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
+                if row:
+                    recent_activity.append(("student","New student enrolled",str(row["name"] or "Student"),"Student records"))
             except Exception:
-                recent_activity=[]
-            recent_activity_html="".join(f"<article class='recent-activity-item'><div class='recent-activity-icon'>A</div><div class='recent-activity-copy'><b>{escape(str(row['action'] or 'School activity').replace('_',' ').title())}</b><span>{escape(str(row['details'] or ''))}</span><small>{escape(str(row['user_email'] or 'System'))} · {escape(str(row['timestamp'] or 'Timestamp unavailable'))}</small></div></article>" for row in recent_activity) or "<div class='recent-activity-empty'>No recorded audit activity is available yet.</div>"
-            quick_access_groups=[
-                ("School operations",[("Students","/app/students","students.view"),("Attendance","/app/attendance","attendance.view"),("Fees & Finance","/app/finance","fees.view"),("Accounting","/app/accounting","finance.view")]),
-                ("Academic work",[("Academic Manager","/app/academics","marks.view"),("MarkSheet Analysis","/app/academics/marksheet-analysis","marks.view")]),
-                ("Administration",[("User Management","/app/users","users.manage"),("School Settings","/app/school-settings","settings.view"),("Roles & Permissions","/app/roles","settings.manage"),("Audit Trail","/app/audit","audit.view")])
-            ]
-            quick_access_html=[]
-            for group_title,links in quick_access_groups:
-                visible=[]
-                for link_title,href,permission in links:
-                    allowed=_require_permission(request,school_id,permission)
-                    if link_title=="Fees & Finance": allowed=allowed or _require_permission(request,school_id,"finance.view")
-                    if allowed: visible.append(f"<a class='overview-quick-link' href='{href}'>{escape(link_title)} <b>›</b></a>")
-                if visible: quick_access_html.append(f"<section class='overview-quick-group'><h3>{escape(group_title)}</h3>{''.join(visible)}</section>")
-            quick_access_html="".join(quick_access_html) or "<div class='recent-activity-empty'>No shortcuts are available for this account.</div>"
-            health_checks=[("Database",True,"Database queries completed successfully."),("Student records",True,f"{s} active student records counted."),("Staff & teachers",True,f"{t} staff/teacher records counted."),("Classes",True,f"{c} classes counted.")]
+                pass
+            try:
+                row=cur.execute("SELECT name FROM teachers WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
+                if row:
+                    recent_activity.append(("staff","Staff updated",str(row["name"] or "Staff member"),"Staff & Teachers"))
+            except Exception:
+                pass
+            try:
+                row=cur.execute("""SELECT sub.name subject_name,e.name exam_name FROM marks m LEFT JOIN subjects sub ON sub.id=m.subject_id LEFT JOIN exams e ON e.id=m.exam_id WHERE m.school_id=? ORDER BY m.id DESC LIMIT 1""",(school_id,)).fetchone()
+                if row:
+                    recent_activity.append(("marks","Marks submitted",str(row["subject_name"] or "Subject") + " - " + str(row["exam_name"] or "Assessment"),"Academic records"))
+            except Exception:
+                pass
+            try:
+                row=cur.execute("SELECT name FROM exams WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
+                if row:
+                    recent_activity.append(("exam","Exam created",str(row["name"] or "Assessment"),"Examinations"))
+            except Exception:
+                pass
+            activity_icons={"student":"S","staff":"T","marks":"M","exam":"E"}
+            recent_activity_html="".join(f"<div class='recent-activity-item'><div class='recent-activity-icon recent-{kind}'>{activity_icons.get(kind,'•')}</div><div class='recent-activity-copy'><b>{escape(title)}</b><span>{escape(detail)}</span></div></div>" for kind,title,detail,_ in recent_activity[:6]) or "<div class='recent-activity-empty'>No recent activity is available yet.</div>"
+
+            health_checks=[("Database",True,"Connected and responding to Overview queries."),("Student records",True,f"{s} student records available."),("Staff & teachers",True,f"{t} staff/teacher records available."),("Classes",True,f"{c} classes available.")]
             health_attention=[]
             try:
                 subject_count=int(cur.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
@@ -4952,38 +4960,79 @@ function toggleTeacherTile(event, tile){{
             admin_health_overall="Healthy" if not health_attention else "Attention"
             admin_health_summary="School systems are responding normally." if not health_attention else f"{len(health_attention)} system area{'s' if len(health_attention)!=1 else ''} need attention."
             admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
-            try:
-                latest_term_row=cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
-                latest_term_label=str((latest_term_row["name"] if "name" in latest_term_row.keys() else latest_term_row["term"] if "term" in latest_term_row.keys() else "Term not set") or "Term not set") if latest_term_row else "Term not set"
-            except Exception:
-                latest_term_label="Term not set"
-            academic_cycle_label=f"{datetime.now(ZoneInfo('Africa/Nairobi')).year} · {latest_term_label}"
 
-            body=f"""<div class='page overview-admin-page'>
-<header class='overview-school-heading'><div class='overview-heading-kicker'>SCHOOL OVERVIEW</div><h1>{escape(school_name)}</h1><div class='muted'>Your school operations, academic activity and system status in one place.</div><div class='overview-cycle-pill'>Academic cycle · {escape(academic_cycle_label)}</div></header>
+            body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
 <div class='grid overview-charts'>
-<div class='card overview-chart-card gender-chart-card'><div class='overview-card-heading'><h2>Students</h2><p>Active learner gender distribution</p></div>{gender_donut}</div>
-<div class='card overview-chart-card gender-chart-card'><div class='overview-card-heading'><h2>Staff</h2><p>Teacher gender distribution</p></div>{staff_gender_donut}</div>
-<div class='card overview-chart-card classes-overview-card'><div class='overview-card-heading'><h2>Classes Overview</h2><p>{c} active class groups</p></div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div>{gender_donut}</div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Student</div><div class='overview-flip-value'>{gender_total}</div><div class='overview-flip-detail'>Students</div></div>
+</div></div>
+<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div>{staff_gender_donut}</div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Staff</div><div class='overview-flip-value'>{staff_gender_total}</div><div class='overview-flip-detail'>Staff members</div></div>
+</div></div>
+<div class='overview-flip-tile classes-overview-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-face overview-flip-front card class-size-chart-card classes-overview-card'><div class='label'>Classes Overview</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div>
+<div class='overview-flip-face overview-flip-back'><div class='label'>Classes Overview</div><div class='overview-flip-value'>{c}</div><div class='overview-flip-detail'>Classes</div></div>
+</div></div>
 </div>
-<div class='overview-recent-row'><div class='card recent-activity-card'><div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest entries recorded in the school audit trail.</div></div>{("<a href='/app/audit' class='recent-view-all'>View all activity</a>" if _require_permission(request,school_id,"audit.view") else "")}</div><div class='recent-activity-list'>{recent_activity_html}</div></div></div>
-<div class='overview-section-heading'><div><div class='overview-heading-kicker'>GET THINGS DONE</div><h2>Quick Access</h2><p>Open the workspaces available to your account.</p></div></div><div class='overview-quick-groups'>{quick_access_html}</div>
-<div class='overview-section-heading'><div><div class='overview-heading-kicker'>WORKSPACE STATUS</div><h2>System Health</h2><p>Checks are based on live queries available to this overview.</p></div></div><details class='overview-health-details'><summary>View system health details · {escape(admin_health_overall)}</summary>{admin_health}</details>
-<style>
+<div class='overview-recent-row'><div class='card recent-activity-card'><div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div><a href='/app/audit' class='recent-view-all'>View All</a></div><div class='recent-activity-list'>{recent_activity_html}</div></div></div>
+<div class='section'><h2>Daily operations</h2><div class='actions'>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Students</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Attendance</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span>Finance</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V7M16 16v-8"/></svg></span>Analysis</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h2M12 14h2M8 18h2M12 18h2"/></svg></span>Accounting</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>Users</div>
+</div></div>
+<div class='section'><h2>Administration</h2><div class='actions'>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.55v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.55-1.03H6v-2.55h.85A1.7 1.7 0 0 0 8.4 10a1.7 1.7 0 0 0-.34-1.88L8 8.06l1.8-1.8.06.06A1.7 1.7 0 0 0 11.74 6 1.7 1.7 0 0 0 12.77 4.45V4h2.55v.45A1.7 1.7 0 0 0 16.35 6a1.7 1.7 0 0 0 1.88.32l.06-.06 1.8 1.8-.06.06A1.7 1.7 0 0 0 19.7 10c.15.62.7 1.03 1.33 1.03H22v2.55h-.97A1.7 1.7 0 0 0 19.4 15Z"/></svg></span>School Settings</div>
 
-.overview-school-heading{{text-align:left;padding:20px 24px;margin:0 0 18px;border:1px solid #d5e2d6;border-radius:18px;background:linear-gradient(115deg,#edf4ee,#f8faf7 72%,#e5eee6);box-shadow:0 5px 18px #244b3010}}.overview-school-heading h1{{margin:4px 0 6px;color:#174b2d;font-size:clamp(23px,3vw,32px)}}.overview-school-heading .muted{{margin:0;color:#617568;font-size:13px}}.overview-heading-kicker{{font-size:10px;letter-spacing:.14em;font-weight:900;color:#5d8068}}.overview-cycle-pill{{display:inline-flex;margin-top:12px;padding:6px 10px;border:1px solid #d5e2d6;border-radius:999px;background:#f7faf7;color:#476b50;font-size:10px;font-weight:800}}
-.overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1500px;margin:18px auto 22px;gap:15px}}
-.overview-flip-tile,.overview-flip-inner{{display:contents}}.overview-flip-face{{display:none!important}}.overview-chart-card{{display:flex;min-width:0;min-height:242px;padding:18px 16px;background:#E6EFE7;border:1px solid #cfddcf;border-radius:16px;box-shadow:0 3px 12px #244b3009;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden}}
-.overview-card-heading{{width:100%;margin-bottom:12px;text-align:left}}.overview-card-heading h2{{font-size:14px;margin:0;color:#214d32;font-weight:850}}.overview-card-heading p{{font-size:10px;margin:3px 0 0;color:#718276}}
-.overview-chart-card .gender-donut-layout{{flex:1;justify-content:center;gap:10px}}.overview-chart-card .gender-donut-hole{{background:#f9fcf9}}
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>Roles</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Audit Trail</div>
+<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>Portals</div>
+</div></div>{admin_health}</div>
+<style>
+.overview-school-heading{{text-align:center;margin-bottom:2px}}.overview-school-heading h1{{margin-bottom:6px}}.overview-school-heading .muted{{margin:0}}.gender-chart-card{{min-width:0;overflow:hidden}}
+.gender-chart-total{{font-size:12px;color:#64748b;margin:3px 0 5px;font-weight:700}}
+.gender-donut-layout{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;min-height:0;min-width:0}}
+.gender-donut{{width:clamp(88px,9vw,112px);height:clamp(88px,9vw,112px);min-width:88px;border-radius:50%;display:grid;place-items:center;position:relative;box-shadow:inset 0 0 0 1px #00000008;flex:0 0 auto}}
+.gender-donut-hole{{width:62%;height:62%;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 1px 5px #0f172a12}}
+.gender-donut-hole strong{{font-size:21px;line-height:1.1;color:#172033;font-weight:900}}
+.gender-donut-hole span{{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em}}
+.donut-legend{{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:12px;min-width:0;width:100%;max-width:none;flex:0 0 auto}}.student-gender-legend{{display:flex!important;flex-direction:row!important;visibility:visible!important;opacity:1!important;min-width:0;width:100%;max-width:none;flex:0 0 auto;flex-shrink:1;justify-content:center}}.student-gender-legend .donut-legend-item{{grid-template-columns:8px auto auto auto;white-space:nowrap}}
+.donut-legend-item{{display:grid;grid-template-columns:8px auto auto auto;align-items:center;gap:4px;font-size:10px;color:#334155}}
+.donut-legend-dot{{width:8px;height:8px;border-radius:50%}}
+.donut-legend-name{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.donut-legend-item b{{font-size:11px;color:#172033}}
+.donut-legend-item small{{font-size:9px;color:#64748b;min-width:34px;text-align:right}}
+@media(max-width:600px){{.gender-donut-layout{{gap:6px}}.gender-donut{{width:88px;height:88px;min-width:88px}}.gender-donut-hole strong{{font-size:18px}}.donut-legend{{gap:10px}}.donut-legend-item{{font-size:9px}}}}
+.overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
+.overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px;position:relative;cursor:default}}
+.overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;will-change:transform}}
+@media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}}}
+.overview-flip-tile.is-flipped .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}
+.overview-flip-face{{position:absolute;inset:0;box-sizing:border-box;border:1px solid #cfddcf;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#E6EFE7;overflow:hidden}}
+.overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
+.overview-flip-back .label,.overview-flip-back .overview-flip-detail{{color:#fff}}
+.overview-flip-value{{font-size:32px;font-weight:900;line-height:1;margin:8px 0 5px}}
+.overview-flip-detail{{font-size:12px;font-weight:800;color:#64748b}}
+.overview-class-icon{{color:#176B3A;margin-bottom:6px}}
+.overview-class-count{{font-size:32px;font-weight:900;color:#172033;line-height:1}}
 .overview-charts .class-size-bars{{min-height:145px;height:145px;gap:10px;padding:6px 6px 0}}
-.overview-recent-row{{display:grid;grid-template-columns:minmax(0,1fr);margin:18px 0}}.recent-activity-card{{min-width:0;border:1px solid #dce7dd;border-radius:16px;background:#fff;box-shadow:0 3px 14px #244b3008;padding:18px}}
-.recent-activity-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 22px}}.recent-activity-item{{display:flex;align-items:flex-start;gap:11px;padding:12px 2px;border-bottom:1px solid #edf2ed;min-width:0}}.recent-activity-copy small{{font-size:10px;color:#849187;line-height:1.4}}
-.overview-section-heading{{margin:24px 0 12px}}.overview-section-heading h2{{margin:3px 0 4px;color:#214d32;font-size:19px}}.overview-section-heading p{{margin:0;color:#718276;font-size:12px}}
-.overview-quick-groups{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}}.overview-quick-group{{min-width:0;padding:15px;border:1px solid #dce7dd;border-radius:15px;background:#f7faf7}}.overview-quick-group h3{{margin:0 0 9px;color:#56745d;font-size:11px;text-transform:uppercase;letter-spacing:.08em}}
-.overview-quick-link{{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;margin-top:6px;border:1px solid #e1eae2;border-radius:10px;background:#e6efe7;color:#254a32;text-decoration:none;font-size:12px;font-weight:800}}.overview-quick-link:hover{{background:#d8e7da}}.overview-quick-link b{{color:#77927d;font-size:19px}}
-@media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr))}}.overview-quick-groups{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
-@media(max-width:600px){{.overview-school-heading{{padding:17px}}.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}.overview-chart-card{{min-height:210px;padding:12px 9px}}.overview-card-heading h2{{font-size:12px}}.overview-card-heading p{{font-size:9px}}.overview-chart-card .gender-donut{{width:88px;height:88px;min-width:88px}}.overview-charts .classes-overview-card{{grid-column:1 / -1;min-height:220px}}.overview-quick-groups{{grid-template-columns:1fr}}.recent-activity-list{{grid-template-columns:1fr}}}}
+.overview-charts .class-size-bar-column{{flex:0 0 56px;flex-basis:56px;width:56px;min-width:56px;height:133px}}
+.overview-charts .class-size-bar-track{{height:95px}}
+.overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
+@media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
+@media(max-width:600px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}.overview-flip-tile{{height:200px}}.overview-charts .classes-overview-tile{{grid-column:1 / -1;height:230px}}.overview-flip-face{{padding:12px}}}}
+.class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:none;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto;scroll-behavior:auto;user-select:none;-webkit-user-select:none}}
+.class-size-bars:active{{cursor:grabbing}}
+.class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:99px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
+.class-size-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
+.class-size-bar-track{{height:55px;width:18px;background:#e2e8f0;border-radius:5px 5px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
+.class-size-bar-fill{{width:100%;height:0;background:#2E8B57;border-radius:6px 6px 2px 2px}}
+.class-size-bar-label{{font-size:9px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:38px;min-height:22px;line-height:11px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
+.class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}.overview-recent-row{{display:grid;grid-template-columns:minmax(0,1fr);margin:18px 0}}.recent-activity-card{{min-width:0}}.recent-activity-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}}.recent-activity-head h2{{font-size:16px;margin:0 0 4px}}.recent-view-all{{color:#176B3A;font-size:12px;font-weight:900;text-decoration:none;white-space:nowrap}}.recent-view-all:hover{{text-decoration:underline}}.recent-activity-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px}}.recent-activity-item{{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid #eef2f7;min-width:0}}.recent-activity-icon{{width:34px;height:34px;min-width:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:#e8f6ee;color:#176B3A}}.recent-staff{{background:#f1eaff;color:#7c3aed}}.recent-marks{{background:#e7f0ff;color:#2563eb}}.recent-exam{{background:#e8f6ee;color:#15803d}}.recent-activity-copy{{min-width:0;display:flex;flex-direction:column;gap:3px}}.recent-activity-copy b{{font-size:12px;color:#172033}}.recent-activity-copy span{{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.recent-activity-empty{{padding:18px 4px;color:#64748b;font-size:12px}}@media(max-width:700px){{.top-system-title{{font-size:15px}}.top-welcome{{font-size:13px}}.recent-activity-list{{grid-template-columns:1fr}}.recent-activity-head{{align-items:flex-start}}}}
 </style>{flip_script}</div>"""
 
     con.close()
