@@ -536,6 +536,22 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/academics/marks",_modern_icon("marks"),"Record Marks"),
             ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
         ]
+        # Show Class Monitoring only to a teacher who currently holds a class-teacher assignment.
+        if school_id and _require_permission(request,int(school_id),"class_teacher.view"):
+            nav_con=_db()
+            try:
+                nav_cur=nav_con.cursor()
+                _ensure_class_teacher_assignments_table(nav_cur)
+                has_class_monitor=bool(nav_cur.execute(
+                    "SELECT 1 FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? LIMIT 1",
+                    (int(school_id),int(request.session.get("teacher_id") or 0))
+                ).fetchone())
+            except Exception:
+                has_class_monitor=False
+            finally:
+                nav_con.close()
+            if has_class_monitor:
+                teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
         links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
@@ -1257,6 +1273,293 @@ def class_teacher_page(request: Request):
 <div class='card section'><h2>Class controls</h2>{controls}</div>
 <div class='card section'><h2>Students in my class ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No students are currently assigned to this class.</td></tr>"}</tbody></table></div></div>"""
     return _school_page(request,"My Class",body)
+
+
+def _ensure_class_submission_followups_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS class_submission_followups(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        class_teacher_id INTEGER NOT NULL,
+        subject_teacher_names TEXT,
+        followup_type TEXT NOT NULL DEFAULT 'Reminder',
+        note TEXT,
+        recorded_at TEXT NOT NULL
+    )""")
+
+@router.post("/app/class-monitoring/follow-up")
+def class_monitoring_follow_up(
+    request: Request,
+    exam_id: int = Form(...),
+    subject_id: int = Form(...),
+    followup_type: str = Form("Reminder"),
+    note: str = Form("")
+):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",status_code=303)
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id or not _require_permission(request,sid,"class_teacher.view"):
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        assignment=cur.execute("""SELECT a.class_id FROM class_teacher_assignments a
+            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+        exam=cur.execute("SELECT id FROM exams WHERE school_id=? AND id=?",(sid,exam_id)).fetchone()
+        if not assignment or not exam:
+            return HTMLResponse("The class or examination could not be verified.",403)
+        class_id=int(assignment["class_id"])
+        _ensure_teacher_allocations_table(cur)
+        _ensure_teacher_assignment_history_tables(cur)
+        allowed=cur.execute("""SELECT 1 FROM teacher_allocations
+            WHERE school_id=? AND class_id=? AND subject_id=?
+            UNION ALL
+            SELECT 1 FROM teacher_allocation_history
+            WHERE school_id=? AND class_id=? AND subject_id=? LIMIT 1""",
+            (sid,class_id,subject_id,sid,class_id,subject_id)).fetchone()
+        if not allowed:
+            return HTMLResponse("This subject is not allocated to the assigned class.",403)
+        _ensure_teacher_assignment_history_tables(cur)
+        teacher_rows=cur.execute("""SELECT DISTINCT COALESCE(NULLIF(trim(t.name),''),NULLIF(trim(h.teacher_name),''),'Subject teacher') AS teacher_name
+            FROM teacher_allocations a LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+            LEFT JOIN teacher_allocation_history h ON h.school_id=a.school_id AND h.class_id=a.class_id
+                AND h.subject_id=a.subject_id AND h.teacher_id=a.teacher_id
+            WHERE a.school_id=? AND a.class_id=? AND a.subject_id=?
+            UNION
+            SELECT DISTINCT COALESCE(NULLIF(trim(h.teacher_name),''),NULLIF(trim(t.name),''),'Subject teacher')
+            FROM teacher_allocation_history h LEFT JOIN teachers t ON t.id=h.teacher_id AND t.school_id=h.school_id
+            WHERE h.school_id=? AND h.class_id=? AND h.subject_id=?""",
+            (sid,class_id,subject_id,sid,class_id,subject_id)).fetchall()
+        teacher_names=", ".join(str(x["teacher_name"] or "") for x in teacher_rows if x["teacher_name"])
+        _ensure_class_submission_followups_table(cur)
+        kind=followup_type.strip().lower()
+        kind="Verbal follow-up" if kind=="verbal" else "Reminder"
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M")
+        cur.execute("""INSERT INTO class_submission_followups
+            (school_id,class_id,exam_id,subject_id,class_teacher_id,subject_teacher_names,followup_type,note,recorded_at)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid,class_id,exam_id,subject_id,teacher_id,teacher_names,kind,str(note or "").strip()[:500],now))
+        con.commit()
+    except Exception as exc:
+        con.rollback()
+        print("DAVISCHOOL CLASS MONITORING FOLLOW-UP WARNING:",repr(exc),flush=True)
+        return HTMLResponse("The follow-up could not be recorded. Please try again.",500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/class-monitoring?exam_id=%s&followup=recorded"%(exam_id),status_code=303)
+
+@router.get("/app/class-monitoring", response_class=HTMLResponse)
+def class_monitoring_page(request: Request):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id or not _require_permission(request,sid,"class_teacher.view"):
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        _ensure_teacher_allocations_table(cur)
+        _ensure_teacher_assignment_history_tables(cur)
+        assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
+            FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+        if not assignment:
+            con.close()
+            return _school_page(request,"Class Monitoring","<div class='page'><h1>Class Monitoring</h1><div class='card section'>You are not currently assigned as a class teacher.</div></div>")
+        class_id=int(assignment["class_id"])
+        exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+        selected_raw=str(request.query_params.get("exam_id") or "").strip()
+        selected_id=int(selected_raw) if selected_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+        exam=next((e for e in exams if int(e["id"])==selected_id),None)
+        if not exam and exams:
+            exam=exams[0]; selected_id=int(exam["id"])
+        class_label=str(assignment["class_name"] or "Class")+" "+str(assignment["stream"] or "")
+        year_raw=str(exam["year"] or "") if exam else ""
+        try: exam_year=int(year_raw)
+        except (TypeError,ValueError): exam_year=0
+        current_rows=cur.execute("""SELECT DISTINCT a.subject_id,a.teacher_id,
+            COALESCE(NULLIF(trim(t.name),''),'Unassigned teacher') teacher_name,
+            COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
+            FROM teacher_allocations a
+            LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+            LEFT JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+            WHERE a.school_id=? AND a.class_id=? ORDER BY subject_name,teacher_name""",(sid,class_id)).fetchall()
+        subjects_by_id={}
+        teachers_by_subject={}
+        for row in current_rows:
+            if row["subject_id"] is None: continue
+            subid=int(row["subject_id"])
+            subjects_by_id[subid]=str(row["subject_name"] or "Subject")
+            names=teachers_by_subject.setdefault(subid,[])
+            if row["teacher_name"] and str(row["teacher_name"]) not in names:
+                names.append(str(row["teacher_name"]))
+        # Resolve the archived staffing snapshot that belonged to this exam cohort.
+        if exam_year:
+            history=cur.execute("""SELECT h.cycle_year,h.subject_id,h.teacher_id,
+                COALESCE(NULLIF(trim(h.teacher_name),''),NULLIF(trim(t.name),''),'Unassigned teacher') teacher_name,
+                h.reason,h.recorded_at,COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
+                FROM teacher_allocation_history h
+                LEFT JOIN teachers t ON t.id=h.teacher_id AND t.school_id=h.school_id
+                LEFT JOIN subjects s ON s.id=h.subject_id AND s.school_id=h.school_id
+                WHERE h.school_id=? AND h.class_id=?
+                  AND h.reason IN ('Cohort promoted to next class','Destination class staffing replaced by promoted cohort',
+                    'Prior allocation retained for cohort promoted to next class','Class cohort graduated')
+                ORDER BY h.cycle_year,h.recorded_at,h.subject_id""",(sid,class_id)).fetchall()
+            cycles=sorted({int(x["cycle_year"] or 0) for x in history if int(x["cycle_year"] or 0)>0})
+            future=[y for y in cycles if y>=exam_year]
+            chosen_cycle=min(future) if future else (max(cycles) if cycles else 0)
+            chosen_rows=[x for x in history if int(x["cycle_year"] or 0)==chosen_cycle] if chosen_cycle else []
+            priorities={"Destination class staffing replaced by promoted cohort":3,
+                "Prior allocation retained for cohort promoted to next class":2,
+                "Cohort promoted to next class":1,"Class cohort graduated":1}
+            best_priority=max([priorities.get(str(x["reason"] or ""),0) for x in chosen_rows] or [0])
+            chosen_rows=[x for x in chosen_rows if priorities.get(str(x["reason"] or ""),0)==best_priority]
+            if chosen_rows:
+                subjects_by_id={}
+                teachers_by_subject={}
+                for row in chosen_rows:
+                    if row["subject_id"] is None: continue
+                    subid=int(row["subject_id"])
+                    subjects_by_id[subid]=str(row["subject_name"] or "Subject")
+                    names=teachers_by_subject.setdefault(subid,[])
+                    name=str(row["teacher_name"] or "Unassigned teacher")
+                    if name not in names: names.append(name)
+        if exam:
+            active_row=cur.execute("""SELECT COUNT(DISTINCT cohort.student_id) n FROM (
+                SELECT st.id student_id FROM students st
+                WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+                  AND NOT EXISTS (SELECT 1 FROM student_class_history incoming
+                    WHERE incoming.school_id=st.school_id AND incoming.student_id=st.id
+                      AND incoming.to_class_id=? AND incoming.to_academic_year>?)
+                UNION
+                SELECT hist.student_id FROM student_class_history hist
+                WHERE hist.school_id=? AND hist.from_class_id=? AND hist.from_academic_year=?
+                  AND hist.to_academic_year>?
+            ) cohort""",(sid,class_id,class_id,exam_year,sid,class_id,exam_year,exam_year)).fetchone() if exam_year else cur.execute("""SELECT COUNT(*) n FROM students st
+                WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,class_id)).fetchone()
+            cohort_count=int(active_row["n"] or 0) if active_row else 0
+            mark_rows=cur.execute("""SELECT subject_id,COUNT(DISTINCT student_id) entered
+                FROM marks WHERE school_id=? AND exam_id=? AND class_id=? GROUP BY subject_id""",(sid,selected_id,class_id)).fetchall()
+            entered_by_subject={int(x["subject_id"]):int(x["entered"] or 0) for x in mark_rows if x["subject_id"] is not None}
+        else:
+            cohort_count=0; entered_by_subject={}
+        subject_ids=sorted(subjects_by_id,key=lambda x:subjects_by_id[x].casefold())
+        followup_rows=[]
+        _ensure_class_submission_followups_table(cur)
+        if exam:
+            followup_rows=cur.execute("""SELECT f.*,COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name,
+                COALESCE(NULLIF(trim(t.name),''),'Class teacher') class_teacher_name
+                FROM class_submission_followups f
+                LEFT JOIN subjects s ON s.id=f.subject_id AND s.school_id=f.school_id
+                LEFT JOIN teachers t ON t.id=f.class_teacher_id AND t.school_id=f.school_id
+                WHERE f.school_id=? AND f.class_id=? AND f.exam_id=?
+                ORDER BY f.id DESC LIMIT 20""",(sid,class_id,selected_id)).fetchall()
+        followup_by_subject={}
+        for item in followup_rows:
+            followup_by_subject.setdefault(int(item["subject_id"]),[]).append(item)
+    except Exception as exc:
+        print("DAVISCHOOL CLASS MONITORING LOAD WARNING:",repr(exc),flush=True)
+        con.close()
+        return HTMLResponse("Class Monitoring could not load. Existing teacher functions remain available.",500)
+    con.close()
+    total=len(subject_ids)
+    complete=sum(1 for subid in subject_ids if cohort_count>0 and entered_by_subject.get(subid,0)>=cohort_count)
+    in_progress=sum(1 for subid in subject_ids if 0<entered_by_subject.get(subid,0)<max(cohort_count,1))
+    pending=max(0,total-complete-in_progress)
+    completion=(complete*100/total) if total else 0
+    exam_options="".join("<option value='%s' %s>%s — %s %s</option>"%(int(e["id"]),"selected" if int(e["id"])==selected_id else "",escape(str(e["name"] or "Examination")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
+    subject_cards=[]
+    for subid in subject_ids:
+        entered=entered_by_subject.get(subid,0)
+        if cohort_count>0 and entered>=cohort_count:
+            status="Submitted"; css="complete"
+        elif entered>0:
+            status="In progress"; css="progress"
+        else:
+            status="Pending"; css="pending"
+        teacher_label=", ".join(teachers_by_subject.get(subid,[])) or "No teacher allocated"
+        history_items=followup_by_subject.get(subid,[])
+        history_html="".join("<div class='cm-history-item'><b>%s</b><span>%s · %s</span><small>%s</small></div>"%(escape(str(x["followup_type"] or "Follow-up")),escape(str(x["recorded_at"] or "")),escape(str(x["class_teacher_name"] or "Class teacher")),escape(str(x["note"] or ""))) for x in history_items[:3])
+        if not history_html: history_html="<div class='cm-no-history'>No follow-ups recorded yet.</div>"
+        subject_cards.append("""<article class='cm-subject-card'>
+            <div class='cm-subject-top'><div><h3>%s</h3><p>Subject teacher: <b>%s</b></p></div><span class='cm-status %s'>%s</span></div>
+            <div class='cm-progress-meta'><span>%s of %s learners with marks</span><b>%s%%</b></div>
+            <div class='cm-progress'><span style='width:%s%%'></span></div>
+            <div class='cm-actions'><form method='post' action='/app/class-monitoring/follow-up'>
+              <input type='hidden' name='exam_id' value='%s'><input type='hidden' name='subject_id' value='%s'>
+              <select name='followup_type' aria-label='Follow-up type'><option value='reminder'>Log reminder</option><option value='verbal'>Verbal follow-up</option></select>
+              <input name='note' maxlength='500' placeholder='Optional follow-up note'>
+              <button type='submit'>Record follow-up</button>
+            </form></div>
+            <div class='cm-history'><b>Recent follow-ups</b>%s</div>
+        </article>"""%(escape(subjects_by_id[subid]),escape(teacher_label),css,status,entered,cohort_count,
+            int(entered*100/cohort_count) if cohort_count else 0,min(100,int(entered*100/cohort_count)) if cohort_count else 0,
+            selected_id,subid,history_html))
+    no_subjects="<div class='cm-empty'>No subject allocations were found for this class and examination year.</div>"
+    success="<div class='cm-success'>Follow-up recorded successfully.</div>" if request.query_params.get("followup")=="recorded" else ""
+    body="""<div class='page class-monitoring-page'>
+      <div class='cm-heading'><div><h1>Class Monitoring</h1><p>Track subject-teacher marks submissions and record follow-ups for your assigned class.</p></div>
+      <a class='cm-back' href='/app/class-teacher'>My Class</a></div>
+      <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
+      %s
+      <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+      <section class='cm-kpis'>
+        <div><small>Subjects</small><strong>%s</strong></div><div><small>Fully submitted</small><strong>%s</strong></div>
+        <div><small>In progress</small><strong>%s</strong></div><div><small>Pending</small><strong>%s</strong></div>
+      </section>
+      <div class='cm-overall'><div><b>Class submission completion</b><strong>%s%%</strong></div><div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
+      <section class='cm-subject-grid'>%s</section>
+      <section class='cm-followup-log'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p>%s</section>
+    </div>"""%(escape(class_label),escape(str(assignment["level"] or "")),cohort_count,success,exam_options,total,complete,in_progress,pending,int(completion),int(completion),
+        "".join(subject_cards) if subject_cards else no_subjects,
+        "".join("<div class='cm-log-row'><b>%s</b><span>%s · %s</span><small>%s</small></div>"%(escape(str(x["subject_name"] or "Subject")),escape(str(x["followup_type"] or "")),escape(str(x["recorded_at"] or "")),escape(str(x["note"] or ""))) for x in followup_rows) or "<div class='cm-no-history'>No follow-up activity has been recorded.</div>")
+    body+="""<style>
+      .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+      .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
+      .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
+      .cm-back:hover{background:#176B3A;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
+      .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
+      .cm-filters label{display:grid;gap:6px;color:#45624d;font-size:12px;font-weight:800}.cm-filters select{min-width:240px;padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
+      .cm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+      .cm-kpis>div{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#eaf3e8;display:grid;gap:6px}
+      .cm-kpis small{color:#52715b;font-size:11px;font-weight:800}.cm-kpis strong{font-size:25px;color:#176B3A}
+      .cm-overall{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#fff;margin-bottom:16px}
+      .cm-overall>div:first-child{display:flex;justify-content:space-between;gap:12px;color:#31563c;font-size:13px}.cm-overall strong{color:#176B3A}
+      .cm-overall-track,.cm-progress{height:9px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:10px}
+      .cm-overall-track span,.cm-progress span{display:block;height:100%;background:#176B3A;border-radius:99px}
+      .cm-subject-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+      .cm-subject-card{min-width:0;padding:15px;border:1px solid #dce9dd;border-radius:13px;background:#fff;box-shadow:0 3px 12px #173b2408}
+      .cm-subject-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.cm-subject-top h3{margin:0;color:#214b32;font-size:15px}
+      .cm-subject-top p{margin:5px 0 0;color:#65786a;font-size:11px}.cm-status{white-space:nowrap;padding:5px 9px;border-radius:99px;font-size:10px;font-weight:900}
+      .cm-status.complete{background:#dff5e6;color:#176b3a}.cm-status.progress{background:#fff0c2;color:#8a5a00}.cm-status.pending{background:#eef1ef;color:#5b6860}
+      .cm-progress-meta{display:flex;justify-content:space-between;gap:8px;margin-top:14px;color:#627468;font-size:11px}.cm-progress-meta b{color:#176B3A}
+      .cm-actions{margin-top:13px;padding-top:12px;border-top:1px solid #edf2ed}.cm-actions form{display:grid;grid-template-columns:130px minmax(0,1fr) auto;gap:7px}
+      .cm-actions select,.cm-actions input{min-width:0;width:100%;padding:9px;border:1px solid #d4e1d6;border-radius:8px;background:#fff;font:inherit;font-size:11px}
+      .cm-actions button{border:0;border-radius:8px;background:#176B3A;color:#fff;padding:9px 11px;font-size:11px;font-weight:800;cursor:pointer}
+      .cm-actions button:hover{background:#0f4d2a}.cm-history{margin-top:12px;padding-top:10px;border-top:1px solid #edf2ed;display:grid;gap:6px}
+      .cm-history>b{font-size:10px;color:#54705b;text-transform:uppercase;letter-spacing:.04em}.cm-history-item{display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#617366}
+      .cm-history-item b{color:#31563c}.cm-history-item small{flex-basis:100%;color:#829087}.cm-no-history,.cm-empty{color:#7b8a7f;font-size:11px;padding:8px 0}
+      .cm-followup-log{margin-top:20px;padding:16px;border:1px solid #dce9dd;border-radius:13px;background:#f8fbf7}.cm-followup-log h2{margin:0 0 4px;color:#214b32;font-size:15px}
+      .cm-followup-log p{margin:0 0 10px;color:#748277;font-size:11px}.cm-log-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 12px;padding:9px 0;border-bottom:1px solid #e7eee8;font-size:11px}
+      .cm-log-row:last-child{border-bottom:0}.cm-log-row b{color:#31563c}.cm-log-row span{color:#6c7c70}.cm-log-row small{grid-column:1/-1;color:#859188}
+      .cm-success{padding:10px 12px;border-radius:9px;background:#e4f5e8;color:#176b3a;font-size:12px;font-weight:800;margin:12px 0}
+      @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-actions form{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
+    </style>"""
+    return _school_page(request,"Class Monitoring",body)
+
 
 @router.get("/app/students", response_class=HTMLResponse)
 def students_page(request: Request):
