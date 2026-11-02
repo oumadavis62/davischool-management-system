@@ -4952,9 +4952,15 @@ function toggleTeacherTile(event, tile){{
             admin_health_overall="Healthy" if not health_attention else "Attention"
             admin_health_summary="School systems are responding normally." if not health_attention else f"{len(health_attention)} system area{'s' if len(health_attention)!=1 else ''} need attention."
             admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
+            try:
+                latest_term_row=cur.execute("SELECT * FROM terms WHERE school_id=? ORDER BY id DESC LIMIT 1",(school_id,)).fetchone()
+                latest_term_label=str(latest_term_row["name"] or latest_term_row["term"] or "Term not set") if latest_term_row else "Term not set"
+            except Exception:
+                latest_term_label="Term not set"
+            academic_cycle_label=f"{datetime.now(ZoneInfo('Africa/Nairobi')).year} · {latest_term_label}"
 
             body=f"""<div class='page overview-admin-page'>
-<header class='overview-school-heading'><div class='overview-heading-kicker'>SCHOOL OVERVIEW</div><h1>{escape(school_name)}</h1><div class='muted'>Your school operations, academic activity and system status in one place.</div></header>
+<header class='overview-school-heading'><div class='overview-heading-kicker'>SCHOOL OVERVIEW</div><h1>{escape(school_name)}</h1><div class='muted'>Your school operations, academic activity and system status in one place.</div><div class='overview-cycle-pill'>Academic cycle · {escape(academic_cycle_label)}</div></header>
 <div class='grid overview-charts'>
 <div class='card overview-chart-card gender-chart-card'><div class='overview-card-heading'><h2>Students</h2><p>Active learner gender distribution</p></div>{gender_donut}</div>
 <div class='card overview-chart-card gender-chart-card'><div class='overview-card-heading'><h2>Staff</h2><p>Teacher gender distribution</p></div>{staff_gender_donut}</div>
@@ -4962,10 +4968,10 @@ function toggleTeacherTile(event, tile){{
 </div>
 <div class='overview-recent-row'><div class='card recent-activity-card'><div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest entries recorded in the school audit trail.</div></div>{("<a href='/app/audit' class='recent-view-all'>View all activity</a>" if _require_permission(request,school_id,"audit.view") else "")}</div><div class='recent-activity-list'>{recent_activity_html}</div></div></div>
 <div class='overview-section-heading'><div><div class='overview-heading-kicker'>GET THINGS DONE</div><h2>Quick Access</h2><p>Open the workspaces available to your account.</p></div></div><div class='overview-quick-groups'>{quick_access_html}</div>
-<div class='overview-section-heading'><div><div class='overview-heading-kicker'>WORKSPACE STATUS</div><h2>System Health</h2><p>Checks are based on live queries available to this overview.</p></div></div>{admin_health}
+<div class='overview-section-heading'><div><div class='overview-heading-kicker'>WORKSPACE STATUS</div><h2>System Health</h2><p>Checks are based on live queries available to this overview.</p></div></div><details class='overview-health-details'><summary>View system health details · {escape(admin_health_overall)}</summary>{admin_health}</details>
 <style>
 
-.overview-school-heading{{text-align:left;padding:20px 24px;margin:0 0 18px;border:1px solid #d5e2d6;border-radius:18px;background:linear-gradient(115deg,#edf4ee,#f8faf7 72%,#e5eee6);box-shadow:0 5px 18px #244b3010}}.overview-school-heading h1{{margin:4px 0 6px;color:#174b2d;font-size:clamp(23px,3vw,32px)}}.overview-school-heading .muted{{margin:0;color:#617568;font-size:13px}}.overview-heading-kicker{{font-size:10px;letter-spacing:.14em;font-weight:900;color:#5d8068}}
+.overview-school-heading{{text-align:left;padding:20px 24px;margin:0 0 18px;border:1px solid #d5e2d6;border-radius:18px;background:linear-gradient(115deg,#edf4ee,#f8faf7 72%,#e5eee6);box-shadow:0 5px 18px #244b3010}}.overview-school-heading h1{{margin:4px 0 6px;color:#174b2d;font-size:clamp(23px,3vw,32px)}}.overview-school-heading .muted{{margin:0;color:#617568;font-size:13px}}.overview-heading-kicker{{font-size:10px;letter-spacing:.14em;font-weight:900;color:#5d8068}}.overview-cycle-pill{{display:inline-flex;margin-top:12px;padding:6px 10px;border:1px solid #d5e2d6;border-radius:999px;background:#f7faf7;color:#476b50;font-size:10px;font-weight:800}}
 .overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1500px;margin:18px auto 22px;gap:15px}}
 .overview-flip-tile,.overview-flip-inner{{display:contents}}.overview-flip-face{{display:none!important}}.overview-chart-card{{display:flex;min-width:0;min-height:242px;padding:18px 16px;background:#E6EFE7;border:1px solid #cfddcf;border-radius:16px;box-shadow:0 3px 12px #244b3009;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden}}
 .overview-card-heading{{width:100%;margin-bottom:12px;text-align:left}}.overview-card-heading h2{{font-size:14px;margin:0;color:#214d32;font-weight:850}}.overview-card-heading p{{font-size:10px;margin:3px 0 0;color:#718276}}
