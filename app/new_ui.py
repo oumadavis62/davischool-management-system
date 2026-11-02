@@ -4922,7 +4922,7 @@ function toggleTeacherTile(event, tile){{
             recent_activity_html="".join(f"<article class='recent-activity-item'><div class='recent-activity-icon'>A</div><div class='recent-activity-copy'><b>{escape(str(row['action'] or 'School activity').replace('_',' ').title())}</b><span>{escape(str(row['details'] or ''))}</span><small>{escape(str(row['user_email'] or 'System'))} · {escape(str(row['timestamp'] or 'Timestamp unavailable'))}</small></div></article>" for row in recent_activity) or "<div class='recent-activity-empty'>No recorded audit activity is available yet.</div>"
             quick_access_groups=[
                 ("School operations",[("Students","/app/students","students.view"),("Attendance","/app/attendance","attendance.view"),("Fees & Finance","/app/finance","fees.view"),("Accounting","/app/accounting","finance.view")]),
-                ("Academic work",[("Academic Manager","/app/academics","academics.view"),("MarkSheet Analysis","/app/academics/marksheet-analysis","academics.view")]),
+                ("Academic work",[("Academic Manager","/app/academics","marks.view"),("MarkSheet Analysis","/app/academics/marksheet-analysis","marks.view")]),
                 ("Administration",[("User Management","/app/users","users.manage"),("School Settings","/app/school-settings","settings.view"),("Roles & Permissions","/app/roles","settings.manage"),("Audit Trail","/app/audit","audit.view")])
             ]
             quick_access_html=[]
