@@ -1291,6 +1291,7 @@ def class_teacher_page(request: Request):
 
 
 def _ensure_class_submission_followups_table(cur):
+    """Create and upgrade the follow-up log table on both fresh and existing databases."""
     cur.execute("""CREATE TABLE IF NOT EXISTS class_submission_followups(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
@@ -1303,6 +1304,30 @@ def _ensure_class_submission_followups_table(cur):
         note TEXT,
         recorded_at TEXT NOT NULL
     )""")
+    cur.execute("SELECT * FROM class_submission_followups LIMIT 0")
+    existing = {
+        str(col.name if hasattr(col, "name") else col[0]).lower()
+        for col in (cur.description or [])
+    }
+    # Older installations may already have the table but not all fields used
+    # by the follow-up form and activity log. Add only missing fields.
+    for column, definition in (
+        ("school_id", "INTEGER"),
+        ("class_id", "INTEGER"),
+        ("exam_id", "INTEGER"),
+        ("subject_id", "INTEGER"),
+        ("class_teacher_id", "INTEGER"),
+        ("subject_teacher_names", "TEXT"),
+        ("followup_type", "TEXT DEFAULT 'Reminder'"),
+        ("note", "TEXT"),
+        ("recorded_at", "TEXT"),
+    ):
+        if column in existing:
+            continue
+        cur.execute(
+            "ALTER TABLE class_submission_followups ADD COLUMN %s %s"
+            % (column, definition)
+        )
 
 @router.post("/app/class-monitoring/follow-up")
 def class_monitoring_follow_up(
