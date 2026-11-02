@@ -1362,8 +1362,125 @@ def class_monitoring_page(request: Request):
             FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
             WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
         if not assignment:
+            # Subject teachers get an allocation-scoped workspace. This is deliberately
+            # separate from the class-teacher dashboard and never exposes other teachers'
+            # classes or subjects.
+            allocations=cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,
+                COALESCE(NULLIF(trim(c.name),''),'Class') class_name,
+                COALESCE(NULLIF(trim(c.stream),''),'') stream,
+                COALESCE(NULLIF(trim(c.level),''),'') level,
+                COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
+                FROM teacher_allocations a
+                JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+                JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+                WHERE a.school_id=? AND a.teacher_id=?
+                ORDER BY c.name,c.stream,s.name""",(sid,teacher_id)).fetchall()
+            exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+            selected_raw=str(request.query_params.get("exam_id") or "").strip()
+            selected_id=int(selected_raw) if selected_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+            exam=next((e for e in exams if int(e["id"])==selected_id),None)
+            if not exam and exams:
+                exam=exams[0]; selected_id=int(exam["id"])
+            try: exam_year=int(exam["year"] or "") if exam else 0
+            except (TypeError,ValueError): exam_year=0
+            cards=[]
+            total_pairs=complete_pairs=progress_pairs=pending_pairs=0
+            for allocation in allocations:
+                class_id=int(allocation["class_id"]); subject_id=int(allocation["subject_id"])
+                if exam:
+                    if exam_year:
+                        cohort_row=cur.execute("""SELECT COUNT(DISTINCT cohort.student_id) n FROM (
+                            SELECT st.id student_id FROM students st
+                            WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
+                              AND NOT EXISTS (SELECT 1 FROM student_class_history incoming
+                                WHERE incoming.school_id=st.school_id AND incoming.student_id=st.id
+                                  AND incoming.to_class_id=? AND incoming.to_academic_year>?)
+                            UNION
+                            SELECT hist.student_id FROM student_class_history hist
+                            WHERE hist.school_id=? AND hist.from_class_id=? AND hist.from_academic_year=?
+                              AND hist.to_academic_year>?
+                        ) cohort""",(sid,class_id,class_id,exam_year,sid,class_id,exam_year,exam_year)).fetchone()
+                    else:
+                        cohort_row=cur.execute("""SELECT COUNT(*) n FROM students st
+                            WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
+                              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,class_id)).fetchone()
+                    expected=int(cohort_row["n"] or 0) if cohort_row else 0
+                    entered_row=cur.execute("""SELECT COUNT(DISTINCT student_id) n FROM marks
+                        WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?""",
+                        (sid,selected_id,class_id,subject_id)).fetchone()
+                    entered=int(entered_row["n"] or 0) if entered_row else 0
+                else:
+                    expected=entered=0
+                if expected>0 and entered>=expected:
+                    status="Submitted"; css="complete"; complete_pairs+=1
+                elif entered>0:
+                    status="In progress"; css="progress"; progress_pairs+=1
+                else:
+                    status="Not started"; css="pending"; pending_pairs+=1
+                total_pairs+=1
+                pct=min(100,int(entered*100/expected)) if expected else 0
+                class_label=str(allocation["class_name"] or "Class") + ((" · "+str(allocation["stream"])) if allocation["stream"] else "")
+                cards.append("""<article class='cm-subject-card'>
+                  <div class='cm-subject-top'><div><h3>%s</h3><p>%s · %s</p><p>Allocated subject: <b>%s</b></p></div>
+                    <span class='cm-status %s'>%s</span></div>
+                  <div class='cm-progress-meta'><span>%s of %s learners have marks</span><b>%s%%</b></div>
+                  <div class='cm-progress'><span style='width:%s%%'></span></div>
+                  <div class='cm-teacher-actions'><a href='/app/academics/marks?exam_id=%s&amp;class_id=%s&amp;subject_id=%s'>Open marks entry</a></div>
+                </article>"""%(escape(class_label),escape(str(allocation["level"] or "")),
+                    escape(str(exam["name"] or "Select an examination") if exam else "No examination selected"),
+                    escape(str(allocation["subject_name"] or "Subject")),css,status,entered,expected,pct,pct,
+                    selected_id,class_id,subject_id))
             con.close()
-            return _school_page(request,"Class Monitoring","<div class='page'><h1>Class Monitoring</h1><div class='card section'>You are not currently assigned as a class teacher.</div></div>")
+            exam_options="".join("<option value='%s' %s>%s — %s %s</option>"%(int(e["id"]),"selected" if int(e["id"])==selected_id else "",escape(str(e["name"] or "Examination")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
+            completion=int(complete_pairs*100/total_pairs) if total_pairs else 0
+            body="""<div class='page class-monitoring-page'>
+              <div class='cm-heading'><div><h1>My Submission Status</h1>
+                <p>Track marks progress for every class, stream and subject allocated to you.</p></div>
+                <a class='cm-back' href='/app/academics/marks'>Record Marks</a></div>
+              <div class='cm-class-line'><b>Subject-teacher workspace</b>
+                <span>Only your current teaching allocations are shown</span></div>
+              <form class='cm-filters' method='get' action='/app/class-monitoring'>
+                <label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+              <section class='cm-kpis'>
+                <div><small>Allocated subjects</small><strong>%s</strong></div>
+                <div><small>Fully submitted</small><strong>%s</strong></div>
+                <div><small>In progress</small><strong>%s</strong></div>
+                <div><small>Not started</small><strong>%s</strong></div>
+              </section>
+              <div class='cm-overall'><div><b>My submission completion</b><strong>%s%%</strong></div>
+                <div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
+              <section class='cm-subject-grid'>%s</section>
+              %s
+            </div>"""%(exam_options,total_pairs,complete_pairs,progress_pairs,pending_pairs,completion,completion,
+                "".join(cards) if cards else "<div class='cm-empty'>No current class and subject allocations were found for your teacher account.</div>",
+                "<p class='cm-empty'>Select an examination to view your submission progress.</p>" if not exam else "")
+            body+="""<style>
+              .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+              .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
+              .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
+              .cm-back:hover{background:#176B3A;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
+              .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
+              .cm-filters label{display:grid;gap:6px;color:#45624d;font-size:12px;font-weight:800}.cm-filters select{min-width:240px;padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
+              .cm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+              .cm-kpis>div{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#eaf3e8;display:grid;gap:6px}
+              .cm-kpis small{color:#52715b;font-size:11px;font-weight:800}.cm-kpis strong{font-size:25px;color:#176B3A}
+              .cm-overall{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#fff;margin-bottom:16px}
+              .cm-overall>div:first-child{display:flex;justify-content:space-between;gap:12px;color:#31563c;font-size:13px}.cm-overall strong{color:#176B3A}
+              .cm-overall-track,.cm-progress{height:9px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:10px}
+              .cm-overall-track span,.cm-progress span{display:block;height:100%;background:#176B3A;border-radius:99px}
+              .cm-subject-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+              .cm-subject-card{min-width:0;padding:15px;border:1px solid #dce9dd;border-radius:13px;background:#fff;box-shadow:0 3px 12px #173b2408}
+              .cm-subject-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.cm-subject-top h3{margin:0;color:#214b32;font-size:15px}
+              .cm-subject-top p{margin:5px 0 0;color:#65786a;font-size:11px}.cm-status{white-space:nowrap;padding:5px 9px;border-radius:99px;font-size:10px;font-weight:900}
+              .cm-status.complete{background:#dff5e6;color:#176b3a}.cm-status.progress{background:#fff0c2;color:#8a5a00}.cm-status.pending{background:#eef1ef;color:#5b6860}
+              .cm-progress-meta{display:flex;justify-content:space-between;gap:8px;margin-top:14px;color:#627468;font-size:11px}.cm-progress-meta b{color:#176B3A}
+              .cm-teacher-actions{margin-top:13px;padding-top:12px;border-top:1px solid #edf2ed}
+              .cm-teacher-actions a{display:inline-block;padding:9px 12px;border-radius:8px;background:#176B3A;color:#fff;text-decoration:none;font-size:11px;font-weight:800}
+              .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
+              @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
+            </style>"""
+            return _school_page(request,"Class Monitoring",body)
         class_id=int(assignment["class_id"])
         exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         selected_raw=str(request.query_params.get("exam_id") or "").strip()
