@@ -5300,7 +5300,7 @@ def parent_portal(request: Request):
             WHERE s.id=? AND s.school_id=? LIMIT 1""", (student_id, sid)).fetchone()
         if not student:
             return HTMLResponse("The linked learner record could not be found. Please contact the school.", 404)
-        school = cur.execute("SELECT name,phone,email,logo_data FROM schools WHERE id=?", (sid,)).fetchone()
+        school = cur.execute("SELECT name,phone,email,logo_data,status FROM schools WHERE id=?", (sid,)).fetchone()
         marks = cur.execute("""SELECT m.marks,m.term,m.year,e.name exam_name,sub.name subject_name
             FROM marks m
             LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
@@ -5324,6 +5324,10 @@ def parent_portal(request: Request):
             attendance_summary = None
     finally:
         con.close()
+    school_status = str(school["status"] or "active").strip().lower() if school else "suspended"
+    if school_status not in ("active", "enabled"):
+        request.session.clear()
+        return RedirectResponse("/login?suspended=1", status_code=303)
     learner_name = escape(str(student["name"] or "Learner"))
     school_name = escape(str(school["name"] or "School")) if school else "School"
     class_label = escape(str(student["class_name"] or "Unassigned"))
