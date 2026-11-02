@@ -526,11 +526,17 @@ def _shell(title, name, role, body, school_id=None):
                 nav = [item for item in nav if item[3] is None or _permission_enabled(cur, int(school_id), role, item[3])]
             finally:
                 con.close()
-    # Teachers open directly on the Overview workspace with the dashboard/sidebar
-    # locked out of sight. School Admin and Super Admin navigation is unchanged.
+    # Teachers receive a focused teaching workspace with only teacher-facing destinations.
     teacher_locked = (role == "teacher")
     if teacher_locked:
-        links = ""
+        teacher_nav = [
+            ("/app",_modern_icon("dashboard"),"Overview"),
+            ("/app#teacher-classes",_modern_icon("school"),"My Classes"),
+            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects"),
+            ("/app/academics/marks",_modern_icon("marks"),"Record Marks"),
+            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
+        ]
+        links = "".join(f"<a href='{u}' class='nav' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
         links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
@@ -542,7 +548,7 @@ def _shell(title, name, role, body, school_id=None):
 <title>{escape(title)} · DaviSchool</title>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#EAF3E8;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
-.app{{display:flex;min-height:100vh}}.teacher-portal .side{{display:none}}.teacher-portal .main{{margin-left:0}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
+.app{{display:flex;min-height:100vh}}.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;padding:11px 12px}}.teacher-portal .nav:hover,.teacher-portal .nav:focus-visible{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a}}.teacher-portal .nav[href='/app']{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a;font-weight:900}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
 .sidebar-brand{{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;color:#fff}}.sidebar-login-logo{{width:48px;height:48px;min-width:48px;border-radius:13px;background:#176B3A;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.12)}}.sidebar-login-logo .davi-mark{{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#176B3A;font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;overflow:visible}}.sidebar-login-logo .davi-mark:before{{content:'D';position:absolute;left:50%;top:50%;transform:translate(-50%,-53%) skew(-7deg);font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.08);z-index:1}}.sidebar-login-logo .davi-mark .d-letter{{display:none}}.sidebar-login-logo .davi-mark:after{{content:'';display:none}}.sidebar-brand-title{{font-size:16px;font-weight:900;line-height:1.15;letter-spacing:-.2px;color:#fff;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center}}.brand{{font-size:17px;font-weight:900;color:white;padding:8px 10px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;line-height:1.15}}.brand-logo{{width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.16)}}.brand-logo .davi-mark{{width:24px;height:24px;border-width:4px;border-left-width:5px;border-radius:5px 13px 13px 5px}}.brand-logo .davi-mark:after{{height:6px}}.brand small{{display:none}}
 .modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}.top .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:#176B3A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;line-height:1;border:0;box-shadow:0 2px 7px rgba(23,107,58,.22)}}
@@ -561,8 +567,8 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 .ds-action-cell.ds-action-open .action:hover,.ds-action-cell.ds-action-open .action:focus-visible{{background:#0F4D2A!important;color:#fff!important;border-color:#0F4D2A!important}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.side{{width:176px!important;max-width:70vw;z-index:1201;box-shadow:8px 0 28px rgba(0,0,0,.18)}}.main{{margin-left:0!important;width:100%;min-width:0}}.sidebar-hidden .side{{transform:translateX(-105%);pointer-events:none}}.sidebar-open:not(.sidebar-hidden)::after{{content:'';position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1200;pointer-events:none}}.top{{z-index:1202;padding:0 14px;position:sticky}}.sidebar-toggle{{position:relative;z-index:1300;pointer-events:auto;touch-action:manipulation}}.page{{width:100%;min-width:0}}.actions > .academic-manager-tile[href="/app/academics/submission-tracker"]{{grid-column:1 / -1;min-height:105px}}.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:0!important}}.side{{width:176px!important;max-width:70vw!important;flex:0 0 176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
-</style></head><body class='{"sidebar-hidden" if teacher_locked else ""}{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
-<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'>{"" if teacher_locked else "<button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button>"}<div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+</style></head><body class='{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
+<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 // Shared workspace performance helpers: warm likely navigation targets on intent,
 // and prevent accidental double-submits without changing form payloads or routes.
 (function(){{
@@ -724,8 +730,8 @@ else setupDaviActionCells();
     try{{
       var mobile=window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
       var saved=localStorage.getItem('davischool_sidebar_hidden')==='1';
-      applySidebarState({str(teacher_locked).lower()} || mobile || saved);
-    }}catch(e){{applySidebarState({str(teacher_locked).lower()} || !!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
+      applySidebarState(mobile || saved);
+    }}catch(e){{applySidebarState(!!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
   }}
   // Delegate from document so the control keeps working after Academic Manager
   // tile navigation replaces the document using the prefetched HTML cache.
@@ -4757,6 +4763,14 @@ def app_home(request: Request):
             ).fetchone()["n"] or 0)
 
             marks_pct=(entered_marks/expected_marks*100) if expected_marks else 0
+            teacher_assignment_rows="".join(
+                f"<tr><td>{escape(str(a['class_name'] or 'Unassigned'))}</td><td>{escape(str(a['stream'] or '—'))}</td><td>{escape(str(a['subject_name'] or '—'))}</td></tr>"
+                for a in allocation_rows
+            )
+            teacher_subjects_html="".join(
+                f"<span class='teacher-chip'>{escape(subject_name)}</span>"
+                for subject_name in sorted({str(a['subject_name'] or '') for a in allocation_rows if a['subject_name']})
+            ) or "<div class='muted'>No subject allocations have been assigned yet.</div>"
             hover_tiles=[
                 ("My Classes",_modern_icon("school",30),str(class_count),f"{class_count} allocated class{'es' if class_count!=1 else ''}"),
                 ("My Subjects",_modern_icon("subject",30),str(subject_count),f"{subject_count} allocated subject{'s' if subject_count!=1 else ''}"),
@@ -4815,7 +4829,32 @@ def app_home(request: Request):
             body=f"""<div class='page overview-home'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
 <div class='grid teacher-overview-grid'>{tile_html}</div>
 <div class='teacher-health-slot'>{teacher_health}</div>
+<div class='section card teacher-assignment-panel' id='teacher-classes'>
+  <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Classes, streams and subjects assigned to your teacher profile.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Record Marks</a></div>
+  <div class='teacher-assignment-scroll'><table><thead><tr><th>Class</th><th>Stream</th><th>Subject</th></tr></thead><tbody>{teacher_assignment_rows or "<tr><td colspan='3'>No teaching assignments are available.</td></tr>"}</tbody></table></div>
+</div>
+<div class='section card teacher-assignment-panel' id='teacher-subjects'>
+  <div class='teacher-section-heading'><div><h2>My Subjects</h2><div class='muted'>Subjects currently appearing in your teaching allocations.</div></div></div>
+  <div class='teacher-chip-list'>{teacher_subjects_html}</div>
+</div>
+<div class='section card teacher-assignment-panel' id='teacher-submission-status'>
+  <div class='teacher-section-heading'><div><h2>Marks Submission Status</h2><div class='muted'>Progress for {escape(latest_exam_name)} based on your current allocations.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Open Marks Entry</a></div>
+  <div class='teacher-progress-meta'><strong>{entered_marks:,} of {expected_marks:,} marks entered</strong><span>{marks_pct:.0f}%</span></div>
+  <div class='teacher-progress-track'><span style='width:{max(0,min(100,marks_pct)):.2f}%'></span></div>
+  <div class='muted' style='margin-top:8px'>{open_mark_subjects} allocated subject/class combinations remain open for editing.</div>
+</div>
 <style>
+.teacher-section-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}}
+.teacher-section-heading h2{{font-size:16px;margin:0 0 4px}}
+.teacher-section-link{{display:inline-flex;align-items:center;justify-content:center;padding:9px 13px;border-radius:9px;background:#C8E6C9;color:#14532d;text-decoration:none;font-size:12px;font-weight:900;border:1px solid #A5D6A7}}
+.teacher-section-link:hover,.teacher-section-link:focus-visible{{background:#176B3A;color:#fff;border-color:#176B3A}}
+.teacher-assignment-scroll{{overflow-x:auto;-webkit-overflow-scrolling:touch}}
+.teacher-assignment-scroll table{{min-width:480px}}
+.teacher-chip-list{{display:flex;gap:8px;flex-wrap:wrap}}
+.teacher-chip{{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#EAF3E8;border:1px solid #cfe3d0;color:#176B3A;font-size:12px;font-weight:800}}
+.teacher-progress-meta{{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#176B3A}}
+.teacher-progress-track{{height:11px;background:#e5eee5;border-radius:999px;overflow:hidden;margin-top:9px}}
+.teacher-progress-track span{{display:block;height:100%;background:#176B3A;border-radius:999px;transition:width .2s ease}}
 .teacher-overview-grid{{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}}
 .teacher-hover-tile{{display:block;min-height:150px;perspective:900px}}
 .teacher-tile-inner{{position:relative;width:100%;height:150px;transition:transform .35s ease;transform-style:preserve-3d}}
@@ -4828,7 +4867,7 @@ def app_home(request: Request):
 .teacher-tile-back-value{{font-size:28px;font-weight:900;margin:8px 0 5px}}
 .teacher-tile-back-detail{{font-size:11px;line-height:1.4;color:#fff}}
 @media(max-width:900px){{.teacher-overview-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
-@media(max-width:600px){{.teacher-overview-grid{{grid-template-columns:1fr 1fr;gap:10px}}.teacher-hover-tile,.teacher-tile-inner{{min-height:135px;height:135px}}.teacher-tile-face{{padding:12px}}.teacher-tile-back-value{{font-size:22px}}}}
+@media(max-width:600px){{.teacher-portal .side{{width:250px!important;max-width:82vw;z-index:1201}}.teacher-portal .main{{margin-left:0!important}}.teacher-portal .sidebar-hidden .side{{transform:translateX(-105%);pointer-events:none}}.teacher-portal .sidebar-open:not(.sidebar-hidden)::after{{content:'';position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1200;pointer-events:none}}.teacher-portal .top{{z-index:1202}}.teacher-portal .sidebar-toggle{{z-index:1300}}.teacher-overview-grid{{grid-template-columns:1fr 1fr;gap:10px}}.teacher-hover-tile,.teacher-tile-inner{{min-height:135px;height:135px}}.teacher-tile-face{{padding:12px}}.teacher-tile-back-value{{font-size:22px}}}}
 </style>
 <script>
 function toggleTeacherTile(event, tile){{
