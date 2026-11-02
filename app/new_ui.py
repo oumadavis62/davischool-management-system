@@ -4863,6 +4863,8 @@ function toggleTeacherTile(event, tile){{
                 return f"<div class='gender-donut-layout'><div class='gender-donut' role='img' aria-label='{chart_name}: {total} total' style='background:{gradient}'><div class='gender-donut-hole'><strong>{total}</strong><span>Total</span></div></div><div class='donut-legend'>{''.join(legend)}</div></div>"
 
             gender_donut=_gender_donut(gender_counts,gender_total,"Student gender distribution")
+            # Keep an explicit, high-visibility colour key on the student chart.
+            gender_donut=gender_donut.replace("class='donut-legend'", "class='donut-legend student-gender-legend'")
 
             staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
             staff_gender_counts={"Male":0,"Female":0}
@@ -4983,7 +4985,7 @@ function toggleTeacherTile(event, tile){{
 .gender-donut-hole{{width:62%;height:62%;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 1px 5px #0f172a12}}
 .gender-donut-hole strong{{font-size:21px;line-height:1.1;color:#172033;font-weight:900}}
 .gender-donut-hole span{{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em}}
-.donut-legend{{display:flex;flex-direction:column;gap:9px;min-width:0;flex:1;max-width:145px}}
+.donut-legend{{display:flex;flex-direction:column;gap:9px;min-width:0;flex:1;max-width:145px}}.student-gender-legend{{display:flex!important;visibility:visible!important;opacity:1!important;min-width:104px;max-width:160px;flex-shrink:0}}.student-gender-legend .donut-legend-item{{grid-template-columns:9px minmax(0,1fr) auto auto;white-space:nowrap}}
 .donut-legend-item{{display:grid;grid-template-columns:9px minmax(0,1fr) auto auto;align-items:center;gap:5px;font-size:10px;color:#334155}}
 .donut-legend-dot{{width:8px;height:8px;border-radius:50%}}
 .donut-legend-name{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
