@@ -5695,7 +5695,8 @@ def app_home(request: Request):
 @media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}}}
 .overview-flip-tile.is-flipped .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}
 .overview-flip-face{{position:absolute;inset:0;box-sizing:border-box;border:1px solid #A5D6A7;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#C8E6C9;overflow:hidden}}
-.overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
+.overview-flip-front{{background:#fff;border-color:#e2ebe3}}
+ .overview-flip-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
 .overview-flip-back .label,.overview-flip-back .overview-flip-detail{{color:#fff}}
 .overview-flip-value{{font-size:32px;font-weight:900;line-height:1;margin:8px 0 5px}}
 .overview-flip-detail{{font-size:12px;font-weight:800;color:#64748b}}
