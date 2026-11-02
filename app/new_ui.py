@@ -1358,6 +1358,9 @@ def class_monitoring_page(request: Request):
         _ensure_class_teacher_assignments_table(cur)
         _ensure_teacher_allocations_table(cur)
         _ensure_teacher_assignment_history_tables(cur)
+        # Subject-teacher progress also reads the durable cohort and graduation snapshots.
+        # Ensure those tables exist before querying historical class membership.
+        _ensure_student_promotion_cohort_tables(cur)
         assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
             FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
             WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
