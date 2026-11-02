@@ -2585,8 +2585,8 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         promoted_source_rows=tracker_cur.execute(
                             """SELECT DISTINCT from_class_id
                                FROM student_class_history
-                               WHERE school_id=? AND from_academic_year=?
-                                 AND to_academic_year>? AND from_class_id IS NOT NULL""",
+                               WHERE school_id=? AND CAST(from_academic_year AS INTEGER)=?
+                                 AND CAST(to_academic_year AS INTEGER)>? AND from_class_id IS NOT NULL""",
                             (sid,exam_year,exam_year)
                         ).fetchall()
                         promoted_source_ids={int(x["from_class_id"]) for x in promoted_source_rows
