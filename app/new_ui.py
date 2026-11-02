@@ -4949,11 +4949,11 @@ function toggleTeacherTile(event, tile){{
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
 <div class='grid overview-charts'>
 <div class='overview-flip-tile'><div class='overview-flip-inner'>
-<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div>{gender_donut}</div>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div>{gender_donut}</div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Student</div><div class='overview-flip-value'>{gender_total}</div><div class='overview-flip-detail'>Students</div></div>
 </div></div>
 <div class='overview-flip-tile'><div class='overview-flip-inner'>
-<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div>{staff_gender_donut}</div>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div>{staff_gender_donut}</div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Staff</div><div class='overview-flip-value'>{staff_gender_total}</div><div class='overview-flip-detail'>Staff members</div></div>
 </div></div>
 <div class='overview-flip-tile classes-overview-tile'><div class='overview-flip-inner'>
