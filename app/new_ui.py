@@ -537,7 +537,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
         ]
         # Show Class Monitoring only to a teacher who currently holds a class-teacher assignment.
-        if school_id and _require_permission(request,int(school_id),"class_teacher.view"):
+        if school_id:
             nav_con=_db()
             try:
                 nav_cur=nav_con.cursor()
@@ -1303,7 +1303,7 @@ def class_monitoring_follow_up(
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
     teacher_id=int(request.session.get("teacher_id") or 0)
-    if not teacher_id or not _require_permission(request,sid,"class_teacher.view"):
+    if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
     con=_db()
     try:
@@ -1363,7 +1363,7 @@ def class_monitoring_page(request: Request):
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
     teacher_id=int(request.session.get("teacher_id") or 0)
-    if not teacher_id or not _require_permission(request,sid,"class_teacher.view"):
+    if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
     con=_db()
     try:
