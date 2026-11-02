@@ -4846,11 +4846,24 @@ function toggleTeacherTile(event, tile){{
                 else:
                     gender_counts["Other"] += int(gr["count"] or 0)
             gender_total=sum(gender_counts.values())
-            gender_bars=""
-            for label in ("Male","Female"):
-                count=gender_counts[label]
-                pct=(count/gender_total*100) if gender_total else 0
-                gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
+
+            def _gender_donut(counts,total,chart_name):
+                colors={"Male":"#2563eb","Female":"#db2777","Other":"#f59e0b"}
+                angle=0.0
+                stops=[]
+                legend=[]
+                for label in ("Male","Female","Other"):
+                    count=int(counts.get(label,0) or 0)
+                    pct=(count/total*100) if total else 0
+                    if count>0 and total:
+                        end=angle+(pct*3.6)
+                        stops.append(f"{colors[label]} {angle:.2f}deg {end:.2f}deg")
+                        angle=end
+                    legend.append(f"<div class='donut-legend-item'><span class='donut-legend-dot' style='background:{colors[label]}'></span><span class='donut-legend-name'>{label}</span><b>{count}</b><small>{pct:.1f}%</small></div>")
+                gradient="conic-gradient("+", ".join(stops)+")" if stops else "conic-gradient(#e2e8f0 0deg 360deg)"
+                return f"<div class='gender-donut-layout'><div class='gender-donut' role='img' aria-label='{chart_name}: {total} total' style='background:{gradient}'><div class='gender-donut-hole'><strong>{total}</strong><span>Total</span></div></div><div class='donut-legend'>{''.join(legend)}</div></div>"
+
+            gender_donut=_gender_donut(gender_counts,gender_total,"Student gender distribution")
 
             staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
             staff_gender_counts={"Male":0,"Female":0,"Other":0}
@@ -4863,11 +4876,7 @@ function toggleTeacherTile(event, tile){{
                 else:
                     staff_gender_counts["Other"] += int(gr["count"] or 0)
             staff_gender_total=sum(staff_gender_counts.values())
-            staff_gender_bars=""
-            for label in ("Male","Female"):
-                count=staff_gender_counts[label]
-                pct=(count/staff_gender_total*100) if staff_gender_total else 0
-                staff_gender_bars += f"<div class='gender-bar-column'><div class='gender-bar-value'>{count}</div><div class='gender-bar-track'><div class='gender-bar-fill gender-{label.lower()}' style='height:{pct:.1f}%'></div></div><div class='gender-bar-label'><span>{label}</span></div></div>"
+            staff_gender_donut=_gender_donut(staff_gender_counts,staff_gender_total,"Staff gender distribution")
 
             class_size_rows=cur.execute("""SELECT c.id,c.name,c.stream,COUNT(s.id) AS student_count
                                            FROM classes c
@@ -4940,11 +4949,11 @@ function toggleTeacherTile(event, tile){{
             body=f"""<div class='page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Your complete school operating centre.</div></div>
 <div class='grid overview-charts'>
 <div class='overview-flip-tile'><div class='overview-flip-inner'>
-<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div><div class='gender-bars'>{gender_bars}</div></div>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Student</div><div class='gender-chart-total'>{gender_total} students</div>{gender_donut}</div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Student</div><div class='overview-flip-value'>{gender_total}</div><div class='overview-flip-detail'>Students</div></div>
 </div></div>
 <div class='overview-flip-tile'><div class='overview-flip-inner'>
-<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div>
+<div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div>{staff_gender_donut}</div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Staff</div><div class='overview-flip-value'>{staff_gender_total}</div><div class='overview-flip-detail'>Staff members</div></div>
 </div></div>
 <div class='overview-flip-tile classes-overview-tile'><div class='overview-flip-inner'>
@@ -4971,15 +4980,18 @@ function toggleTeacherTile(event, tile){{
 <style>
 .overview-school-heading{{text-align:center;margin-bottom:2px}}.overview-school-heading h1{{margin-bottom:6px}}.overview-school-heading .muted{{margin:0}}.gender-chart-card{{min-width:0;overflow:hidden}}
 .gender-chart-total{{font-size:12px;color:#64748b;margin:5px 0 10px;font-weight:700}}
-.gender-bars{{display:flex;align-items:flex-end;justify-content:space-around;gap:10px;width:100%;min-height:125px;padding:4px 8px 0}}
-.gender-bar-column{{display:flex;width:30%;height:125px;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}}
-.gender-bar-value{{font-size:11px;font-weight:800;color:#0f172a;min-height:14px}}
-.gender-bar-track{{height:85px;width:22px;background:#e2e8f0;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}}
-.gender-bar-fill{{width:100%;height:0;border-radius:6px 6px 2px 2px;min-height:0}}
-.gender-male{{background:#2563eb}}
-.gender-female{{background:#db2777}}
-.gender-other{{background:#f59e0b}}
-.gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
+.gender-donut-layout{{display:flex;align-items:center;justify-content:center;gap:clamp(10px,2vw,22px);width:100%;min-height:145px;min-width:0}}
+.gender-donut{{width:clamp(94px,10vw,124px);height:clamp(94px,10vw,124px);min-width:94px;border-radius:50%;display:grid;place-items:center;position:relative;box-shadow:inset 0 0 0 1px #00000008}}
+.gender-donut-hole{{width:62%;height:62%;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 1px 5px #0f172a12}}
+.gender-donut-hole strong{{font-size:21px;line-height:1.1;color:#172033;font-weight:900}}
+.gender-donut-hole span{{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em}}
+.donut-legend{{display:flex;flex-direction:column;gap:9px;min-width:0;flex:1;max-width:145px}}
+.donut-legend-item{{display:grid;grid-template-columns:9px minmax(0,1fr) auto auto;align-items:center;gap:5px;font-size:10px;color:#334155}}
+.donut-legend-dot{{width:8px;height:8px;border-radius:50%}}
+.donut-legend-name{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.donut-legend-item b{{font-size:11px;color:#172033}}
+.donut-legend-item small{{font-size:9px;color:#64748b;min-width:34px;text-align:right}}
+@media(max-width:600px){{.gender-donut-layout{{gap:10px}}.gender-donut{{width:94px;height:94px}}.gender-donut-hole strong{{font-size:18px}}.donut-legend{{gap:7px}}}}
 .overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
 .overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px;position:relative;cursor:default}}
 .overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;will-change:transform}}
