@@ -4947,11 +4947,7 @@ function toggleTeacherTile(event, tile){{
 <div class='overview-flip-face overview-flip-front card gender-chart-card'><div class='label'>Staff</div><div class='gender-chart-total'>{staff_gender_total} staff</div><div class='gender-bars'>{staff_gender_bars}</div></div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Staff</div><div class='overview-flip-value'>{staff_gender_total}</div><div class='overview-flip-detail'>Staff members</div></div>
 </div></div>
-<div class='overview-flip-tile'><div class='overview-flip-inner'>
-<div class='overview-flip-face overview-flip-front'><div class='label'>Class</div><div class='overview-class-icon'>{_modern_icon("school",30)}</div><div class='overview-class-count'>{c}</div><div class='muted'>classes</div></div>
-<div class='overview-flip-face overview-flip-back'><div class='label'>Class</div><div class='overview-flip-value'>{c}</div><div class='overview-flip-detail'>Classes</div></div>
-</div></div>
-<div class='overview-flip-tile'><div class='overview-flip-inner'>
+<div class='overview-flip-tile classes-overview-tile'><div class='overview-flip-inner'>
 <div class='overview-flip-face overview-flip-front card class-size-chart-card classes-overview-card'><div class='label'>Classes Overview</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div>
 <div class='overview-flip-face overview-flip-back'><div class='label'>Classes Overview</div><div class='overview-flip-value'>{c}</div><div class='overview-flip-detail'>Classes</div></div>
 </div></div>
@@ -4984,7 +4980,7 @@ function toggleTeacherTile(event, tile){{
 .gender-female{{background:#db2777}}
 .gender-other{{background:#f59e0b}}
 .gender-bar-label{{font-size:11px;color:#334155;font-weight:700;text-align:center}}
-.overview-charts{{grid-template-columns:repeat(4,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
+.overview-charts{{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1500px;margin:22px auto;align-items:stretch}}
 .overview-flip-tile{{min-width:0;width:100%;height:255px;perspective:900px;position:relative;cursor:default}}
 .overview-flip-inner{{position:relative;width:100%;height:100%;transition:transform .35s ease;transform-style:preserve-3d;-webkit-transform-style:preserve-3d;will-change:transform}}
 @media (hover:hover) and (pointer:fine){{.overview-flip-tile:hover .overview-flip-inner{{transform:rotateY(180deg);-webkit-transform:rotateY(180deg)}}}}
@@ -5001,7 +4997,7 @@ function toggleTeacherTile(event, tile){{
 .overview-charts .class-size-bar-track{{height:95px}}
 .overview-charts .class-size-bar-label{{max-width:56px;min-height:28px;line-height:13px;white-space:normal;overflow-wrap:anywhere}}
 @media(max-width:900px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px}}}}
-@media(max-width:600px){{.overview-charts{{grid-template-columns:1fr 1fr;gap:10px}}.overview-flip-tile{{height:200px}}.overview-flip-face{{padding:12px}}}}
+@media(max-width:600px){{.overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}.overview-flip-tile{{height:200px}}.overview-charts .classes-overview-tile{{grid-column:1 / -1;height:230px}}.overview-flip-face{{padding:12px}}}}
 .class-size-bars{{display:flex;align-items:flex-end;justify-content:flex-start;flex-wrap:nowrap;gap:7px;width:100%;min-width:0;min-height:110px;height:110px;padding:2px 6px 0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;box-sizing:border-box;-webkit-overflow-scrolling:touch;touch-action:none;overscroll-behavior-x:contain;overscroll-behavior-y:contain;cursor:grab;pointer-events:auto;scroll-behavior:auto;user-select:none;-webkit-user-select:none}}
 .class-size-bars:active{{cursor:grabbing}}
 .class-size-bar-column{{display:flex;flex:0 0 38px;width:38px;height:99px;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}}
