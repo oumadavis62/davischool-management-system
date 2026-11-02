@@ -4771,25 +4771,6 @@ def app_home(request: Request):
                 f"<span class='teacher-chip'>{escape(subject_name)}</span>"
                 for subject_name in sorted({str(a['subject_name'] or '') for a in allocation_rows if a['subject_name']})
             ) or "<div class='muted'>No subject allocations have been assigned yet.</div>"
-            hover_tiles=[
-                ("My Classes",_modern_icon("school",30),str(class_count),f"{class_count} allocated class{'es' if class_count!=1 else ''}"),
-                ("My Subjects",_modern_icon("subject",30),str(subject_count),f"{subject_count} allocated subject{'s' if subject_count!=1 else ''}"),
-                ("My Students",_modern_icon("students",30),str(teacher_student_count),f"Students in your allocated classes"),
-                ("Record Marks",_modern_icon("marks",30),f"{marks_pct:.0f}%",f"{entered_marks}/{expected_marks} marks entered · {latest_exam_name}"),
-                ("Attendance",_modern_icon("attendance",30),str(attendance_present),f"{attendance_present} present · {attendance_absent} absent today"),
-                ("Corrections",_modern_icon("correction",30),str(pending_corrections),f"Pending mark correction request{'s' if pending_corrections!=1 else ''}"),
-                ("Analysis",_modern_icon("analysis",30),latest_exam_name,f"Latest exam · {entered_marks} marks recorded")
-            ]
-            tile_html=""
-            for title,icon,value,detail in hover_tiles:
-                # The Record Marks tile is a real navigation link and must open on
-                # the first tap. Only informational tiles should consume clicks to flip.
-                href=" href='/app/academics/marks'" if title=="Record Marks" else ""
-                tile_click=" onclick='toggleTeacherTile(event,this)'" if not href else ""
-                tile_html+=f"""<a class='teacher-hover-tile' title='{escape(detail)}'{href}{tile_click} aria-pressed='false' style='text-decoration:none;color:inherit'>
-<div class='teacher-tile-inner'><div class='teacher-tile-face teacher-tile-front'><div class='label'>{escape(title)}</div><div class='kpi'>{icon}</div></div>
-<div class='teacher-tile-face teacher-tile-back'><div class='teacher-tile-back-title'>{escape(title)}</div><div class='teacher-tile-back-value'>{escape(value)}</div><div class='teacher-tile-back-detail'>{escape(detail)}</div></div></div></a>"""
-
             # Marks need attention only while one or more allocated subject/class
             # combinations are still open for editing. Once a subject is locked/finalized,
             # its missing marks are considered finalized as part of that submission.
@@ -4826,64 +4807,52 @@ def app_home(request: Request):
             teacher_health=_overview_health_panel("Teacher Workspace",teacher_health_overall,teacher_health_summary,teacher_health_items," ".join(teacher_attention) if teacher_attention else "No items currently require attention.")
             flip_script = "<script>(function(){\n  var tiles=document.querySelectorAll('.overview-flip-tile');\n  tiles.forEach(function(tile){\n    var moved=false,startX=0,startY=0;\n    tile.addEventListener('touchstart',function(e){\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\n      moved=false;\n    },{passive:true});\n    tile.addEventListener('touchmove',function(e){\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\n    },{passive:true});\n    tile.addEventListener('click',function(e){\n      if(moved || e.target.closest('.class-size-bars')) return;\n      tile.classList.toggle('is-flipped');\n    });\n  });\n})();</script>"
 
-            body=f"""<div class='page overview-home'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
-<div class='grid teacher-overview-grid'>{tile_html}</div>
-<div class='teacher-health-slot'>{teacher_health}</div>
-<div class='section card teacher-assignment-panel' id='teacher-classes'>
-  <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Classes, streams and subjects assigned to your teacher profile.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Record Marks</a></div>
-  <div class='teacher-assignment-scroll'><table><thead><tr><th>Class</th><th>Stream</th><th>Subject</th></tr></thead><tbody>{teacher_assignment_rows or "<tr><td colspan='3'>No teaching assignments are available.</td></tr>"}</tbody></table></div>
-</div>
-<div class='section card teacher-assignment-panel' id='teacher-subjects'>
-  <div class='teacher-section-heading'><div><h2>My Subjects</h2><div class='muted'>Subjects currently appearing in your teaching allocations.</div></div></div>
-  <div class='teacher-chip-list'>{teacher_subjects_html}</div>
-</div>
-<div class='section card teacher-assignment-panel' id='teacher-submission-status'>
-  <div class='teacher-section-heading'><div><h2>Marks Submission Status</h2><div class='muted'>Progress for {escape(latest_exam_name)} based on your current allocations.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Open Marks Entry</a></div>
-  <div class='teacher-progress-meta'><strong>{entered_marks:,} of {expected_marks:,} marks entered</strong><span>{marks_pct:.0f}%</span></div>
-  <div class='teacher-progress-track'><span style='width:{max(0,min(100,marks_pct)):.2f}%'></span></div>
-  <div class='muted' style='margin-top:8px'>{open_mark_subjects} allocated subject/class combinations remain open for editing.</div>
+            body=f"""<div class='page overview-home teacher-workspace-page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
+<div class='teacher-workspace-grid'>
+  <div class='teacher-workspace-column teacher-workspace-primary'>
+    <section class='section card teacher-assignment-panel' id='teacher-classes'>
+      <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Your allocated classes, streams and subjects.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Record Marks</a></div>
+      <div class='teacher-assignment-scroll'><table><thead><tr><th>Class</th><th>Stream</th><th>Subject</th></tr></thead><tbody>{teacher_assignment_rows or "<tr><td colspan='3'>No teaching assignments are available.</td></tr>"}</tbody></table></div>
+    </section>
+    <section class='section card teacher-assignment-panel' id='teacher-subjects'>
+      <div class='teacher-section-heading'><div><h2>My Subjects</h2><div class='muted'>Subjects currently appearing in your teaching allocations.</div></div></div>
+      <div class='teacher-chip-list'>{teacher_subjects_html}</div>
+    </section>
+  </div>
+  <div class='teacher-workspace-column teacher-workspace-secondary'>
+    <section class='section card teacher-assignment-panel' id='teacher-submission-status'>
+      <div class='teacher-section-heading'><div><h2>Marks Submission Progress</h2><div class='muted'>Your progress for {escape(latest_exam_name)}.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Open Marks Entry</a></div>
+      <div class='teacher-progress-meta'><strong>{entered_marks:,} of {expected_marks:,} marks entered</strong><span>{marks_pct:.0f}%</span></div>
+      <div class='teacher-progress-track'><span style='width:{max(0,min(100,marks_pct)):.2f}%'></span></div>
+      <div class='teacher-workspace-detail-row'><span>{open_mark_subjects} subject/class combinations still open for editing</span><span>{pending_corrections} pending correction requests</span></div>
+    </section>
+    <div class='teacher-health-slot'>{teacher_health}</div>
+  </div>
 </div>
 <style>
+.teacher-workspace-grid{{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);gap:18px;align-items:start}}
+.teacher-workspace-column{{display:flex;flex-direction:column;gap:18px;min-width:0}}
+.teacher-assignment-panel{{margin:0;background:#fff;border:1px solid #e2ebe3;border-radius:14px;box-shadow:0 2px 10px #173b2408;padding:18px}}
 .teacher-section-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}}
-.teacher-section-heading h2{{font-size:16px;margin:0 0 4px}}
-.teacher-section-link{{display:inline-flex;align-items:center;justify-content:center;padding:9px 13px;border-radius:9px;background:#C8E6C9;color:#14532d;text-decoration:none;font-size:12px;font-weight:900;border:1px solid #A5D6A7}}
+.teacher-section-heading h2{{font-size:16px;margin:0 0 4px;color:#174b2b}}
+.teacher-section-link{{display:inline-flex;align-items:center;justify-content:center;padding:9px 13px;border-radius:9px;background:#e8f3e8;color:#14532d;text-decoration:none;font-size:12px;font-weight:900;border:1px solid #cfe3d0;transition:background .18s ease,color .18s ease,border-color .18s ease}}
 .teacher-section-link:hover,.teacher-section-link:focus-visible{{background:#176B3A;color:#fff;border-color:#176B3A}}
 .teacher-assignment-scroll{{overflow-x:auto;-webkit-overflow-scrolling:touch}}
 .teacher-assignment-scroll table{{min-width:480px}}
+.teacher-assignment-panel table{{width:100%;border-collapse:collapse}}
+.teacher-assignment-panel th{{text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#55715d;background:#f3f8f2;padding:11px 12px}}
+.teacher-assignment-panel td{{padding:12px;border-bottom:1px solid #edf2ed;font-size:13px}}
+.teacher-assignment-panel tr:last-child td{{border-bottom:0}}
 .teacher-chip-list{{display:flex;gap:8px;flex-wrap:wrap}}
-.teacher-chip{{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#EAF3E8;border:1px solid #cfe3d0;color:#176B3A;font-size:12px;font-weight:800}}
+.teacher-chip{{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:#eaf3e8;border:1px solid #cfe3d0;color:#176B3A;font-size:12px;font-weight:800}}
 .teacher-progress-meta{{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#176B3A}}
 .teacher-progress-track{{height:11px;background:#e5eee5;border-radius:999px;overflow:hidden;margin-top:9px}}
 .teacher-progress-track span{{display:block;height:100%;background:#176B3A;border-radius:999px;transition:width .2s ease}}
-.teacher-overview-grid{{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}}
-.teacher-hover-tile{{display:block;min-height:150px;perspective:900px}}
-.teacher-tile-inner{{position:relative;width:100%;height:150px;transition:transform .35s ease;transform-style:preserve-3d}}
-.teacher-hover-tile.active .teacher-tile-inner{{transform:rotateY(180deg)}}
-.teacher-hover-tile:focus-visible{{outline:2px solid #176B3A;outline-offset:3px}}
-.teacher-tile-face{{position:absolute;inset:0;background:#fff;border:1px solid #e2ebe3;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}}
-.teacher-tile-front .kpi{{margin-top:12px}}
-.teacher-tile-back{{transform:rotateY(180deg);background:#176B3A;color:#fff;border-color:#176B3A}}
-.teacher-tile-back-title{{font-size:12px;text-transform:uppercase;font-weight:900;letter-spacing:.4px}}
-.teacher-tile-back-value{{font-size:28px;font-weight:900;margin:8px 0 5px}}
-.teacher-tile-back-detail{{font-size:11px;line-height:1.4;color:#fff}}
-@media(max-width:900px){{.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;justify-content:flex-start}}.teacher-portal .nav span{{font-size:13px}}.teacher-overview-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
-@media(max-width:600px){{.teacher-portal .side{{width:250px!important;max-width:82vw;z-index:1201}}.teacher-portal .main{{margin-left:0!important}}.teacher-portal .sidebar-hidden .side{{transform:translateX(-105%);pointer-events:none}}.teacher-portal .sidebar-open:not(.sidebar-hidden)::after{{content:'';position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1200;pointer-events:none}}.teacher-portal .top{{z-index:1202}}.teacher-portal .sidebar-toggle{{z-index:1300}}.teacher-overview-grid{{grid-template-columns:1fr 1fr;gap:10px}}.teacher-hover-tile,.teacher-tile-inner{{min-height:135px;height:135px}}.teacher-tile-face{{padding:12px}}.teacher-tile-back-value{{font-size:22px}}}}
-</style>
-<script>
-function toggleTeacherTile(event, tile){{
-    if(!tile)return;
-    const isActive=tile.classList.contains('active');
-    if(!isActive){{
-        if(event)event.preventDefault();
-        tile.classList.add('active');
-        tile.setAttribute('aria-pressed','true');
-    }}else{{
-        tile.classList.remove('active');
-        tile.setAttribute('aria-pressed','false');
-        if(!tile.getAttribute('href') && event)event.preventDefault();
-    }}
-}}
-</script></div>"""
+.teacher-workspace-detail-row{{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:12px;color:#647568;font-size:11px}}
+.teacher-health-slot{{min-width:0}}
+@media(max-width:900px){{.teacher-workspace-grid{{grid-template-columns:1fr}}.teacher-workspace-grid .teacher-workspace-secondary{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}}}
+@media(max-width:600px){{.teacher-workspace-grid{{gap:12px}}.teacher-workspace-column{{gap:12px}}.teacher-workspace-grid .teacher-workspace-secondary{{grid-template-columns:1fr}}.teacher-assignment-panel{{padding:14px}}.teacher-assignment-scroll table{{min-width:440px}}.teacher-workspace-detail-row{{flex-direction:column}}}}
+</style></div>"""
         else:
             s=cur.execute("SELECT COUNT(*) c FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)",(school_id,)).fetchone()["c"]
             t=cur.execute("SELECT COUNT(*) c FROM teachers WHERE school_id=?",(school_id,)).fetchone()["c"]
