@@ -4836,23 +4836,22 @@ function toggleTeacherTile(event, tile){{
             c=cur.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?",(school_id,)).fetchone()["c"]
 
             gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id) GROUP BY gender",(school_id,)).fetchall()
-            gender_counts={"Male":0,"Female":0,"Other":0}
+            gender_counts={"Male":0,"Female":0}
             for gr in gender_rows:
                 value=str(gr["gender"] or "").strip().lower()
                 if value.startswith("m"):
                     gender_counts["Male"] += int(gr["count"] or 0)
                 elif value.startswith("f"):
                     gender_counts["Female"] += int(gr["count"] or 0)
-                else:
-                    gender_counts["Other"] += int(gr["count"] or 0)
+                # Ignore blank or unrecognized gender values in the two-category chart
             gender_total=sum(gender_counts.values())
 
             def _gender_donut(counts,total,chart_name):
-                colors={"Male":"#2563eb","Female":"#db2777","Other":"#f59e0b"}
+                colors={"Male":"#2563eb","Female":"#db2777"}
                 angle=0.0
                 stops=[]
                 legend=[]
-                for label in ("Male","Female","Other"):
+                for label in ("Male","Female"):
                     count=int(counts.get(label,0) or 0)
                     pct=(count/total*100) if total else 0
                     if count>0 and total:
@@ -4866,15 +4865,14 @@ function toggleTeacherTile(event, tile){{
             gender_donut=_gender_donut(gender_counts,gender_total,"Student gender distribution")
 
             staff_gender_rows=cur.execute("SELECT gender, COUNT(*) AS count FROM teachers WHERE school_id=? GROUP BY gender",(school_id,)).fetchall()
-            staff_gender_counts={"Male":0,"Female":0,"Other":0}
+            staff_gender_counts={"Male":0,"Female":0}
             for gr in staff_gender_rows:
                 value=str(gr["gender"] or "").strip().lower()
                 if value.startswith("m"):
                     staff_gender_counts["Male"] += int(gr["count"] or 0)
                 elif value.startswith("f"):
                     staff_gender_counts["Female"] += int(gr["count"] or 0)
-                else:
-                    staff_gender_counts["Other"] += int(gr["count"] or 0)
+                # Ignore blank or unrecognized gender values in the two-category chart
             staff_gender_total=sum(staff_gender_counts.values())
             staff_gender_donut=_gender_donut(staff_gender_counts,staff_gender_total,"Staff gender distribution")
 
