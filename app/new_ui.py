@@ -2573,6 +2573,31 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         teacher_names=teachers_by_class_subject.setdefault((allocation_class_id,allocation_subject_id),[])
                         if teacher_name and teacher_name not in teacher_names:
                             teacher_names.append(teacher_name)
+                # A class row can be reused after its cohort is promoted. Current
+                # teacher_allocations then belong to the next cohort (or may be
+                # stale rows awaiting fresh allocations), not to the old cohort
+                # that sat this examination. Remove those current rows from this
+                # exam's staffing view before applying the archived snapshot.
+                # If no archived snapshot exists, the old cohort must correctly
+                # display "No teacher allocated" rather than inheriting new staff.
+                if exam_year:
+                    try:
+                        promoted_source_rows=tracker_cur.execute(
+                            """SELECT DISTINCT from_class_id
+                               FROM student_class_history
+                               WHERE school_id=? AND from_academic_year=?
+                                 AND to_academic_year>? AND from_class_id IS NOT NULL""",
+                            (sid,exam_year,exam_year)
+                        ).fetchall()
+                        promoted_source_ids={int(x["from_class_id"]) for x in promoted_source_rows
+                                             if x["from_class_id"] is not None}
+                        for promoted_class_id in promoted_source_ids:
+                            subjects_by_class.pop(promoted_class_id,None)
+                            for allocation_key in list(teachers_by_class_subject):
+                                if allocation_key[0]==promoted_class_id:
+                                    teachers_by_class_subject.pop(allocation_key,None)
+                    except Exception as cohort_history_exc:
+                        print("DAVISCHOOL TRACKER PROMOTED COHORT SCOPE WARNING:",repr(cohort_history_exc),flush=True)
                 # Resolve teacher staffing against the exam year, not just the
                 # current active allocation. Promotion history is recorded in the
                 # promotion cycle year, which may be the year AFTER the exam year.
