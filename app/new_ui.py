@@ -1224,6 +1224,33 @@ def _school_page(request, title, body):
     if not sid: return RedirectResponse("/")
     return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid))
 
+def _teacher_exam_cohort(cur, school_id, current_class_id, exam_year):
+    """Resolve current learners to the class they belonged to in a selected exam year."""
+    _ensure_student_promotion_cohort_tables(cur)
+    current_class_id=int(current_class_id)
+    try: exam_year=int(exam_year or 0)
+    except (TypeError,ValueError): exam_year=0
+    rows=cur.execute("""SELECT st.id student_id,
+        CASE WHEN ?>0 THEN COALESCE(
+          (SELECT h.from_class_id FROM student_class_history h
+           WHERE h.school_id=st.school_id AND h.student_id=st.id AND h.from_class_id IS NOT NULL
+             AND h.from_academic_year<=? AND h.to_academic_year>?
+           ORDER BY h.from_academic_year DESC,h.id DESC LIMIT 1),
+          (SELECT h.to_class_id FROM student_class_history h
+           WHERE h.school_id=st.school_id AND h.student_id=st.id AND h.to_class_id IS NOT NULL
+             AND h.to_academic_year<=?
+           ORDER BY h.to_academic_year DESC,h.id DESC LIMIT 1),
+          st.class_id
+        ) ELSE st.class_id END exam_class_id
+        FROM students st WHERE st.school_id=? AND st.class_id=?
+          AND lower(coalesce(st.status,'active'))='active'
+          AND NOT EXISTS(SELECT 1 FROM student_graduations g
+                         WHERE g.school_id=st.school_id AND g.student_id=st.id)
+        ORDER BY st.id""",
+        (exam_year,exam_year,exam_year,exam_year,school_id,current_class_id)).fetchall()
+    return [(int(r["student_id"]),int(r["exam_class_id"] or current_class_id)) for r in rows]
+
+
 @router.get("/app/class-teacher", response_class=HTMLResponse)
 def class_teacher_page(request: Request):
     sid=_school_session(request)
@@ -1237,8 +1264,8 @@ def class_teacher_page(request: Request):
     teacher_id=int(request.session.get("teacher_id") or 0)
     _ensure_class_teacher_assignments_table(cur)
     assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
-        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id
-        WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+        WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
     if not assignment:
         con.close()
         body="""<div class='page'><h1>🏫 My Class</h1><div class='card section'><h2>No class assigned</h2><div class='muted'>The School Admin has not linked your account to a class as Class Teacher yet.</div></div></div>"""
@@ -1364,7 +1391,7 @@ def class_monitoring_page(request: Request):
         _ensure_student_promotion_cohort_tables(cur)
         assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
             FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
-            WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
         if not assignment:
             # Subject teachers get an allocation-scoped workspace. This is deliberately
             # separate from the class-teacher dashboard and never exposes other teachers'
@@ -1392,28 +1419,17 @@ def class_monitoring_page(request: Request):
             for allocation in allocations:
                 class_id=int(allocation["class_id"]); subject_id=int(allocation["subject_id"])
                 if exam:
-                    if exam_year:
-                        cohort_row=cur.execute("""SELECT COUNT(DISTINCT cohort.student_id) n FROM (
-                            SELECT st.id student_id FROM students st
-                            WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
-                              AND NOT EXISTS (SELECT 1 FROM student_class_history incoming
-                                WHERE incoming.school_id=st.school_id AND incoming.student_id=st.id
-                                  AND incoming.to_class_id=? AND incoming.to_academic_year>?)
-                            UNION
-                            SELECT hist.student_id FROM student_class_history hist
-                            WHERE hist.school_id=? AND hist.from_class_id=? AND hist.from_academic_year=?
-                              AND hist.to_academic_year>?
-                        ) cohort""",(sid,class_id,class_id,exam_year,sid,class_id,exam_year,exam_year)).fetchone()
+                    allocation_cohort=_teacher_exam_cohort(cur,sid,class_id,exam_year)
+                    allocation_ids=[student_id for student_id,_ in allocation_cohort]
+                    expected=len(allocation_ids)
+                    if allocation_ids:
+                        id_marks=",".join("?" for _ in allocation_ids)
+                        entered_row=cur.execute("""SELECT COUNT(DISTINCT student_id) n FROM marks
+                            WHERE school_id=? AND exam_id=? AND subject_id=? AND student_id IN ("""+id_marks+""")""",
+                            [sid,selected_id,subject_id]+allocation_ids).fetchone()
+                        entered=int(entered_row["n"] or 0) if entered_row else 0
                     else:
-                        cohort_row=cur.execute("""SELECT COUNT(*) n FROM students st
-                            WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                              AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,class_id)).fetchone()
-                    expected=int(cohort_row["n"] or 0) if cohort_row else 0
-                    entered_row=cur.execute("""SELECT COUNT(DISTINCT student_id) n FROM marks
-                        WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?""",
-                        (sid,selected_id,class_id,subject_id)).fetchone()
-                    entered=int(entered_row["n"] or 0) if entered_row else 0
+                        entered=0
                 else:
                     expected=entered=0
                 if expected>0 and entered>=expected:
@@ -1496,6 +1512,9 @@ def class_monitoring_page(request: Request):
         year_raw=str(exam["year"] or "") if exam else ""
         try: exam_year=int(year_raw)
         except (TypeError,ValueError): exam_year=0
+        cohort_members=_teacher_exam_cohort(cur,sid,class_id,exam_year) if exam else []
+        cohort_ids=[student_id for student_id,_ in cohort_members]
+        cohort_class_ids={historic_class_id for _,historic_class_id in cohort_members}
         current_rows=cur.execute("""SELECT DISTINCT a.subject_id,a.teacher_id,
             COALESCE(NULLIF(trim(t.name),''),'Unassigned teacher') teacher_name,
             COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
@@ -1514,20 +1533,18 @@ def class_monitoring_page(request: Request):
                 names.append(str(row["teacher_name"]))
         # Resolve the archived staffing snapshot that belonged to this exam cohort.
         if exam_year:
+            staffing_class_id=next(iter(cohort_class_ids)) if len(cohort_class_ids)==1 else class_id
             history=cur.execute("""SELECT h.cycle_year,h.subject_id,h.teacher_id,
                 COALESCE(NULLIF(trim(h.teacher_name),''),NULLIF(trim(t.name),''),'Unassigned teacher') teacher_name,
                 h.reason,h.recorded_at,COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
                 FROM teacher_allocation_history h
                 LEFT JOIN teachers t ON t.id=h.teacher_id AND t.school_id=h.school_id
                 LEFT JOIN subjects s ON s.id=h.subject_id AND s.school_id=h.school_id
-                WHERE h.school_id=? AND h.class_id=?
+                WHERE h.school_id=? AND h.class_id=? AND h.cycle_year=?
                   AND h.reason IN ('Cohort promoted to next class','Destination class staffing replaced by promoted cohort',
                     'Prior allocation retained for cohort promoted to next class','Class cohort graduated')
-                ORDER BY h.cycle_year,h.recorded_at,h.subject_id""",(sid,class_id)).fetchall()
-            cycles=sorted({int(x["cycle_year"] or 0) for x in history if int(x["cycle_year"] or 0)>0})
-            future=[y for y in cycles if y>=exam_year]
-            chosen_cycle=min(future) if future else (max(cycles) if cycles else 0)
-            chosen_rows=[x for x in history if int(x["cycle_year"] or 0)==chosen_cycle] if chosen_cycle else []
+                ORDER BY h.recorded_at,h.subject_id""",(sid,staffing_class_id,exam_year)).fetchall()
+            chosen_rows=history
             priorities={"Destination class staffing replaced by promoted cohort":3,
                 "Prior allocation retained for cohort promoted to next class":2,
                 "Cohort promoted to next class":1,"Class cohort graduated":1}
@@ -1543,24 +1560,12 @@ def class_monitoring_page(request: Request):
                     names=teachers_by_subject.setdefault(subid,[])
                     name=str(row["teacher_name"] or "Unassigned teacher")
                     if name not in names: names.append(name)
-        if exam:
-            active_row=cur.execute("""SELECT COUNT(DISTINCT cohort.student_id) n FROM (
-                SELECT st.id student_id FROM students st
-                WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                  AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)
-                  AND NOT EXISTS (SELECT 1 FROM student_class_history incoming
-                    WHERE incoming.school_id=st.school_id AND incoming.student_id=st.id
-                      AND incoming.to_class_id=? AND incoming.to_academic_year>?)
-                UNION
-                SELECT hist.student_id FROM student_class_history hist
-                WHERE hist.school_id=? AND hist.from_class_id=? AND hist.from_academic_year=?
-                  AND hist.to_academic_year>?
-            ) cohort""",(sid,class_id,class_id,exam_year,sid,class_id,exam_year,exam_year)).fetchone() if exam_year else cur.execute("""SELECT COUNT(*) n FROM students st
-                WHERE st.school_id=? AND st.class_id=? AND lower(coalesce(st.status,'active'))='active'
-                  AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)""",(sid,class_id)).fetchone()
-            cohort_count=int(active_row["n"] or 0) if active_row else 0
+        if exam and cohort_ids:
+            cohort_count=len(cohort_ids)
+            id_marks=",".join("?" for _ in cohort_ids)
             mark_rows=cur.execute("""SELECT subject_id,COUNT(DISTINCT student_id) entered
-                FROM marks WHERE school_id=? AND exam_id=? AND class_id=? GROUP BY subject_id""",(sid,selected_id,class_id)).fetchall()
+                FROM marks WHERE school_id=? AND exam_id=? AND student_id IN ("""+id_marks+""")
+                GROUP BY subject_id""",[sid,selected_id]+cohort_ids).fetchall()
             entered_by_subject={int(x["subject_id"]):int(x["entered"] or 0) for x in mark_rows if x["subject_id"] is not None}
         else:
             cohort_count=0; entered_by_subject={}
@@ -1686,7 +1691,7 @@ def teacher_performance_page(request: Request):
         _ensure_student_promotion_cohort_tables(cur)
         ca=cur.execute("""SELECT a.class_id,c.name class_name,c.stream FROM class_teacher_assignments a
             JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
-            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id LIMIT 1""",(sid,teacher_id)).fetchone()
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
         allocations=cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,
             COALESCE(NULLIF(trim(c.name),''),'Class') class_name,COALESCE(NULLIF(trim(c.stream),''),'') stream,
             COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
@@ -1704,31 +1709,27 @@ def teacher_performance_page(request: Request):
         try: exam_year=int(exam["year"] or "") if exam else 0
         except (TypeError,ValueError): exam_year=0
 
+        cohort_cache={}
+        def cohort_members(cid):
+            if cid not in cohort_cache:
+                cohort_cache[cid]=_teacher_exam_cohort(cur,sid,cid,exam_year) if exam else []
+            return cohort_cache[cid]
+
         def cohort(cid):
-            if exam_year:
-                row=cur.execute("""SELECT COUNT(DISTINCT x.student_id) n FROM (
-                    SELECT st.id student_id FROM students st WHERE st.school_id=? AND st.class_id=?
-                    AND lower(coalesce(st.status,'active'))='active'
-                    AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)
-                    AND NOT EXISTS(SELECT 1 FROM student_class_history h WHERE h.school_id=st.school_id AND h.student_id=st.id
-                      AND h.to_class_id=? AND h.to_academic_year>?)
-                    UNION SELECT h.student_id FROM student_class_history h WHERE h.school_id=? AND h.from_class_id=?
-                      AND h.from_academic_year=? AND h.to_academic_year>?) x""",
-                    (sid,cid,cid,exam_year,sid,cid,exam_year,exam_year)).fetchone()
-            else:
-                row=cur.execute("""SELECT COUNT(*) n FROM students st WHERE st.school_id=? AND st.class_id=?
-                    AND lower(coalesce(st.status,'active'))='active'
-                    AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)""",(sid,cid)).fetchone()
-            return int(row["n"] or 0) if row else 0
+            return len(cohort_members(cid))
 
         def marks_for(cid,subid):
             if not exam: return [],100.0
+            member_ids=[student_id for student_id,_ in cohort_members(cid)]
+            if not member_ids: return [],100.0
+            id_marks=",".join("?" for _ in member_ids)
             rows=cur.execute("""SELECT m.marks,st.name student_name,st.admission_no,
                 (SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id
                  AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1) out_of
                 FROM marks m JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-                WHERE m.school_id=? AND m.exam_id=? AND m.class_id=? AND m.subject_id=? ORDER BY st.name""",
-                (sid,eid,cid,subid)).fetchall()
+                WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
+                  AND m.student_id IN ("""+id_marks+""") ORDER BY st.name""",
+                [sid,eid,subid]+member_ids).fetchall()
             out_of=100.0
             for x in rows:
                 try:
@@ -1834,27 +1835,20 @@ def teacher_performance_learners_page(request: Request):
         if not is_class_teacher and not is_subject_teacher: return HTMLResponse("You do not have access to this class and subject.",403)
         try: exam_year=int(exam["year"] or "")
         except (TypeError,ValueError): exam_year=0
-        if exam_year:
-            cohort_row=cur.execute("""SELECT COUNT(DISTINCT x.student_id) n FROM (
-                SELECT st.id student_id FROM students st WHERE st.school_id=? AND st.class_id=?
-                  AND lower(coalesce(st.status,'active'))='active'
-                  AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)
-                  AND NOT EXISTS(SELECT 1 FROM student_class_history h WHERE h.school_id=st.school_id AND h.student_id=st.id
-                    AND h.to_class_id=? AND h.to_academic_year>?)
-                UNION SELECT h.student_id FROM student_class_history h WHERE h.school_id=? AND h.from_class_id=?
-                  AND h.from_academic_year=? AND h.to_academic_year>?) x""",
-                (sid,cid,cid,exam_year,sid,cid,exam_year,exam_year)).fetchone()
+        cohort_members=_teacher_exam_cohort(cur,sid,cid,exam_year)
+        cohort_ids=[student_id for student_id,_ in cohort_members]
+        cohort_count=len(cohort_ids)
+        if cohort_ids:
+            id_marks=",".join("?" for _ in cohort_ids)
+            rows=cur.execute("""SELECT m.marks,st.name student_name,st.admission_no,
+                (SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id
+                 AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1) out_of
+                FROM marks m JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
+                WHERE m.school_id=? AND m.exam_id=? AND m.subject_id=?
+                  AND m.student_id IN ("""+id_marks+""")
+                ORDER BY st.name""",[sid,eid,subid]+cohort_ids).fetchall()
         else:
-            cohort_row=cur.execute("""SELECT COUNT(*) n FROM students st WHERE st.school_id=? AND st.class_id=?
-                AND lower(coalesce(st.status,'active'))='active'
-                AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=st.school_id AND g.student_id=st.id)""",(sid,cid)).fetchone()
-        cohort_count=int(cohort_row["n"] or 0) if cohort_row else 0
-        rows=cur.execute("""SELECT m.marks,st.name student_name,st.admission_no,
-            (SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id
-             AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1) out_of
-            FROM marks m JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
-            WHERE m.school_id=? AND m.exam_id=? AND m.class_id=? AND m.subject_id=?
-            ORDER BY st.name""",(sid,eid,cid,subid)).fetchall()
+            rows=[]
         out_of=100.0
         for row in rows:
             try:
@@ -1872,7 +1866,12 @@ def teacher_performance_learners_page(request: Request):
         highest=max((x[2] for x in learners),default=None); lowest=min((x[2] for x in learners),default=None)
         table_rows="".join("<tr><td>%s</td><td>%s</td><td><strong>%s</strong></td><td>%.2f</td><td>%.1f%%</td></tr>"%(index,escape(name),escape(admission or "—"),mark,pct) for index,(name,admission,mark,pct) in enumerate(learners,1))
         if not table_rows: table_rows="<tr><td colspan='5' class='empty'>No saved learner marks are available for this subject and examination.</td></tr>"
-        class_name=str(cls["name"] or "Class")+((" · "+str(cls["stream"])) if cls["stream"] else "")
+        cohort_class_ids={historic_class_id for _,historic_class_id in cohort_members}
+        display_class=cls
+        if len(cohort_class_ids)==1:
+            historical_class=cur.execute("SELECT name,stream FROM classes WHERE school_id=? AND id=?",(sid,next(iter(cohort_class_ids)))).fetchone()
+            if historical_class: display_class=historical_class
+        class_name=str(display_class["name"] or "Class")+((" · "+str(display_class["stream"])) if display_class["stream"] else "")
         heading=escape(str(subject["name"] or "Subject"))
         subtitle=escape(class_name)+" · "+escape(str(exam["name"] or "Examination"))+" · "+escape(str(exam["term"] or ""))+" "+escape(str(exam["year"] or ""))
         missing=max(0,cohort_count-len(learners))
