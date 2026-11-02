@@ -5318,7 +5318,9 @@ def parent_portal(request: Request):
             attendance_summary = cur.execute("""SELECT
                 COUNT(*) total,
                 SUM(CASE WHEN lower(COALESCE(status,'present'))='present' THEN 1 ELSE 0 END) present,
-                SUM(CASE WHEN lower(COALESCE(status,''))='absent' THEN 1 ELSE 0 END) absent
+                SUM(CASE WHEN lower(COALESCE(status,''))='absent' THEN 1 ELSE 0 END) absent,
+                SUM(CASE WHEN lower(COALESCE(status,'')) IN ('late','late arrival') THEN 1 ELSE 0 END) late,
+                SUM(CASE WHEN lower(COALESCE(status,''))='excused' THEN 1 ELSE 0 END) excused
                 FROM attendance WHERE school_id=? AND student_id=?""", (sid, student_id)).fetchone()
         except Exception:
             attendance_summary = None
@@ -5350,7 +5352,14 @@ def parent_portal(request: Request):
     total_att = int(attendance_summary["total"] or 0) if attendance_summary else 0
     present_att = int(attendance_summary["present"] or 0) if attendance_summary else 0
     absent_att = int(attendance_summary["absent"] or 0) if attendance_summary else 0
+    late_att = int(attendance_summary["late"] or 0) if attendance_summary and "late" in attendance_summary.keys() else 0
+    excused_att = int(attendance_summary["excused"] or 0) if attendance_summary and "excused" in attendance_summary.keys() else 0
     attendance_pct = (present_att / total_att * 100) if total_att else 0
+    result_count = len(marks)
+    school_contact = " · ".join(x for x in [
+        str(school["phone"] or "").strip() if school else "",
+        str(school["email"] or "").strip() if school else ""
+    ] if x)
     body = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
 <title>Parent Portal · DaviSchool</title><style>
@@ -5369,10 +5378,10 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 </style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
 <section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div></section>
-<section class='stats'><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
+<section class='stats'><div class='stat'><small>Assessments recorded</small><strong>{result_count}</strong></div><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Absent</small><strong>{absent_att}</strong></div><div class='stat'><small>Late</small><strong>{late_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
 <div class='columns'><section class='panel'><h2>Academic results</h2><div class='table-wrap'><table><thead><tr><th>Examination</th><th>Subject</th><th style='text-align:center'>Marks</th></tr></thead><tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No examination results have been published for this learner yet.</td></tr>"}</tbody></table></div></section>
 <section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></div>
-<p class='muted' style='text-align:center;margin-top:22px'>For questions about results or attendance, please contact {school_name}.</p></main></body></html>"""
+<section class='panel' style='margin-top:16px'><h2>School contact</h2><div class='muted'>For questions about your child's results, attendance or school activities, contact {school_name}.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section><p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner linked to this parent account.</p></main></body></html>"""
     return HTMLResponse(body)
 
 
