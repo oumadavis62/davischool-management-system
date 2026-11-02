@@ -4858,7 +4858,8 @@ function toggleTeacherTile(event, tile){{
                         end=angle+(pct*3.6)
                         stops.append(f"{colors[label]} {angle:.2f}deg {end:.2f}deg")
                         angle=end
-                    legend.append(f"<div class='donut-legend-item'><span class='donut-legend-dot' style='background:{colors[label]}'></span><span class='donut-legend-name'>{label}</span><b>{count}</b><small>{pct:.1f}%</small></div>")
+                    short_label="M" if label=="Male" else "F"
+                    legend.append(f"<div class='donut-legend-item'><span class='donut-legend-dot' style='background:{colors[label]}'></span><span class='donut-legend-name'>{short_label}</span><b>{count}</b><small>{pct:.1f}%</small></div>")
                 gradient="conic-gradient("+", ".join(stops)+")" if stops else "conic-gradient(#e2e8f0 0deg 360deg)"
                 return f"<div class='gender-donut-layout'><div class='gender-donut' role='img' aria-label='{chart_name}: {total} total' style='background:{gradient}'><div class='gender-donut-hole'><strong>{total}</strong><span>Total</span></div></div><div class='donut-legend'>{''.join(legend)}</div></div>"
 
