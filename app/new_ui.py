@@ -536,22 +536,9 @@ def _shell(title, name, role, body, school_id=None):
             ("/app/academics/marks",_modern_icon("marks"),"Record Marks"),
             ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
         ]
-        # Show Class Monitoring only to a teacher who currently holds a class-teacher assignment.
-        if school_id:
-            nav_con=_db()
-            try:
-                nav_cur=nav_con.cursor()
-                _ensure_class_teacher_assignments_table(nav_cur)
-                has_class_monitor=bool(nav_cur.execute(
-                    "SELECT 1 FROM class_teacher_assignments WHERE school_id=? AND teacher_id=? LIMIT 1",
-                    (int(school_id),int(request.session.get("teacher_id") or 0))
-                ).fetchone())
-            except Exception:
-                has_class_monitor=False
-            finally:
-                nav_con.close()
-            if has_class_monitor:
-                teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
+        # Keep the entry visible in every teacher workspace. The page itself
+        # verifies the teacher's current class-teacher assignment before showing class data.
+        teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
         links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
