@@ -1324,9 +1324,21 @@ def class_monitoring_follow_up(
     try:
         cur=con.cursor()
         _ensure_class_teacher_assignments_table(cur)
-        assignment=cur.execute("""SELECT a.class_id FROM class_teacher_assignments a
-            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
-            WHERE a.school_id=? AND a.teacher_id=? LIMIT 1""",(sid,teacher_id)).fetchone()
+        _ensure_student_promotion_cohort_tables(cur)
+        assignment=cur.execute("""SELECT c.id class_id FROM class_teacher_assignments a
+            JOIN classes c ON c.id=COALESCE((
+                SELECT h.to_class_id FROM student_class_history h
+                JOIN students st ON st.id=h.student_id AND st.school_id=h.school_id
+                WHERE h.school_id=a.school_id AND h.from_class_id=a.class_id
+                  AND h.to_class_id IS NOT NULL AND st.class_id=h.to_class_id
+                  AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS(SELECT 1 FROM student_graduations g
+                                 WHERE g.school_id=st.school_id AND g.student_id=st.id)
+                GROUP BY h.to_class_id
+                ORDER BY COUNT(DISTINCT h.student_id) DESC,MAX(h.to_academic_year) DESC
+                LIMIT 1
+            ),a.class_id) AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
         exam=cur.execute("SELECT id FROM exams WHERE school_id=? AND id=?",(sid,exam_id)).fetchone()
         if not assignment or not exam:
             return HTMLResponse("The class or examination could not be verified.",403)
@@ -1389,8 +1401,20 @@ def class_monitoring_page(request: Request):
         # Subject-teacher progress also reads the durable cohort and graduation snapshots.
         # Ensure those tables exist before querying historical class membership.
         _ensure_student_promotion_cohort_tables(cur)
-        assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
-            FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+        assignment=cur.execute("""SELECT c.id class_id,c.name class_name,c.level,c.stream
+            FROM class_teacher_assignments a
+            JOIN classes c ON c.id=COALESCE((
+                SELECT h.to_class_id FROM student_class_history h
+                JOIN students st ON st.id=h.student_id AND st.school_id=h.school_id
+                WHERE h.school_id=a.school_id AND h.from_class_id=a.class_id
+                  AND h.to_class_id IS NOT NULL AND st.class_id=h.to_class_id
+                  AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS(SELECT 1 FROM student_graduations g
+                                 WHERE g.school_id=st.school_id AND g.student_id=st.id)
+                GROUP BY h.to_class_id
+                ORDER BY COUNT(DISTINCT h.student_id) DESC,MAX(h.to_academic_year) DESC
+                LIMIT 1
+            ),a.class_id) AND c.school_id=a.school_id
             WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
         if not assignment:
             # Subject teachers get an allocation-scoped workspace. This is deliberately
