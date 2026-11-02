@@ -709,7 +709,7 @@ else setupDaviActionCells();
   function applySidebarState(hidden){{
     try{{document.body.classList.toggle('sidebar-hidden', !!hidden);}}catch(e){{}}
     var b=document.getElementById('sidebarToggle');
-    if(b){{b.textContent=hidden?'☰ Show sidebar':'☰ Hide sidebar';b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}
+    if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');}}
   }}
   function toggleSidebar(){{
     var hidden=!document.body.classList.contains('sidebar-hidden');
