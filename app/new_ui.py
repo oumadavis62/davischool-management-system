@@ -723,13 +723,13 @@ else setupDaviActionCells();
   function toggleSidebar(){{
     var hidden=!document.body.classList.contains('sidebar-hidden');
     applySidebarState(hidden);
-    try{{localStorage.setItem('davischool_sidebar_hidden',hidden?'1':'0');}}catch(e){{}}
+    try{{localStorage.setItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }',hidden?'1':'0');}}catch(e){{}}
   }}
   window.toggleSidebar=toggleSidebar;
   function initSidebar(){{
     try{{
       var mobile=window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
-      var saved=localStorage.getItem('davischool_sidebar_hidden')==='1';
+      var saved=localStorage.getItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }')==='1';
       applySidebarState(mobile || saved);
     }}catch(e){{applySidebarState(!!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
   }}
