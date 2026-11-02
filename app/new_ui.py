@@ -5306,7 +5306,7 @@ def parent_portal(request: Request):
             LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
             LEFT JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
             WHERE m.school_id=? AND m.student_id=?
-            ORDER BY CAST(COALESCE(NULLIF(m.year,''),'0') AS INTEGER) DESC,m.id DESC""",
+            ORDER BY m.id DESC""",
             (sid, student_id)).fetchall()
         try:
             attendance = cur.execute("""SELECT date,status
