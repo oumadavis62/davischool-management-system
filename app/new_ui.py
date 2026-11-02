@@ -4510,7 +4510,7 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 </div>
 <style>
 .overview-health-wrap{{width:100%;grid-column:1 / -1;margin-top:18px}}
-.overview-health-card{{width:100%;box-sizing:border-box;background:#fff;border:1px solid #dbe5df;border-radius:18px;box-shadow:0 4px 16px #00000008;cursor:pointer;outline:none;transition:box-shadow .2s ease,border-color .2s ease}}
+.overview-health-card{{width:100%;box-sizing:border-box;background:#E6EFE7;border:1px solid #cfddcf;border-radius:18px;box-shadow:0 4px 16px #00000008;cursor:pointer;outline:none;transition:box-shadow .2s ease,border-color .2s ease}}
 .overview-health-card:hover{{border-color:#176B3A;box-shadow:0 8px 24px #00000010}}
 .health-compact{{min-height:92px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px}}
 .health-kicker{{font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#176B3A}}
