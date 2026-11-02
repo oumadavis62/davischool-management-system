@@ -1789,7 +1789,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     if tracker_page:
         body="<div class='page'><h1>Examination Submission Tracker</h1><div class='muted'>Track subject submissions for each examination, including historical class/stream allocations.</div>"
     else:
-        body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Classes</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Entries</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams),len(classes),int(stat["entries"] or 0))
+        body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams))
         body+="<div class='section'><div class='actions'>"+action_html+"</div></div>"
     # Admin-only tracker page: keep its existing filters, table, and status calculations.
     if role in ("school_admin","registrar") and tracker_page:
