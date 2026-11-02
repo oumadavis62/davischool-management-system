@@ -724,8 +724,8 @@ else setupDaviActionCells();
     try{{
       var mobile=window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
       var saved=localStorage.getItem('davischool_sidebar_hidden')==='1';
-      applySidebarState(!{str(teacher_locked).lower()} && (mobile || saved));
-    }}catch(e){{applySidebarState(!!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
+      applySidebarState({str(teacher_locked).lower()} || mobile || saved);
+    }}catch(e){{applySidebarState({str(teacher_locked).lower()} || !!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
   }}
   // Delegate from document so the control keeps working after Academic Manager
   // tile navigation replaces the document using the prefetched HTML cache.
