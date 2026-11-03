@@ -435,6 +435,29 @@ class DaviSchoolTabSessionMiddleware:
                 })
                 await send({"type": "http.response.body", "body": body})
                 return
+            preview_role = str(session.get("role") or "")
+            preview_portal = str(session.get("preview_portal") or "")
+            # The preview launcher uses explicit role-specific URLs. Keep the
+            # parent/student URLs mapped to the shared role-aware portal handler
+            # when no dedicated route is registered in this deployment.
+            if method == "GET" and preview_portal in ("parent", "student"):
+                if scope.get("path") in ("/portal/parent", "/portal/student"):
+                    scope["path"] = "/portal"
+                    scope["raw_path"] = b"/portal"
+
+            # Accountant previews use the same finance workspace and school
+            # module handlers as the deployed accounting interface. Those
+            # handlers authorize school_admin/registrar; elevate only for the
+            # duration of this isolated preview request, then restore the
+            # accountant identity before the session cookie is serialized.
+            if preview_role == "accountant" and preview_portal == "accountant":
+                session["role"] = "school_admin"
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    session["role"] = preview_role
+                return
+
             await self.app(scope, receive, send)
 
         session_app = SessionMiddleware(
