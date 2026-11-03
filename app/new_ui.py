@@ -1558,7 +1558,7 @@ def class_monitoring_page(request: Request):
               @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
             @media(max-width:520px){.class-monitoring-page .parent-tab{padding:10px 12px;font-size:12px}.cm-register-card{padding:14px;border-radius:13px}}
     </style>"""
-            body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
+            body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');function activate(target){tabs.forEach(function(tab){var active=tab.getAttribute('data-cm-tab')===target;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){var active=panel.getAttribute('data-cm-panel')===target;panel.classList.toggle('active',active);panel.hidden=!active;});}tabs.forEach(function(tab){tab.addEventListener('click',function(){activate(tab.getAttribute('data-cm-tab'));});});activate('overview');})();</script>"""
             return _school_page(request,"Class Monitoring",body)
         class_id=int(assignment["class_id"])
         exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
@@ -1736,6 +1736,13 @@ def class_monitoring_page(request: Request):
     body+="""<style>
       .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
       .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
+      /* Class-teacher route owns its own stylesheet; hide inactive workspaces here. */
+      .class-monitoring-page .cm-panel{display:none!important}
+      .class-monitoring-page .cm-panel.active{display:block!important}
+      .class-monitoring-page .parent-nav{display:flex;gap:7px;overflow-x:auto;padding:5px;margin:18px 0;border-bottom:1px solid #dce9df;scrollbar-width:thin;overscroll-behavior-x:contain}
+      .class-monitoring-page .parent-tab{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 15px;border-radius:10px 10px 0 0;font:800 13px Arial;cursor:pointer;transition:background .15s,color .15s}
+      .class-monitoring-page .parent-tab:hover{background:#f1f8f3;color:#176b3a}
+      .class-monitoring-page .parent-tab.active{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}
       .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
       .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
       .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
