@@ -5348,13 +5348,44 @@ def parent_portal(request: Request):
         if not student:
             return HTMLResponse("The linked learner record could not be found. Please contact the school.", 404)
         school = cur.execute("SELECT name,phone,email,logo_data,status FROM schools WHERE id=?", (sid,)).fetchone()
-        marks = cur.execute("""SELECT m.marks,m.term,m.year,e.name exam_name,sub.name subject_name
+        exam_options = cur.execute("""SELECT m.exam_id,COALESCE(e.name,'Assessment') exam_name,
+                m.term,m.year,MAX(m.id) latest_id
+            FROM marks m LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+            WHERE m.school_id=? AND m.student_id=? AND m.exam_id IS NOT NULL
+            GROUP BY m.exam_id,e.name,m.term,m.year ORDER BY MAX(m.id) DESC""",
+            (sid, student_id)).fetchall()
+        requested_exam = str(request.query_params.get("exam_id") or "").strip()
+        valid_exam_ids = {str(int(x["exam_id"])) for x in exam_options if x["exam_id"] is not None}
+        selected_exam_id = int(requested_exam) if requested_exam.isdigit() and requested_exam in valid_exam_ids else (
+            int(exam_options[0]["exam_id"]) if exam_options else 0
+        )
+        marks = cur.execute("""SELECT m.marks,m.term,m.year,m.exam_id,m.subject_id,
+                e.name exam_name,sub.name subject_name
             FROM marks m
             LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
             LEFT JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
-            WHERE m.school_id=? AND m.student_id=?
-            ORDER BY m.id DESC""",
-            (sid, student_id)).fetchall()
+            WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY m.id DESC""",
+            (sid, student_id, selected_exam_id)).fetchall() if selected_exam_id else []
+        subject_means = {}
+        if selected_exam_id and student["class_id"]:
+            try:
+                mean_rows = cur.execute("""SELECT subject_id,AVG(marks) subject_mean FROM marks
+                    WHERE school_id=? AND exam_id=? AND class_id=? AND marks IS NOT NULL
+                    GROUP BY subject_id""", (sid, selected_exam_id, int(student["class_id"]))).fetchall()
+                subject_means = {int(x["subject_id"]): float(x["subject_mean"]) for x in mean_rows if x["subject_id"] is not None}
+            except Exception as mean_exc:
+                print("DAVISCHOOL PARENT SUBJECT MEANS WARNING:", repr(mean_exc), flush=True)
+        parent_grading_rules = _load_grading_rules(cur, sid)
+        parent_overall_rules = _load_overall_grading_rules(cur, sid)
+        mark_total = sum(float(row["marks"]) for row in marks if row["marks"] is not None)
+        assessed_subjects = [row for row in marks if row["marks"] is not None]
+        parent_mean = mark_total / len(assessed_subjects) if assessed_subjects else 0
+        parent_overall_grade = _marksheet_overall_grade(cur, sid, parent_mean, len(assessed_subjects), parent_overall_rules)
+        subject_grade_map = {
+            int(row["subject_id"] or 0): (_subject_grade_details(cur, sid, int(row["subject_id"] or 0), row["marks"], parent_grading_rules)[0]
+                if row["marks"] is not None else "—")
+            for row in marks
+        }
         try:
             attendance = cur.execute("""SELECT date,status
                 FROM attendance WHERE school_id=? AND student_id=?
@@ -5392,12 +5423,22 @@ def parent_portal(request: Request):
     admission = escape(str(student["admission_no"] or "—"))
     logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
     logo_html = "<img src='" + escape(logo, quote=True) + "' alt='School logo'>" if logo else "<span class='brand-mark'>D</span>"
-    mark_rows = "".join(
-        "<tr><td><b>" + escape(str(row["exam_name"] or "Assessment")) + "</b><small>" +
-        escape(" · ".join(x for x in [str(row["term"] or ""), str(row["year"] or "")] if x)) +
-        "</small></td><td>" + escape(str(row["subject_name"] or "Subject")) +
-        "</td><td class='number'>" + escape(str(row["marks"] if row["marks"] is not None else "—")) + "</td></tr>"
-        for row in marks
+    mark_rows_parts = []
+    for row in marks:
+        subject_id = int(row["subject_id"] or 0)
+        subject_mean = subject_means.get(subject_id)
+        mark_rows_parts.append(
+            "<tr><td>" + escape(str(row["subject_name"] or "Subject")) +
+            "</td><td class='number'>" + escape(str(row["marks"] if row["marks"] is not None else "—")) +
+            "</td><td class='number'>" + escape(subject_grade_map.get(subject_id, "—")) +
+            "</td><td class='number'>" + (format(subject_mean, ".2f") if subject_mean is not None else "—") + "</td></tr>"
+        )
+    mark_rows = "".join(mark_rows_parts)
+    exam_options_html = "".join(
+        "<option value='" + str(int(x["exam_id"])) + "'" + (" selected" if int(x["exam_id"]) == selected_exam_id else "") + ">" +
+        escape(str(x["exam_name"] or "Assessment")) + " · " +
+        escape(" / ".join(y for y in [str(x["term"] or "").strip(), str(x["year"] or "").strip()] if y)) +
+        "</option>" for x in exam_options if x["exam_id"] is not None
     )
     attendance_rows = "".join(
         "<tr><td>" + escape(str(row["date"] or "—")) + "</td><td>" +
@@ -5437,10 +5478,6 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 @media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
 </style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
-<section class='parent-view' id='parent-overview'>
-<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div>{("<form method='get' action='/app/parent'><select name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
-<section class='stats'><div class='stat'><small>Assessments recorded</small><strong>{result_count}</strong></div><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Absent</small><strong>{absent_att}</strong></div><div class='stat'><small>Late</small><strong>{late_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
-</section>
 <nav class='parent-nav' aria-label='Parent portal sections'>
 <button type='button' class='parent-tab active' data-view='overview' onclick="parentShow('overview')">Overview</button>
 <button type='button' class='parent-tab' data-view='academics' onclick="parentShow('academics')">Academics</button>
@@ -5450,7 +5487,25 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 <button type='button' class='parent-tab' data-view='messages' onclick="parentShow('messages')">Messages</button>
 <button type='button' class='parent-tab' data-view='contact' onclick="parentShow('contact')">School Contact</button>
 </nav>
-<section class='parent-view' id='parent-academics' hidden><section class='panel'><h2>Academic results</h2><div class='table-wrap'><table><thead><tr><th>Examination</th><th>Subject</th><th style='text-align:center'>Marks</th></tr></thead><tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No examination results have been published for this learner yet.</td></tr>"}</tbody></table></div></section></section>
+<section class='parent-view' id='parent-overview'>
+<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div>{("<form method='get' action='/app/parent'><select name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
+<section class='stats'><div class='stat'><small>Assessments recorded</small><strong>{result_count}</strong></div><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Absent</small><strong>{absent_att}</strong></div><div class='stat'><small>Late</small><strong>{late_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
+</section>
+<section class='parent-view' id='parent-academics' hidden><section class='panel'>
+<h2>Academic results</h2>
+<form method='get' action='/app/parent' style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px'>
+<input type='hidden' name='student_id' value='{student_id}'>
+<label for='parent-exam-select' style='font-size:12px;font-weight:800;color:#557060'>Select examination</label>
+<select id='parent-exam-select' name='exam_id' class='child-select' onchange='this.form.submit()'>{exam_options_html or "<option value=''>No examinations recorded</option>"}</select>
+</form>
+<div class='parent-overview-summary'>
+<div class='stat'><small>Total marks</small><strong>{mark_total:.2f}</strong></div>
+<div class='stat'><small>Overall mean</small><strong>{parent_mean:.2f}</strong></div>
+<div class='stat'><small>Overall grade</small><strong>{escape(str(parent_overall_grade))}</strong></div>
+</div>
+<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th><th style='text-align:center'>Subject mean</th></tr></thead>
+<tbody>{mark_rows or "<tr><td colspan='4' class='empty'>No results are recorded for this examination.</td></tr>"}</tbody></table></div>
+</section></section>
 <section class='parent-view' id='parent-attendance' hidden><section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></section>
 <section class='parent-view' id='parent-fees' hidden><section class='panel' style='margin-top:16px'><h2>Fee statement</h2><div class='stats' style='margin:0 0 12px'><div class='stat'><small>Total charged</small><strong>KES {fee_total:,.2f}</strong></div><div class='stat'><small>Total paid</small><strong>KES {fee_paid:,.2f}</strong></div><div class='stat'><small>Outstanding balance</small><strong>KES {fee_balance:,.2f}</strong></div></div><div class='table-wrap'><table><thead><tr><th>Charge</th><th>Due date</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_html or "<tr><td colspan='5' class='empty'>No fee statement is available.</td></tr>"}</tbody></table></div></section></section>
 <section class='parent-view' id='parent-notices' hidden><section class='panel' style='margin-top:16px'><h2>School notices</h2>{notice_html or "<div class='empty'>There are no parent announcements at the moment.</div>"}</section></section>
