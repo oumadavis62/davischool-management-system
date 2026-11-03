@@ -11974,7 +11974,7 @@ def users_page(request: Request):
         success_block=""
     class_options_html="".join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
     subject_options_html="".join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)
-    body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
+    body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div><div style='display:flex;gap:9px;flex-wrap:wrap;margin:14px 0'><a href='/app/parent-links' class='btn'>Manage Parent–Learner Links</a><a href='/app/parent-messages' class='btn'>Parent Messages Inbox</a></div>
 {success_block}
 {credential_modal}<div class='card section'><h2>Create user account</h2>
 <div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
