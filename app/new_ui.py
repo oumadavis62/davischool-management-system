@@ -5329,7 +5329,7 @@ def parent_portal(request: Request):
             # also repairs older/manual parent accounts that only had one
             # student_id link recorded when they were first created.
             def _parent_phone_key(value):
-                digits = re.sub(r"\\D", "", str(value or ""))
+                digits = re.sub(r"\D", "", str(value or ""))
                 if len(digits) == 10 and digits.startswith("0"):
                     return "254" + digits[1:]
                 if len(digits) == 9:
