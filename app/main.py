@@ -4345,6 +4345,20 @@ def _ensure_davischool_demo_tenant():
             subject = cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? ORDER BY id DESC LIMIT 1",
                                   (demo_id, "Mathematics")).fetchone()
         subject_id = int(subject["id"])
+        exam = cur.execute("SELECT id FROM exams WHERE school_id=? AND name=? LIMIT 1",
+                            (demo_id, "Demo Assessment")).fetchone()
+        if not exam:
+            cur.execute("INSERT INTO exams (school_id,name,term,year,exam_type) VALUES (?,?,?,?,?)",
+                        (demo_id, "Demo Assessment", "Term 1", "2026", "Assessment"))
+            exam = cur.execute("SELECT id FROM exams WHERE school_id=? AND name=? ORDER BY id DESC LIMIT 1",
+                               (demo_id, "Demo Assessment")).fetchone()
+        exam_id = int(exam["id"])
+        mark = cur.execute("SELECT id FROM marks WHERE school_id=? AND student_id=? AND subject_id=? AND exam_id=? LIMIT 1",
+                           (demo_id, student_id, subject_id, exam_id)).fetchone()
+        if not mark:
+            cur.execute("""INSERT INTO marks (school_id,student_id,subject_id,exam_id,class_id,marks,year,term)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (demo_id, student_id, subject_id, exam_id, class_id, 78, "2026", "Term 1"))
         allocation = cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
                                  (demo_id, teacher_id, class_id, subject_id)).fetchone()
         if not allocation:
@@ -4377,6 +4391,7 @@ def super_admin_portal_management(request: Request):
         ("teacher", "Teacher Portal", "TR", "Teaching allocations, marks entry and teacher monitoring."),
         ("parent", "Parent Portal", "PR", "Parent dashboard, learner progress and fee summary."),
         ("student", "Student Portal", "ST", "Learner profile and academic records."),
+        ("accountant", "Accountant Portal", "AC", "Fees and finance workspace in the isolated demonstration school."),
     ]
     cards = "".join(
         f"""<article class="portal-card"><div class="portal-icon">{icon}</div>
@@ -4419,6 +4434,7 @@ def enter_super_admin_portal_preview(portal: str, request: Request):
         "teacher": ("teacher", "/portal/teacher"),
         "parent": ("parent", "/portal/parent"),
         "student": ("student", "/portal/student"),
+        "accountant": ("accountant", "/school/finance"),
     }
     if portal not in allowed:
         return RedirectResponse("/super/portal-management", 303)
@@ -4456,7 +4472,7 @@ def enter_super_admin_portal_preview(portal: str, request: Request):
 
 @app.get("/super/portal-management/exit")
 def exit_super_admin_portal_preview(request: Request):
-    if request.session.get("role") not in ("school_admin","registrar","teacher","parent","student") or not request.session.get("is_portal_preview"):
+    if request.session.get("role") not in ("school_admin","registrar","teacher","parent","student","accountant") or not request.session.get("is_portal_preview"):
         return RedirectResponse("/", 303)
     demo_id = request.session.get("preview_school_id", 0)
     admin_email = request.session.get("_preview_admin_email", "")
