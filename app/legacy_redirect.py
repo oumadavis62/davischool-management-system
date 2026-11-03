@@ -176,6 +176,11 @@ def install_legacy_school_redirect(app):
         path = request.url.path
 
         # Legacy school URLs now go to the new application.
+        # The finance workspace is an intentional compatibility route used by
+        # the Accountant portal. Its own route-level authorization remains active.
+        if (path == "/school/finance" or path.startswith("/school/finance/")):
+            return await call_next(request)
+
         if path == "/school" or path.startswith("/school/"):
             return RedirectResponse("/app", status_code=303)
 

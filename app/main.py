@@ -3706,7 +3706,12 @@ def _school_user(request: Request):
     # /app workspace and dedicated role portals are now the supported workflow.
     # School Admin and Registrar share school-level administration access.
     role = str(request.session.get("role", ""))
-    if role not in {"school_admin", "registrar", "super_admin"}:
+    accountant_preview = (
+        role == "accountant"
+        and request.session.get("is_portal_preview")
+        and request.session.get("preview_portal") == "accountant"
+    )
+    if role not in {"school_admin", "registrar", "super_admin"} and not accountant_preview:
         return None
     school = get_school_obj(request)
     if not school or not request.session.get("email"):
@@ -4042,7 +4047,13 @@ def school_other(path: str, request: Request):
 # === DAVISCHOOL OPERATIONS COMPLETION ===
 def _require_school_admin(request: Request):
     school=_school_user(request)
-    if not school or request.session.get('role') not in ('school_admin','registrar','super_admin'): return None
+    role = request.session.get('role')
+    accountant_preview = (
+        role == 'accountant'
+        and request.session.get('is_portal_preview')
+        and request.session.get('preview_portal') == 'accountant'
+    )
+    if not school or (role not in ('school_admin','registrar','super_admin') and not accountant_preview): return None
     return school
 
 @app.get('/school/finance', response_class=HTMLResponse)
@@ -4488,8 +4499,8 @@ def enter_super_admin_portal_preview(portal: str, request: Request, ticket: str 
         "school-admin": ("school_admin", "/app"),
         "registrar": ("registrar", "/app"),
         "teacher": ("teacher", "/app"),
-        "parent": ("parent", "/portal/parent"),
-        "student": ("student", "/portal/student"),
+        "parent": ("parent", "/portal"),
+        "student": ("student", "/portal"),
         "accountant": ("accountant", "/school/finance"),
     }
     if portal not in allowed:
@@ -4560,3 +4571,11 @@ def exit_super_admin_portal_preview(request: Request):
     for key in ("teacher_id","student_id","is_impersonating","is_portal_preview","preview_portal","preview_school_id"):
         request.session.pop(key, None)
     return RedirectResponse("/super/portal-management", 303)
+
+# Install tab-scoped signed sessions around the fully configured ASGI app.
+# This must wrap the app only after every route and FastAPI middleware has been registered.
+app = DaviSchoolTabSessionMiddleware(
+    app,
+    secret_key=SECRET_KEY,
+    https_only=SESSION_HTTPS_ONLY,
+)

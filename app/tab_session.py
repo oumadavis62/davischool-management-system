@@ -400,6 +400,30 @@ class DaviSchoolTabSessionMiddleware:
             for part in cookie_header.split(";")
             if "=" in part
         )
+        migrated_legacy_session = False
+        if tab_id and not selected_cookie_present:
+            legacy_value = next(
+                (
+                    part.strip().split("=", 1)[1]
+                    for part in cookie_header.split(";")
+                    if "=" in part and part.strip().split("=", 1)[0] == "session"
+                ),
+                None,
+            )
+            if legacy_value is not None:
+                preserved = [
+                    part.strip()
+                    for part in cookie_header.split(";")
+                    if "=" in part and part.strip().split("=", 1)[0] != "session"
+                ]
+                preserved.append(session_cookie + "=" + legacy_value)
+                rewritten_cookie = "; ".join(preserved).encode("latin-1", "ignore")
+                scope["headers"] = [
+                    (name, rewritten_cookie if name.lower() == b"cookie" else value)
+                    for name, value in scope.get("headers", [])
+                ]
+                selected_cookie_present = True
+                migrated_legacy_session = True
         if is_student_save:
             query = scope.get("query_string", b"").decode("utf-8", "ignore")
             referer = next(
@@ -435,29 +459,6 @@ class DaviSchoolTabSessionMiddleware:
                 })
                 await send({"type": "http.response.body", "body": body})
                 return
-            preview_role = str(session.get("role") or "")
-            preview_portal = str(session.get("preview_portal") or "")
-            # The preview launcher uses explicit role-specific URLs. Keep the
-            # parent/student URLs mapped to the shared role-aware portal handler
-            # when no dedicated route is registered in this deployment.
-            if method == "GET" and preview_portal in ("parent", "student"):
-                if scope.get("path") in ("/portal/parent", "/portal/student"):
-                    scope["path"] = "/portal"
-                    scope["raw_path"] = b"/portal"
-
-            # Accountant previews use the same finance workspace and school
-            # module handlers as the deployed accounting interface. Those
-            # handlers authorize school_admin/registrar; elevate only for the
-            # duration of this isolated preview request, then restore the
-            # accountant identity before the session cookie is serialized.
-            if preview_role == "accountant" and preview_portal == "accountant":
-                session["role"] = "school_admin"
-                try:
-                    await self.app(scope, receive, send)
-                finally:
-                    session["role"] = preview_role
-                return
-
             await self.app(scope, receive, send)
 
         session_app = SessionMiddleware(
@@ -508,6 +509,11 @@ class DaviSchoolTabSessionMiddleware:
                     )
                 content_type = (headers.get("content-type") or "").lower()
                 html_response["value"] = "text/html" in content_type
+                if migrated_legacy_session:
+                    deletion = "session=; Max-Age=0; Path=/; SameSite=lax"
+                    if self.https_only:
+                        deletion += "; Secure"
+                    headers.append("set-cookie", deletion)
                 location = headers.get("location")
                 if tab_id and location:
                     headers["location"] = self._with_tab(location, tab_id)
