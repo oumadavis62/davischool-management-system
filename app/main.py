@@ -922,7 +922,8 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                     if valid_student:
                         target_school_id = valid_student["school_id"]
                         created_account = None
-                        for student in matching_students:
+                        ordered_students = [valid_student] + [student for student in matching_students if int(student["id"]) != int(valid_student["id"])]
+                        for student in ordered_students:
                             if student["school_id"] != target_school_id:
                                 continue
                             parent_result = _create_or_link_parent_access(
