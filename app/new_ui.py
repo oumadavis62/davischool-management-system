@@ -1494,10 +1494,9 @@ def class_monitoring_page(request: Request):
                 <span>Only your current teaching allocations are shown</span></div>
               <form class='cm-filters' method='get' action='/app/class-monitoring'>
                 <label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
-              <nav class='cm-tabs' role='tablist' aria-label='Submission workspace'>
+              <nav class='cm-tabs' role='tablist' aria-label='My submission workspace'>
                 <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
-                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
-                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
+                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>My Submissions</button>
               </nav>
               <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
               <section class='cm-kpis'>
@@ -1510,11 +1509,8 @@ def class_monitoring_page(request: Request):
                 <div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
               </section>
               <section class='cm-panel' role='tabpanel' data-cm-panel='subjects'>
-                <div class='cm-panel-heading'><h2>Subject submissions</h2><p>Review each allocated subject, marks progress and follow-up actions.</p></div>
+                <div class='cm-panel-heading'><h2>My allocated subjects</h2><p>Open marks entry for the class, stream and subject assigned to you.</p></div>
                 <section class='cm-subject-grid'>%s</section>
-              </section>
-              <section class='cm-panel' role='tabpanel' data-cm-panel='followups'>
-                <div class='cm-panel-heading'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p></div>
                 %s
               </section>
             </div>"""%(exam_options,total_pairs,complete_pairs,progress_pairs,pending_pairs,completion,completion,
@@ -1680,9 +1676,10 @@ def class_monitoring_page(request: Request):
       <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
       %s
       <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
-      <nav class='cm-tabs' role='tablist' aria-label='My submission workspace'>
+      <nav class='cm-tabs' role='tablist' aria-label='Class monitoring workspace'>
         <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
-        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>My Submissions</button>
+        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
+        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
       </nav>
       <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
       <section class='cm-kpis'>
@@ -1692,8 +1689,11 @@ def class_monitoring_page(request: Request):
       <div class='cm-overall'><div><b>Class submission completion</b><strong>%s%%</strong></div><div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
       </section>
       <section class='cm-panel' role='tabpanel' data-cm-panel='subjects'>
-        <div class='cm-panel-heading'><h2>My allocated subjects</h2><p>Open marks entry for the class, stream and subject assigned to you.</p></div>
+        <div class='cm-panel-heading'><h2>Subject submissions</h2><p>Review every subject, assigned teacher and marks progress for this class.</p></div>
         <section class='cm-subject-grid'>%s</section>
+      </section>
+      <section class='cm-panel' role='tabpanel' data-cm-panel='followups'>
+        <div class='cm-panel-heading'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p></div>
         <section class='cm-followup-log'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p>%s</section>
     </div>"""%(escape(class_label),escape(str(assignment["level"] or "")),cohort_count,success,exam_options,total,complete,in_progress,pending,int(completion),int(completion),
         "".join(subject_cards) if subject_cards else no_subjects,
