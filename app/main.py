@@ -1114,7 +1114,7 @@ def dashboard(request: Request):
     school_html = "".join("<tr><td><b>{}</b><small>{}</small></td><td>{}</td><td>{:,}</td><td><span class='status {}'>{}</span></td><td><a href='/schools/profile/{}'>Profile →</a></td></tr>".format(safe(r["name"]),safe(r["location"]),safe(r["school_type"]),int(r["learners"] or 0),"active" if str(r["status"] or "active").lower() in ("active","enabled") else "suspended","Active" if str(r["status"] or "active").lower() in ("active","enabled") else "Suspended",int(r["id"])) for r in recent) or "<tr><td colspan='5' class='empty'>No schools have been registered.</td></tr>"
     activity_html = "".join("<div class='activity'><div><b>{}</b><small>{} · {}</small><small>{}</small></div><time>{}</time></div>".format(safe(a["action"]),safe(a["school_name"] or "Platform"),safe(a["user_email"]),safe(a["details"]),safe(a["timestamp"])) for a in activity) or "<p class='muted'>No platform audit events have been recorded yet.</p>"
     alerts = []
-    if pending: alerts.append("<a href='/schools/manage?success=code_sent'>{} school registration request(s) awaiting verification</a>".format(pending))
+    if pending: alerts.append("<a href='/schools/manage#pending-schools'>{} school registration request(s) awaiting verification</a>".format(pending))
     if no_admin: alerts.append("<a href='/schools/manage'>{} school(s) have no School Admin account</a>".format(len(no_admin)))
     if suspended: alerts.append("<a href='/schools/manage?status=suspended'>{} suspended school account(s)</a>".format(suspended))
     alert_html = "".join("<div class='alert'>• {}</div>".format(x) for x in alerts) or "<div class='healthy'>No outstanding platform alerts from the available checks.</div>"
@@ -1186,7 +1186,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     registrar_rows="".join(registrar_rows) or "<tr><td colspan='6' style='padding:30px;text-align:center;color:#94a3b8'>No registrar accounts yet.</td></tr>"
     pending_rows = "".join([f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px;font-weight:700'>{ps["name"]}</td><td>{ps["email"]}</td><td>{ps["school_type"]}</td><td>{ps["timestamp"]}</td><td><a href='/schools/manage?success=code_sent&pending_id={ps["id"]}' style='background:#dcf0dc;color:#14532d;padding:6px 9px;border-radius:7px;text-decoration:none;font-size:11px;font-weight:700'>Continue verification</a></td></tr>""" for ps in pending_schools]) or "<tr><td colspan='5' style='padding:24px;text-align:center;color:#94a3b8'>No pending school registrations.</td></tr>"
     
-    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.card{{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<script>
+    return HTMLResponse(f"""<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f1f8f1;color:#203126}}.card{{background:white;border:1px solid #dce9dc;border-radius:16px;padding:18px}}input,select{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px}}</style></head><body>{header_html(initials, name, email)}<script>
 async function viewSchoolPassword(id){{
   try{{
     let r=await fetch('/schools/password/'+id);
