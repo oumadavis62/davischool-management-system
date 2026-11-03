@@ -1519,10 +1519,13 @@ def class_monitoring_page(request: Request):
             body+="""<style>
               .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
               .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
-              .cm-tabs{display:flex;gap:7px;overflow-x:auto;padding:5px;margin:18px 0;border-bottom:1px solid #dce9df;scrollbar-width:thin;overscroll-behavior-x:contain}
-.cm-tab{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 15px;border-radius:10px 10px 0 0;font:800 13px Arial;cursor:pointer;transition:background .15s,color .15s}
-.cm-tab:hover{background:#f1f8f3;color:#176b3a}
-.cm-tab.active{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}
+              /* Match the Parent Portal's horizontal tab treatment exactly. */
+              .class-monitoring-page .parent-nav{display:flex;gap:7px;overflow-x:auto;padding:5px;margin:18px 0;border-bottom:1px solid #dce9df;scrollbar-width:thin;overscroll-behavior-x:contain}
+              .class-monitoring-page .parent-tab{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 15px;border-radius:10px 10px 0 0;font:800 13px Arial;cursor:pointer;transition:background .15s,color .15s}
+              .class-monitoring-page .parent-tab:hover{background:#f1f8f3;color:#176b3a}
+              .class-monitoring-page .parent-tab.active{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}
+              .class-monitoring-page .cm-panel{display:none}
+              .class-monitoring-page .cm-panel.active{display:block}
 .cm-panel{display:none}.cm-panel.active{display:block}
 .cm-register-card{background:#fff;border:1px solid #dfebe2;border-radius:16px;padding:20px;box-shadow:0 5px 18px #173d2910;min-width:0}
 .cm-register-table-wrap{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #e5eee7;border-radius:11px}
@@ -1553,7 +1556,7 @@ def class_monitoring_page(request: Request):
               .cm-teacher-actions a{display:inline-block;padding:9px 12px;border-radius:8px;background:#176B3A;color:#fff;text-decoration:none;font-size:11px;font-weight:800}
               .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
               @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
-            @media(max-width:520px){.cm-tab{padding:10px 12px;font-size:12px}.cm-register-card{padding:14px;border-radius:13px}}
+            @media(max-width:520px){.class-monitoring-page .parent-tab{padding:10px 12px;font-size:12px}.cm-register-card{padding:14px;border-radius:13px}}
     </style>"""
             body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
             return _school_page(request,"Class Monitoring",body)
@@ -1705,11 +1708,11 @@ def class_monitoring_page(request: Request):
       <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
       %s
       <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
-      <nav class='cm-tabs' role='tablist' aria-label='Class monitoring workspace'>
-        <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
-        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
-        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
-        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='register'>Students Register</button>
+      <nav class='parent-nav cm-tabs' role='tablist' aria-label='Class monitoring workspace'>
+        <button type='button' class='parent-tab cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
+        <button type='button' class='parent-tab cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
+        <button type='button' class='parent-tab cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
+        <button type='button' class='parent-tab cm-tab' role='tab' aria-selected='false' data-cm-tab='register'>Students Register</button>
       </nav>
       <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
       <section class='cm-kpis'>
