@@ -4089,7 +4089,12 @@ def school_finance_expense(request:Request,category:str=Form(...),description:st
 
 @app.get('/portal', response_class=HTMLResponse)
 def role_portal(request:Request):
-    if request.session.get('role') not in ('teacher','parent','student'): return RedirectResponse('/',303)
+    role = request.session.get('role')
+    if request.session.get("is_portal_preview") and role == "accountant":
+        return RedirectResponse("/school/finance", 303)
+    if request.session.get("is_portal_preview") and role == "registrar":
+        return RedirectResponse("/school/dashboard", 303)
+    if role not in ('teacher','parent','student'): return RedirectResponse('/',303)
     school=get_school_obj(request)
     if not school: return RedirectResponse('/',303)
     con=get_db(); cur=con.cursor(); role=request.session['role']; student_id=request.session.get('student_id'); teacher_id=request.session.get('teacher_id')
