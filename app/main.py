@@ -9,6 +9,7 @@ import os
 import hashlib
 import hmac
 import base64
+import json
 import secrets
 import re
 import traceback
@@ -4406,19 +4407,24 @@ def super_admin_portal_management(request: Request):
         return RedirectResponse("/", 303)
     name = escape(str(request.session.get("name") or "Super Administrator"))
     portals = [
-        ("school-admin", "School Admin Portal", "SA", "School operations, learners, staff, academics, finance and settings."),
-        ("registrar", "Registrar Portal", "RG", "Learner registration, records and registrar workflows."),
-        ("teacher", "Teacher Portal", "TR", "Teaching allocations, marks entry and teacher monitoring."),
-        ("parent", "Parent Portal", "PR", "Parent dashboard, learner progress and fee summary."),
-        ("student", "Student Portal", "ST", "Learner profile and academic records."),
-        ("accountant", "Accountant Portal", "AC", "Fees and finance workspace in the isolated demonstration school."),
+        ("school-admin", "School Admin Portal", "SA", "The real school administration workspace and modules."),
+        ("registrar", "Registrar Portal", "RG", "The real registrar workspace with school-wide access."),
+        ("teacher", "Teacher Portal", "TR", "The real teacher workspace, allocations, marks entry and monitoring."),
+        ("parent", "Parent Portal", "PR", "The parent-facing learner progress and school updates portal."),
+        ("student", "Student Portal", "ST", "The student-facing academic records portal."),
+        ("accountant", "Accountant Portal", "AC", "The finance workspace in the isolated demonstration school."),
     ]
-    cards = "".join(
-        f"""<article class="portal-card"><div class="portal-icon">{icon}</div>
-        <div class="portal-copy"><h2>{title}</h2><p>{description}</p></div>
-        <a class="open" href="/super/portal-management/enter/{key}">Open preview →</a></article>"""
-        for key,title,icon,description in portals
-    )
+    cards_list = []
+    for key, title, icon, description in portals:
+        tab_id = secrets.token_hex(16)
+        ticket = _make_portal_preview_ticket(key, request.session)
+        preview_url = "/super/portal-management/enter/{}?ds_tab={}&ds_tab_shared=1&ticket={}".format(key, tab_id, quote(ticket, safe=""))
+        cards_list.append(
+            f"""<article class="portal-card"><div class="portal-icon">{icon}</div>
+            <div class="portal-copy"><h2>{title}</h2><p>{description}</p></div>
+            <a class="open" target="_blank" rel="noopener" href="{preview_url}">Open independent preview →</a></article>"""
+        )
+    cards = "".join(cards_list)
     return HTMLResponse(f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Portal Management · DaviSchool</title><style>
     *{{box-sizing:border-box}}body{{margin:0;background:#f1f8f1;color:#203126;font-family:Arial,sans-serif}}
@@ -4436,37 +4442,76 @@ def super_admin_portal_management(request: Request):
     @media(max-width:680px){{main{{padding:14px 11px}}.grid{{grid-template-columns:1fr}}.hero h1{{font-size:21px}}.portal-card{{gap:10px}}}}
     </style></head><body><header class="top"><b>DaviSchool · Global Control Centre</b><a href="/dashboard">← Return to Global Overview</a></header>
     <main><section class="hero"><h1>Portal Management & Design Centre</h1>
-    <p>Welcome, {name}. Open each portal independently using a secure Super Admin preview identity. These previews use a separate demonstration school and never require a school user's password.</p></section>
+    <p>Welcome, {name}. Each portal opens in its own isolated browser tab, using the real role-specific application workspace and a separate demonstration-school identity.</p></section>
     <div class="notice"><b>Protected demonstration environment</b><br>
-    Preview sessions are isolated to synthetic demo records. All data-changing requests are blocked while preview mode is active. Password changes and school account changes cannot affect this access. Use the persistent preview banner to return here.</div>
+    Each preview has its own signed-in session and synthetic demo records. Logging out, timing out or encountering an error in one preview cannot sign out the other previews or your Global Control Centre. All data-changing requests are blocked.</div>
     <section class="grid">{cards}</section>
     <p class="foot">Portal previews show the current application experience using demonstration data. Changes to application design are still made centrally in the application source and deployed through the normal release process. Preview access is not a customer account and cannot access customer school records.</p>
     </main></body></html>""")
 
 
+def _make_portal_preview_ticket(portal: str, admin_session) -> str:
+    """Create a short-lived signed handoff for a fresh per-tab preview session."""
+    payload = {
+        "portal": portal,
+        "admin_user_id": int(admin_session.get("user_id") or 0),
+        "admin_email": str(admin_session.get("email") or ""),
+        "admin_name": str(admin_session.get("name") or "Super Administrator"),
+        "expires": int(datetime.now().timestamp()) + 600,
+        "nonce": secrets.token_urlsafe(12),
+    }
+    raw = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")).decode("ascii").rstrip("=")
+    signature = hmac.new(SECRET_KEY.encode("utf-8"), raw.encode("ascii"), hashlib.sha256).hexdigest()
+    return raw + "." + signature
+
+
+def _read_portal_preview_ticket(ticket: str, portal: str):
+    try:
+        raw, supplied = str(ticket or "").rsplit(".", 1)
+        expected = hmac.new(SECRET_KEY.encode("utf-8"), raw.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(supplied, expected):
+            return None
+        padded = raw + "=" * (-len(raw) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+        if payload.get("portal") != portal or int(payload.get("expires") or 0) < int(datetime.now().timestamp()):
+            return None
+        if not payload.get("admin_email"):
+            return None
+        return payload
+    except Exception:
+        return None
+
+
 @app.get("/super/portal-management/enter/{portal}")
-def enter_super_admin_portal_preview(portal: str, request: Request):
-    if request.session.get("role") != "super_admin" or request.session.get("is_portal_preview"):
-        return RedirectResponse("/", 303)
+def enter_super_admin_portal_preview(portal: str, request: Request, ticket: str = ""):
     allowed = {
-        "school-admin": ("school_admin", "/school/dashboard"),
-        "registrar": ("registrar", "/school/dashboard"),
-        "teacher": ("teacher", "/portal/teacher"),
+        "school-admin": ("school_admin", "/app"),
+        "registrar": ("registrar", "/app"),
+        "teacher": ("teacher", "/app"),
         "parent": ("parent", "/portal/parent"),
         "student": ("student", "/portal/student"),
         "accountant": ("accountant", "/school/finance"),
     }
     if portal not in allowed:
         return RedirectResponse("/super/portal-management", 303)
+    handoff = _read_portal_preview_ticket(ticket, portal)
+    if request.session.get("role") != "super_admin" and not handoff:
+        return RedirectResponse("/", 303)
+    if request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
     try:
         demo = _ensure_davischool_demo_tenant()
     except Exception as exc:
         print("DAVISCHOOL PORTAL DEMO INITIALIZATION FAILED:", repr(exc), flush=True)
         return HTMLResponse("The isolated demo environment could not be prepared. No school data was changed. Please check the application logs.", 500)
+
     role, destination = allowed[portal]
-    request.session["_preview_admin_user_id"] = request.session.get("user_id", 0)
-    request.session["_preview_admin_email"] = request.session.get("email", "")
-    request.session["_preview_admin_name"] = request.session.get("name", "Super Administrator")
+    admin_user_id = (handoff or {}).get("admin_user_id", request.session.get("user_id", 0))
+    admin_email = (handoff or {}).get("admin_email", request.session.get("email", ""))
+    admin_name = (handoff or {}).get("admin_name", request.session.get("name", "Super Administrator"))
+    request.session["_preview_admin_user_id"] = admin_user_id
+    request.session["_preview_admin_email"] = admin_email
+    request.session["_preview_admin_name"] = admin_name
     request.session["role"] = role
     request.session["email"] = "preview-" + portal + "@davischool.invalid"
     request.session["name"] = "Super Admin Preview"
@@ -4482,7 +4527,7 @@ def enter_super_admin_portal_preview(portal: str, request: Request):
     try:
         ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         con.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
-                    (demo["school_id"], request.session["_preview_admin_email"], "PORTAL_PREVIEW_ENTER",
+                    (demo["school_id"], admin_email, "PORTAL_PREVIEW_ENTER",
                      "Opened isolated " + portal + " portal preview", ts))
         con.commit()
     finally:
@@ -4513,5 +4558,4 @@ def exit_super_admin_portal_preview(request: Request):
     for key in ("teacher_id","student_id","is_impersonating","is_portal_preview","preview_portal","preview_school_id"):
         request.session.pop(key, None)
     return RedirectResponse("/super/portal-management", 303)
-
 
