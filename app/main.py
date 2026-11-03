@@ -1561,7 +1561,14 @@ def switch_to_school(sid: int, request: Request):
     cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",(sid,request.session.get("email",""),"SUPER_ADMIN_SCHOOL_ACCESS","Super Admin entered school workspace",ts)); con.commit(); con.close()
     request.session["school_id"]=sid; request.session["is_impersonating"]=True; return RedirectResponse("/school/dashboard",303)
 @app.get("/super/back-to-admin")
-def back_to_admin(request: Request): request.session["school_id"]=0; request.session["is_impersonating"]=False; return RedirectResponse("/dashboard",303)
+def back_to_admin(request: Request):
+    sid = request.session.get("school_id")
+    if request.session.get("role") == "super_admin" and sid:
+        con=get_db(); cur=con.cursor(); ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",(sid,request.session.get("email",""),"SUPER_ADMIN_RETURN_TO_PLATFORM","Super Admin returned to platform management",ts)); con.commit(); con.close()
+    request.session["school_id"]=0
+    request.session["is_impersonating"]=False
+    return RedirectResponse("/dashboard",303)
 
 # === SET MARKS FILTER HELPERS — EXACT ===
 def get_set_marks_filter_data(school_id):
