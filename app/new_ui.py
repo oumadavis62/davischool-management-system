@@ -5459,10 +5459,12 @@ def parent_portal(request: Request):
 <meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
 <title>Parent Portal · DaviSchool</title><style>
 *{{box-sizing:border-box}}body{{margin:0;background:#f0f7f1;color:#183526;font-family:Inter,Arial,sans-serif}}
-header{{background:#fff;border-bottom:1px solid #dce9df;padding:14px 5%;display:flex;align-items:center;justify-content:space-between;gap:12px}}
-.brand{{display:flex;align-items:center;gap:11px;font-weight:900;color:#176b3a}}.brand img,.brand-mark{{width:42px;height:42px;object-fit:contain;border-radius:10px}}.brand-mark{{display:grid;place-items:center;background:#176b3a;color:#fff;font-size:23px}}
-header a{{color:#176b3a;text-decoration:none;font-weight:800;font-size:13px}}
+header{{background:#fff;border-bottom:1px solid #dce9df;padding:12px 5%;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:76px;box-shadow:0 2px 10px #173d2908}}
+.brand{{display:flex;align-items:center;gap:12px;font-weight:900;color:#176b3a;min-width:0}}.brand img,.brand-mark{{width:46px;height:46px;min-width:46px;object-fit:contain;border-radius:11px}}.brand-mark{{display:grid;place-items:center;background:#176b3a;color:#fff;font-size:23px}}
+.brand-copy{{min-width:0}}.brand-name{{font-size:17px;font-weight:900;color:#176b3a;line-height:1.2;overflow-wrap:anywhere}}.brand-subtitle{{display:block;color:#718477;font-size:11px;font-weight:700;margin-top:3px}}
+.parent-top-right{{display:flex;align-items:center;gap:14px;min-width:0}}.parent-top-welcome{{font-size:13px;color:#647568;text-align:right;line-height:1.5}}.parent-top-welcome strong{{color:#183526}}.parent-top-role{{font-size:11px;color:#718477;font-weight:700}}.parent-top-avatar{{width:38px;height:38px;flex:0 0 38px;border-radius:50%;display:grid;place-items:center;background:#e7f5eb;color:#176b3a;font-weight:900;border:1px solid #d4e8d9}}header a{{color:#176b3a;text-decoration:none;font-weight:800;font-size:13px;white-space:nowrap}}
 main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}}.welcome h1{{font-size:clamp(24px,4vw,34px);margin:0 0 6px;color:#12472b}}.muted{{color:#688071;font-size:13px}}
+@media(max-width:600px){{header{{padding:10px 4%;gap:8px}}.brand img,.brand-mark{{width:40px;height:40px;min-width:40px}}.brand-name{{font-size:14px}}.parent-top-right{{gap:8px}}.parent-top-welcome{{font-size:11px}}.parent-top-avatar{{width:32px;height:32px;flex-basis:32px}}header a{{font-size:12px}}}}
 .stats{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0}}
 .stat,.panel{{background:#fff;border:1px solid #dfebe2;border-radius:16px;padding:18px;box-shadow:0 5px 18px #173d2910}}
 .stat small{{display:block;color:#6d8173;font-weight:700}}.stat strong{{display:block;font-size:24px;color:#176b3a;margin-top:7px}}
@@ -5476,7 +5478,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 .parent-overview-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}}
 @media(max-width:720px){{.parent-overview-summary{{grid-template-columns:1fr 1fr}}.parent-tab{{padding:10px 12px}}}}
 @media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
-</style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
+</style></head><body><header><div class='brand'>{logo_html}<span class='brand-copy'><span class='brand-name'>{school_name}</span><small class='brand-subtitle'>DaviSchool · Parent Portal</small></span></div><div class='parent-top-right'><div class='parent-top-welcome'>Welcome back, <strong>{escape(str(request.session.get("name") or "Parent"))}</strong><div class='parent-top-role'>Parent</div></div><span class='parent-top-avatar'>{escape((str(request.session.get("name") or "P").strip()[:1] or "P").upper())}</span><a href='/logout'>Log out ↗</a></div></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
 <nav class='parent-nav' aria-label='Parent portal sections'>
 <button type='button' class='parent-tab active' data-view='overview' onclick="parentShow('overview')">Overview</button>
