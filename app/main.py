@@ -1912,7 +1912,7 @@ def school_set_marks_save(request: Request, subject_id: int = Form(...), class_n
 
 @app.post("/school/set-marks/delete/{cid}")
 def school_set_marks_delete(cid: int, request: Request):
-    if request.session.get("role") not in {"school_admin","super_admin"}: return RedirectResponse("/",303)
+    if request.session.get("role") not in {"school_admin","registrar","super_admin"}: return RedirectResponse("/",303)
     school=get_school_obj(request)
     if not school or not _role_permission(request,"marks.edit"): return RedirectResponse("/portal",303)
     con = get_db(); cur = con.cursor()
@@ -2419,7 +2419,7 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
     current_role=str(request.session.get("role") or "")
     if role_v=="school_admin" and current_role!="super_admin":
         return HTMLResponse("Only the Super Admin can create School Admin accounts.",403)
-    if role_v=="registrar" and current_role not in ("school_admin","super_admin"):
+    if role_v=="registrar" and current_role not in ("school_admin","registrar","super_admin"):
         return HTMLResponse("Only the School Admin or Super Admin can create Registrar accounts.",403)
     if role_v not in allowed or not full_name.strip() or not email.strip() or not password.strip():
         return HTMLResponse("Invalid user details.",400)
