@@ -1191,7 +1191,18 @@ def change_password(request: Request,current_password:str=Form(...),new_password
     return RedirectResponse('/account/change-password',303)
 
 @app.get("/logout")
-def logout(request: Request): request.session.clear(); return RedirectResponse("/")
+def logout(request: Request):
+    if request.session.get("is_portal_preview"):
+        request.session["role"] = "super_admin"
+        request.session["school_id"] = 0
+        request.session["user_id"] = request.session.pop("_preview_admin_user_id", 0)
+        request.session["email"] = request.session.pop("_preview_admin_email", "")
+        request.session["name"] = request.session.pop("_preview_admin_name", "Super Administrator")
+        for key in ("teacher_id", "student_id", "is_portal_preview", "is_impersonating", "preview_portal", "preview_school_id"):
+            request.session.pop(key, None)
+        return RedirectResponse("/super/portal-management", 303)
+    request.session.clear()
+    return RedirectResponse("/")
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -1260,7 +1271,7 @@ def dashboard(request: Request):
     .layout{{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,.85fr);gap:14px}}.layout>div,.panel{{min-width:0}}.panel{{background:white;border:1px solid #dce9dc;border-radius:14px;margin-bottom:14px;overflow:hidden}}.panel-head{{padding:14px 16px;border-bottom:1px solid #edf3ed;display:flex;justify-content:space-between;gap:10px;align-items:center}}.panel-head b{{font-size:14px}}.panel-head a,.panel a{{color:#166534;text-decoration:none;font-size:11px;font-weight:800}}.panel-body{{padding:15px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px;text-align:left;border-bottom:1px solid #edf3ed;font-size:11px}}th{{font-size:10px;background:#f7fbf7;color:#718477}}td small{{display:block;color:#718477;margin-top:4px}}.status{{padding:4px 8px;border-radius:18px;font-size:10px;font-weight:800}}.status.active{{background:#dcfce7;color:#166534}}.status.suspended{{background:#fee2e2;color:#991b1b}}.table-scroll{{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;scrollbar-width:thin}}.table-scroll table{{width:max-content;min-width:100%;border-collapse:collapse}}.type-row{{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:11px}}.type-row span{{flex:1}}.type-row div{{width:38%;height:8px;background:#edf4ed;border-radius:10px;overflow:hidden}}.type-row i{{display:block;height:100%;background:#2f855a;border-radius:10px}}.type-row b{{min-width:20px;text-align:right}}.activity{{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.activity:last-child{{border:0}}.activity small{{display:block;color:#718477;margin-top:4px}}.activity time{{font-size:10px;color:#718477;white-space:nowrap}}.alert{{padding:10px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.alert a{{color:#8a5a00}}.healthy{{padding:11px;background:#e9f6eb;color:#166534;border-radius:9px;font-size:11px}}.muted,.empty{{color:#94a3b8;font-size:11px}}.empty{{text-align:center;padding:22px}}
     @media(max-width:1050px){{.stats{{grid-template-columns:repeat(3,1fr)}}}}@media(max-width:760px){{.wrap{{padding:12px}}.hero{{align-items:flex-start;flex-direction:column}}.hero h1{{font-size:20px}}.stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.layout{{grid-template-columns:minmax(0,1fr)}}.table-scroll{{cursor:grab;scrollbar-width:thin}}.table-scroll:active{{cursor:grabbing}}.table-scroll table{{min-width:620px;width:max-content}}}}
     </style></head><body>{header}<main class='wrap'>
-    <section class='hero'><div><h1>DaviSchool Platform Overview</h1><p>Manage registered schools and monitor platform-wide school operations.</p></div><div class='actions'><a href='/schools/manage'>＋ Manage Schools</a></div></section>
+    <section class='hero'><div><h1>DaviSchool Platform Overview</h1><p>Manage registered schools and monitor platform-wide school operations.</p></div><div class='actions'><a href='/super/portal-management'>▦ Portal Management</a><a href='/schools/manage'>＋ Manage Schools</a></div></section>
     <section class='stats'>
     <a class='stat' href='/schools/manage'><span>REGISTERED SCHOOLS</span><b>{total:,}</b><small>All school accounts</small></a>
     <a class='stat' href='/schools/manage?status=active'><span>ACTIVE SCHOOLS</span><b>{active:,}</b><small>Enabled accounts</small></a>
@@ -1862,7 +1873,7 @@ def get_global_set_marks_filter_data():
 @app.get("/school/marks", response_class=HTMLResponse)
 def school_set_marks(request: Request, year: str = "all", term: str = "all", class_name: str = "all", search: str = ""):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
     name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
@@ -4278,3 +4289,218 @@ app.include_router(new_ui_router)
 # Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
 from app.legacy_redirect import install_legacy_school_redirect
 install_legacy_school_redirect(app)
+
+
+# === SUPER ADMIN PORTAL MANAGEMENT & ISOLATED PREVIEW WORKSPACE ===
+def _ensure_davischool_demo_tenant():
+    """Create one isolated demo tenant and minimal synthetic portal data."""
+    con = get_db()
+    cur = con.cursor()
+    try:
+        demo = cur.execute("SELECT id FROM schools WHERE email=? ORDER BY id LIMIT 1",
+                           ("portal-demo@davischool.invalid",)).fetchone()
+        if not demo:
+            cur.execute("""INSERT INTO schools (name,email,code,location,phone,principal,school_type,status)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        ("DaviSchool Demonstration Environment", "portal-demo@davischool.invalid",
+                         "DAVI-DEMO", "Demonstration only", "", "DaviSchool Platform",
+                         "Demonstration", "active"))
+            demo = cur.execute("SELECT id FROM schools WHERE email=? ORDER BY id DESC LIMIT 1",
+                               ("portal-demo@davischool.invalid",)).fetchone()
+        demo_id = int(demo["id"])
+        klass = cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=? ORDER BY id LIMIT 1",
+                            (demo_id, "GRADE 7", "DEMO")).fetchone()
+        if not klass:
+            cur.execute("INSERT INTO classes (school_id,name,level,stream) VALUES (?,?,?,?)",
+                        (demo_id, "GRADE 7", "Junior School", "DEMO"))
+            klass = cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=? ORDER BY id DESC LIMIT 1",
+                                (demo_id, "GRADE 7", "DEMO")).fetchone()
+        class_id = int(klass["id"])
+        learner = cur.execute("SELECT id FROM students WHERE school_id=? AND admission_no=? LIMIT 1",
+                              (demo_id, "DEMO-001")).fetchone()
+        if not learner:
+            cur.execute("""INSERT INTO students
+                           (school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (demo_id, "DEMO-001", "DEMO-001", "Alex Demo Learner",
+                         class_id, "Male", "0700000000", "DEMO"))
+            learner = cur.execute("SELECT id FROM students WHERE school_id=? AND admission_no=? ORDER BY id DESC LIMIT 1",
+                                  (demo_id, "DEMO-001")).fetchone()
+        student_id = int(learner["id"])
+        teacher = cur.execute("SELECT id FROM teachers WHERE school_id=? AND email=? LIMIT 1",
+                              (demo_id, "teacher@davischool.invalid")).fetchone()
+        if not teacher:
+            cur.execute("""INSERT INTO teachers (school_id,name,email,phone,gender,role,employment_type)
+                           VALUES (?,?,?,?,?,?,?)""",
+                        (demo_id, "Taylor Demo Teacher", "teacher@davischool.invalid",
+                         "0700000001", "Female", "Teacher", "Demonstration"))
+            teacher = cur.execute("SELECT id FROM teachers WHERE school_id=? AND email=? ORDER BY id DESC LIMIT 1",
+                                  (demo_id, "teacher@davischool.invalid")).fetchone()
+        teacher_id = int(teacher["id"])
+        subject = cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? LIMIT 1",
+                              (demo_id, "Mathematics")).fetchone()
+        if not subject:
+            cur.execute("INSERT INTO subjects (school_id,name,code,initial) VALUES (?,?,?,?)",
+                        (demo_id, "Mathematics", "MATH", "M"))
+            subject = cur.execute("SELECT id FROM subjects WHERE school_id=? AND name=? ORDER BY id DESC LIMIT 1",
+                                  (demo_id, "Mathematics")).fetchone()
+        subject_id = int(subject["id"])
+        allocation = cur.execute("SELECT id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+                                 (demo_id, teacher_id, class_id, subject_id)).fetchone()
+        if not allocation:
+            cur.execute("INSERT INTO teacher_allocations (school_id,teacher_id,subject_id,class_id) VALUES (?,?,?,?)",
+                        (demo_id, teacher_id, subject_id, class_id))
+        try:
+            cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+                school_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL, created_at TEXT,
+                PRIMARY KEY (school_id,user_id,student_id))""")
+        except Exception:
+            pass
+        con.commit()
+        return {"school_id": demo_id, "student_id": student_id, "teacher_id": teacher_id}
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+@app.get("/super/portal-management", response_class=HTMLResponse)
+def super_admin_portal_management(request: Request):
+    if request.session.get("role") != "super_admin" or request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
+    name = escape(str(request.session.get("name") or "Super Administrator"))
+    portals = [
+        ("school-admin", "School Admin Portal", "SA", "School operations, learners, staff, academics, finance and settings."),
+        ("registrar", "Registrar Portal", "RG", "Learner registration, records and registrar workflows."),
+        ("teacher", "Teacher Portal", "TR", "Teaching allocations, marks entry and teacher monitoring."),
+        ("parent", "Parent Portal", "PR", "Parent dashboard, learner progress and fee summary."),
+        ("student", "Student Portal", "ST", "Learner profile and academic records."),
+    ]
+    cards = "".join(
+        f"""<article class="portal-card"><div class="portal-icon">{icon}</div>
+        <div class="portal-copy"><h2>{title}</h2><p>{description}</p></div>
+        <a class="open" href="/super/portal-management/enter/{key}">Open preview →</a></article>"""
+        for key,title,icon,description in portals
+    )
+    return HTMLResponse(f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Portal Management · DaviSchool</title><style>
+    *{{box-sizing:border-box}}body{{margin:0;background:#f1f8f1;color:#203126;font-family:Arial,sans-serif}}
+    .top{{background:#14532d;color:#fff;padding:17px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}}
+    .top a{{color:#fff;text-decoration:none;font-weight:800;font-size:12px}}main{{max-width:1180px;margin:auto;padding:24px 16px}}
+    .hero{{background:linear-gradient(120deg,#14532d,#237b49);color:white;border-radius:18px;padding:23px;margin-bottom:17px}}
+    .hero h1{{margin:0;font-size:25px}}.hero p{{color:#d8f0dc;font-size:13px;line-height:1.6;max-width:760px}}
+    .notice{{background:#e7f5eb;border:1px solid #c8e5d0;color:#245c37;border-radius:12px;padding:13px 15px;font-size:12px;line-height:1.6;margin-bottom:18px}}
+    .grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+    .portal-card{{background:#fff;border:1px solid #dce9dc;border-radius:15px;padding:17px;display:flex;gap:13px;align-items:flex-start;min-width:0;flex-wrap:wrap}}
+    .portal-icon{{width:44px;height:44px;border-radius:12px;background:#e7f5eb;color:#14532d;display:grid;place-items:center;font-weight:900;flex:0 0 44px}}
+    .portal-copy{{flex:1;min-width:180px}}.portal-copy h2{{font-size:15px;margin:2px 0 6px}}.portal-copy p{{font-size:12px;color:#64766a;line-height:1.5;margin:0}}
+    .open{{display:inline-block;background:#14532d;color:#fff;padding:10px 13px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;margin-left:auto}}
+    .foot{{margin-top:18px;color:#64766a;font-size:11px;line-height:1.6}}
+    @media(max-width:680px){{main{{padding:14px 11px}}.grid{{grid-template-columns:1fr}}.hero h1{{font-size:21px}}.portal-card{{gap:10px}}}}
+    </style></head><body><header class="top"><b>DaviSchool · Global Control Centre</b><a href="/dashboard">← Return to Global Overview</a></header>
+    <main><section class="hero"><h1>Portal Management & Design Centre</h1>
+    <p>Welcome, {name}. Open each portal independently using a secure Super Admin preview identity. These previews use a separate demonstration school and never require a school user's password.</p></section>
+    <div class="notice"><b>Protected demonstration environment</b><br>
+    Preview sessions are isolated to synthetic demo records. All data-changing requests are blocked while preview mode is active. Password changes and school account changes cannot affect this access. Use the persistent preview banner to return here.</div>
+    <section class="grid">{cards}</section>
+    <p class="foot">Portal previews show the current application experience using demonstration data. Changes to application design are still made centrally in the application source and deployed through the normal release process. Preview access is not a customer account and cannot access customer school records.</p>
+    </main></body></html>""")
+
+
+@app.get("/super/portal-management/enter/{portal}")
+def enter_super_admin_portal_preview(portal: str, request: Request):
+    if request.session.get("role") != "super_admin" or request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
+    allowed = {
+        "school-admin": ("school_admin", "/school/dashboard"),
+        "registrar": ("registrar", "/school/dashboard"),
+        "teacher": ("teacher", "/portal/teacher"),
+        "parent": ("parent", "/portal/parent"),
+        "student": ("student", "/portal/student"),
+    }
+    if portal not in allowed:
+        return RedirectResponse("/super/portal-management", 303)
+    try:
+        demo = _ensure_davischool_demo_tenant()
+    except Exception as exc:
+        print("DAVISCHOOL PORTAL DEMO INITIALIZATION FAILED:", repr(exc), flush=True)
+        return HTMLResponse("The isolated demo environment could not be prepared. No school data was changed. Please check the application logs.", 500)
+    role, destination = allowed[portal]
+    request.session["_preview_admin_user_id"] = request.session.get("user_id", 0)
+    request.session["_preview_admin_email"] = request.session.get("email", "")
+    request.session["_preview_admin_name"] = request.session.get("name", "Super Administrator")
+    request.session["role"] = role
+    request.session["email"] = "preview-" + portal + "@davischool.invalid"
+    request.session["name"] = "Super Admin Preview"
+    request.session["user_id"] = 0
+    request.session["school_id"] = demo["school_id"]
+    request.session["teacher_id"] = demo["teacher_id"] if role == "teacher" else None
+    request.session["student_id"] = demo["student_id"] if role in ("parent", "student") else None
+    request.session["is_impersonating"] = False
+    request.session["is_portal_preview"] = True
+    request.session["preview_portal"] = portal
+    request.session["preview_school_id"] = demo["school_id"]
+    con = get_db()
+    try:
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                    (demo["school_id"], request.session["_preview_admin_email"], "PORTAL_PREVIEW_ENTER",
+                     "Opened isolated " + portal + " portal preview", ts))
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse(destination, 303)
+
+
+@app.get("/super/portal-management/exit")
+def exit_super_admin_portal_preview(request: Request):
+    if request.session.get("role") not in ("school_admin","registrar","teacher","parent","student") or not request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
+    demo_id = request.session.get("preview_school_id", 0)
+    admin_email = request.session.get("_preview_admin_email", "")
+    con = get_db()
+    try:
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                    (demo_id, admin_email, "PORTAL_PREVIEW_EXIT",
+                     "Returned to Global Control Centre from portal preview", ts))
+        con.commit()
+    finally:
+        con.close()
+    request.session["role"] = "super_admin"
+    request.session["school_id"] = 0
+    request.session["user_id"] = request.session.pop("_preview_admin_user_id", 0)
+    request.session["email"] = request.session.pop("_preview_admin_email", "")
+    request.session["name"] = request.session.pop("_preview_admin_name", "Super Administrator")
+    for key in ("teacher_id","student_id","is_impersonating","is_portal_preview","preview_portal","preview_school_id"):
+        request.session.pop(key, None)
+    return RedirectResponse("/super/portal-management", 303)
+
+
+@app.middleware("http")
+async def protect_super_admin_portal_preview(request: Request, call_next):
+    """Keep portal preview read-only and visibly returnable to the control centre."""
+    if request.session.get("is_portal_preview") and request.method in ("POST","PUT","PATCH","DELETE"):
+        return HTMLResponse(
+            "<!doctype html><html><body style='font-family:Arial;padding:28px;background:#f1f8f1;color:#203126'>"
+            "<h2>Preview mode is read-only</h2><p>Data changes are disabled in the Super Admin portal preview.</p>"
+            "<a href='/super/portal-management/exit'>Return to Portal Management</a></body></html>", status_code=403)
+    response = await call_next(request)
+    if request.session.get("is_portal_preview") and "text/html" in str(response.headers.get("content-type","")) and hasattr(response,"body"):
+        banner = ("<div style='position:sticky;top:0;z-index:99999;background:#123d27;color:#fff;padding:9px 13px;"
+                  "display:flex;justify-content:space-between;align-items:center;gap:10px;font:12px Arial;box-shadow:0 2px 8px #0002'>"
+                  "<span><b>SUPER ADMIN PREVIEW</b> · Demonstration data only · Read-only</span>"
+                  "<a href='/super/portal-management/exit' style='color:#fff;background:#287447;padding:7px 10px;border-radius:7px;"
+                  "text-decoration:none;font-weight:800'>Return to Control Centre</a></div>")
+        try:
+            html = response.body.decode("utf-8")
+            if "</body>" in html:
+                html = html.replace("</body>", banner + "</body>", 1)
+                headers = {k:v for k,v in response.headers.items() if k.lower() != "content-length"}
+                response = HTMLResponse(html, status_code=response.status_code, headers=headers)
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        except Exception:
+            pass
+    return response
