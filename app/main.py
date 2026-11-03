@@ -2526,13 +2526,198 @@ def student_portal(request: Request):
 
 @app.get("/portal/parent", response_class=HTMLResponse)
 def parent_portal(request: Request):
-    if not portal_guard(request) or request.session.get("role")!="parent": return RedirectResponse("/")
-    con=get_db(); cur=con.cursor(); student_id=request.session.get('student_id'); st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(student_id,request.session['school_id'])).fetchone()
-    marks=cur.execute("SELECT sub.name subject,e.name exam,m.marks,e.term,e.year FROM marks m JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id WHERE m.student_id=? AND m.school_id=? ORDER BY e.year DESC,e.id DESC,sub.name",(student_id,request.session['school_id'])).fetchall() if st else []
-    fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=? AND student_id=?",(request.session['school_id'],student_id)).fetchone() if st else {'expected':0,'paid':0}
-    tr=''.join(f"<tr><td>{m['subject']}</td><td>{m['exam']}</td><td>{m['marks']}</td><td>{m['term']} {m['year']}</td></tr>" for m in marks) or '<tr><td colspan=4>No academic records yet.</td></tr>'
-    balance=float(fee['expected'] or 0)-float(fee['paid'] or 0)
-    body=f"<div class='card'><h3>👨‍👩‍👧 Child Record</h3><b>{st['name'] if st else 'No linked student'}</b><br>Admission: {st['admission_no'] if st else ''}<br>Class: {st['class_name'] if st else ''} {st['stream'] if st else ''}</div><div class='card'><h3>💰 Fee Balance</h3>Expected: {fee['expected'] if st else 0} &nbsp; Paid: {fee['paid'] if st else 0} &nbsp; <b>Balance: {balance}</b></div><div class='card'><h3>📊 Academic Performance</h3><table><tr><th>Subject</th><th>Exam</th><th>Marks</th><th>Term</th></tr>{tr}</table></div>"; con.close(); return portal_page(request,'👨‍👩‍👧 Parent Portal',body)
+    if not portal_guard(request) or request.session.get("role") != "parent":
+        return RedirectResponse("/", status_code=303)
+
+    school_id = request.session["school_id"]
+    user_id = request.session.get("user_id")
+    con = get_db()
+    cur = con.cursor()
+    try:
+        # Prefer the explicit parent-child links so one parent account can
+        # switch between siblings. Retain compatibility with older accounts.
+        linked_students = []
+        if user_id:
+            try:
+                linked_students = cur.execute(
+                    """SELECT s.id, s.name, s.admission_no, c.name AS class_name, c.stream
+                       FROM parent_student_links l
+                       JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+                       LEFT JOIN classes c ON c.id=s.class_id
+                       WHERE l.school_id=? AND l.user_id=?
+                       ORDER BY s.name""",
+                    (school_id, user_id)
+                ).fetchall()
+            except Exception:
+                linked_students = []
+        if not linked_students and request.session.get("student_id"):
+            linked_students = cur.execute(
+                """SELECT s.id, s.name, s.admission_no, c.name AS class_name, c.stream
+                   FROM students s LEFT JOIN classes c ON c.id=s.class_id
+                   WHERE s.id=? AND s.school_id=?""",
+                (request.session.get("student_id"), school_id)
+            ).fetchall()
+
+        requested_student = request.query_params.get("student_id", "")
+        selected = next(
+            (item for item in linked_students if str(item["id"]) == str(requested_student)),
+            None
+        ) if requested_student else None
+        st = selected or (linked_students[0] if linked_students else None)
+        if not st:
+            con.close()
+            return portal_page(
+                request, "Parent Portal",
+                "<section class='parent-empty'><div class='parent-empty-icon'>⌂</div><h2>No linked learner yet</h2><p>Please contact the school office to confirm that your parent account is linked to your child.</p></section>"
+            )
+
+        student_id = int(st["id"])
+        marks = cur.execute(
+            """SELECT sub.name AS subject, e.name AS exam, m.marks, e.term, e.year
+               FROM marks m
+               JOIN subjects sub ON sub.id=m.subject_id
+               JOIN exams e ON e.id=m.exam_id
+               WHERE m.student_id=? AND m.school_id=?
+               ORDER BY e.year DESC, e.id DESC, sub.name""",
+            (student_id, school_id)
+        ).fetchall()
+        fee = cur.execute(
+            """SELECT COALESCE(SUM(amount),0) AS expected,
+                      COALESCE(SUM(paid),0) AS paid
+               FROM fees WHERE school_id=? AND student_id=?""",
+            (school_id, student_id)
+        ).fetchone()
+        expected = float(fee["expected"] or 0)
+        paid = float(fee["paid"] or 0)
+        balance = expected - paid
+        money = lambda value: "{:,.2f}".format(value)
+        safe = lambda value: escape(str(value if value is not None else ""))
+        learner_name = safe(st["name"])
+        class_label = safe(st["class_name"] or "Class not assigned")
+        stream_label = safe(st["stream"] or "")
+        admission = safe(st["admission_no"])
+        latest = marks[:5]
+        latest_rows = "".join(
+            "<tr><td>" + safe(m["subject"]) + "</td><td>" + safe(m["exam"]) +
+            "</td><td class='parent-mark'>" + safe(m["marks"]) +
+            "</td><td>" + safe((str(m["term"] or "") + " " + str(m["year"] or "")).strip()) +
+            "</td></tr>" for m in latest
+        ) or "<tr><td colspan='4' class='parent-muted'>No academic results have been published yet.</td></tr>"
+        academic_rows = "".join(
+            "<tr><td>" + safe(m["subject"]) + "</td><td>" + safe(m["exam"]) +
+            "</td><td class='parent-mark'>" + safe(m["marks"]) +
+            "</td><td>" + safe(m["term"]) + "</td><td>" + safe(m["year"]) +
+            "</td></tr>" for m in marks
+        ) or "<tr><td colspan='5' class='parent-muted'>No academic results have been published yet.</td></tr>"
+
+        child_options = "".join(
+            "<option value='" + safe(item["id"]) + "'" +
+            (" selected" if int(item["id"]) == student_id else "") + ">" +
+            safe(item["name"]) + " · " + safe(item["admission_no"]) + "</option>"
+            for item in linked_students
+        )
+        child_switcher = (
+            "<form class='parent-child-form' method='get' action='/portal/parent'>"
+            "<label for='parent-child'>Viewing learner</label>"
+            "<select id='parent-child' name='student_id' onchange='this.form.submit()'>" +
+            child_options + "</select></form>"
+        ) if len(linked_students) > 1 else ""
+
+        overview = (
+            "<section class='parent-panel' id='parent-overview'>"
+            "<div class='parent-section-heading'><div><span class='parent-eyebrow'>YOUR CHILD</span>"
+            "<h2>" + learner_name + "</h2><p>" + class_label +
+            (" · " + stream_label if stream_label else "") + " &nbsp;·&nbsp; Admission " + admission +
+            "</p></div><span class='parent-avatar'>"
+            + safe("".join(part[0] for part in str(st["name"] or "L").split()[:2]).upper()) +
+            "</span></div>"
+            "<div class='parent-summary-grid'>"
+            "<article class='parent-summary'><span class='parent-summary-label'>Fee balance</span>"
+            "<strong>KSh " + money(balance) + "</strong><small>Outstanding amount</small></article>"
+            "<article class='parent-summary'><span class='parent-summary-label'>Amount paid</span>"
+            "<strong>KSh " + money(paid) + "</strong><small>Recorded payments</small></article>"
+            "<article class='parent-summary'><span class='parent-summary-label'>Published results</span>"
+            "<strong>" + str(len(marks)) + "</strong><small>Available subject records</small></article>"
+            "</div>"
+            "<div class='parent-content-card'><div class='parent-card-heading'><div><h3>Recent academic results</h3>"
+            "<p>Your child's latest published subject marks</p></div><button class='parent-text-button' type='button' onclick=\"parentShow('academics')\">View all results →</button></div>"
+            "<div class='parent-table-wrap'><table><thead><tr><th>Subject</th><th>Assessment</th><th>Marks</th><th>Period</th></tr></thead><tbody>"
+            + latest_rows + "</tbody></table></div></div></section>"
+        )
+        academics = (
+            "<section class='parent-panel' id='parent-academics' hidden>"
+            "<div class='parent-card-heading'><div><span class='parent-eyebrow'>LEARNING</span><h2>Academic performance</h2>"
+            "<p>Published examination results for " + learner_name + ".</p></div></div>"
+            "<div class='parent-content-card'><div class='parent-table-wrap'><table><thead><tr>"
+            "<th>Subject</th><th>Assessment</th><th>Marks</th><th>Term</th><th>Year</th>"
+            "</tr></thead><tbody>" + academic_rows + "</tbody></table></div></div></section>"
+        )
+        fees = (
+            "<section class='parent-panel' id='parent-fees' hidden>"
+            "<div class='parent-card-heading'><div><span class='parent-eyebrow'>SCHOOL FINANCE</span><h2>Fee summary</h2>"
+            "<p>Current fee position for " + learner_name + ".</p></div></div>"
+            "<div class='parent-fee-grid'>"
+            "<article class='parent-fee-item'><span>Expected fees</span><strong>KSh " + money(expected) + "</strong></article>"
+            "<article class='parent-fee-item'><span>Amount paid</span><strong>KSh " + money(paid) + "</strong></article>"
+            "<article class='parent-fee-item parent-fee-balance'><span>Outstanding balance</span><strong>KSh " + money(balance) + "</strong></article>"
+            "</div><p class='parent-note'>This summary reflects fee records currently maintained by the school. Contact the school office if you need a payment statement or clarification.</p></section>"
+        )
+        body = (
+            "<div class='parent-dashboard'>"
+            "<div class='parent-welcome'><div><span class='parent-eyebrow'>PARENT WORKSPACE</span>"
+            "<h1>Welcome, " + safe(request.session.get("name") or "Parent") + "</h1>"
+            "<p>Stay connected with your child's school progress.</p></div>" + child_switcher + "</div>"
+            "<nav class='parent-nav' aria-label='Parent portal sections'>"
+            "<button type='button' class='parent-nav-btn active' data-section='overview' onclick=\"parentShow('overview')\">Overview</button>"
+            "<button type='button' class='parent-nav-btn' data-section='academics' onclick=\"parentShow('academics')\">Academics</button>"
+            "<button type='button' class='parent-nav-btn' data-section='fees' onclick=\"parentShow('fees')\">Fees</button>"
+            "</nav>" + overview + academics + fees + "</div>"
+            "<script>function parentShow(section){document.querySelectorAll('.parent-panel').forEach(function(p){p.hidden=p.id!=='parent-'+section;});document.querySelectorAll('.parent-nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.section===section);});window.scrollTo({top:0,behavior:'smooth'});}</script>"
+        )
+        page = portal_page(request, "Parent Portal", body)
+        if isinstance(page, HTMLResponse):
+            # Add a scoped visual system without changing teacher/student/admin pages.
+            page.body = page.body.replace(
+                "</style>",
+                """.parent-dashboard{max-width:1080px;margin:0 auto;color:#183b29}
+                .parent-welcome{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:8px 0 22px}
+                .parent-welcome h1{margin:5px 0 4px;color:#123d27;font-size:clamp(25px,4vw,34px)}
+                .parent-welcome p,.parent-section-heading p,.parent-card-heading p{margin:0;color:#64766c;font-size:13px}
+                .parent-eyebrow{font-size:10px;letter-spacing:.12em;font-weight:900;color:#16834a}
+                .parent-child-form{min-width:210px}.parent-child-form label{display:block;font-size:11px;font-weight:800;color:#52675a;margin-bottom:6px}
+                .parent-child-form select{width:100%;padding:11px 34px 11px 12px;border:1px solid #d5e7db;border-radius:11px;background:#fff;color:#17452d;font-weight:700}
+                .parent-nav{display:flex;gap:7px;overflow-x:auto;padding:5px;margin:0 0 18px;border-bottom:1px solid #dce9df}
+                .parent-nav-btn{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 17px;border-radius:10px 10px 0 0;font-weight:800;cursor:pointer}
+                .parent-nav-btn.active{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}
+                .parent-panel[hidden]{display:none!important}.parent-section-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:4px 0 17px}
+                .parent-section-heading h2,.parent-card-heading h2{font-size:22px;color:#123d27;margin:4px 0}
+                .parent-avatar{width:48px;height:48px;flex:0 0 48px;border-radius:15px;background:#e3f3e8;color:#176b3a;display:grid;place-items:center;font-weight:900;font-size:17px}
+                .parent-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+                .parent-summary,.parent-fee-item{background:#fff;border:1px solid #e0ebe3;border-radius:14px;padding:16px;min-width:0}
+                .parent-summary-label,.parent-fee-item span{display:block;color:#63766a;font-size:12px;font-weight:700}
+                .parent-summary strong,.parent-fee-item strong{display:block;color:#17452d;font-size:21px;margin:7px 0 3px;overflow-wrap:anywhere}
+                .parent-summary small{color:#819087;font-size:11px}
+                .parent-content-card{background:#fff;border:1px solid #e0ebe3;border-radius:15px;padding:17px}
+                .parent-card-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+                .parent-card-heading h3{margin:0 0 4px;color:#17452d;font-size:17px}.parent-card-heading p{font-size:12px}
+                .parent-text-button{border:0;background:transparent;color:#08783f;font-weight:800;cursor:pointer;padding:8px;white-space:nowrap}
+                .parent-table-wrap{width:100%;overflow-x:auto} .parent-table-wrap table{min-width:560px}
+                .parent-table-wrap th{background:#f4faf6;color:#52675a;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+                .parent-table-wrap td{color:#344f3e}.parent-mark{font-weight:900;color:#176b3a!important}
+                .parent-muted{color:#819087!important;text-align:center!important;padding:22px!important}
+                .parent-fee-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+                .parent-fee-balance{background:#f0f8f2;border-color:#cfe5d5}.parent-note{font-size:12px;color:#718277;margin:14px 2px}
+                .parent-empty{max-width:620px;margin:45px auto;text-align:center;background:#fff;border:1px solid #e0ebe3;border-radius:18px;padding:30px}
+                .parent-empty-icon{font-size:30px;color:#16834a}.parent-empty h2{color:#123d27}.parent-empty p{color:#64766c}
+                @media(max-width:680px){.parent-welcome{display:block}.parent-child-form{margin-top:15px}.parent-summary-grid,.parent-fee-grid{grid-template-columns:1fr 1fr}.parent-summary:last-child{grid-column:1/-1}.parent-summary,.parent-fee-item{padding:13px}.parent-summary strong,.parent-fee-item strong{font-size:18px}.parent-card-heading{align-items:flex-start}.parent-text-button{font-size:11px;padding:4px 0}.parent-section-heading h2,.parent-card-heading h2{font-size:19px}}
+                </style>"""
+            )
+        return page
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
 
 @app.get("/school/finance", response_class=HTMLResponse)
 def school_finance(request: Request):
