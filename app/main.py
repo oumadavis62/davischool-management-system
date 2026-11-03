@@ -12,6 +12,9 @@ import base64
 import secrets
 import re
 import traceback
+import smtplib
+import ssl
+from email.message import EmailMessage
 import threading
 from app.tab_session import DaviSchoolTabSessionMiddleware
 import random
@@ -184,6 +187,53 @@ def _startup_database_initialization():
     )
     DB_INIT_THREAD.start()
     print("DAVISCHOOL DATABASE INITIALIZATION STARTED IN BACKGROUND", flush=True)
+
+def send_school_verification_email(recipient: str, school_name: str, auth_code: str) -> None:
+    """Send a one-time school registration code using configured SMTP credentials."""
+    host = os.environ.get("SMTP_HOST", "").strip()
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "")
+    sender = os.environ.get("SMTP_FROM_EMAIL", username).strip()
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    use_ssl = os.environ.get("SMTP_USE_SSL", "0").strip().lower() in {"1", "true", "yes"}
+    if not host or not username or not password or not sender:
+        raise RuntimeError("School verification email is not configured. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM_EMAIL.")
+    safe_school = escape(str(school_name or "your school"))
+    message = EmailMessage()
+    message["Subject"] = "Your DaviSchool registration verification code"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(
+        "DaviSchool school registration verification\\n\\n"
+        "Your verification code is: %s\\n\\n"
+        "Enter this six-digit code on the DaviSchool Register School page to confirm the email address. "
+        "If you did not request this, you can ignore this email.\\n\\nDaviSchool Support" % auth_code
+    )
+    message.add_alternative(
+        "<div style='font-family:Arial,sans-serif;color:#1f2937;max-width:560px;margin:auto'>"
+        "<div style='background:#14532d;color:white;padding:18px;border-radius:12px 12px 0 0;font-size:20px;font-weight:800'>DaviSchool</div>"
+        "<div style='padding:22px;border:1px solid #e5e7eb;border-radius:0 0 12px 12px'>"
+        "<h2 style='color:#14532d'>Verify your school email</h2>"
+        "<p>Use the code below to confirm the administrator email for <b>%s</b>.</p>"
+        "<div style='font-size:32px;letter-spacing:9px;font-weight:900;text-align:center;background:#f0fdf4;color:#166534;padding:18px;border-radius:10px'>%s</div>"
+        "<p>This code is for one-time registration verification. If you did not request it, ignore this message.</p>"
+        "<p style='color:#64748b;font-size:12px'>DaviSchool · A modern platform for managing school operations securely.</p>"
+        "</div></div>" % (safe_school, escape(auth_code)),
+        subtype="html",
+    )
+    context = ssl.create_default_context()
+    if use_ssl:
+        with smtplib.SMTP_SSL(host, port, context=context, timeout=20) as server:
+            server.login(username, password)
+            server.send_message(message)
+    else:
+        with smtplib.SMTP(host, port, timeout=20) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(username, password)
+            server.send_message(message)
+
 
 SECRET_KEY = os.environ.get("DAVISCHOOL_SECRET_KEY") or "dev-only-change-this-secret"
 SESSION_HTTPS_ONLY = os.environ.get("DAVISCHOOL_HTTPS_ONLY", "0").lower() in {"1", "true", "yes"}
@@ -1181,6 +1231,8 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
     elif success=="verify_error":
         safe = (message or "The school account could not be created.").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
         popup=f"""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ Verification failed</div><div style='margin-top:8px;color:#475569'>The school was not partially created. Try the verification again.</div><div style='margin-top:10px;font-family:monospace;font-size:12px;word-break:break-word'>{safe}</div></div>"""
+    elif success=="email_error":
+        popup="""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ Verification email could not be sent</div><div style='margin-top:8px;color:#475569'>The school registration was not saved. Please check the email service configuration and try again.</div></div>"""
     elif success=="already_added":
         popup=f"""<div style='margin-bottom:16px;background:#fef3c7;border:2px solid #f4b400;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#92400e'>⚠️ School account already exists</div><div style='margin-top:8px;color:#475569'>{school_email}</div></div>"""
     elif success=="status_updated":
@@ -1189,7 +1241,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         popup="""<div style='margin-bottom:16px;background:#dcfce7;border:2px solid #22c55e;border-radius:14px;padding:16px'><div style='font-size:17px;font-weight:900;color:#166534'>✅ Registrar updated</div><div style='margin-top:6px;color:#475569'>The changes are now reflected in the linked school account.</div></div>"""
     elif success=="registrar_deleted":
         popup="""<div style='margin-bottom:16px;background:#dcfce7;border:2px solid #22c55e;border-radius:14px;padding:16px'><div style='font-size:17px;font-weight:900;color:#166534'>✅ Registrar deleted</div><div style='margin-top:6px;color:#475569'>The Registrar account has been removed from the linked school.</div></div>"""
-    if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #fb923c;border-radius:12px;padding:16px'><div style='font-weight:800'>🔓 Code for {pending["name"]}</div><div style='border:1.5px dashed #fb923c;border-radius:10px;padding:18px;text-align:center;background:#fffbeb;margin:12px 0'><div style='font-size:28px;font-weight:900;letter-spacing:10px'>{" ".join(list(pending["auth_code"]))}</div></div><form method='post' action='/verify-school-code' style='display:flex;gap:10px'><input type='hidden' name='pending_id' value='{pending_id}'><input name='auth_code' value='{pending["auth_code"]}' required style='flex:1;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700'><button style='background:#0b3d91;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Verify</button></form></div>"""
+    if success=="code_sent" and pending: popup=f"""<div style='margin-bottom:16px;background:white;border:1.5px solid #86b98b;border-radius:12px;padding:16px'><div style='font-weight:800;color:#166534'>✉️ Verification code sent</div><div style='margin-top:7px;color:#475569'>A six-digit code has been emailed to <b>{escape(str(pending["email"] or ""))}</b> for <b>{escape(str(pending["name"] or ""))}</b>. Check the inbox and spam folder.</div><form method='post' action='/verify-school-code' style='display:flex;gap:10px;flex-wrap:wrap;margin-top:14px'><input type='hidden' name='pending_id' value='{escape(str(pending_id))}'><input name='auth_code' inputmode='numeric' autocomplete='one-time-code' maxlength='6' pattern='[0-9]{{6}}' placeholder='Enter 6-digit code' required style='flex:1;min-width:180px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;text-align:center;font-weight:700;letter-spacing:5px'><button style='background:#0b3d91;color:white;padding:12px 18px;border:none;border-radius:10px'>✅ Confirm Email & Register</button></form></div>"""
     elif success=="added" and new_pass:
         popup=f"""<div id='daviSuccessOverlay' style='position:fixed;inset:0;background:rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99999'><div style='width:min(760px,96vw);background:#dcfce7;border:3px solid #16a34a;border-radius:18px;padding:28px;font-family:Arial,sans-serif'><div style='font-size:25px;font-weight:900;color:#166534;margin-bottom:18px'>✅ Success! 🏫 {school_name}</div><div style='background:white;border:1.5px dashed #22c55e;border-radius:14px;padding:18px;margin-bottom:18px'><div style='font-size:15px;color:#64748b'>👤 Username:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{school_email}</div><div style='font-size:15px;color:#64748b;margin-top:12px'>🔑 Password:</div><div style='font-size:25px;font-weight:900;color:#166534;word-break:break-word'>{new_pass}</div></div><button type='button' onclick="document.getElementById('daviSuccessOverlay').remove()" style='display:block;margin-left:auto;background:#0b3d91;color:white;border:0;border-radius:12px;padding:13px 30px;font-size:17px;font-weight:900;cursor:pointer'>OK ✅</button></div></div>"""
     rows=[]
@@ -1259,9 +1311,25 @@ def register_school(request: Request, school_name: str = Form(...), school_email
     role = str(role or "school_admin").strip().lower()
     if role not in {"school_admin", "registrar"}:
         return RedirectResponse("/schools/manage?success=verify_error&message=Invalid%20account%20role",303)
-    auth_code = str(random.randint(100000, 999999)); con = get_db(); cur = con.cursor(); ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,role,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, role, auth_code, ts))
-    pending_id = cur.lastrowid; con.commit(); con.close(); return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
+    auth_code = str(random.randint(100000, 999999))
+    try:
+        send_school_verification_email(school_email.strip(), school_name.strip(), auth_code)
+    except Exception as exc:
+        print("DAVISCHOOL SCHOOL VERIFICATION EMAIL FAILED:", repr(exc), flush=True)
+        return RedirectResponse("/schools/manage?success=email_error", status_code=303)
+    con = get_db()
+    try:
+        cur = con.cursor()
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,role,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, role, auth_code, ts))
+        pending_id = cur.lastrowid
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
 @app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
     from urllib.parse import quote
