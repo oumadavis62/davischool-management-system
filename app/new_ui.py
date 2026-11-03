@@ -5315,12 +5315,37 @@ def parent_portal(request: Request):
             ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
             (sid, student_id, datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
              sid, str(request.session.get("email") or "")))
-        parent_user = cur.execute("SELECT id FROM users WHERE school_id=? AND lower(username)=lower(?)",
+        parent_user = cur.execute("SELECT id,username FROM users WHERE school_id=? AND lower(username)=lower(?) AND lower(role)='parent'",
             (sid, str(request.session.get("email") or ""))).fetchone()
         if parent_user:
+            parent_user_id = int(parent_user["id"])
+            link_timestamp = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
             cur.execute("""INSERT INTO parent_student_links(school_id,user_id,student_id,created_at)
                 VALUES(?,?,?,?) ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
-                (sid, int(parent_user["id"]), student_id, datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+                (sid, parent_user_id, student_id, link_timestamp))
+
+            # Backfill every learner in this school whose parent phone resolves
+            # to the same Kenyan number as this parent's login username. This
+            # also repairs older/manual parent accounts that only had one
+            # student_id link recorded when they were first created.
+            def _parent_phone_key(value):
+                digits = re.sub(r"\\D", "", str(value or ""))
+                if len(digits) == 10 and digits.startswith("0"):
+                    return "254" + digits[1:]
+                if len(digits) == 9:
+                    return "254" + digits
+                return digits
+
+            account_phone_key = _parent_phone_key(parent_user["username"])
+            if len(account_phone_key) >= 9:
+                phone_rows = cur.execute("""SELECT id,parent_phone FROM students
+                    WHERE school_id=? AND COALESCE(parent_phone,'')<>''""", (sid,)).fetchall()
+                for phone_row in phone_rows:
+                    if _parent_phone_key(phone_row["parent_phone"]) == account_phone_key:
+                        cur.execute("""INSERT INTO parent_student_links(school_id,user_id,student_id,created_at)
+                            VALUES(?,?,?,?) ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
+                            (sid, parent_user_id, int(phone_row["id"]), link_timestamp))
+
         linked_children = cur.execute("""SELECT DISTINCT s.id,s.name,s.admission_no,c.name class_name,c.stream
             FROM parent_student_links l JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
             LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
