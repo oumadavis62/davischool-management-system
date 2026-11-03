@@ -415,8 +415,30 @@ class DaviSchoolTabSessionMiddleware:
                 flush=True,
             )
 
+        async def preview_guard(scope, receive, send):
+            session = scope.get("session", {})
+            method = str(scope.get("method", "GET")).upper()
+            if scope.get("type") == "http" and method in ("POST", "PUT", "PATCH", "DELETE") and session.get("is_portal_preview"):
+                body = (
+                    "<!doctype html><html><body style='font-family:Arial;padding:28px;background:#f1f8f1;color:#203126'>"
+                    "<h2>Preview mode is read-only</h2><p>Data changes are disabled in the Super Admin portal preview.</p>"
+                    "<a href='/super/portal-management/exit'>Return to Portal Management</a></body></html>"
+                ).encode("utf-8")
+                await send({
+                    "type": "http.response.start",
+                    "status": 403,
+                    "headers": [
+                        (b"content-type", b"text/html; charset=utf-8"),
+                        (b"cache-control", b"no-store"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+            await self.app(scope, receive, send)
+
         session_app = SessionMiddleware(
-            self.app,
+            preview_guard,
             secret_key=self.secret_key,
             session_cookie=session_cookie,
             max_age=self.max_age,
@@ -477,6 +499,22 @@ class DaviSchoolTabSessionMiddleware:
                 body_chunks.append(message.get("body", b""))
                 if not message.get("more_body", False):
                     body = b"".join(body_chunks)
+                    # Show a persistent exit control while the Super Admin is
+                    # previewing a portal. Preview requests are scoped to the demo
+                    # tenant and mutation methods are rejected by preview_guard.
+                    if scope.get("session", {}).get("is_portal_preview"):
+                        banner = (
+                            "<div style='position:sticky;top:0;z-index:99999;background:#123d27;color:#fff;"
+                            "padding:9px 13px;display:flex;justify-content:space-between;align-items:center;"
+                            "gap:10px;font:12px Arial;box-shadow:0 2px 8px #0002'>"
+                            "<span><b>SUPER ADMIN PREVIEW</b> · Demonstration data only · Read-only</span>"
+                            "<a href='/super/portal-management/exit' style='color:#fff;background:#287447;"
+                            "padding:7px 10px;border-radius:7px;text-decoration:none;font-weight:800'>Return to Control Centre</a></div>"
+                        ).encode("utf-8")
+                        marker = b"</body>"
+                        if marker in body.lower():
+                            idx = body.lower().rfind(marker)
+                            body = body[:idx] + banner + body[idx:]
                     # Load the tab-session controller as a cacheable external
                     # script instead of embedding the full controller into every
                     # HTML response. This keeps the same tab isolation/history/
