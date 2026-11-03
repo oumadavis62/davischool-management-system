@@ -4532,7 +4532,9 @@ def enter_super_admin_portal_preview(portal: str, request: Request, ticket: str 
         con.commit()
     finally:
         con.close()
-    return RedirectResponse(destination, 303)
+    # Preserve the explicit tab handoff through this redirect. The browser controller
+    # adopts the fresh tab id from ds_tab_shared before normal navigation begins.
+    return RedirectResponse(destination + "?ds_tab_shared=1", 303)
 
 
 @app.get("/super/portal-management/exit")
@@ -4558,4 +4560,3 @@ def exit_super_admin_portal_preview(request: Request):
     for key in ("teacher_id","student_id","is_impersonating","is_portal_preview","preview_portal","preview_school_id"):
         request.session.pop(key, None)
     return RedirectResponse("/super/portal-management", 303)
-
