@@ -5431,7 +5431,7 @@ def parent_portal(request: Request):
             "<tr><td>" + escape(str(row["subject_name"] or "Subject")) +
             "</td><td class='number'>" + escape(str(row["marks"] if row["marks"] is not None else "—")) +
             "</td><td class='number'>" + escape(subject_grade_map.get(subject_id, "—")) +
-            "</td><td class='number'>" + (format(subject_mean, ".2f") if subject_mean is not None else "—") + "</td></tr>"
+            "</td></tr>"
         )
     mark_rows = "".join(mark_rows_parts)
     exam_options_html = "".join(
@@ -5503,8 +5503,8 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 <div class='stat'><small>Overall mean</small><strong>{parent_mean:.2f}</strong></div>
 <div class='stat'><small>Overall grade</small><strong>{escape(str(parent_overall_grade))}</strong></div>
 </div>
-<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th><th style='text-align:center'>Subject mean</th></tr></thead>
-<tbody>{mark_rows or "<tr><td colspan='4' class='empty'>No results are recorded for this examination.</td></tr>"}</tbody></table></div>
+<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th></tr></thead>
+<tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No results are recorded for this examination.</td></tr>"}</tbody></table></div>
 </section></section>
 <section class='parent-view' id='parent-attendance' hidden><section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></section>
 <section class='parent-view' id='parent-fees' hidden><section class='panel' style='margin-top:16px'><h2>Fee statement</h2><div class='stats' style='margin:0 0 12px'><div class='stat'><small>Total charged</small><strong>KES {fee_total:,.2f}</strong></div><div class='stat'><small>Total paid</small><strong>KES {fee_paid:,.2f}</strong></div><div class='stat'><small>Outstanding balance</small><strong>KES {fee_balance:,.2f}</strong></div></div><div class='table-wrap'><table><thead><tr><th>Charge</th><th>Due date</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_html or "<tr><td colspan='5' class='empty'>No fee statement is available.</td></tr>"}</tbody></table></div></section></section>
