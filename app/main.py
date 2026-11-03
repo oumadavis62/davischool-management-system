@@ -1602,10 +1602,10 @@ def school_dashboard(request: Request):
     con.close()
     stats = {}; tb=0; tg=0
     for r in gender_rows:
-        cn = (r['class_name'] or 'UNASSIGNED').upper()
+        cn = (r['school_name'] or 'School') + ' · ' + (r['class_name'] or 'UNASSIGNED').upper()
         if cn not in stats: stats[cn] = {'boys':0,'girls':0}
-        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']=r['cnt']; tb+=r['cnt']
-        else: stats[cn]['girls']=r['cnt']; tg+=r['cnt']
+        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']+=r['cnt']; tb+=r['cnt']
+        elif (r['gender'] or '').lower().startswith('f'): stats[cn]['girls']+=r['cnt']; tg+=r['cnt']
     max_v = max([max(v['boys'],v['girls']) for v in stats.values()], default=1) or 1
     chart_html = "".join([f"<div style='text-align:center;min-width:90px'><div style='display:flex;gap:10px;align-items:end;justify-content:center;height:170px'><div><div style='width:42px;height:{bh}px;background:#0a84ff;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px;height:{gh}px;background:#ff2d92;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px;font-weight:800;margin-top:8px'>{cn}</div></div>" for cn,v in stats.items() for bh in [int((v['boys']/max_v)*150) if v['boys']>0 else 6] for gh in [int((v['girls']/max_v)*150) if v['girls']>0 else 6]]) or "<div style='padding:30px;color:#94a3b8;text-align:center;width:100%'>No students yet</div>"
     stu_rows = "".join([f"<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:10px 12px;font-size:12px'>{st['name']}</td><td style='padding:10px 12px;font-size:11px'>{st['assessment_no'] or ''}</td><td style='padding:10px 12px;font-size:11px'>{st['gender']}</td><td>Class {st['class_id'] or ''}</td></tr>" for st in recent_students]) or "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No students yet</td></tr>"
@@ -2108,7 +2108,7 @@ def global_dashboard(request: Request):
     name = request.session.get("name","Davis Ouma")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT COUNT(*) c FROM students"); sc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM classes"); cc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM exams"); ec = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM teachers"); tc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM set_marks_config"); setc = cur.fetchone()["c"]
-    cur.execute("SELECT c.name as class_name, s.gender, COUNT(*) as cnt FROM students s LEFT JOIN classes c ON s.class_id=c.id GROUP BY c.name, s.gender ORDER BY c.name"); gender_rows = cur.fetchall()
+    cur.execute("SELECT s.school_id,COALESCE(sc.name,'School') school_name,COALESCE(c.name,'Unassigned') class_name,LOWER(COALESCE(s.gender,'')) gender,COUNT(*) cnt FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id LEFT JOIN schools sc ON sc.id=s.school_id GROUP BY s.school_id,sc.name,c.name,LOWER(COALESCE(s.gender,'')) ORDER BY sc.name,c.name"); gender_rows = cur.fetchall()
     con.close()
     stats = {}; tb=0; tg=0
     for r in gender_rows:
