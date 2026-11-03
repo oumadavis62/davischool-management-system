@@ -1967,6 +1967,8 @@ def global_set_marks_delete(cid: int, request: Request):
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
+    if request.session.get("is_portal_preview") and request.session.get("role") == "accountant":
+        return RedirectResponse("/school/finance", 303)
     if request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/")
     if request.session.get("role")=="super_admin" and request.session.get("school_id",0)==0: return RedirectResponse("/dashboard")
     school = get_school_obj(request)
@@ -4009,6 +4011,8 @@ def school_student_analysis_printable(student_id:int, request:Request):
 @app.get("/school/{path:path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session: return RedirectResponse("/")
+    if request.session.get("is_portal_preview") and request.session.get("role") == "accountant":
+        return RedirectResponse("/school/finance", 303)
     if request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
