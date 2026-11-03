@@ -899,6 +899,49 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                         break
             except Exception:
                 pass
+        # Older student records may predate automatic parent-account creation.
+        # On the first valid parent sign-in, provision the account from the
+        # matching student's phone + admission-number@current-year credential.
+        if not u:
+            try:
+                phone_digits = re.sub(r"\\D", "", login_id)
+                phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)
+                current_year = datetime.now(ZoneInfo("Africa/Nairobi")).year
+                if len(phone_key) >= 9:
+                    student_rows = cur.execute("""SELECT * FROM students
+                        WHERE COALESCE(parent_phone,'')<>'' ORDER BY id DESC""").fetchall()
+                    matching_students = []
+                    for student in student_rows:
+                        stored_digits = re.sub(r"\\D", "", str(student["parent_phone"] or ""))
+                        stored_key = ("254" + stored_digits[1:]) if len(stored_digits) == 10 and stored_digits.startswith("0") else (("254" + stored_digits) if len(stored_digits) == 9 else stored_digits)
+                        if stored_key == phone_key:
+                            matching_students.append(student)
+                    valid_student = next((student for student in matching_students
+                        if str(student["admission_no"] or "").strip()
+                        and hmac.compare_digest(str(password or ""), str(student["admission_no"]).strip() + "@" + str(current_year))), None)
+                    if valid_student:
+                        target_school_id = valid_student["school_id"]
+                        created_account = None
+                        for student in matching_students:
+                            if student["school_id"] != target_school_id:
+                                continue
+                            parent_result = _create_or_link_parent_access(
+                                cur, target_school_id, int(student["id"]),
+                                str(student["admission_no"] or ""),
+                                str(student["parent_name"] or "") if "parent_name" in student.keys() else "",
+                                str(student["parent_phone"] or "")
+                            )
+                            if parent_result:
+                                created_account = parent_result
+                        if created_account:
+                            con.commit()
+                            u = cur.execute("""SELECT * FROM users
+                                WHERE school_id=? AND role='parent'
+                                  AND lower(trim(COALESCE(username,'')))=lower(trim(?))
+                                ORDER BY id DESC LIMIT 1""",
+                                (target_school_id, created_account["username"])).fetchone()
+            except Exception as parent_provision_exc:
+                print("DAVISCHOOL PARENT LOGIN PROVISION WARNING:", repr(parent_provision_exc), flush=True)
         if not u:
             return RedirectResponse("/?error=1&username=" + quote(login_id, safe=""), status_code=303)
         valid, legacy_password = verify_password(password, u["password"])
