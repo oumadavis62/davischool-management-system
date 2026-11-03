@@ -3495,13 +3495,19 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
                 return HTMLResponse("Invalid class selected.", 400)
             stream = str(row["stream"] or "").strip()
         _ensure_student_parent_name_column(cur)
+        saved_parent_name = (parent_name or guardian_name or "").strip()
         cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_name.strip(), parent_phone.strip(), stream, "active"))
+                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), saved_parent_name, parent_phone.strip(), stream, "active"))
         student_row = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1", (school["id"], admission)).fetchone()
+        if student_row:
+            # Explicitly persist the parent field after insertion so the register
+            # always reads the same canonical value submitted by the Add Student form.
+            cur.execute("UPDATE students SET parent_name=? WHERE id=? AND school_id=?",
+                        (saved_parent_name, int(student_row["id"]), school["id"]))
         if student_row and parent_phone.strip():
             cur.execute("SAVEPOINT parent_access_sync")
             try:
-                parent_access = _create_or_link_parent_access(cur, school["id"], int(student_row["id"]), admission, parent_name, parent_phone)
+                parent_access = _create_or_link_parent_access(cur, school["id"], int(student_row["id"]), admission, saved_parent_name, parent_phone)
             except Exception as parent_exc:
                 try:
                     cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
@@ -3526,7 +3532,7 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
 
 # Explicit /app student POST handlers kept in app/main.py.
 @app.post("/app/students/add")
-def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form(""), guardian_name: str = Form("")):
     role = str(request.session.get("role", ""))
     if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
