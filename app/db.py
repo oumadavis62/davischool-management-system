@@ -239,7 +239,7 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
             # a large per-process default can exhaust that shared limit when
             # the host runs multiple workers or instances.
             min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 1, 1, 2)
-            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 3, min_size, 5)
+            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 5, min_size, 5)
             pool = ConnectionPool(
                 conninfo=key,
                 min_size=min_size,
