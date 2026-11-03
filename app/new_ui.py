@@ -1494,6 +1494,12 @@ def class_monitoring_page(request: Request):
                 <span>Only your current teaching allocations are shown</span></div>
               <form class='cm-filters' method='get' action='/app/class-monitoring'>
                 <label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+              <nav class='cm-tabs' role='tablist' aria-label='Submission workspace'>
+                <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
+                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
+                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
+              </nav>
+              <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
               <section class='cm-kpis'>
                 <div><small>Allocated subjects</small><strong>%s</strong></div>
                 <div><small>Fully submitted</small><strong>%s</strong></div>
@@ -1502,14 +1508,25 @@ def class_monitoring_page(request: Request):
               </section>
               <div class='cm-overall'><div><b>My submission completion</b><strong>%s%%</strong></div>
                 <div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
-              <section class='cm-subject-grid'>%s</section>
-              %s
+              </section>
+              <section class='cm-panel' role='tabpanel' data-cm-panel='subjects'>
+                <div class='cm-panel-heading'><h2>Subject submissions</h2><p>Review each allocated subject, marks progress and follow-up actions.</p></div>
+                <section class='cm-subject-grid'>%s</section>
+              </section>
+              <section class='cm-panel' role='tabpanel' data-cm-panel='followups'>
+                <div class='cm-panel-heading'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p></div>
+                %s
+              </section>
             </div>"""%(exam_options,total_pairs,complete_pairs,progress_pairs,pending_pairs,completion,completion,
                 "".join(cards) if cards else "<div class='cm-empty'>No current class and subject allocations were found for your teacher account.</div>",
                 "<p class='cm-empty'>Select an examination to view your submission progress.</p>" if not exam else "")
             body+="""<style>
               .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
               .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
+              .cm-tabs{display:flex;gap:7px;overflow-x:auto;white-space:nowrap;padding:5px 0 10px;margin:8px 0 14px;border-bottom:1px solid #dce9dd;scrollbar-width:thin}
+.cm-tab{flex:0 0 auto;border:1px solid #d5e4d7;border-radius:9px;background:#f4f8f3;color:#45624d;padding:10px 15px;font-size:12px;font-weight:800;cursor:pointer}
+.cm-tab.active{background:#176B3A;border-color:#176B3A;color:#fff;box-shadow:0 3px 9px #176b3a22}
+.cm-panel{display:none}.cm-panel.active{display:block}.cm-panel-heading{margin:4px 0 12px}.cm-panel-heading h2{margin:0 0 4px;color:#214b32;font-size:17px}.cm-panel-heading p{margin:0;color:#748277;font-size:12px}
               .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
               .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
               .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
@@ -1531,7 +1548,9 @@ def class_monitoring_page(request: Request):
               .cm-teacher-actions a{display:inline-block;padding:9px 12px;border-radius:8px;background:#176B3A;color:#fff;text-decoration:none;font-size:11px;font-weight:800}
               .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
               @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
-            </style>"""
+            @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
+    </style>"""
+     <script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>
             return _school_page(request,"Class Monitoring",body)
         class_id=int(assignment["class_id"])
         exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
@@ -1661,13 +1680,21 @@ def class_monitoring_page(request: Request):
       <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
       %s
       <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+      <nav class='cm-tabs' role='tablist' aria-label='My submission workspace'>
+        <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
+        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>My Submissions</button>
+      </nav>
+      <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
       <section class='cm-kpis'>
         <div><small>Subjects</small><strong>%s</strong></div><div><small>Fully submitted</small><strong>%s</strong></div>
         <div><small>In progress</small><strong>%s</strong></div><div><small>Pending</small><strong>%s</strong></div>
       </section>
       <div class='cm-overall'><div><b>Class submission completion</b><strong>%s%%</strong></div><div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
-      <section class='cm-subject-grid'>%s</section>
-      <section class='cm-followup-log'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p>%s</section>
+      </section>
+      <section class='cm-panel' role='tabpanel' data-cm-panel='subjects'>
+        <div class='cm-panel-heading'><h2>My allocated subjects</h2><p>Open marks entry for the class, stream and subject assigned to you.</p></div>
+        <section class='cm-subject-grid'>%s</section>
+        <section class='cm-followup-log'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p>%s</section>
     </div>"""%(escape(class_label),escape(str(assignment["level"] or "")),cohort_count,success,exam_options,total,complete,in_progress,pending,int(completion),int(completion),
         "".join(subject_cards) if subject_cards else no_subjects,
         "".join("<div class='cm-log-row'><b>%s</b><span>%s · %s</span><small>%s</small></div>"%(escape(str(x["subject_name"] or "Subject")),escape(str(x["followup_type"] or "")),escape(str(x["recorded_at"] or "")),escape(str(x["note"] or ""))) for x in followup_rows) or "<div class='cm-no-history'>No follow-up activity has been recorded.</div>")
@@ -1702,7 +1729,9 @@ def class_monitoring_page(request: Request):
       .cm-log-row:last-child{border-bottom:0}.cm-log-row b{color:#31563c}.cm-log-row span{color:#6c7c70}.cm-log-row small{grid-column:1/-1;color:#859188}
       .cm-success{padding:10px 12px;border-radius:9px;background:#e4f5e8;color:#176b3a;font-size:12px;font-weight:800;margin:12px 0}
       @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-actions form{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
+    @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
     </style>"""
+     <script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>
     return _school_page(request,"Class Monitoring",body)
 
 
