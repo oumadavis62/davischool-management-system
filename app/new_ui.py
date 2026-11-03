@@ -5433,7 +5433,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 .parent-tab.active{{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}}
 .parent-view[hidden]{{display:none!important}}
 .parent-overview-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}}
-@media(max-width:720px){{.parent-overview-summary{{grid-template-columns:1fr 1fr}}.parent-tab{{padding:10px 12px}}}
+@media(max-width:720px){{.parent-overview-summary{{grid-template-columns:1fr 1fr}}.parent-tab{{padding:10px 12px}}}}
 @media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
 </style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
