@@ -1519,9 +1519,18 @@ def class_monitoring_page(request: Request):
             body+="""<style>
               .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
               .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
-              .cm-tabs{display:flex;gap:7px;overflow-x:auto;white-space:nowrap;padding:5px 0 10px;margin:8px 0 14px;border-bottom:1px solid #dce9dd;scrollbar-width:thin}
-.cm-tab{flex:0 0 auto;border:1px solid #d5e4d7;border-radius:9px;background:#f4f8f3;color:#45624d;padding:10px 15px;font-size:12px;font-weight:800;cursor:pointer}
-.cm-tab.active{background:#176B3A;border-color:#176B3A;color:#fff;box-shadow:0 3px 9px #176b3a22}
+              .cm-tabs{display:flex;gap:7px;overflow-x:auto;padding:5px;margin:18px 0;border-bottom:1px solid #dce9df;scrollbar-width:thin;overscroll-behavior-x:contain}
+.cm-tab{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 15px;border-radius:10px 10px 0 0;font:800 13px Arial;cursor:pointer;transition:background .15s,color .15s}
+.cm-tab:hover{background:#f1f8f3;color:#176b3a}
+.cm-tab.active{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}
+.cm-panel{display:none}.cm-panel.active{display:block}
+.cm-register-card{background:#fff;border:1px solid #dfebe2;border-radius:16px;padding:20px;box-shadow:0 5px 18px #173d2910;min-width:0}
+.cm-register-table-wrap{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #e5eee7;border-radius:11px}
+.cm-register-table{width:100%;min-width:520px;border-collapse:collapse;font-size:13px}
+.cm-register-table th,.cm-register-table td{padding:12px 13px;border-bottom:1px solid #e8efe9;text-align:left;white-space:nowrap}
+.cm-register-table th{background:#f5faf6;color:#557060;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.cm-register-table td{color:#354c3d}.cm-register-table tbody tr:last-child td{border-bottom:0}
+.cm-register-table tbody tr:hover{background:#f7fbf8}.cm-register-empty{text-align:center;color:#718477;padding:20px!important}
 .cm-panel{display:none}.cm-panel.active{display:block}.cm-panel-heading{margin:4px 0 12px}.cm-panel-heading h2{margin:0 0 4px;color:#214b32;font-size:17px}.cm-panel-heading p{margin:0;color:#748277;font-size:12px}
               .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
               .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
@@ -1544,7 +1553,7 @@ def class_monitoring_page(request: Request):
               .cm-teacher-actions a{display:inline-block;padding:9px 12px;border-radius:8px;background:#176B3A;color:#fff;text-decoration:none;font-size:11px;font-weight:800}
               .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
               @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
-            @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
+            @media(max-width:520px){.cm-tab{padding:10px 12px;font-size:12px}.cm-register-card{padding:14px;border-radius:13px}}
     </style>"""
             body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
             return _school_page(request,"Class Monitoring",body)
@@ -1630,6 +1639,15 @@ def class_monitoring_page(request: Request):
         followup_by_subject={}
         for item in followup_rows:
             followup_by_subject.setdefault(int(item["subject_id"]),[]).append(item)
+        register_students=cur.execute("""SELECT s.id,s.admission_no,s.name,s.gender,s.status
+            FROM students s
+            WHERE s.school_id=? AND s.class_id=?
+              AND lower(coalesce(s.status,'active'))='active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM student_graduations g
+                  WHERE g.school_id=s.school_id AND g.student_id=s.id
+              )
+            ORDER BY s.name""",(sid,class_id)).fetchall()
     except Exception as exc:
         print("DAVISCHOOL CLASS MONITORING LOAD WARNING:",repr(exc),flush=True)
         con.close()
@@ -1640,6 +1658,18 @@ def class_monitoring_page(request: Request):
     in_progress=sum(1 for subid in subject_ids if 0<entered_by_subject.get(subid,0)<max(cohort_count,1))
     pending=max(0,total-complete-in_progress)
     completion=(complete*100/total) if total else 0
+    register_rows="".join(
+        "<tr><td>%s</td><td><b>%s</b></td><td>%s</td><td>%s</td></tr>" % (
+            escape(str(student["admission_no"] or "")),
+            escape(str(student["name"] or "")),
+            escape(str(student["gender"] or "")),
+            escape(str(student["status"] or "Active"))
+        ) for student in register_students
+    )
+    register_panel="""<div class='cm-register-card'>
+        <div class='cm-panel-heading'><h2>Students Register (%s)</h2><p>Currently enrolled learners assigned to your class. Graduated learners remain in historical records.</p></div>
+        <div class='cm-register-table-wrap'><table class='cm-register-table'><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Status</th></tr></thead><tbody>%s</tbody></table></div>
+      </div>""" % (len(register_students), register_rows or "<tr><td colspan='4' class='cm-register-empty'>No currently enrolled students are assigned to this class.</td></tr>")
     exam_options="".join("<option value='%s' %s>%s — %s %s</option>"%(int(e["id"]),"selected" if int(e["id"])==selected_id else "",escape(str(e["name"] or "Examination")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
     subject_cards=[]
     for subid in subject_ids:
@@ -1671,8 +1701,7 @@ def class_monitoring_page(request: Request):
     no_subjects="<div class='cm-empty'>No subject allocations were found for this class and examination year.</div>"
     success="<div class='cm-success'>Follow-up recorded successfully.</div>" if request.query_params.get("followup")=="recorded" else ""
     body="""<div class='page class-monitoring-page'>
-      <div class='cm-heading'><div><h1>Class Monitoring</h1><p>Track subject-teacher marks submissions and record follow-ups for your assigned class.</p></div>
-      <a class='cm-back' href='/app/class-teacher'>Students Register</a></div>
+      <div class='cm-heading'><div><h1>Class Monitoring</h1><p>Track subject-teacher marks submissions and record follow-ups for your assigned class.</p></div></div>
       <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
       %s
       <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
@@ -1680,6 +1709,7 @@ def class_monitoring_page(request: Request):
         <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
         <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>Subject Submissions</button>
         <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='followups'>Follow-up Activity</button>
+        <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='register'>Students Register</button>
       </nav>
       <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
       <section class='cm-kpis'>
@@ -1694,9 +1724,12 @@ def class_monitoring_page(request: Request):
       </section>
       <section class='cm-panel' role='tabpanel' data-cm-panel='followups'>
         <section class='cm-followup-log'><h2>Follow-up activity</h2><p>Recent reminders and verbal follow-ups recorded for this examination.</p>%s</section>
+      </section>
+      <section class='cm-panel' role='tabpanel' data-cm-panel='register'>%s</section>
     </div>"""%(escape(class_label),escape(str(assignment["level"] or "")),cohort_count,success,exam_options,total,complete,in_progress,pending,int(completion),int(completion),
         "".join(subject_cards) if subject_cards else no_subjects,
-        "".join("<div class='cm-log-row'><b>%s</b><span>%s · %s</span><small>%s</small></div>"%(escape(str(x["subject_name"] or "Subject")),escape(str(x["followup_type"] or "")),escape(str(x["recorded_at"] or "")),escape(str(x["note"] or ""))) for x in followup_rows) or "<div class='cm-no-history'>No follow-up activity has been recorded.</div>")
+        "".join("<div class='cm-log-row'><b>%s</b><span>%s · %s</span><small>%s</small></div>"%(escape(str(x["subject_name"] or "Subject")),escape(str(x["followup_type"] or "")),escape(str(x["recorded_at"] or "")),escape(str(x["note"] or ""))) for x in followup_rows) or "<div class='cm-no-history'>No follow-up activity has been recorded.</div>",
+        register_panel)
     body+="""<style>
       .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
       .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
