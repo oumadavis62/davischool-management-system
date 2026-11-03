@@ -904,7 +904,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         # matching student's phone + admission-number@current-year credential.
         if not u:
             try:
-                phone_digits = re.sub(r"\\D", "", login_id)
+                phone_digits = re.sub(r"\D", "", login_id)
                 phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)
                 current_year = datetime.now(ZoneInfo("Africa/Nairobi")).year
                 if len(phone_key) >= 9:
@@ -912,7 +912,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
                         WHERE COALESCE(parent_phone,'')<>'' ORDER BY id DESC""").fetchall()
                     matching_students = []
                     for student in student_rows:
-                        stored_digits = re.sub(r"\\D", "", str(student["parent_phone"] or ""))
+                        stored_digits = re.sub(r"\D", "", str(student["parent_phone"] or ""))
                         stored_key = ("254" + stored_digits[1:]) if len(stored_digits) == 10 and stored_digits.startswith("0") else (("254" + stored_digits) if len(stored_digits) == 9 else stored_digits)
                         if stored_key == phone_key:
                             matching_students.append(student)
