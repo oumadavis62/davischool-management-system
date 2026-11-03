@@ -5295,9 +5295,52 @@ def parent_portal(request: Request):
     con = _db()
     try:
         cur = con.cursor()
+        # Explicit school-scoped links support siblings while preserving the
+        # original users.student_id link for existing parent accounts.
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
+            created_at TEXT, UNIQUE(school_id,user_id,student_id))""")
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
+            subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT DEFAULT 'Open',
+            created_at TEXT, reply TEXT, replied_at TEXT)""")
+        cur.execute("""INSERT INTO parent_student_links(school_id,user_id,student_id,created_at)
+            SELECT ?,id,? ,? FROM users WHERE school_id=? AND lower(username)=lower(?)
+            ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
+            (sid, student_id, datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S"),
+             sid, str(request.session.get("email") or "")))
+        parent_user = cur.execute("SELECT id FROM users WHERE school_id=? AND lower(username)=lower(?)",
+            (sid, str(request.session.get("email") or ""))).fetchone()
+        if parent_user:
+            cur.execute("""INSERT INTO parent_student_links(school_id,user_id,student_id,created_at)
+                VALUES(?,?,?,?) ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
+                (sid, int(parent_user["id"]), student_id, datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")))
+        linked_children = cur.execute("""SELECT DISTINCT s.id,s.name,s.admission_no,c.name class_name,c.stream
+            FROM parent_student_links l JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+            LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
+            WHERE l.school_id=? AND l.user_id=? ORDER BY s.name""",
+            (sid, int(parent_user["id"]) if parent_user else 0)).fetchall()
+        requested_child = str(request.query_params.get("student_id") or "").strip()
+        if requested_child.isdigit() and any(int(x["id"]) == int(requested_child) for x in linked_children):
+            student_id = int(requested_child)
         student = cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream
             FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
             WHERE s.id=? AND s.school_id=? LIMIT 1""", (student_id, sid)).fetchone()
+        fee_rows = cur.execute("""SELECT id,amount,paid,description,due_date,status FROM fees
+            WHERE school_id=? AND student_id=? ORDER BY id DESC""", (sid, student_id)).fetchall()
+        payment_rows = cur.execute("""SELECT amount,reference,method,date FROM fee_payments
+            WHERE school_id=? AND student_id=? ORDER BY id DESC LIMIT 20""", (sid, student_id)).fetchall()
+        try:
+            parent_notices = cur.execute("""SELECT title,message,created_at FROM announcements
+                WHERE school_id=? AND lower(coalesce(audience,'all')) IN ('all','parents','parent')
+                ORDER BY id DESC LIMIT 10""", (sid,)).fetchall()
+        except Exception:
+            parent_notices = []
+        parent_message_rows = cur.execute("""SELECT subject,message,status,created_at,reply,replied_at
+            FROM parent_messages WHERE school_id=? AND user_id=? AND student_id=? ORDER BY id DESC LIMIT 10""",
+            (sid, int(parent_user["id"]) if parent_user else 0, student_id)).fetchall()
         if not student:
             return HTMLResponse("The linked learner record could not be found. Please contact the school.", 404)
         school = cur.execute("SELECT name,phone,email,logo_data,status FROM schools WHERE id=?", (sid,)).fetchone()
@@ -5326,6 +5369,13 @@ def parent_portal(request: Request):
             attendance_summary = None
     finally:
         con.close()
+    fee_total = sum(float(x["amount"] or 0) for x in fee_rows)
+    fee_paid = sum(float(x["paid"] or 0) for x in fee_rows)
+    fee_balance = max(0.0, fee_total - fee_paid)
+    fee_html = "".join("<tr><td>"+escape(str(x["description"] or "Fee"))+"</td><td>"+escape(str(x["due_date"] or "—"))+"</td><td>KES "+format(float(x["amount"] or 0),",.2f")+"</td><td>KES "+format(float(x["paid"] or 0),",.2f")+"</td><td>KES "+format(max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),",.2f")+"</td></tr>" for x in fee_rows)
+    notice_html = "".join("<article class='notice'><b>"+escape(str(x["title"] or "School notice"))+"</b><small>"+escape(str(x["created_at"] or ""))+"</small><p>"+escape(str(x["message"] or ""))+"</p></article>" for x in parent_notices)
+    message_html = "".join("<article class='notice'><b>"+escape(str(x["subject"] or "Message"))+"</b><small>"+escape(str(x["created_at"] or ""))+" · "+escape(str(x["status"] or "Open"))+"</small><p>"+escape(str(x["message"] or ""))+"</p>"+("<p><b>School reply:</b> "+escape(str(x["reply"]))+"</p>" if x["reply"] else "")+"</article>" for x in parent_message_rows)
+    child_options = "".join("<option value='"+str(int(x["id"]))+"'"+(" selected" if int(x["id"])==student_id else "")+">"+escape(str(x["name"] or "Learner"))+" ("+escape(str(x["admission_no"] or ""))+")</option>" for x in linked_children)
     school_status = str(school["status"] or "active").strip().lower() if school else "suspended"
     if school_status not in ("active", "enabled"):
         request.session.clear()
@@ -5373,16 +5423,137 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 .stat small{{display:block;color:#6d8173;font-weight:700}}.stat strong{{display:block;font-size:24px;color:#176b3a;margin-top:7px}}
 .columns{{display:grid;grid-template-columns:1.35fr .85fr;gap:16px}}.panel h2{{font-size:17px;margin:0 0 14px;color:#17452d}}
 .table-wrap{{overflow-x:auto}}table{{width:100%;border-collapse:collapse;font-size:13px;min-width:360px}}th,td{{padding:11px 9px;border-bottom:1px solid #e8efe9;text-align:left;white-space:nowrap}}th{{color:#557060;background:#f5faf6;font-size:11px;text-transform:uppercase;letter-spacing:.04em}}td small{{display:block;color:#7b8d80;margin-top:3px}}.number{{font-weight:900;color:#176b3a;text-align:center}}
-.attendance-list{{max-height:420px;overflow:auto}}.empty{{padding:20px;text-align:center;color:#718477;font-size:13px}}
+.attendance-list{{max-height:420px;overflow:auto}}.empty{{padding:20px;text-align:center;color:#718477;font-size:13px}}.child-select{{padding:11px;border:1px solid #dbe8dd;border-radius:9px;min-width:220px;max-width:100%;font:inherit}}.send-btn{{justify-self:start;padding:11px 18px;border:0;border-radius:9px;background:#176b3a;color:#fff;font-weight:800;cursor:pointer}}.notice{{padding:12px 0;border-bottom:1px solid #e8efe9}}.notice:last-child{{border:0}}.notice small{{display:block;color:#7b8d80;margin-top:3px}}.notice p{{margin:7px 0 0;white-space:pre-wrap;line-height:1.5}}
 @media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
 </style></head><body><header><div class='brand'>{logo_html}<span>{school_name}<small style='display:block;color:#718477;font-size:11px;font-weight:600'>Parent Portal</small></span></div><a href='/logout'>Log out ↗</a></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div></section>
-<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div></section>
+<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div>{("<form method='get' action='/app/parent'><select name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
 <section class='stats'><div class='stat'><small>Assessments recorded</small><strong>{result_count}</strong></div><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Absent</small><strong>{absent_att}</strong></div><div class='stat'><small>Late</small><strong>{late_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
 <div class='columns'><section class='panel'><h2>Academic results</h2><div class='table-wrap'><table><thead><tr><th>Examination</th><th>Subject</th><th style='text-align:center'>Marks</th></tr></thead><tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No examination results have been published for this learner yet.</td></tr>"}</tbody></table></div></section>
 <section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></div>
-<section class='panel' style='margin-top:16px'><h2>School contact</h2><div class='muted'>For questions about your child's results, attendance or school activities, contact {school_name}.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section><p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner linked to this parent account.</p></main></body></html>"""
+<section class='panel' style='margin-top:16px'><h2>Fee statement</h2><div class='stats' style='margin:0 0 12px'><div class='stat'><small>Total charged</small><strong>KES {fee_total:,.2f}</strong></div><div class='stat'><small>Total paid</small><strong>KES {fee_paid:,.2f}</strong></div><div class='stat'><small>Outstanding balance</small><strong>KES {fee_balance:,.2f}</strong></div></div><div class='table-wrap'><table><thead><tr><th>Charge</th><th>Due date</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_html or "<tr><td colspan='5' class='empty'>No fee statement is available.</td></tr>"}</tbody></table></div></section>
+<section class='panel' style='margin-top:16px'><h2>School notices</h2>{notice_html or "<div class='empty'>There are no parent announcements at the moment.</div>"}</section>
+<section class='panel' style='margin-top:16px'><h2>Contact the school</h2><form method='post' action='/app/parent/message' style='display:grid;gap:9px'><input type='hidden' name='student_id' value='{student_id}'><input name='subject' required maxlength='120' placeholder='Subject' class='child-select'><textarea name='message' required maxlength='4000' rows='4' placeholder='Write a message to the school' class='child-select'></textarea><button class='send-btn'>Send message</button></form><div style='margin-top:14px'>{message_html or "<div class='empty'>Your messages and school replies will appear here.</div>"}</div></section>
+<section class='panel' style='margin-top:16px'><h2>School contact</h2><div class='muted'>For questions about your child's results, attendance or school activities, contact {school_name}.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section><p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p></main></body></html>"""
     return HTMLResponse(body)
+
+
+@router.post("/app/parent/message")
+def parent_send_message(request: Request, student_id: int = Form(...), subject: str = Form(...), message: str = Form(...)):
+    if "email" not in request.session or str(request.session.get("role") or "") != "parent":
+        return RedirectResponse("/login",303)
+    sid=int(request.session.get("school_id") or 0)
+    if not sid:return RedirectResponse("/login",303)
+    subject_v=str(subject or "").strip()[:120]; message_v=str(message or "").strip()[:4000]
+    if not subject_v or not message_v:return HTMLResponse("Subject and message are required.",400)
+    con=_db()
+    try:
+        cur=con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL,user_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,created_at TEXT,UNIQUE(school_id,user_id,student_id))""")
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,user_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,subject TEXT NOT NULL,message TEXT NOT NULL,status TEXT DEFAULT 'Open',
+            created_at TEXT,reply TEXT,replied_at TEXT)""")
+        user=cur.execute("SELECT id FROM users WHERE school_id=? AND lower(username)=lower(?) AND lower(role)='parent'",
+            (sid,str(request.session.get("email") or ""))).fetchone()
+        linked=cur.execute("SELECT 1 FROM parent_student_links WHERE school_id=? AND user_id=? AND student_id=?",
+            (sid,int(user["id"]) if user else 0,student_id)).fetchone()
+        if not user or not linked or not cur.execute("SELECT 1 FROM students WHERE school_id=? AND id=?",(sid,student_id)).fetchone():
+            return HTMLResponse("You are not authorised to message the school about this learner.",403)
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO parent_messages(school_id,user_id,student_id,subject,message,status,created_at) VALUES(?,?,?,?,?,'Open',?)",
+            (sid,int(user["id"]),student_id,subject_v,message_v,now))
+        con.commit()
+    finally: con.close()
+    return RedirectResponse("/app/parent?student_id="+str(student_id),303)
+
+
+@router.get("/app/parent-links", response_class=HTMLResponse)
+def parent_links_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"users.manage"):return HTMLResponse("You do not have permission to manage parent links.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,user_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,created_at TEXT,UNIQUE(school_id,user_id,student_id))""")
+        users=cur.execute("SELECT id,full_name,username FROM users WHERE school_id=? AND lower(role)='parent' ORDER BY full_name",(sid,)).fetchall()
+        students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        links=cur.execute("""SELECT l.id,u.full_name,s.name learner,s.admission_no FROM parent_student_links l
+            JOIN users u ON u.id=l.user_id AND u.school_id=l.school_id
+            JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id
+            WHERE l.school_id=? ORDER BY u.full_name,s.name""",(sid,)).fetchall()
+    finally: con.close()
+    user_opts="".join("<option value='"+str(int(u["id"]))+"'>"+escape(str(u["full_name"] or u["username"]))+"</option>" for u in users)
+    student_opts="".join("<option value='"+str(int(x["id"]))+"'>"+escape(str(x["name"]))+" ("+escape(str(x["admission_no"] or ""))+")</option>" for x in students)
+    rows="".join("<tr><td>"+escape(str(x["full_name"] or ""))+"</td><td>"+escape(str(x["learner"] or ""))+"</td><td>"+escape(str(x["admission_no"] or ""))+"</td></tr>" for x in links)
+    body=f"""<div class='page'><h1>Parent–Learner Links</h1><div class='muted'>Link additional children to an existing parent account. Only explicitly linked learners are visible to that parent.</div><div class='card section'><form method='post' action='/app/parent-links/add' class='formgrid'><select name='user_id' required class='field'>{user_opts}</select><select name='student_id' required class='field'>{student_opts}</select><button class='btn'>Link learner</button></form></div><div class='card section'><h2>Existing links</h2><table><thead><tr><th>Parent account</th><th>Learner</th><th>Admission No.</th></tr></thead><tbody>{rows or "<tr><td colspan='3'>No additional links recorded.</td></tr>"}</tbody></table></div></div><style>.formgrid{{display:grid;grid-template-columns:1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176b3a;color:#fff;font-weight:800}}@media(max-width:650px){{.formgrid{{grid-template-columns:1fr}}}}</style>"""
+    return _school_page(request,"Parent–Learner Links",body)
+
+
+@router.post("/app/parent-links/add")
+def parent_links_add(request: Request,user_id:int=Form(...),student_id:int=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"users.manage"):return HTMLResponse("You do not have permission to manage parent links.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,user_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,created_at TEXT,UNIQUE(school_id,user_id,student_id))""")
+        valid_user=cur.execute("SELECT id FROM users WHERE id=? AND school_id=? AND lower(role)='parent'",(user_id,sid)).fetchone()
+        valid_student=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+        if not valid_user or not valid_student:return HTMLResponse("Select a parent account and learner from this school.",400)
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("INSERT INTO parent_student_links(school_id,user_id,student_id,created_at) VALUES(?,?,?,?) ON CONFLICT(school_id,user_id,student_id) DO NOTHING",(sid,user_id,student_id,now))
+        con.commit()
+    finally:con.close()
+    return RedirectResponse("/app/parent-links",303)
+
+
+@router.get("/app/parent-messages", response_class=HTMLResponse)
+def parent_messages_inbox(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"communications.view"):return HTMLResponse("You do not have permission to view parent messages.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS parent_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,user_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,subject TEXT NOT NULL,message TEXT NOT NULL,status TEXT DEFAULT 'Open',
+            created_at TEXT,reply TEXT,replied_at TEXT)""")
+        rows=cur.execute("""SELECT m.*,u.full_name,s.name learner,s.admission_no FROM parent_messages m
+            JOIN users u ON u.id=m.user_id AND u.school_id=m.school_id
+            JOIN students s ON s.id=m.student_id AND s.school_id=m.school_id
+            WHERE m.school_id=? ORDER BY m.id DESC LIMIT 200""",(sid,)).fetchall()
+    finally:con.close()
+    tr="".join("<tr><td>"+escape(str(x["created_at"] or ""))+"</td><td>"+escape(str(x["full_name"] or ""))+"</td><td>"+escape(str(x["learner"] or ""))+"</td><td><b>"+escape(str(x["subject"] or ""))+"</b><br>"+escape(str(x["message"] or ""))+"</td><td>"+escape(str(x["status"] or "Open"))+(("<br><small>Reply: "+escape(str(x["reply"]))+"</small>") if x["reply"] else "")+"</td><td><form method='post' action='/app/parent-messages/reply'><input type='hidden' name='message_id' value='"+str(int(x["id"]))+"'><textarea name='reply' required maxlength='4000' placeholder='Reply to parent'></textarea><button class='btn'>Send reply</button></form></td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Parent Messages</h1><div class='muted'>Review parent enquiries and send replies to the linked parent account.</div><div class='card section'><table><thead><tr><th>Received</th><th>Parent</th><th>Learner</th><th>Message</th><th>Status / Reply</th><th>Respond</th></tr></thead><tbody>{tr or "<tr><td colspan='6'>No parent messages received.</td></tr>"}</tbody></table></div></div><style>textarea{{width:100%;min-width:150px;padding:8px;border:1px solid #dbe2ea;border-radius:8px}}.btn{{margin-top:5px;padding:8px 12px;border:0;border-radius:8px;background:#176b3a;color:white;font-weight:800}}</style>"""
+    return _school_page(request,"Parent Messages",body)
+
+
+@router.post("/app/parent-messages/reply")
+def parent_messages_reply(request: Request,message_id:int=Form(...),reply:str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"communications.edit"):return HTMLResponse("You do not have permission to reply to parent messages.",403)
+    reply_v=str(reply or "").strip()[:4000]
+    if not reply_v:return HTMLResponse("A reply is required.",400)
+    con=_db()
+    try:
+        cur=con.cursor()
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("UPDATE parent_messages SET reply=?,replied_at=?,status='Replied' WHERE id=? AND school_id=?",(reply_v,now,message_id,sid))
+        if cur.rowcount<1:return HTMLResponse("Parent message not found.",404)
+        con.commit()
+    finally:con.close()
+    return RedirectResponse("/app/parent-messages",303)
 
 
 @router.get("/app", response_class=HTMLResponse)
