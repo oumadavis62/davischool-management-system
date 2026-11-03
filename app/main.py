@@ -3578,7 +3578,7 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
     return RedirectResponse("/app/students", 303)
 
 @app.post("/app/students/edit/{student_id}")
-def main_app_student_edit(request: Request, student_id: int, admission_no: str = Form(...), name: str = Form(...), assessment_no: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), status: str = Form("active")):
+def main_app_student_edit(request: Request, student_id: int, admission_no: str = Form(...), name: str = Form(...), assessment_no: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), status: str = Form("active")):
     role = str(request.session.get("role", ""))
     if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
@@ -3601,8 +3601,9 @@ def main_app_student_edit(request: Request, student_id: int, admission_no: str =
             row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?", (cid, school["id"])).fetchone()
             if not row: return HTMLResponse("Invalid class selected.", 400)
             stream = str(row["stream"] or "").strip()
-        cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",
-                    (admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, new_status, student_id, school["id"]))
+        _ensure_student_parent_name_column(cur)
+        cur.execute("UPDATE students SET admission_no=?,assessment_no=?,name=?,class_id=?,gender=?,parent_name=?,parent_phone=?,stream=?,status=? WHERE id=? AND school_id=?",
+                    (admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_name.strip(), parent_phone.strip(), stream, new_status, student_id, school["id"]))
         con.commit()
     except Exception as exc:
         con.rollback(); print(f"DAVISCHOOL APP STUDENT UPDATE ERROR: {exc!r}", flush=True)
