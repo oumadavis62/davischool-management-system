@@ -1361,6 +1361,11 @@ def school_profile(sid: int, request: Request):
         audit = cur.execute("SELECT user_email,action,details,timestamp FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 25", (sid,)).fetchall()
     except Exception:
         audit = []
+    try:
+        registration = cur.execute("SELECT timestamp FROM system_audit WHERE school_id=? AND action='SCHOOL_REGISTERED' ORDER BY id ASC LIMIT 1", (sid,)).fetchone()
+        registration_date = registration["timestamp"] if registration else "Not recorded for this legacy school"
+    except Exception:
+        registration_date = "Not recorded"
     con.close()
     safe = lambda v: str(v or "—").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
     active = str(school["status"] or "active").lower() in ("active", "enabled")
@@ -1376,7 +1381,7 @@ def school_profile(sid: int, request: Request):
     <div class='actions'><a href='/schools/manage'>← School Directory</a><a href='/schools/edit/{sid}'>Edit School Details</a><a href='/super/switch-to-school/{sid}' onclick="return confirm('Enter this school workspace? Use Back to Admin to return.')">Open School Workspace →</a></div>
     <section class='stats'>{stats}</section>
     <div class='grid'><section class='panel'><h2>School Details</h2><dl>
-    <dt>School code</dt><dd>{safe(school['code'])}</dd><dt>Email</dt><dd>{safe(school['email'])}</dd><dt>Phone</dt><dd>{safe(school['phone'])}</dd><dt>Principal</dt><dd>{safe(school['principal'])}</dd><dt>Location</dt><dd>{safe(school['location'])}</dd><dt>School level</dt><dd>{safe(school['school_type'])}</dd><dt>Account status</dt><dd>{'Active' if active else 'Suspended'}</dd>
+    <dt>Registration</dt><dd>{safe(registration_date)}</dd><dt>School code</dt><dd>{safe(school['code'])}</dd><dt>Email</dt><dd>{safe(school['email'])}</dd><dt>Phone</dt><dd>{safe(school['phone'])}</dd><dt>Principal</dt><dd>{safe(school['principal'])}</dd><dt>Location</dt><dd>{safe(school['location'])}</dd><dt>School level</dt><dd>{safe(school['school_type'])}</dd><dt>Account status</dt><dd>{'Active' if active else 'Suspended'}</dd>
     </dl></section><section class='panel'><h2>Subscription & Billing Snapshot</h2><div class='money'>KES {paid_total:,.2f}</div><p class='muted'>Recorded paid / completed billing · {bill_count} billing records. This is a billing summary, not a live subscription entitlement check.</p><a href='/super/global-control/system-settings/billing-payments'>Open billing records →</a></section></div>
     <section class='panel'><h2>Users & Access</h2><div class='scroll'><table><thead><tr><th>NAME</th><th>EMAIL</th><th>USERNAME</th><th>ROLE</th></tr></thead><tbody>{user_rows}</tbody></table></div></section>
     <section class='panel'><h2>Permissions & Role Overrides</h2><div class='scroll'><table><thead><tr><th>ROLE</th><th>PERMISSION</th><th>STATUS</th></tr></thead><tbody>{permission_rows}</tbody></table></div><p class='muted'>Manage platform-wide role rules from <a href='/super/global-control/system-settings/roles-permissions'>Roles & Permissions</a>.</p></section><section class='panel'><h2>School Activity & Audit History</h2><div class='scroll'><table><thead><tr><th>TIME</th><th>ACTOR</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>{audit_rows}</tbody></table></div></section>
