@@ -1174,7 +1174,7 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         status_bg = "#dcfce7" if school_status in ("active", "enabled") else "#fee2e2"
         status_fg = "#166534" if school_status in ("active", "enabled") else "#991b1b"
         school_name_js=str(s["name"] or "this school").replace("\\","\\\\").replace("'","\\'")
-        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px'><form method='post' action='/schools/status/{sid}' style='display:inline'><button type='submit' style='border:0;background:{status_bg};color:{status_fg};border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:800'>{status_text}</button></form></td><td style='padding:12px 10px;white-space:nowrap'><a href='/schools/profile/{sid}' style='background:#dcf0dc;color:#14532d;padding:6px 9px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>Profile</a> <a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/schools/delete/{sid}' style='display:inline' onsubmit="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')"><button type='submit' style='border:0;background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700;cursor:pointer'>🗑️</button></form></td></tr>""")
+        rows.append(f"""<tr style='border-bottom:1px solid #f1f5f9'><td style='padding:12px 10px'><div style='font-weight:700'>🏫 {s['name']}</div><div style='font-size:10px;color:#64748b'>{s['school_type'] or 'School'} · 🔑 {s['code']}</div></td><td style='padding:12px 10px;font-size:12px'>{s['phone'] or ''}</td><td style='padding:12px 10px;font-size:11px'>{s['email']}</td><td style='padding:12px 10px;font-size:12px'>{s['location']}</td><td style='padding:12px 10px;font-size:11px'>{admin_email}</td><td style='padding:12px 10px;font-size:12px'><button type='button' onclick='viewSchoolPassword({sid})' title='View password' style='border:0;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:15px'>👁️</button></td><td style='padding:12px 10px'><form method='post' action='/schools/status/{sid}' style='display:inline' onsubmit="return confirm('Change the account status for {school_name_js}?')"><button type='submit' style='border:0;background:{status_bg};color:{status_fg};border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:800'>{status_text}</button></form></td><td style='padding:12px 10px;white-space:nowrap'><a href='/schools/profile/{sid}' style='background:#dcf0dc;color:#14532d;padding:6px 9px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>Profile</a> <a href='/schools/edit/{sid}' onclick="return confirm('Open edit screen for {school_name_js}?')" style='background:#e0f2fe;color:#075985;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700'>✏️ Edit</a><form method='post' action='/schools/delete/{sid}' style='display:inline' onsubmit="return confirm('Delete {school_name_js} and its school administrator account? This cannot be undone.')"><button type='submit' style='border:0;background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:6px;text-decoration:none;font-size:11px;font-weight:700;cursor:pointer'>🗑️</button></form></td></tr>""")
     rows="".join(rows) or "<tr><td colspan='8' style='padding:40px;text-align:center'>No schools</td></tr>"
     registrar_rows=[]
     for rr in registrars:
@@ -1477,6 +1477,8 @@ def update_school(sid: int, request: Request, school_name: str = Form(...), scho
     else:
         if new_password.strip():
             cur.execute("INSERT INTO users(email,password,role,full_name,school_id,credential_secret) VALUES(?,?,?,?,?,?)",(school_email.strip(),hash_password(new_password.strip()),"school_admin",principal.strip(),sid,encrypt_credential(new_password.strip())))
+    ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",(sid,request.session.get("email",""),"SCHOOL_PROFILE_UPDATE","Updated school profile and administrator account",ts))
     con.commit(); con.close()
     return RedirectResponse("/schools/manage?success=updated",303)
 
@@ -1555,6 +1557,8 @@ def switch_to_school(sid: int, request: Request):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE id=?", (sid,)); s = cur.fetchone(); con.close()
     if not s: return RedirectResponse("/schools/manage")
+    con=get_db(); cur=con.cursor(); ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",(sid,request.session.get("email",""),"SUPER_ADMIN_SCHOOL_ACCESS","Super Admin entered school workspace",ts)); con.commit(); con.close()
     request.session["school_id"]=sid; request.session["is_impersonating"]=True; return RedirectResponse("/school/dashboard",303)
 @app.get("/super/back-to-admin")
 def back_to_admin(request: Request): request.session["school_id"]=0; request.session["is_impersonating"]=False; return RedirectResponse("/dashboard",303)
@@ -2219,10 +2223,10 @@ def global_dashboard(request: Request):
     con.close()
     stats = {}; tb=0; tg=0
     for r in gender_rows:
-        cn = (r['class_name'] or 'UNASSIGNED').upper()
+        cn = (r['school_name'] or 'School') + ' · ' + (r['class_name'] or 'UNASSIGNED').upper()
         if cn not in stats: stats[cn] = {'boys':0,'girls':0}
-        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']=r['cnt']; tb+=r['cnt']
-        else: stats[cn]['girls']=r['cnt']; tg+=r['cnt']
+        if (r['gender'] or '').lower().startswith('m'): stats[cn]['boys']+=r['cnt']; tb+=r['cnt']
+        elif (r['gender'] or '').lower().startswith('f'): stats[cn]['girls']+=r['cnt']; tg+=r['cnt']
     max_v = max([max(v['boys'],v['girls']) for v in stats.values()], default=1) or 1
     chart_html = "".join([f"<div style='text-align:center;min-width:90px'><div style='display:flex;gap:10px;align-items:end;justify-content:center;height:170px'><div><div style='width:42px;height:{bh}px;background:#0a84ff;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#0a84ff'>{v['boys']}</div></div><div><div style='width:42px;height:{gh}px;background:#ff2d92;border-radius:6px 6px 0 0'></div><div style='font-size:10px;font-weight:700;color:#ff2d92'>{v['girls']}</div></div></div><div style='font-size:11px;font-weight:800;margin-top:8px'>{cn}</div></div>" for cn,v in stats.items() for bh in [int((v['boys']/max_v)*150) if v['boys']>0 else 6] for gh in [int((v['girls']/max_v)*150) if v['girls']>0 else 6]]) or "<div style='padding:30px;color:#94a3b8;text-align:center;width:100%'>No students yet</div>"
     header = global_header(name, "dashboard")
