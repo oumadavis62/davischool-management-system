@@ -189,7 +189,89 @@ def _startup_database_initialization():
     print("DAVISCHOOL DATABASE INITIALIZATION STARTED IN BACKGROUND", flush=True)
 
 def send_school_verification_email(recipient: str, school_name: str, auth_code: str) -> None:
-    """Send a one-time school registration code using configured SMTP credentials."""
+    """Send a one-time school registration code; prefer Gmail HTTPS API on Render Free."""
+    safe_school = escape(str(school_name or "your school"))
+    message = EmailMessage()
+    message["Subject"] = "Your DaviSchool registration verification code"
+    message["To"] = recipient
+    message.set_content(
+        "DaviSchool school registration verification\n\n"
+        f"Your verification code is: {auth_code}\n\n"
+        "Enter this six-digit code on the DaviSchool Register School page to confirm "
+        "the email address. If you did not request this, you can ignore this email.\n\n"
+        "DaviSchool Support"
+    )
+    message.add_alternative(
+        "<div style='font-family:Arial,sans-serif;color:#1f2937;max-width:560px;margin:auto'>"
+        "<div style='background:#14532d;color:white;padding:18px;border-radius:12px 12px 0 0;font-size:20px;font-weight:800'>DaviSchool</div>"
+        "<div style='padding:22px;border:1px solid #e5e7eb;border-radius:0 0 12px 12px'>"
+        "<h2 style='color:#14532d'>Verify your school email</h2>"
+        f"<p>Use the code below to confirm the administrator email for <b>{safe_school}</b>.</p>"
+        f"<div style='font-size:32px;letter-spacing:9px;font-weight:900;text-align:center;background:#f0fdf4;color:#166534;padding:18px;border-radius:10px'>{escape(auth_code)}</div>"
+        "<p>This code is for one-time registration verification. If you did not request it, ignore this message.</p>"
+        "<p style='color:#64748b;font-size:12px'>DaviSchool · A modern platform for managing school operations securely.</p>"
+        "</div></div>",
+        subtype="html",
+    )
+
+    # Gmail API uses HTTPS (443), which works on Render Free. It requires an
+    # OAuth refresh token; a Gmail App Password is only valid for SMTP.
+    client_id = os.environ.get("GMAIL_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("GMAIL_CLIENT_SECRET", "").strip()
+    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN", "").strip()
+    gmail_sender = os.environ.get("GMAIL_SENDER_EMAIL", "").strip()
+    gmail_values = (client_id, client_secret, refresh_token, gmail_sender)
+    if any(gmail_values):
+        if not all(gmail_values):
+            raise RuntimeError(
+                "Gmail API setup is incomplete. Configure GMAIL_CLIENT_ID, "
+                "GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN and GMAIL_SENDER_EMAIL."
+            )
+        import json
+        from urllib.parse import urlencode
+        from urllib.request import Request as URLRequest, urlopen
+
+        token_data = urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode("utf-8")
+        token_request = URLRequest(
+            "https://oauth2.googleapis.com/token",
+            data=token_data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        try:
+            with urlopen(token_request, timeout=20) as response:
+                token_result = json.loads(response.read().decode("utf-8"))
+            access_token = token_result.get("access_token")
+            if not access_token:
+                raise RuntimeError("Google did not return an access token.")
+            message["From"] = gmail_sender
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
+            gmail_request = URLRequest(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                data=json.dumps({"raw": raw_message}).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urlopen(gmail_request, timeout=20) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            if not result.get("id"):
+                raise RuntimeError("Gmail API did not confirm message submission.")
+            print("DAVISCHOOL SCHOOL VERIFICATION EMAIL ACCEPTED BY GMAIL API", flush=True)
+            return
+        except Exception as exc:
+            # Do not log OAuth credentials, access tokens, or message contents.
+            print("DAVISCHOOL GMAIL API SEND FAILED:", type(exc).__name__, str(exc)[:300], flush=True)
+            raise RuntimeError("Gmail API could not send the verification email. Check OAuth setup and Gmail API access.") from exc
+
+    # Legacy SMTP fallback remains available for paid hosts that permit SMTP.
     host = os.environ.get("SMTP_HOST", "").strip()
     username = os.environ.get("SMTP_USERNAME", "").strip()
     password = os.environ.get("SMTP_PASSWORD", "")
@@ -197,30 +279,11 @@ def send_school_verification_email(recipient: str, school_name: str, auth_code: 
     port = int(os.environ.get("SMTP_PORT", "587"))
     use_ssl = os.environ.get("SMTP_USE_SSL", "0").strip().lower() in {"1", "true", "yes"}
     if not host or not username or not password or not sender:
-        raise RuntimeError("School verification email is not configured. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM_EMAIL.")
-    safe_school = escape(str(school_name or "your school"))
-    message = EmailMessage()
-    message["Subject"] = "Your DaviSchool registration verification code"
+        raise RuntimeError(
+            "Configure Gmail API OAuth variables for Render Free, or SMTP_HOST, "
+            "SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM_EMAIL on a host that permits SMTP."
+        )
     message["From"] = sender
-    message["To"] = recipient
-    message.set_content(
-        "DaviSchool school registration verification\\n\\n"
-        "Your verification code is: %s\\n\\n"
-        "Enter this six-digit code on the DaviSchool Register School page to confirm the email address. "
-        "If you did not request this, you can ignore this email.\\n\\nDaviSchool Support" % auth_code
-    )
-    message.add_alternative(
-        "<div style='font-family:Arial,sans-serif;color:#1f2937;max-width:560px;margin:auto'>"
-        "<div style='background:#14532d;color:white;padding:18px;border-radius:12px 12px 0 0;font-size:20px;font-weight:800'>DaviSchool</div>"
-        "<div style='padding:22px;border:1px solid #e5e7eb;border-radius:0 0 12px 12px'>"
-        "<h2 style='color:#14532d'>Verify your school email</h2>"
-        "<p>Use the code below to confirm the administrator email for <b>%s</b>.</p>"
-        "<div style='font-size:32px;letter-spacing:9px;font-weight:900;text-align:center;background:#f0fdf4;color:#166534;padding:18px;border-radius:10px'>%s</div>"
-        "<p>This code is for one-time registration verification. If you did not request it, ignore this message.</p>"
-        "<p style='color:#64748b;font-size:12px'>DaviSchool · A modern platform for managing school operations securely.</p>"
-        "</div></div>" % (safe_school, escape(auth_code)),
-        subtype="html",
-    )
     context = ssl.create_default_context()
     if use_ssl:
         with smtplib.SMTP_SSL(host, port, context=context, timeout=20) as server:
