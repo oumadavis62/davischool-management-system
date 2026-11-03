@@ -560,6 +560,10 @@ def _create_or_link_parent_access(cur, school_id, student_id, admission_no, pare
     cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
         school_id INTEGER NOT NULL, user_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
         created_at TEXT, PRIMARY KEY (school_id,user_id,student_id))""")
+    cur.execute("SELECT * FROM users LIMIT 0")
+    user_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+    if "must_change_password" not in user_columns:
+        cur.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
     cur.execute("""CREATE TABLE IF NOT EXISTS parent_access_credentials (
         school_id INTEGER NOT NULL, student_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
         username TEXT NOT NULL, password_cipher TEXT, created_at TEXT,
@@ -584,9 +588,9 @@ def _create_or_link_parent_access(cur, school_id, student_id, admission_no, pare
         initial_password = str(admission_no or "").strip().upper() + "@" + str(secrets.randbelow(10000)).zfill(4)
         parent_label = str(parent_name or "").strip() or "Parent / Guardian"
         cur.execute("""INSERT INTO users
-            (email,username,password,role,full_name,school_id,student_id)
-            VALUES (?,?,?,?,?,?,?)""",
-            (phone, phone, hash_password(initial_password), "parent", parent_label, school_id, student_id))
+            (email,username,password,role,full_name,school_id,student_id,must_change_password)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (phone, phone, hash_password(initial_password), "parent", parent_label, school_id, student_id, 1))
         account = cur.execute("""SELECT * FROM users
             WHERE school_id=? AND role='parent'
               AND lower(trim(COALESCE(username,'')))=lower(trim(?))
@@ -830,7 +834,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         try:
             cur.execute("SELECT * FROM users LIMIT 0")
             columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
-            definitions = {"username":"TEXT","teacher_id":"INTEGER","student_id":"INTEGER","temporary_password":"TEXT"}
+            definitions = {"username":"TEXT","teacher_id":"INTEGER","student_id":"INTEGER","temporary_password":"TEXT","must_change_password":"INTEGER DEFAULT 0"}
             for column, definition in definitions.items():
                 if column not in columns:
                     cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
@@ -925,6 +929,10 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
     request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None
     request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None
     request.session["is_impersonating"]=False
+    must_change_parent_password = bool(u["must_change_password"]) if role == "parent" and "must_change_password" in u.keys() else False
+    if must_change_parent_password:
+        request.session["must_change_password"] = True
+        return RedirectResponse("/account/change-password?first_login=1", status_code=303)
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
@@ -938,6 +946,15 @@ def change_password(request: Request,current_password:str=Form(...),new_password
     if not u: u=cur.execute("SELECT * FROM users WHERE lower(email)=lower(?)",(request.session.get('email',''),)).fetchone()
     if not u or not verify_password(current_password,u['password'])[0]: con.close(); return HTMLResponse("Current password is incorrect. <a href='/account/change-password'>Back</a>",403)
     cur.execute("UPDATE users SET password=? WHERE id=?",(hash_password(new_password),u['id']))
+    if str(request.session.get("role") or "") == "parent":
+        try:
+            cur.execute("UPDATE users SET must_change_password=0 WHERE id=?", (u["id"],))
+        except Exception:
+            pass
+        try:
+            cur.execute("UPDATE parent_access_credentials SET password_cipher=NULL WHERE user_id=?", (u["id"],))
+        except Exception:
+            pass
     ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close(); return RedirectResponse('/account/change-password',303)
 
 @app.get("/logout")
