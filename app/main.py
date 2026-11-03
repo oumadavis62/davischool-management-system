@@ -955,7 +955,11 @@ def change_password(request: Request,current_password:str=Form(...),new_password
             cur.execute("UPDATE parent_access_credentials SET password_cipher=NULL WHERE user_id=?", (u["id"],))
         except Exception:
             pass
-    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close(); return RedirectResponse('/account/change-password',303)
+    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close()
+    if str(request.session.get("role") or "") == "parent":
+        request.session["must_change_password"] = False
+        return RedirectResponse("/app/parent", 303)
+    return RedirectResponse('/account/change-password',303)
 
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/")
