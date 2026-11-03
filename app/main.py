@@ -918,7 +918,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         return HTMLResponse("DaviSchool could not complete the sign-in request. Please try again.", status_code=500)
     finally:
         con.close()
-    request.session["user_id"]=user_id; request.session["email"]=user_email; request.session["role"]=role
+    request.session["user_id"]=user_id; request.session["email"]=(str(u["username"] or user_email) if role == "parent" else user_email); request.session["role"]=role
     request.session["name"]=full_name; request.session["school_id"]=school_id
     # Preserve the linked profile created in School Users so dedicated portals
     # can identify the correct teacher/student/parent after sign-in.
@@ -3629,6 +3629,7 @@ def parent_credentials_page(request: Request, student_id: int):
         con.close()
 
     password_html = escape(password) if password else "Existing password retained"
+    password_copy_button = "<button type='button' onclick=" + '"navigator.clipboard.writeText(document.getElementById(\'parent-password\').innerText).then(()=>alert(\'Password copied\'))"' + ">Copy</button>" if password else ""
     if password:
         share_message = f"Hello {parent_name}, your DaviSchool Parent Portal access is ready. Username: {username}. Initial password: {password}. Please keep these details private and change your password after signing in. Learner: {learner_name} ({admission})."
         password_note = "This is the initial password generated for this parent account. Share it privately with the parent."
@@ -3642,7 +3643,7 @@ def parent_credentials_page(request: Request, student_id: int):
 <div class='field'><div class='label'>LEARNER</div><div class='value'>{escape(learner_name)} · {escape(admission)}</div></div>
 <div class='field'><div class='label'>PARENT / GUARDIAN</div><div class='value'>{escape(parent_name)} · {escape(phone)}</div></div>
 <div class='field'><div class='label'>USERNAME (PARENT PHONE NUMBER)</div><div class='value'><span id='parent-username'>{escape(username)}</span><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-username').innerText).then(()=>alert('Username copied'))">Copy</button></div></div>
-<div class='field'><div class='label'>INITIAL PASSWORD</div><div class='value'><span id='parent-password'>{password_html}</span>{("<button type='button' onclick=\"navigator.clipboard.writeText(document.getElementById('parent-password').innerText).then(()=>alert('Password copied'))\">Copy</button>" if password else "")}</div><div class='muted' style='margin-top:6px'>{escape(password_note)}</div></div>
+<div class='field'><div class='label'>INITIAL PASSWORD</div><div class='value'><span id='parent-password'>{password_html}</span>{password_copy_button}</div><div class='muted' style='margin-top:6px'>{escape(password_note)}</div></div>
 <div class='field'><div class='label'>MESSAGE TO SHARE WITH PARENT</div><textarea id='parent-share-message' readonly>{escape(share_message)}</textarea><div class='actions'><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-share-message').value).then(()=>alert('Parent message copied'))">Copy message</button><button type='button' onclick='window.print()'>Print credentials</button><a class='back' href='/app/students'>Back to Students</a></div></div>
 <div class='note'>Share credentials directly with the verified parent or guardian. Do not post them in a public group. The parent can sign in through the existing DaviSchool login page by entering their phone number as the username.</div>
 </section></main></body></html>""")
