@@ -3574,8 +3574,7 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
         print(f"DAVISCHOOL APP STUDENT CREATE ERROR: {exc!r}", flush=True)
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally: con.close()
-    if parent_access:
-        return RedirectResponse("/app/parent-credentials?student_id=" + str(parent_access["student_id"]), 303)
+    # Parent portal account is created/linked in the background of student registration.
     return RedirectResponse("/app/students", 303)
 
 @app.post("/app/students/edit/{student_id}")
