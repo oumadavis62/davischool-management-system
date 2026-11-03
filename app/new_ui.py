@@ -1287,11 +1287,11 @@ def class_teacher_page(request: Request):
         ORDER BY s.name""",(sid,cid)).fetchall()
     con.close()
     rows="".join(
-        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] or 'Active'))}</td><td><a class='action' href='/app/students/history/{int(s['id'])}'>📋 History</a></td></tr>"
+        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['status'] or 'Active'))}</td></tr>"
         for s in students
     )
     body=f"""<div class='page'>
-<div class='card section'><h2>Students Register ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No currently enrolled students are assigned to this class.</td></tr>"}</tbody></table></div></div></div>"""
+<div class='card section'><h2>Students Register ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Status</th></tr></thead><tbody>{rows or "<tr><td colspan='4'>No currently enrolled students are assigned to this class.</td></tr>"}</tbody></table></div></div></div>"""
     return _school_page(request,"Students Register",body)
 
 
