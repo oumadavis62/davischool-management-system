@@ -1262,6 +1262,57 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
 def verify_school_code_get():
     return RedirectResponse("/schools/manage", status_code=303)
 
+
+@app.get("/schools/profile/{sid}", response_class=HTMLResponse)
+def school_profile(sid: int, request: Request):
+    if request.session.get("role") != "super_admin":
+        return RedirectResponse("/", status_code=303)
+    con = get_db()
+    cur = con.cursor()
+    school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    if not school:
+        con.close()
+        return RedirectResponse("/schools/manage", status_code=303)
+    users = cur.execute("SELECT full_name,email,username,role FROM users WHERE school_id=? AND lower(COALESCE(role,'')) IN ('school_admin','registrar') ORDER BY id", (sid,)).fetchall()
+    counts = {}
+    for table in ("students", "teachers", "classes", "subjects", "exams"):
+        try:
+            counts[table] = int(cur.execute("SELECT COUNT(*) c FROM " + table + " WHERE school_id=?", (sid,)).fetchone()["c"] or 0)
+        except Exception:
+            counts[table] = 0
+    try:
+        bill = cur.execute("SELECT COALESCE(SUM(CASE WHEN lower(COALESCE(status,'')) IN ('paid','complete','completed') THEN CAST(amount AS REAL) ELSE 0 END),0) total,COUNT(*) records FROM billing WHERE school_id=?", (sid,)).fetchone()
+        paid_total = float(bill["total"] or 0)
+        bill_count = int(bill["records"] or 0)
+    except Exception:
+        paid_total, bill_count = 0.0, 0
+    try:
+        audit = cur.execute("SELECT user_email,action,details,timestamp FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 25", (sid,)).fetchall()
+    except Exception:
+        audit = []
+    con.close()
+    safe = lambda v: str(v or "—").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
+    active = str(school["status"] or "active").lower() in ("active", "enabled")
+    user_rows = "".join("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(safe(u["full_name"]), safe(u["email"]), safe(u["username"]), safe(u["role"])) for u in users) or "<tr><td colspan='4'>No School Admin or Registrar accounts found.</td></tr>"
+    audit_rows = "".join("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(safe(a["timestamp"]), safe(a["user_email"]), safe(a["action"]), safe(a["details"])) for a in audit) or "<tr><td colspan='4'>No audit events recorded.</td></tr>"
+    stats = "".join("<div class='stat'><span>{}</span><b>{:,}</b></div>".format(label, counts[key]) for key, label in (("students","Learners"),("teachers","Staff"),("classes","Classes"),("subjects","Subjects"),("exams","Exams")))
+    name = request.session.get("name", "Super Administrator")
+    initials = "".join(p[0] for p in name.split()[:2]).upper()
+    header = header_html(initials, name, request.session.get("email", ""))
+    html = f"""<main class='wrap'>
+    <section class='hero'><div><small>SCHOOL PROFILE · ID {sid}</small><h1>{safe(school['name'])}</h1><p>{safe(school['school_type'])} · {safe(school['location'])}</p></div><b class='status {'active' if active else 'suspended'}'>{'Active' if active else 'Suspended'}</b></section>
+    <div class='actions'><a href='/schools/manage'>← School Directory</a><a href='/schools/edit/{sid}'>Edit School Details</a><a href='/super/switch-to-school/{sid}' onclick="return confirm('Enter this school workspace? Use Back to Admin to return.')">Open School Workspace →</a></div>
+    <section class='stats'>{stats}</section>
+    <div class='grid'><section class='panel'><h2>School Details</h2><dl>
+    <dt>School code</dt><dd>{safe(school['code'])}</dd><dt>Email</dt><dd>{safe(school['email'])}</dd><dt>Phone</dt><dd>{safe(school['phone'])}</dd><dt>Principal</dt><dd>{safe(school['principal'])}</dd><dt>Location</dt><dd>{safe(school['location'])}</dd><dt>School level</dt><dd>{safe(school['school_type'])}</dd><dt>Account status</dt><dd>{'Active' if active else 'Suspended'}</dd>
+    </dl></section><section class='panel'><h2>Subscription & Billing Snapshot</h2><div class='money'>KES {paid_total:,.2f}</div><p class='muted'>Recorded paid / completed billing · {bill_count} billing records. This is a billing summary, not a live subscription entitlement check.</p><a href='/super/global-control/system-settings/billing-payments'>Open billing records →</a></section></div>
+    <section class='panel'><h2>Users & Access</h2><div class='scroll'><table><thead><tr><th>NAME</th><th>EMAIL</th><th>USERNAME</th><th>ROLE</th></tr></thead><tbody>{user_rows}</tbody></table></div></section>
+    <section class='panel'><h2>School Activity & Audit History</h2><div class='scroll'><table><thead><tr><th>TIME</th><th>ACTOR</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>{audit_rows}</tbody></table></div></section>
+    </main>
+    <style>*{{box-sizing:border-box}}body{{font-family:Arial;background:#f1f8f1;color:#203126;margin:0}}.wrap{{max-width:1350px;margin:auto;padding:22px}}.hero{{background:linear-gradient(120deg,#14532d,#166534);color:white;border-radius:16px;padding:22px;display:flex;justify-content:space-between;align-items:center;gap:15px}}.hero h1{{margin:8px 0;font-size:24px}}.hero p{{margin:0;color:#d8f0dc;font-size:12px}}.hero small{{font-size:10px;color:#cde8d2;font-weight:800}}.status{{padding:6px 10px;border-radius:20px;font-size:11px}}.status.active{{background:#dcfce7;color:#166534}}.status.suspended{{background:#fee2e2;color:#991b1b}}.actions{{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}}.actions a{{background:white;border:1px solid #dce9dc;padding:10px 12px;border-radius:9px;color:#166534;text-decoration:none;font-size:12px;font-weight:800}}.stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin-bottom:14px}}.stat,.panel{{background:white;border:1px solid #dce9dc;border-radius:13px;padding:15px}}.stat span{{display:block;font-size:10px;color:#718477;font-weight:800}}.stat b{{display:block;font-size:25px;color:#14532d;margin-top:7px}}.grid{{display:grid;grid-template-columns:1.2fr .8fr;gap:13px}}.panel{{margin-bottom:14px;overflow:hidden}}.panel h2{{font-size:14px;margin:0 0 12px}}dl{{display:grid;grid-template-columns:130px 1fr;gap:10px;font-size:12px;margin:0}}dt{{color:#718477}}dd{{margin:0;font-weight:700;overflow-wrap:anywhere}}.money{{font-size:27px;color:#14532d;font-weight:900}}.muted{{font-size:11px;color:#718477}}table{{width:100%;border-collapse:collapse;min-width:560px}}th,td{{padding:11px;text-align:left;border-bottom:1px solid #edf3ed;font-size:11px}}th{{background:#f7fbf7;color:#718477}}.scroll{{overflow:auto}}@media(max-width:760px){{.wrap{{padding:13px}}.hero{{align-items:flex-start;flex-direction:column}}.grid{{grid-template-columns:1fr}}dl{{grid-template-columns:105px 1fr}}}}</style>"""
+    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>{safe(school['name'])} · DaviSchool</title></head><body>{header}{html}</div></div></body></html>")
+
+
 @app.post("/schools/status/{sid}")
 def update_school_status(sid: int, request: Request):
     if request.session.get("role") != "super_admin":
