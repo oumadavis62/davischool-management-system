@@ -219,7 +219,6 @@ async def idle_session_timeout(request: Request, call_next):
     response = await call_next(request)
     return response
 
-app.add_middleware(DaviSchoolTabSessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
 
 
 @app.get("/healthz")
@@ -327,6 +326,11 @@ async def security_headers(request: Request, call_next):
     if SESSION_HTTPS_ONLY:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+# Install the tab-aware SessionMiddleware outside every @app.middleware layer.
+# Request.session must exist before inactivity and role-routing middleware run.
+app.add_middleware(DaviSchoolTabSessionMiddleware, secret_key=SECRET_KEY, https_only=SESSION_HTTPS_ONLY, same_site="lax", max_age=60*60*12)
+
 SUPER_ADMIN = os.environ.get("DAVISCHOOL_SUPER_ADMIN", "admin@davischool.com")
 DB_PATH = os.environ.get("DAVISCHOOL_DB_PATH", "davischool.db")
 # Production deployments MUST use the persistent PostgreSQL database.
