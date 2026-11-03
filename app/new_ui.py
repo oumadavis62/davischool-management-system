@@ -1269,26 +1269,30 @@ def class_teacher_page(request: Request):
         WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
     if not assignment:
         con.close()
-        body="""<div class='page'><h1>🏫 My Class</h1><div class='card section'><h2>No class assigned</h2><div class='muted'>The School Admin has not linked your account to a class as Class Teacher yet.</div></div></div>"""
-        return _school_page(request,"My Class",body)
+        body="""<div class='page'><div class='card section'><h2>No class assigned</h2><div class='muted'>Your teacher profile is not currently assigned as a Class Teacher.</div></div></div>"""
+        return _school_page(request,"Students Register",body)
     cid=int(assignment["class_id"])
+    _ensure_student_promotion_cohort_tables(cur)
+    # A final-class cohort remains in the same class row after graduation.
+    # Show only currently enrolled learners; archived graduates belong in the
+    # Graduation Records register, never in the active class-teacher register.
     students=cur.execute("""SELECT s.id,s.admission_no,s.name,s.gender,s.parent_phone,s.status
-        FROM students s WHERE s.school_id=? AND s.class_id=? ORDER BY s.name""",(sid,cid)).fetchall()
-    edit_enabled=_require_permission(request,sid,"class_teacher.edit")
+        FROM students s
+        WHERE s.school_id=? AND s.class_id=?
+          AND lower(coalesce(s.status,'active'))='active'
+          AND NOT EXISTS (
+              SELECT 1 FROM student_graduations g
+              WHERE g.school_id=s.school_id AND g.student_id=s.id
+          )
+        ORDER BY s.name""",(sid,cid)).fetchall()
     con.close()
     rows="".join(
         f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['status'] or 'Active'))}</td><td><a class='action' href='/app/students/history/{int(s['id'])}'>📋 History</a></td></tr>"
         for s in students
     )
-    controls=f"""<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:12px'>
-<a class='action' href='/app/academics/marks?class_id={cid}'>📝 Class Marks</a>
-<a class='action' href='/app/report-cards?class_id={cid}'>📄 Report Cards</a>
-</div>""" if edit_enabled else """<div class='muted' style='margin-top:12px'>Editing controls are restricted by the School Admin. You currently have view-only class access.</div>"""
-    body=f"""<div class='page'><h1>🏫 My Class</h1><div class='muted'>Class Teacher workspace. Access is limited to the class assigned to your teacher profile.</div>
-<div class='grid'><div class='card'><div class='label'>Class</div><div class='kpi'>{escape(str(assignment['class_name'] or ''))}{(' · '+escape(str(assignment['stream'] or ''))) if assignment['stream'] else ''}</div></div><div class='card'><div class='label'>Level</div><div class='kpi'>{escape(str(assignment['level'] or ''))}</div></div><div class='card'><div class='label'>Students</div><div class='kpi'>{len(students)}</div></div></div>
-<div class='card section'><h2>Class controls</h2>{controls}</div>
-<div class='card section'><h2>Students in my class ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No students are currently assigned to this class.</td></tr>"}</tbody></table></div></div>"""
-    return _school_page(request,"My Class",body)
+    body=f"""<div class='page'>
+<div class='card section'><h2>Students Register ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Parent Phone</th><th>Status</th><th>Details</th></tr></thead><tbody>{rows or "<tr><td colspan='6'>No currently enrolled students are assigned to this class.</td></tr>"}</tbody></table></div></div></div>"""
+    return _school_page(request,"Students Register",body)
 
 
 def _ensure_class_submission_followups_table(cur):
@@ -1653,7 +1657,7 @@ def class_monitoring_page(request: Request):
     success="<div class='cm-success'>Follow-up recorded successfully.</div>" if request.query_params.get("followup")=="recorded" else ""
     body="""<div class='page class-monitoring-page'>
       <div class='cm-heading'><div><h1>Class Monitoring</h1><p>Track subject-teacher marks submissions and record follow-ups for your assigned class.</p></div>
-      <a class='cm-back' href='/app/class-teacher'>My Class</a></div>
+      <a class='cm-back' href='/app/class-teacher'>Students Register</a></div>
       <div class='cm-class-line'><b>%s</b><span>%s</span><span>%s learners in the examination cohort</span></div>
       %s
       <form class='cm-filters' method='get' action='/app/class-monitoring'><label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
