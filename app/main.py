@@ -585,7 +585,7 @@ def _create_or_link_parent_access(cur, school_id, student_id, admission_no, pare
               AND school_id<>? ORDER BY id DESC LIMIT 1""", (phone, school_id)).fetchone()
         if other_school:
             raise ValueError("This phone number already has a parent account at another school. Ask the school to resolve the account link before sharing credentials.")
-        initial_password = str(admission_no or "").strip().upper() + "@" + str(secrets.randbelow(10000)).zfill(4)
+        initial_password = str(admission_no or "").strip() + "@" + str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
         parent_label = str(parent_name or "").strip() or "Parent / Guardian"
         cur.execute("""INSERT INTO users
             (email,username,password,role,full_name,school_id,student_id,must_change_password)
@@ -3521,8 +3521,7 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally:
         con.close()
-    if parent_access:
-        return RedirectResponse("/app/parent-credentials?student_id=" + str(parent_access["student_id"]), 303)
+    # Parent access is provisioned silently; administrators remain on the Students page.
     return RedirectResponse("/app/students", 303)
 
 # Explicit /app student POST handlers kept in app/main.py.
@@ -3613,61 +3612,6 @@ def main_app_student_edit(request: Request, student_id: int, admission_no: str =
     return RedirectResponse("/app/students", 303)
 
 
-
-@app.get("/app/parent-credentials", response_class=HTMLResponse)
-def parent_credentials_page(request: Request, student_id: int):
-    role = str(request.session.get("role") or "")
-    if not request.session.get("email") or role not in {"school_admin", "registrar"}:
-        return RedirectResponse("/", 303)
-    school = get_school_obj(request)
-    if not school:
-        return RedirectResponse("/", 303)
-    con = get_db()
-    try:
-        cur = con.cursor()
-        student = cur.execute("""SELECT id,name,admission_no,parent_name,parent_phone
-            FROM students WHERE id=? AND school_id=? LIMIT 1""",
-            (student_id, school["id"])).fetchone()
-        if not student:
-            return HTMLResponse("Student record not found.", 404)
-        credential = cur.execute("""SELECT * FROM parent_access_credentials
-            WHERE school_id=? AND student_id=? LIMIT 1""",
-            (school["id"], student_id)).fetchone()
-        if not credential:
-            return HTMLResponse("<div style='font-family:Arial;padding:28px'><h2>Parent access was not created</h2><p>Check that a valid parent phone number was saved with this student.</p><a href='/app/students'>Back to Students</a></div>", 404)
-        username = str(credential["username"] or "")
-        password = ""
-        if credential["password_cipher"]:
-            try:
-                password = decrypt_credential(str(credential["password_cipher"]))
-            except Exception:
-                password = ""
-        parent_name = str(student["parent_name"] or "").strip() or "Parent / Guardian"
-        learner_name = str(student["name"] or "")
-        admission = str(student["admission_no"] or "")
-        phone = str(student["parent_phone"] or "")
-    finally:
-        con.close()
-
-    password_html = escape(password) if password else "Existing password retained"
-    password_copy_button = "<button type='button' onclick=" + '"navigator.clipboard.writeText(document.getElementById(\'parent-password\').innerText).then(()=>alert(\'Password copied\'))"' + ">Copy</button>" if password else ""
-    if password:
-        share_message = f"Hello {parent_name}, your DaviSchool Parent Portal access is ready. Username: {username}. Initial password: {password}. Please keep these details private and change your password after signing in. Learner: {learner_name} ({admission})."
-        password_note = "This is the initial password generated for this parent account. Share it privately with the parent."
-    else:
-        share_message = f"Hello {parent_name}, your DaviSchool Parent Portal account is linked. Username: {username}. Please use the password you already set for your existing parent account. Learner: {learner_name} ({admission})."
-        password_note = "This phone number already has a parent account. Its existing password has not been reset."
-    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Parent Access Credentials · DaviSchool</title>
-<style>body{{margin:0;background:#f3f7f3;font-family:Arial,sans-serif;color:#183528}}.wrap{{max-width:720px;margin:28px auto;padding:18px}}.card{{background:#fff;border:1px solid #dce9df;border-radius:16px;padding:22px;box-shadow:0 8px 24px rgba(20,70,40,.06)}}h1{{font-size:23px;margin:0 0 7px}}.muted{{color:#647568;font-size:13px;line-height:1.5}}.field{{margin:16px 0}}.label{{font-size:12px;color:#647568;font-weight:700;margin-bottom:6px}}.value{{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f5f8f5;border:1px solid #dce9df;border-radius:10px;padding:12px;font-weight:700;overflow-wrap:anywhere}}button,.back{{border:0;border-radius:9px;padding:10px 13px;background:#176b45;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;font-size:13px}}textarea{{width:100%;min-height:118px;box-sizing:border-box;border:1px solid #dce9df;border-radius:10px;padding:12px;font:13px/1.5 Arial;background:#fbfdfb;color:#183528}}.actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}}.note{{background:#f0f7f1;border-left:4px solid #39865c;padding:12px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:16px}}@media(max-width:540px){{.wrap{{padding:12px;margin:12px auto}}.card{{padding:17px}}}}</style></head><body><main class='wrap'><section class='card'>
-<div class='muted' style='font-weight:700;color:#176b45;margin-bottom:8px'>DAVISCHOOL · PARENT ACCESS</div><h1>Parent login credentials</h1>
-<p class='muted'>The student has been saved and the parent's phone number has been linked to the learner account. No SMS or email has been sent; you can copy these details and share them privately.</p>
-<div class='field'><div class='label'>LEARNER</div><div class='value'>{escape(learner_name)} · {escape(admission)}</div></div>
-<div class='field'><div class='label'>PARENT / GUARDIAN</div><div class='value'>{escape(parent_name)} · {escape(phone)}</div></div>
-<div class='field'><div class='label'>USERNAME (PARENT PHONE NUMBER)</div><div class='value'><span id='parent-username'>{escape(username)}</span><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-username').innerText).then(()=>alert('Username copied'))">Copy</button></div></div>
-<div class='field'><div class='label'>INITIAL PASSWORD</div><div class='value'><span id='parent-password'>{password_html}</span>{password_copy_button}</div><div class='muted' style='margin-top:6px'>{escape(password_note)}</div></div>
-<div class='field'><div class='label'>MESSAGE TO SHARE WITH PARENT</div><textarea id='parent-share-message' readonly>{escape(share_message)}</textarea><div class='actions'><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-share-message').value).then(()=>alert('Parent message copied'))">Copy message</button><button type='button' onclick='window.print()'>Print credentials</button><a class='back' href='/app/students'>Back to Students</a></div></div>
-<div class='note'>Share credentials directly with the verified parent or guardian. Do not post them in a public group. The parent can sign in through the existing DaviSchool login page by entering their phone number as the username.</div>
-</section></main></body></html>""")
 
 # DaviSchool unified application UI
 from app.new_ui import router as new_ui_router
