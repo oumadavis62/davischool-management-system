@@ -541,6 +541,91 @@ def generate_unique_password(name):
     if len(p)<3: p="SCH"
     return f"{p}@{random.randint(1000,9999)}!"
 
+
+
+def _ensure_student_parent_name_column(cur):
+    """Add the parent-name field without changing existing student records."""
+    cur.execute("SELECT * FROM students LIMIT 0")
+    columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+    if "parent_name" not in columns:
+        cur.execute("ALTER TABLE students ADD COLUMN parent_name TEXT")
+
+
+def _create_or_link_parent_access(cur, school_id, student_id, admission_no, parent_name, parent_phone):
+    """Create one phone-based parent login per school and link all their children."""
+    phone = re.sub(r"[^0-9+]", "", str(parent_phone or "").strip())
+    if not phone:
+        return None
+    _ensure_student_parent_name_column(cur)
+    cur.execute("""CREATE TABLE IF NOT EXISTS parent_student_links (
+        school_id INTEGER NOT NULL, user_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
+        created_at TEXT, PRIMARY KEY (school_id,user_id,student_id))""")
+    cur.execute("SELECT * FROM users LIMIT 0")
+    user_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+    if "must_change_password" not in user_columns:
+        cur.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+    cur.execute("""CREATE TABLE IF NOT EXISTS parent_access_credentials (
+        school_id INTEGER NOT NULL, student_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+        username TEXT NOT NULL, password_cipher TEXT, created_at TEXT,
+        PRIMARY KEY (school_id,student_id))""")
+
+    account = cur.execute("""SELECT * FROM users
+        WHERE school_id=? AND role='parent'
+          AND lower(trim(COALESCE(username,'')))=lower(trim(?))
+        ORDER BY id DESC LIMIT 1""", (school_id, phone)).fetchone()
+
+    if not account:
+        conflicting = cur.execute("""SELECT id,role FROM users
+            WHERE school_id=? AND lower(trim(COALESCE(username,'')))=lower(trim(?))
+            ORDER BY id DESC LIMIT 1""", (school_id, phone)).fetchone()
+        if conflicting:
+            raise ValueError("This phone number is already used as another school account's username.")
+        other_school = cur.execute("""SELECT id,school_id FROM users
+            WHERE role='parent' AND lower(trim(COALESCE(username,'')))=lower(trim(?))
+              AND school_id<>? ORDER BY id DESC LIMIT 1""", (phone, school_id)).fetchone()
+        if other_school:
+            raise ValueError("This phone number already has a parent account at another school. Ask the school to resolve the account link before sharing credentials.")
+        initial_password = str(admission_no or "").strip().upper() + "@" + str(secrets.randbelow(10000)).zfill(4)
+        parent_label = str(parent_name or "").strip() or "Parent / Guardian"
+        cur.execute("""INSERT INTO users
+            (email,username,password,role,full_name,school_id,student_id,must_change_password)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (phone, phone, hash_password(initial_password), "parent", parent_label, school_id, student_id, 1))
+        account = cur.execute("""SELECT * FROM users
+            WHERE school_id=? AND role='parent'
+              AND lower(trim(COALESCE(username,'')))=lower(trim(?))
+            ORDER BY id DESC LIMIT 1""", (school_id, phone)).fetchone()
+        if not account:
+            raise RuntimeError("Parent account could not be created.")
+        password_to_show = initial_password
+    else:
+        password_to_show = None
+        prior_credential = cur.execute("""SELECT password_cipher FROM parent_access_credentials
+            WHERE school_id=? AND user_id=? AND COALESCE(password_cipher,'')<>''
+            ORDER BY created_at ASC LIMIT 1""", (school_id, int(account["id"]))).fetchone()
+        if prior_credential:
+            try:
+                password_to_show = decrypt_credential(str(prior_credential["password_cipher"]))
+            except Exception:
+                password_to_show = None
+        if not account["student_id"]:
+            cur.execute("UPDATE users SET student_id=? WHERE id=?", (student_id, account["id"]))
+
+    user_id = int(account["id"])
+    created_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("""INSERT INTO parent_student_links(school_id,user_id,student_id,created_at)
+        VALUES(?,?,?,?) ON CONFLICT(school_id,user_id,student_id) DO NOTHING""",
+        (school_id, user_id, student_id, created_at))
+    encrypted = encrypt_credential(password_to_show) if password_to_show else None
+    cur.execute("""INSERT INTO parent_access_credentials
+        (school_id,student_id,user_id,username,password_cipher,created_at)
+        VALUES(?,?,?,?,?,?)
+        ON CONFLICT(school_id,student_id) DO UPDATE SET
+          user_id=excluded.user_id, username=excluded.username,
+          password_cipher=excluded.password_cipher, created_at=excluded.created_at""",
+        (school_id, student_id, user_id, phone, encrypted, created_at))
+    return {"student_id": int(student_id), "username": phone, "password": password_to_show}
+
 def header_html(initials, name, email):
     return f"""<style>.do-avatar{{width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer;border:2px solid #e2e8f0}}.dropdown-item{{display:flex;align-items:center;gap:10px;padding:11px 14px;text-decoration:none;font-size:13px}}.dropdown-item:hover{{background:#0b3d91;color:white}}</style><div style='background:white;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;justify-content:space-between;align-items:center'><div><b style='font-size:14px'>🏫 Davischool Platform (Super Admin)</b><div style='font-size:11px;color:#64748b'>{name} • Super Admin</div></div><div style='position:relative'><div onclick='toggleProfileMenu()' class='do-avatar'>{initials}</div><div id='profileDropdown' style='display:none;position:absolute;right:0;top:44px;background:white;border:1px solid #e2e8f0;border-radius:12px;width:220px;box-shadow:0 10px 25px rgba(0,0,0,0.12);z-index:1000;overflow:hidden'><div style='padding:14px;border-bottom:1px solid #f1f5f9;background:#f8fafc'><div style='font-weight:700;font-size:13px'>{name}</div><div style='font-size:11px;color:#64748b'>{email}</div></div><a href='/super/global-control/dashboard' class='dropdown-item' style='color:#0b3d91'>🌍 Global Control</a><a href='/logout' class='dropdown-item' style='color:#dc2626'>🚪 Logout</a></div></div></div><script>function toggleProfileMenu(){{let m=document.getElementById('profileDropdown'); m.style.display=m.style.display==='none'||m.style.display===''? 'block':'none';}}</script>"""
 
@@ -749,7 +834,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         try:
             cur.execute("SELECT * FROM users LIMIT 0")
             columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
-            definitions = {"username":"TEXT","teacher_id":"INTEGER","student_id":"INTEGER","temporary_password":"TEXT"}
+            definitions = {"username":"TEXT","teacher_id":"INTEGER","student_id":"INTEGER","temporary_password":"TEXT","must_change_password":"INTEGER DEFAULT 0"}
             for column, definition in definitions.items():
                 if column not in columns:
                     cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
@@ -837,13 +922,17 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         return HTMLResponse("DaviSchool could not complete the sign-in request. Please try again.", status_code=500)
     finally:
         con.close()
-    request.session["user_id"]=user_id; request.session["email"]=user_email; request.session["role"]=role
+    request.session["user_id"]=user_id; request.session["email"]=(str(u["username"] or user_email) if role == "parent" else user_email); request.session["role"]=role
     request.session["name"]=full_name; request.session["school_id"]=school_id
     # Preserve the linked profile created in School Users so dedicated portals
     # can identify the correct teacher/student/parent after sign-in.
     request.session["teacher_id"]=u["teacher_id"] if "teacher_id" in u.keys() else None
     request.session["student_id"]=u["student_id"] if "student_id" in u.keys() else None
     request.session["is_impersonating"]=False
+    must_change_parent_password = bool(u["must_change_password"]) if role == "parent" and "must_change_password" in u.keys() else False
+    if must_change_parent_password:
+        request.session["must_change_password"] = True
+        return RedirectResponse("/account/change-password?first_login=1", status_code=303)
     return RedirectResponse("/app", status_code=303)
 @app.get("/account/change-password", response_class=HTMLResponse)
 def change_password_page(request: Request):
@@ -857,7 +946,20 @@ def change_password(request: Request,current_password:str=Form(...),new_password
     if not u: u=cur.execute("SELECT * FROM users WHERE lower(email)=lower(?)",(request.session.get('email',''),)).fetchone()
     if not u or not verify_password(current_password,u['password'])[0]: con.close(); return HTMLResponse("Current password is incorrect. <a href='/account/change-password'>Back</a>",403)
     cur.execute("UPDATE users SET password=? WHERE id=?",(hash_password(new_password),u['id']))
-    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close(); return RedirectResponse('/account/change-password',303)
+    if str(request.session.get("role") or "") == "parent":
+        try:
+            cur.execute("UPDATE users SET must_change_password=0 WHERE id=?", (u["id"],))
+        except Exception:
+            pass
+        try:
+            cur.execute("UPDATE parent_access_credentials SET password_cipher=NULL WHERE user_id=?", (u["id"],))
+        except Exception:
+            pass
+    ts=datetime.now(ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'); cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",(u['school_id'] or 0,u['email'],'PASSWORD_CHANGE','Password changed',ts)); con.commit(); con.close()
+    if str(request.session.get("role") or "") == "parent":
+        request.session["must_change_password"] = False
+        return RedirectResponse("/app/parent", 303)
+    return RedirectResponse('/account/change-password',303)
 
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/")
@@ -3366,7 +3468,7 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 # submit directly to /app/students; keep this handler in main.py so that route
 # remains functional even when an older new_ui.py is cached/deployed.
 @app.post("/app/students")
-def main_app_students_post(request: Request, admission_no: str = Form(...), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+def main_app_students_post(request: Request, admission_no: str = Form(...), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
     role = str(request.session.get("role", ""))
     if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}:
         return RedirectResponse("/", 303)
@@ -3380,6 +3482,7 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
     if not admission or not student_name:
         return HTMLResponse("Admission number and full name are required.", 400)
     con = get_db()
+    parent_access = None
     try:
         cur = con.cursor()
         if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
@@ -3391,8 +3494,23 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
             if not row:
                 return HTMLResponse("Invalid class selected.", 400)
             stream = str(row["stream"] or "").strip()
-        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, "active"))
+        _ensure_student_parent_name_column(cur)
+        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_name.strip(), parent_phone.strip(), stream, "active"))
+        student_row = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1", (school["id"], admission)).fetchone()
+        if student_row and parent_phone.strip():
+            cur.execute("SAVEPOINT parent_access_sync")
+            try:
+                parent_access = _create_or_link_parent_access(cur, school["id"], int(student_row["id"]), admission, parent_name, parent_phone)
+            except Exception as parent_exc:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
+                    cur.execute("RELEASE SAVEPOINT parent_access_sync")
+                except Exception:
+                    pass
+                print("DAVISCHOOL PARENT ACCESS SETUP WARNING:", repr(parent_exc), flush=True)
+            else:
+                cur.execute("RELEASE SAVEPOINT parent_access_sync")
         con.commit()
     except Exception as exc:
         try:
@@ -3403,11 +3521,13 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally:
         con.close()
+    if parent_access:
+        return RedirectResponse("/app/parent-credentials?student_id=" + str(parent_access["student_id"]), 303)
     return RedirectResponse("/app/students", 303)
 
 # Explicit /app student POST handlers kept in app/main.py.
 @app.post("/app/students/add")
-def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+def main_app_students_add(request: Request, admission_no: str = Form(...), name: str = Form(...), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
     role = str(request.session.get("role", ""))
     if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}: return RedirectResponse("/", 303)
     school = get_school_obj(request)
@@ -3416,6 +3536,7 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
     admission, student_name = admission_no.strip(), name.strip()
     if not admission or not student_name: return HTMLResponse("Admission number and full name are required.", 400)
     con = get_db()
+    parent_access = None
     try:
         cur = con.cursor()
         if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
@@ -3426,8 +3547,23 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
             row = cur.execute("SELECT id,stream FROM classes WHERE id=? AND school_id=?", (cid, school["id"])).fetchone()
             if not row: return HTMLResponse("Invalid class selected.", 400)
             stream = str(row["stream"] or "").strip()
-        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_phone.strip(), stream, "active"))
+        _ensure_student_parent_name_column(cur)
+        cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (school["id"], admission, assessment_no.strip(), student_name, cid, gender.strip(), parent_name.strip(), parent_phone.strip(), stream, "active"))
+        student_row = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1", (school["id"], admission)).fetchone()
+        if student_row and parent_phone.strip():
+            cur.execute("SAVEPOINT parent_access_sync")
+            try:
+                parent_access = _create_or_link_parent_access(cur, school["id"], int(student_row["id"]), admission, parent_name, parent_phone)
+            except Exception as parent_exc:
+                try:
+                    cur.execute("ROLLBACK TO SAVEPOINT parent_access_sync")
+                    cur.execute("RELEASE SAVEPOINT parent_access_sync")
+                except Exception:
+                    pass
+                print("DAVISCHOOL PARENT ACCESS SETUP WARNING:", repr(parent_exc), flush=True)
+            else:
+                cur.execute("RELEASE SAVEPOINT parent_access_sync")
         # Keep the live /app/students save path in main.py PostgreSQL-safe.
         # Do not use cursor.lastrowid; the Render PostgreSQL cursor does not expose it.
         con.commit()
@@ -3439,6 +3575,8 @@ def main_app_students_add(request: Request, admission_no: str = Form(...), name:
         print(f"DAVISCHOOL APP STUDENT CREATE ERROR: {exc!r}", flush=True)
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally: con.close()
+    if parent_access:
+        return RedirectResponse("/app/parent-credentials?student_id=" + str(parent_access["student_id"]), 303)
     return RedirectResponse("/app/students", 303)
 
 @app.post("/app/students/edit/{student_id}")
@@ -3473,6 +3611,63 @@ def main_app_student_edit(request: Request, student_id: int, admission_no: str =
         return HTMLResponse("<h2>Student was not saved</h2><p>Please try again.</p><a href='/app/students'>Back to Students</a>", 500)
     finally: con.close()
     return RedirectResponse("/app/students", 303)
+
+
+
+@app.get("/app/parent-credentials", response_class=HTMLResponse)
+def parent_credentials_page(request: Request, student_id: int):
+    role = str(request.session.get("role") or "")
+    if not request.session.get("email") or role not in {"school_admin", "registrar"}:
+        return RedirectResponse("/", 303)
+    school = get_school_obj(request)
+    if not school:
+        return RedirectResponse("/", 303)
+    con = get_db()
+    try:
+        cur = con.cursor()
+        student = cur.execute("""SELECT id,name,admission_no,parent_name,parent_phone
+            FROM students WHERE id=? AND school_id=? LIMIT 1""",
+            (student_id, school["id"])).fetchone()
+        if not student:
+            return HTMLResponse("Student record not found.", 404)
+        credential = cur.execute("""SELECT * FROM parent_access_credentials
+            WHERE school_id=? AND student_id=? LIMIT 1""",
+            (school["id"], student_id)).fetchone()
+        if not credential:
+            return HTMLResponse("<div style='font-family:Arial;padding:28px'><h2>Parent access was not created</h2><p>Check that a valid parent phone number was saved with this student.</p><a href='/app/students'>Back to Students</a></div>", 404)
+        username = str(credential["username"] or "")
+        password = ""
+        if credential["password_cipher"]:
+            try:
+                password = decrypt_credential(str(credential["password_cipher"]))
+            except Exception:
+                password = ""
+        parent_name = str(student["parent_name"] or "").strip() or "Parent / Guardian"
+        learner_name = str(student["name"] or "")
+        admission = str(student["admission_no"] or "")
+        phone = str(student["parent_phone"] or "")
+    finally:
+        con.close()
+
+    password_html = escape(password) if password else "Existing password retained"
+    password_copy_button = "<button type='button' onclick=" + '"navigator.clipboard.writeText(document.getElementById(\'parent-password\').innerText).then(()=>alert(\'Password copied\'))"' + ">Copy</button>" if password else ""
+    if password:
+        share_message = f"Hello {parent_name}, your DaviSchool Parent Portal access is ready. Username: {username}. Initial password: {password}. Please keep these details private and change your password after signing in. Learner: {learner_name} ({admission})."
+        password_note = "This is the initial password generated for this parent account. Share it privately with the parent."
+    else:
+        share_message = f"Hello {parent_name}, your DaviSchool Parent Portal account is linked. Username: {username}. Please use the password you already set for your existing parent account. Learner: {learner_name} ({admission})."
+        password_note = "This phone number already has a parent account. Its existing password has not been reset."
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Parent Access Credentials · DaviSchool</title>
+<style>body{{margin:0;background:#f3f7f3;font-family:Arial,sans-serif;color:#183528}}.wrap{{max-width:720px;margin:28px auto;padding:18px}}.card{{background:#fff;border:1px solid #dce9df;border-radius:16px;padding:22px;box-shadow:0 8px 24px rgba(20,70,40,.06)}}h1{{font-size:23px;margin:0 0 7px}}.muted{{color:#647568;font-size:13px;line-height:1.5}}.field{{margin:16px 0}}.label{{font-size:12px;color:#647568;font-weight:700;margin-bottom:6px}}.value{{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#f5f8f5;border:1px solid #dce9df;border-radius:10px;padding:12px;font-weight:700;overflow-wrap:anywhere}}button,.back{{border:0;border-radius:9px;padding:10px 13px;background:#176b45;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;font-size:13px}}textarea{{width:100%;min-height:118px;box-sizing:border-box;border:1px solid #dce9df;border-radius:10px;padding:12px;font:13px/1.5 Arial;background:#fbfdfb;color:#183528}}.actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}}.note{{background:#f0f7f1;border-left:4px solid #39865c;padding:12px;border-radius:8px;font-size:13px;line-height:1.5;margin-top:16px}}@media(max-width:540px){{.wrap{{padding:12px;margin:12px auto}}.card{{padding:17px}}}}</style></head><body><main class='wrap'><section class='card'>
+<div class='muted' style='font-weight:700;color:#176b45;margin-bottom:8px'>DAVISCHOOL · PARENT ACCESS</div><h1>Parent login credentials</h1>
+<p class='muted'>The student has been saved and the parent's phone number has been linked to the learner account. No SMS or email has been sent; you can copy these details and share them privately.</p>
+<div class='field'><div class='label'>LEARNER</div><div class='value'>{escape(learner_name)} · {escape(admission)}</div></div>
+<div class='field'><div class='label'>PARENT / GUARDIAN</div><div class='value'>{escape(parent_name)} · {escape(phone)}</div></div>
+<div class='field'><div class='label'>USERNAME (PARENT PHONE NUMBER)</div><div class='value'><span id='parent-username'>{escape(username)}</span><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-username').innerText).then(()=>alert('Username copied'))">Copy</button></div></div>
+<div class='field'><div class='label'>INITIAL PASSWORD</div><div class='value'><span id='parent-password'>{password_html}</span>{password_copy_button}</div><div class='muted' style='margin-top:6px'>{escape(password_note)}</div></div>
+<div class='field'><div class='label'>MESSAGE TO SHARE WITH PARENT</div><textarea id='parent-share-message' readonly>{escape(share_message)}</textarea><div class='actions'><button type='button' onclick="navigator.clipboard.writeText(document.getElementById('parent-share-message').value).then(()=>alert('Parent message copied'))">Copy message</button><button type='button' onclick='window.print()'>Print credentials</button><a class='back' href='/app/students'>Back to Students</a></div></div>
+<div class='note'>Share credentials directly with the verified parent or guardian. Do not post them in a public group. The parent can sign in through the existing DaviSchool login page by entering their phone number as the username.</div>
+</section></main></body></html>""")
 
 # DaviSchool unified application UI
 from app.new_ui import router as new_ui_router
