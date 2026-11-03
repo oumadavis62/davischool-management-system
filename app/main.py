@@ -853,13 +853,13 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         # Parent usernames are phone numbers. Match equivalent Kenyan formats
         # (07..., 2547..., +2547...) without changing the stored username.
         if not u:
-            phone_digits = re.sub(r"\\D", "", login_id)
+            phone_digits = re.sub(r"\D", "", login_id)
             phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)
             if len(phone_key) >= 9:
                 try:
                     parent_candidates = cur.execute("SELECT * FROM users WHERE lower(trim(COALESCE(role,'')))='parent' ORDER BY id DESC").fetchall()
                     for candidate in parent_candidates:
-                        stored_phone = re.sub(r"\\D", "", str(candidate["username"] or candidate["email"] or ""))
+                        stored_phone = re.sub(r"\D", "", str(candidate["username"] or candidate["email"] or ""))
                         stored_key = ("254" + stored_phone[1:]) if len(stored_phone) == 10 and stored_phone.startswith("0") else (("254" + stored_phone) if len(stored_phone) == 9 else stored_phone)
                         if stored_key == phone_key:
                             u = candidate
