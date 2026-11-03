@@ -1296,6 +1296,9 @@ def manage_schools(request: Request, success: str = "", pending_id: str = "", ne
         popup=f"""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ Verification failed</div><div style='margin-top:8px;color:#475569'>The school was not partially created. Try the verification again.</div><div style='margin-top:10px;font-family:monospace;font-size:12px;word-break:break-word'>{safe}</div></div>"""
     elif success=="email_error":
         popup="""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ Verification email could not be sent</div><div style='margin-top:8px;color:#475569'>The school registration was not saved. Please check the email service configuration and try again.</div></div>"""
+    elif success=="register_error":
+        safe = (message or "The school could not be registered. Please review the details and try again.").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        popup=f"""<div style='margin-bottom:16px;background:#fff1f2;border:2px solid #fb7185;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#9f1239'>❌ School registration failed</div><div style='margin-top:8px;color:#475569'>{safe}</div></div>"""
     elif success=="already_added":
         popup=f"""<div style='margin-bottom:16px;background:#fef3c7;border:2px solid #f4b400;border-radius:14px;padding:18px'><div style='font-size:18px;font-weight:900;color:#92400e'>⚠️ School account already exists</div><div style='margin-top:8px;color:#475569'>{school_email}</div></div>"""
     elif success=="status_updated":
@@ -1353,7 +1356,7 @@ async function viewSchoolPassword(id){{
 <button type='button' class='manage-school-tab' data-tab='pending'>Pending Registrations</button>
 <button type='button' class='manage-school-tab' data-tab='registrars'>Registrars</button>
 </div>
-<div class='card manage-school-panel' id='manage-panel-register' style='height:fit-content'><div style='font-weight:800;font-size:15px'>➕ Register New School</div><form method='post' action='/register-school' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='role' required><option value='school_admin'>School Admin</option><option value='registrar'>Registrar</option></select><select name='school_type' required><option>Primary</option><option>Junior School</option><option>Primary & Junior School</option><option>Senior School</option><option>Tertiary/College</option><option>University</option></select><button style='grid-column:1/-1;width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;margin-top:4px'>📧 Send Code</button></form></div><div><div class='card manage-school-panel' id='manage-panel-schools'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0'><input id='schoolSearch' type='search' placeholder='Search school, code, location, email...' oninput='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><select id='schoolStatusFilter' onchange='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><option value='all'>All account statuses</option><option value='active'>Active</option><option value='suspended'>Suspended</option></select><select id='schoolTypeFilter' onchange='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><option value='all'>All school levels</option><option>Primary</option><option>Junior School</option><option>Primary & Junior School</option><option>Senior School</option><option>Tertiary/College</option><option>University</option></select></div><div id='schoolFilterCount' style='font-size:11px;color:#647b68;margin-bottom:8px'>Showing all registered schools</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Admin Account</th><th>Last Activity</th><th>Password</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0b3d91;font-weight:700;font-size:12px'>⬅️ Back</a></div><div class='card manage-school-panel' id='manage-panel-pending' style='margin-top:16px'><div id='pending-schools'><div style='font-weight:800;font-size:15px'>⏳ Pending School Registrations ({len(pending_schools)})</div><div style='font-size:12px;color:#64748b;margin-top:4px'>Registrations awaiting verification before a school account is created.</div><div style='overflow:auto;margin-top:10px;border:1px solid #f1f5f9;border-radius:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='background:#f8fafc;text-align:left;font-size:11px'><tr><th style='padding:10px'>School</th><th>Email</th><th>School Level</th><th>Submitted</th><th>Action</th></tr></thead><tbody>{pending_rows}</tbody></table></div></div></div><div class='card manage-school-panel' id='manage-panel-registrars' style='margin-top:16px'><div style='font-weight:800;font-size:15px'>👩‍💼 Registrars</div><div style='font-size:12px;color:#64748b;margin-top:4px'>Registrar accounts across all schools. Registrar details are linked to the teacher record whenever the account was created from a teacher profile.</div><div style='overflow:auto;margin-top:10px;border:1px solid #f1f5f9;border-radius:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='background:#f8fafc;text-align:left;font-size:11px'><tr><th style='padding:10px'>Registrar</th><th>Email / Username</th><th>School</th><th>Phone</th><th>Teacher Role</th><th>Action</th></tr></thead><tbody>{registrar_rows}</tbody></table></div></div></div></div><script>
+<div class='card manage-school-panel' id='manage-panel-register' style='height:fit-content'><div style='font-weight:800;font-size:15px'>➕ Register New School</div><div style='font-size:12px;color:#64748b;margin:6px 0 10px'>Create the school and its administrator account immediately. Email verification is deferred.</div><form method='post' action='/register-school' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px'><input name='school_name' required placeholder='🏫 School Name *'><input name='school_email' required type='email' placeholder='📧 Admin Email *'><input name='location' required placeholder='📍 Location *'><input name='phone' required placeholder='📱 Phone *'><input name='principal' required placeholder='👤 Principal *'><select name='role' required><option value='school_admin'>School Admin</option><option value='registrar'>Registrar</option></select><select name='school_type' required><option>Primary</option><option>Junior School</option><option>Primary & Junior School</option><option>Senior School</option><option>Tertiary/College</option><option>University</option></select><button style='grid-column:1/-1;width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;margin-top:4px'>＋ Register School</button></form></div><div><div class='card manage-school-panel' id='manage-panel-schools'>{popup}<div style='font-weight:800'>📚 Registered Schools ({len(schools)})</div><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:12px 0'><input id='schoolSearch' type='search' placeholder='Search school, code, location, email...' oninput='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><select id='schoolStatusFilter' onchange='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><option value='all'>All account statuses</option><option value='active'>Active</option><option value='suspended'>Suspended</option></select><select id='schoolTypeFilter' onchange='filterSchoolDirectory()' style='padding:10px;border:1px solid #dce9dc;border-radius:9px'><option value='all'>All school levels</option><option>Primary</option><option>Junior School</option><option>Primary & Junior School</option><option>Senior School</option><option>Tertiary/College</option><option>University</option></select></div><div id='schoolFilterCount' style='font-size:11px;color:#647b68;margin-bottom:8px'>Showing all registered schools</div><div style='overflow:auto;max-height:65vh;border:1px solid #f1f5f9;border-radius:10px;margin-top:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='position:sticky;top:0;background:#f8fafc'><tr style='text-align:left;font-size:11px'><th style='padding:10px'>School</th><th>Contact</th><th>Email</th><th>Location</th><th>Admin Account</th><th>Last Activity</th><th>Password</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows}</tbody></table></div><a href='/dashboard' style='margin-top:14px;display:inline-block;padding:10px 16px;background:white;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#0b3d91;font-weight:700;font-size:12px'>⬅️ Back</a></div><div class='card manage-school-panel' id='manage-panel-pending' style='margin-top:16px'><div id='pending-schools'><div style='font-weight:800;font-size:15px'>⏳ Pending School Registrations ({len(pending_schools)})</div><div style='font-size:12px;color:#64748b;margin-top:4px'>Registrations awaiting verification before a school account is created.</div><div style='overflow:auto;margin-top:10px;border:1px solid #f1f5f9;border-radius:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='background:#f8fafc;text-align:left;font-size:11px'><tr><th style='padding:10px'>School</th><th>Email</th><th>School Level</th><th>Submitted</th><th>Action</th></tr></thead><tbody>{pending_rows}</tbody></table></div></div></div><div class='card manage-school-panel' id='manage-panel-registrars' style='margin-top:16px'><div style='font-weight:800;font-size:15px'>👩‍💼 Registrars</div><div style='font-size:12px;color:#64748b;margin-top:4px'>Registrar accounts across all schools. Registrar details are linked to the teacher record whenever the account was created from a teacher profile.</div><div style='overflow:auto;margin-top:10px;border:1px solid #f1f5f9;border-radius:10px'><table style='width:100%;border-collapse:collapse;font-size:13px'><thead style='background:#f8fafc;text-align:left;font-size:11px'><tr><th style='padding:10px'>Registrar</th><th>Email / Username</th><th>School</th><th>Phone</th><th>Teacher Role</th><th>Action</th></tr></thead><tbody>{registrar_rows}</tbody></table></div></div></div></div><script>
 (function(){{
  const tabs=Array.from(document.querySelectorAll('.manage-school-tab'));
  const panels={{register:document.getElementById('manage-panel-register'),schools:document.getElementById('manage-panel-schools'),pending:document.getElementById('manage-panel-pending'),registrars:document.getElementById('manage-panel-registrars')}};
@@ -1371,28 +1374,75 @@ function filterSchoolDirectory(){{const q=(document.getElementById('schoolSearch
 def register_school(request: Request, school_name: str = Form(...), school_email: str = Form(...), location: str = Form(...), phone: str = Form(...), principal: str = Form(...), role: str = Form("school_admin"), school_type: str = Form(...)):
     if request.session.get("role") != "super_admin":
         return RedirectResponse("/", status_code=303)
-    role = str(role or "school_admin").strip().lower()
-    if role not in {"school_admin", "registrar"}:
-        return RedirectResponse("/schools/manage?success=verify_error&message=Invalid%20account%20role",303)
-    auth_code = str(random.randint(100000, 999999))
-    try:
-        send_school_verification_email(school_email.strip(), school_name.strip(), auth_code)
-    except Exception as exc:
-        print("DAVISCHOOL SCHOOL VERIFICATION EMAIL FAILED:", repr(exc), flush=True)
-        return RedirectResponse("/schools/manage?success=email_error", status_code=303)
+
+    from urllib.parse import quote
+    school_name_clean = str(school_name or "").strip()
+    email_clean = str(school_email or "").strip()
+    location_clean = str(location or "").strip()
+    phone_clean = str(phone or "").strip()
+    principal_clean = str(principal or "").strip()
+    role_clean = str(role or "school_admin").strip().lower()
+    school_type_clean = str(school_type or "Primary").strip()
+
+    if not all((school_name_clean, email_clean, location_clean, phone_clean, principal_clean)):
+        return RedirectResponse("/schools/manage?success=register_error&message=Please%20complete%20all%20required%20fields", status_code=303)
+    if role_clean not in {"school_admin", "registrar"}:
+        return RedirectResponse("/schools/manage?success=register_error&message=Invalid%20account%20role", status_code=303)
+
     con = get_db()
     try:
         cur = con.cursor()
+        existing = cur.execute(
+            "SELECT id FROM users WHERE lower(trim(COALESCE(email,'')))=lower(trim(?))",
+            (email_clean,)
+        ).fetchone()
+        if existing:
+            con.close()
+            return RedirectResponse(
+                f"/schools/manage?success=already_added&school_email={quote(email_clean)}&school_name={quote(school_name_clean)}",
+                status_code=303
+            )
+
+        school_code = str(random.randint(100000, 999999))
+        unique_pass = generate_unique_password(school_name_clean)
+        cur.execute(
+            "INSERT INTO schools (name,email,code,location,phone,principal,school_type,status) VALUES (?,?,?,?,?,?,?,?)",
+            (school_name_clean.upper(), email_clean, school_code, location_clean,
+             phone_clean, principal_clean, school_type_clean, "active")
+        )
+        school_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO users (email,password,role,full_name,school_id,credential_secret) VALUES (?,?,?,?,?,?)",
+            (email_clean, hash_password(unique_pass), role_clean, principal_clean,
+             school_id, encrypt_credential(unique_pass))
+        )
         ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("INSERT INTO pending_schools (name,email,location,phone,principal,school_type,role,auth_code,timestamp) VALUES (?,?,?,?,?,?,?,?,?)", (school_name.strip().upper(), school_email.strip(), location.strip(), phone.strip(), principal.strip(), school_type, role, auth_code, ts))
-        pending_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+            (school_id, email_clean, "SCHOOL_REGISTERED",
+             "School account created directly by Super Admin; email verification deferred", ts)
+        )
         con.commit()
-    except Exception:
-        con.rollback()
-        raise
+        return RedirectResponse(
+            f"/schools/manage?success=added&new_pass={quote(unique_pass)}&school_email={quote(email_clean)}&school_name={quote(school_name_clean)}",
+            status_code=303
+        )
+    except Exception as exc:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        print("DAVISCHOOL DIRECT SCHOOL REGISTRATION FAILED:", type(exc).__name__, str(exc)[:300], flush=True)
+        return RedirectResponse(
+            f"/schools/manage?success=register_error&message={quote(str(exc)[:180])}",
+            status_code=303
+        )
     finally:
-        con.close()
-    return RedirectResponse(f"/schools/manage?success=code_sent&pending_id={pending_id}",303)
+        try:
+            con.close()
+        except Exception:
+            pass
+
 @app.post("/verify-school-code", response_class=HTMLResponse)
 def verify_school_code(request: Request, pending_id: str = Form(...), auth_code: str = Form(...)):
     from urllib.parse import quote
