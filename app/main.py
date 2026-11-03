@@ -1096,13 +1096,18 @@ def dashboard(request: Request):
     cur.execute("SELECT COUNT(*) c FROM schools WHERE lower(COALESCE(status,'active')) IN ('active','enabled')")
     active = int(cur.fetchone()["c"] or 0)
     suspended = max(0, total-active)
-    cur.execute("SELECT COUNT(*) c FROM students")
+    # Only records belonging to registered schools count in platform totals.
+    cur.execute("SELECT COUNT(*) c FROM students st INNER JOIN schools s ON s.id=st.school_id")
     learners = int(cur.fetchone()["c"] or 0)
-    cur.execute("SELECT COUNT(*) c FROM teachers")
+    cur.execute("SELECT COUNT(*) c FROM teachers t INNER JOIN schools s ON s.id=t.school_id")
     staff = int(cur.fetchone()["c"] or 0)
-    cur.execute("SELECT COUNT(*) c FROM users WHERE lower(COALESCE(role,'')) IN ('school_admin','registrar')")
+    cur.execute("SELECT COUNT(*) c FROM users u INNER JOIN schools s ON s.id=u.school_id WHERE lower(COALESCE(u.role,'')) IN ('school_admin','registrar')")
     accounts = int(cur.fetchone()["c"] or 0)
-    cur.execute("SELECT COUNT(*) c FROM pending_schools")
+    cur.execute("""SELECT COUNT(*) c FROM pending_schools p
+                   WHERE NOT EXISTS (SELECT 1 FROM system_audit a
+                     WHERE a.action='SCHOOL_DELETE'
+                       AND lower(trim(COALESCE(p.name,''))) =
+                           lower(trim(replace(COALESCE(a.details,''),'Deleted school ',''))))""")
     pending = int(cur.fetchone()["c"] or 0)
     try:
         cur.execute("SELECT COALESCE(SUM(CASE WHEN lower(COALESCE(status,'')) IN ('paid','complete','completed') THEN CAST(amount AS REAL) ELSE 0 END),0) total FROM billing")
@@ -1116,10 +1121,6 @@ def dashboard(request: Request):
                    GROUP BY s.id,s.name,s.location,s.school_type,s.status
                    ORDER BY s.id DESC LIMIT 10""")
     recent = cur.fetchall()
-    cur.execute("""SELECT a.school_id,sc.name school_name,a.user_email,a.action,a.details,a.timestamp
-                   FROM system_audit a LEFT JOIN schools sc ON sc.id=a.school_id
-                   ORDER BY a.id DESC LIMIT 10""")
-    activity = cur.fetchall()
     cur.execute("""SELECT s.id,s.name FROM schools s
                    LEFT JOIN users u ON u.school_id=s.id AND lower(COALESCE(u.role,''))='school_admin'
                    GROUP BY s.id,s.name HAVING COUNT(u.id)=0 ORDER BY s.name""")
@@ -1132,7 +1133,6 @@ def dashboard(request: Request):
     type_total = max(1,sum(int(r["c"] or 0) for r in school_types))
     type_html = "".join("<div class='type-row'><span>{}</span><div><i style='width:{:.1f}%'></i></div><b>{}</b></div>".format(safe(r["school_type"] or "Unspecified"),int(r["c"] or 0)/type_total*100,int(r["c"] or 0)) for r in school_types) or "<p class='muted'>No registered schools yet.</p>"
     school_html = "".join("<tr><td><b>{}</b><small>{}</small></td><td>{}</td><td>{:,}</td><td><span class='status {}'>{}</span></td><td><a href='/schools/profile/{}'>Profile →</a></td></tr>".format(safe(r["name"]),safe(r["location"]),safe(r["school_type"]),int(r["learners"] or 0),"active" if str(r["status"] or "active").lower() in ("active","enabled") else "suspended","Active" if str(r["status"] or "active").lower() in ("active","enabled") else "Suspended",int(r["id"])) for r in recent) or "<tr><td colspan='5' class='empty'>No schools have been registered.</td></tr>"
-    activity_html = "".join("<div class='activity'><div><b>{}</b><small>{} · {}</small><small>{}</small></div><time>{}</time></div>".format(safe(a["action"]),safe(a["school_name"] or "Platform"),safe(a["user_email"]),safe(a["details"]),safe(a["timestamp"])) for a in activity) or "<p class='muted'>No platform audit events have been recorded yet.</p>"
     alerts = []
     if pending: alerts.append("<a href='/schools/manage#pending-schools'>{} school registration request(s) awaiting verification</a>".format(pending))
     if no_admin: alerts.append("<a href='/schools/manage'>{} school(s) have no School Admin account</a>".format(len(no_admin)))
@@ -1147,28 +1147,32 @@ def dashboard(request: Request):
     .layout{{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,.85fr);gap:14px}}.panel{{background:white;border:1px solid #dce9dc;border-radius:14px;margin-bottom:14px;overflow:hidden}}.panel-head{{padding:14px 16px;border-bottom:1px solid #edf3ed;display:flex;justify-content:space-between;gap:10px;align-items:center}}.panel-head b{{font-size:14px}}.panel-head a,.panel a{{color:#166534;text-decoration:none;font-size:11px;font-weight:800}}.panel-body{{padding:15px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px;text-align:left;border-bottom:1px solid #edf3ed;font-size:11px}}th{{font-size:10px;background:#f7fbf7;color:#718477}}td small{{display:block;color:#718477;margin-top:4px}}.status{{padding:4px 8px;border-radius:18px;font-size:10px;font-weight:800}}.status.active{{background:#dcfce7;color:#166534}}.status.suspended{{background:#fee2e2;color:#991b1b}}.table-scroll{{overflow:auto}}.type-row{{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:11px}}.type-row span{{flex:1}}.type-row div{{width:38%;height:8px;background:#edf4ed;border-radius:10px;overflow:hidden}}.type-row i{{display:block;height:100%;background:#2f855a;border-radius:10px}}.type-row b{{min-width:20px;text-align:right}}.activity{{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.activity:last-child{{border:0}}.activity small{{display:block;color:#718477;margin-top:4px}}.activity time{{font-size:10px;color:#718477;white-space:nowrap}}.alert{{padding:10px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.alert a{{color:#8a5a00}}.healthy{{padding:11px;background:#e9f6eb;color:#166534;border-radius:9px;font-size:11px}}.muted,.empty{{color:#94a3b8;font-size:11px}}.empty{{text-align:center;padding:22px}}
     @media(max-width:1050px){{.stats{{grid-template-columns:repeat(3,1fr)}}}}@media(max-width:760px){{.wrap{{padding:12px}}.hero{{align-items:flex-start;flex-direction:column}}.hero h1{{font-size:20px}}.stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.layout{{grid-template-columns:1fr}}.table-scroll table{{min-width:620px}}}}
     </style></head><body>{header}<main class='wrap'>
-    <section class='hero'><div><h1>DaviSchool Platform Overview</h1><p>Monitor schools, access, platform activity and operational health in one place.</p></div><div class='actions'><a href='/schools/manage'>＋ Manage Schools</a><a href='/super/global-control/dashboard'>Global Control →</a></div></section>
+    <section class='hero'><div><h1>DaviSchool Platform Overview</h1><p>Manage registered schools and monitor platform-wide school operations.</p></div><div class='actions'><a href='/schools/manage'>＋ Manage Schools</a></div></section>
     <section class='stats'>
     <a class='stat' href='/schools/manage'><span>REGISTERED SCHOOLS</span><b>{total:,}</b><small>All school accounts</small></a>
     <a class='stat' href='/schools/manage?status=active'><span>ACTIVE SCHOOLS</span><b>{active:,}</b><small>Enabled accounts</small></a>
     <a class='stat' href='/schools/manage?status=suspended'><span>SUSPENDED SCHOOLS</span><b>{suspended:,}</b><small>Restricted accounts</small></a>
-    <a class='stat' href='/super/global-control/students'><span>LEARNERS</span><b>{learners:,}</b><small>Across all schools</small></a>
-    <a class='stat' href='/super/global-control/teachers'><span>STAFF</span><b>{staff:,}</b><small>{accounts:,} admin / registrar accounts</small></a>
+    <a class='stat' href='/schools/manage'><span>LEARNERS</span><b>{learners:,}</b><small>In currently registered schools</small></a>
+    <a class='stat' href='/schools/manage'><span>STAFF</span><b>{staff:,}</b><small>{accounts:,} admin / registrar accounts in registered schools</small></a>
     </section>
     <section class='layout'><div>
     <section class='panel'><div class='panel-head'><b>Recently Added Schools</b><a href='/schools/manage'>View all →</a></div><div class='table-scroll'><table><thead><tr><th>SCHOOL</th><th>LEVEL</th><th>LEARNERS</th><th>STATUS</th><th></th></tr></thead><tbody>{school_html}</tbody></table></div></section>
-    <section class='panel'><div class='panel-head'><b>Recent Platform Activity</b><a href='/super/global-control/system-settings/system-audit'>Audit trail →</a></div><div class='panel-body'>{activity_html}</div></section>
     </div><div>
     <section class='panel'><div class='panel-head'><b>School Distribution</b></div><div class='panel-body'>{type_html}</div></section>
     <section class='panel'><div class='panel-head'><b>Attention Required</b></div><div class='panel-body'>{alert_html}</div></section>
-    <section class='panel'><div class='panel-head'><b>Platform Billing Summary</b></div><div class='panel-body'><span class='muted'>RECORDED PAID / COMPLETED BILLING</span><div style='font-size:25px;color:#14532d;font-weight:900;margin:8px 0'>KES {revenue:,.2f}</div><span class='muted'>Based on billing records; this is not a live subscription entitlement check.</span><p><a href='/super/global-control/system-settings/billing-payments'>Open billing records →</a></p></div></section>
+    <section class='panel'><div class='panel-head'><b>Platform Billing Summary</b></div><div class='panel-body'><span class='muted'>RECORDED PAID / COMPLETED BILLING</span><div style='font-size:25px;color:#14532d;font-weight:900;margin:8px 0'>KES {revenue:,.2f}</div><span class='muted'>Based on billing records; this is not a live subscription entitlement check.</span></div></section>
     </div></section></main></body></html>""")
 
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = "", message: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role IN ('school_admin','registrar') ORDER BY id"); users = cur.fetchall(); cur.execute("""SELECT u.id,u.full_name,u.email,u.username,u.school_id,u.teacher_id,s.name AS school_name,t.name AS teacher_name,t.phone AS teacher_phone,t.role AS teacher_role FROM users u LEFT JOIN schools s ON s.id=u.school_id LEFT JOIN teachers t ON t.id=u.teacher_id WHERE lower(COALESCE(u.role,''))='registrar' ORDER BY u.id DESC"""); registrars = cur.fetchall(); cur.execute("SELECT * FROM pending_schools ORDER BY id DESC"); pending_schools = cur.fetchall(); cur.execute("SELECT school_id,MAX(timestamp) AS last_activity FROM system_audit GROUP BY school_id"); last_activity_by_school = {int(r["school_id"] or 0): r["last_activity"] for r in cur.fetchall()}; pending=None
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role IN ('school_admin','registrar') ORDER BY id"); users = cur.fetchall(); cur.execute("""SELECT u.id,u.full_name,u.email,u.username,u.school_id,u.teacher_id,s.name AS school_name,t.name AS teacher_name,t.phone AS teacher_phone,t.role AS teacher_role FROM users u LEFT JOIN schools s ON s.id=u.school_id LEFT JOIN teachers t ON t.id=u.teacher_id WHERE lower(COALESCE(u.role,''))='registrar' ORDER BY u.id DESC"""); registrars = cur.fetchall(); cur.execute("""SELECT p.* FROM pending_schools p
+                   WHERE NOT EXISTS (SELECT 1 FROM system_audit a
+                     WHERE a.action='SCHOOL_DELETE'
+                       AND lower(trim(COALESCE(p.name,''))) =
+                           lower(trim(replace(COALESCE(a.details,''),'Deleted school ',''))))
+                   ORDER BY p.id DESC"""); pending_schools = cur.fetchall(); cur.execute("SELECT school_id,MAX(timestamp) AS last_activity FROM system_audit GROUP BY school_id"); last_activity_by_school = {int(r["school_id"] or 0): r["last_activity"] for r in cur.fetchall()}; pending=None
     if pending_id: cur.execute("SELECT * FROM pending_schools WHERE id=?", (pending_id,)); pending = cur.fetchone()
     con.close(); users_by_school = {u["school_id"]: u for u in users}
     popup=""
@@ -1582,6 +1586,8 @@ def delete_school(sid: int, request: Request):
     ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
                 (sid, request.session.get("email",""), "SCHOOL_DELETE", f"Deleted school {school['name']}", ts))
+    # Remove unverified registrations for this school as part of permanent deletion.
+    cur.execute("DELETE FROM pending_schools WHERE lower(trim(COALESCE(name,'')))=lower(trim(?)) OR lower(trim(COALESCE(email,'')))=lower(trim((SELECT email FROM schools WHERE id=?)))", (school["name"], sid))
     cur.execute("DELETE FROM users WHERE school_id=?", (sid,))
     cur.execute("DELETE FROM schools WHERE id=?", (sid,))
     con.commit(); con.close()
