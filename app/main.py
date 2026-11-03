@@ -665,7 +665,12 @@ def get_school_obj(req):
         status = str(s["status"] or "active").strip().lower()
     except Exception:
         status = "active"
-    if status not in ("active", "enabled"):
+    is_private_demo = (
+        status == "demo"
+        and bool(req.session.get("is_portal_preview"))
+        and str(s["email"] or "").strip().lower() == "portal-demo@davischool.invalid"
+    )
+    if status not in ("active", "enabled") and not is_private_demo:
         return None
     return s
 
@@ -1215,9 +1220,9 @@ def dashboard(request: Request):
         return RedirectResponse("/")
     con = get_db()
     cur = con.cursor()
-    cur.execute("SELECT COUNT(*) c FROM schools")
+    cur.execute("SELECT COUNT(*) c FROM schools WHERE lower(COALESCE(email,''))<>'portal-demo@davischool.invalid'")
     total = int(cur.fetchone()["c"] or 0)
-    cur.execute("SELECT COUNT(*) c FROM schools WHERE lower(COALESCE(status,'active')) IN ('active','enabled')")
+    cur.execute("SELECT COUNT(*) c FROM schools WHERE lower(COALESCE(email,''))<>'portal-demo@davischool.invalid' AND lower(COALESCE(status,'active')) IN ('active','enabled')")
     active = int(cur.fetchone()["c"] or 0)
     suspended = max(0, total-active)
     # Only records belonging to registered schools count in platform totals.
@@ -1238,15 +1243,17 @@ def dashboard(request: Request):
         revenue = float(cur.fetchone()["total"] or 0)
     except Exception:
         revenue = 0.0
-    cur.execute("SELECT school_type,COUNT(*) c FROM schools GROUP BY school_type ORDER BY school_type")
+    cur.execute("SELECT school_type,COUNT(*) c FROM schools WHERE lower(COALESCE(email,''))<>'portal-demo@davischool.invalid' GROUP BY school_type ORDER BY school_type")
     school_types = cur.fetchall()
     cur.execute("""SELECT s.id,s.name,s.location,s.school_type,s.status,COUNT(DISTINCT st.id) learners
                    FROM schools s LEFT JOIN students st ON st.school_id=s.id
+                   WHERE lower(COALESCE(s.email,''))<>'portal-demo@davischool.invalid'
                    GROUP BY s.id,s.name,s.location,s.school_type,s.status
                    ORDER BY s.id DESC LIMIT 10""")
     recent = cur.fetchall()
     cur.execute("""SELECT s.id,s.name FROM schools s
                    LEFT JOIN users u ON u.school_id=s.id AND lower(COALESCE(u.role,''))='school_admin'
+                   WHERE lower(COALESCE(s.email,''))<>'portal-demo@davischool.invalid'
                    GROUP BY s.id,s.name HAVING COUNT(u.id)=0 ORDER BY s.name""")
     no_admin = cur.fetchall()
     con.close()
@@ -1291,7 +1298,7 @@ def dashboard(request: Request):
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = "", message: str = ""):
     if request.session.get("role")!= "super_admin": return RedirectResponse("/school/dashboard")
     name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
-    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools ORDER BY id DESC"); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role IN ('school_admin','registrar') ORDER BY id"); users = cur.fetchall(); cur.execute("""SELECT u.id,u.full_name,u.email,u.username,u.school_id,u.teacher_id,s.name AS school_name,t.name AS teacher_name,t.phone AS teacher_phone,t.role AS teacher_role FROM users u LEFT JOIN schools s ON s.id=u.school_id LEFT JOIN teachers t ON t.id=u.teacher_id WHERE lower(COALESCE(u.role,''))='registrar' ORDER BY u.id DESC"""); registrars = cur.fetchall(); cur.execute("""SELECT p.* FROM pending_schools p
+    con = get_db(); cur = con.cursor(); cur.execute("SELECT * FROM schools WHERE lower(COALESCE(email,''))<>? ORDER BY id DESC", ("portal-demo@davischool.invalid",)); schools = cur.fetchall(); cur.execute("SELECT * FROM users WHERE role IN ('school_admin','registrar') ORDER BY id"); users = cur.fetchall(); cur.execute("""SELECT u.id,u.full_name,u.email,u.username,u.school_id,u.teacher_id,s.name AS school_name,t.name AS teacher_name,t.phone AS teacher_phone,t.role AS teacher_role FROM users u LEFT JOIN schools s ON s.id=u.school_id LEFT JOIN teachers t ON t.id=u.teacher_id WHERE lower(COALESCE(u.role,''))='registrar' ORDER BY u.id DESC"""); registrars = cur.fetchall(); cur.execute("""SELECT p.* FROM pending_schools p
                    WHERE NOT EXISTS (SELECT 1 FROM system_audit a
                      WHERE a.action='SCHOOL_DELETE'
                        AND lower(trim(COALESCE(p.name,''))) =
@@ -4304,10 +4311,11 @@ def _ensure_davischool_demo_tenant():
                            VALUES (?,?,?,?,?,?,?,?)""",
                         ("DaviSchool Demonstration Environment", "portal-demo@davischool.invalid",
                          "DAVI-DEMO", "Demonstration only", "", "DaviSchool Platform",
-                         "Demonstration", "active"))
+                         "Demonstration", "demo"))
             demo = cur.execute("SELECT id FROM schools WHERE email=? ORDER BY id DESC LIMIT 1",
                                ("portal-demo@davischool.invalid",)).fetchone()
         demo_id = int(demo["id"])
+        cur.execute("UPDATE schools SET status='demo' WHERE id=?", (demo_id,))
         klass = cur.execute("SELECT id FROM classes WHERE school_id=? AND name=? AND stream=? ORDER BY id LIMIT 1",
                             (demo_id, "GRADE 7", "DEMO")).fetchone()
         if not klass:
