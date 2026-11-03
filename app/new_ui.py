@@ -1511,7 +1511,7 @@ def class_monitoring_page(request: Request):
               .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
               .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
               .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
-              .cm-back:hover{background:#176B3A;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
+              .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
               .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
               .cm-filters label{display:grid;gap:6px;color:#45624d;font-size:12px;font-weight:800}.cm-filters select{min-width:240px;padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
               .cm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
@@ -1675,7 +1675,7 @@ def class_monitoring_page(request: Request):
       .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
       .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
       .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
-      .cm-back:hover{background:#176B3A;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
+      .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
       .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
       .cm-filters label{display:grid;gap:6px;color:#45624d;font-size:12px;font-weight:800}.cm-filters select{min-width:240px;padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
       .cm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
