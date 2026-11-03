@@ -1247,7 +1247,7 @@ async function viewSchoolPassword(id){{
    Object.entries(panels).forEach(([key,p])=>{{if(p)p.style.display=key===name?'':'none';}});
  }}
  const params=new URLSearchParams(location.search);
- const initial=params.get('success')==='code_sent'||location.hash==='#pending-schools'?'pending':(params.get('success')==='added'?'schools':'register');
+ const initial=params.get('success')?'schools':(location.hash==='#pending-schools'?'pending':'register');
  tabs.forEach(t=>t.addEventListener('click',()=>activate(t.dataset.tab)));
  activate(initial);
 }})();
