@@ -285,6 +285,22 @@ async def students_page_swipe_scroll(request: Request, call_next):
     return response
 
 @app.middleware("http")
+async def super_admin_landing_redirect(request: Request, call_next):
+    """
+    Send platform-level Super Admin sessions to the redesigned platform
+    overview instead of the separate /app school workspace. Super Admins
+    impersonating a school keep using the school workspace.
+    """
+    if request.url.path in ("/app", "/app/"):
+        session = request.session
+        role = str(session.get("role") or "").strip().lower()
+        school_id = session.get("school_id") or 0
+        is_impersonating = bool(session.get("is_impersonating"))
+        if role == "super_admin" and not school_id and not is_impersonating:
+            return RedirectResponse("/dashboard", status_code=303)
+    return await call_next(request)
+
+@app.middleware("http")
 async def dynamic_app_no_cache(request: Request, call_next):
     """
     Prevent browsers/proxies from reusing stale dynamic DaviSchool pages.
