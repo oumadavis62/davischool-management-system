@@ -1545,8 +1545,1555 @@ def class_monitoring_page(request: Request):
               .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
               @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
             @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
+    </style>"""from fastapi import APIRouter, Request, Form, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
+from html import escape
+import base64
+import re
+from urllib.parse import quote
+import json
+import csv
+import io
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+router = APIRouter()
+
+# Google Search Console HTML-file ownership verification.
+@router.get("/google0dd64183cf2d3d1b.html", include_in_schema=False)
+def google_search_console_verification():
+    return Response(
+        content="google-site-verification: google0dd64183cf2d3d1b.html",
+        media_type="text/html",
+    )
+
+_USER_ACCOUNT_COLUMNS_READY = False
+# Schema compatibility work is expensive on PostgreSQL because each ALTER
+# check/savepoint is a database round trip. Run these additive migrations once
+# per worker process, not on every Save Marks request.
+_REPORT_CARD_FIELDS_READY = False
+_TEACHER_MARK_DRAFTS_SCHEMA_READY = False
+_STUDENT_HISTORY_SCHEMA_READY = False
+
+def _pdf_route_error(request, route_name, exc):
+    import traceback
+    print("DAVISCHOOL PDF ROUTE ERROR: %s %s %s" % (route_name, request.method, request.url.path), flush=True)
+    print("DAVISCHOOL PDF ROUTE EXCEPTION: %r" % (exc,), flush=True)
+    print(traceback.format_exc(), flush=True)
+    detail = f"{type(exc).__name__}: {str(exc) or 'no exception message'}"
+    safe_detail = escape(detail)[:800]
+    return HTMLResponse(
+        "DaviSchool PDF generation failed.<br><br><b>Technical detail:</b> " + safe_detail +
+        "<br><br>Please send this exact technical detail to the developer so the failing database/query can be fixed.",
+        status_code=500,
+    )
+
+# Standard selection lists used across school data-entry screens. These keep
+# entry consistent while still allowing the database to store plain text.
+TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
+YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi")).year, datetime.now(ZoneInfo("Africa/Nairobi")).year + 5))
+
+def _parse_assessment_ids(exam_ids="", exam_id=""):
+    """Safely normalize one or more assessment IDs without changing existing routes."""
+    raw = exam_ids or exam_id or ""
+    out = []
+    for value in str(raw).split(","):
+        try:
+            value = int(value.strip())
+            if value > 0 and value not in out:
+                out.append(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _average_selected_assessments(cur, school_id, student_id, exam_ids, term="", year=""):
+    """Return subject-level averages for selected assessments.
+    
+    This calculation layer is deliberately isolated from the existing screens.
+    Missing marks are ignored, while available assessment marks are averaged.
+    """
+    ids = _parse_assessment_ids(",".join(str(x) for x in (exam_ids or [])))
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    sql = (
+        "SELECT subject_id, marks FROM marks "
+        "WHERE school_id=? AND student_id=? AND exam_id IN (" + placeholders + ")"
+    )
+    params = [school_id, student_id] + ids
+    if term:
+        sql += " AND term=?"
+        params.append(term)
+    if year:
+        sql += " AND year=?"
+        params.append(year)
+    rows = cur.execute(sql, params).fetchall()
+    buckets = {}
+    for row in rows:
+        if row["marks"] is None or str(row["marks"]).strip() == "":
+            continue
+        try:
+            buckets.setdefault(int(row["subject_id"]), []).append(float(row["marks"]))
+        except (TypeError, ValueError):
+            continue
+    return {subject_id: sum(values) / len(values) for subject_id, values in buckets.items() if values}
+
+
+@router.get("/", response_class=HTMLResponse)
+def davischool_public_homepage(request: Request):
+    """Public, indexable product homepage; authenticated users keep their normal dashboard flow."""
+    if request.session.get("email"):
+        return RedirectResponse("/app", status_code=303)
+    return HTMLResponse("""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DaviSchool Management System | School Operations Platform</title>
+<meta name="description" content="DaviSchool Management System helps schools manage students, teachers, academic assessments, marks, and school operations in one secure platform.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://davischool.fastapicloud.dev/">
+<meta name="theme-color" content="#08783f">
+<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#163525;background:#fff;line-height:1.6}.wrap{width:min(1120px,92%);margin:auto}.nav{height:78px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;font-size:20px;color:#07552f;text-decoration:none}.logo{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#08783f;color:#fff;font-size:27px;font-weight:900;box-shadow:0 5px 14px #08783f30}.nav-cta,.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:800;border-radius:11px;padding:11px 20px}.nav-cta{color:#08783f;border:1px solid #b9dfc7}.hero{padding:74px 0 82px;background:radial-gradient(ellipse at 85% 20%,#dff5e7 0,transparent 40%),linear-gradient(130deg,#f4fbf6,#fff 65%)}.hero-grid{display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:54px}.eyebrow{display:inline-block;padding:6px 12px;border-radius:999px;background:#e0f4e7;color:#086338;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.hero h1{font-size:clamp(36px,5vw,58px);line-height:1.08;letter-spacing:-.04em;margin:20px 0;color:#103b25}.hero h1 span{color:#0a8548}.hero p{font-size:18px;color:#52675a;max-width:610px;margin:0 0 28px}.actions{display:flex;flex-wrap:wrap;gap:12px}.btn-primary{background:#08783f;color:#fff;box-shadow:0 8px 20px #08783f26}.btn-secondary{color:#155d37;border:1px solid #c7e3d0;background:#fff}.visual{border:1px solid #d9eadf;background:#fff;border-radius:24px;padding:22px;box-shadow:0 24px 70px #12472a14;transform:rotate(1deg)}.visual-top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e9f0eb;padding-bottom:17px;margin-bottom:18px}.visual-title{font-weight:900;font-size:16px}.status{font-size:11px;font-weight:800;color:#08783f;background:#e5f6eb;border-radius:99px;padding:5px 9px}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.stat{border:1px solid #e5eee8;border-radius:14px;padding:16px;background:#fbfefc}.stat-icon{font-size:20px}.stat strong{display:block;font-size:15px;margin:8px 0 2px;color:#173d29}.stat small{font-size:12px;color:#708176}.visual-note{margin-top:13px;border-radius:12px;background:#f0faf3;padding:12px 14px;color:#37634a;font-size:12px}.section{padding:68px 0}.section h2{text-align:center;font-size:clamp(27px,3.4vw,38px);line-height:1.2;margin:0 0 12px;color:#123d27}.section-intro{text-align:center;color:#607267;max-width:650px;margin:0 auto 34px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.feature{padding:25px;border:1px solid #e1ece5;border-radius:17px;background:#fff}.feature-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:13px;background:#e8f7ed;font-size:23px}.feature h3{font-size:17px;margin:15px 0 7px;color:#17462d}.feature p{margin:0;color:#627468;font-size:14px}.trust{background:#f5fbf7}.trust-inner{max-width:850px;margin:auto;text-align:center}.trust-inner p{color:#5b7062;margin:0}.bottom-cta{padding:58px 20px;text-align:center;background:#07552f;color:#fff}.bottom-cta h2{color:#fff;margin:0 0 10px}.bottom-cta p{color:#d4eddd;margin:0 auto 23px;max-width:620px}.bottom-cta .btn{background:#fff;color:#07552f}.footer{padding:23px 0;color:#718277;font-size:12px}.footer-inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.footer a{color:#236b43;text-decoration:none}@media(max-width:760px){.nav{height:68px}.brand{font-size:17px}.hero{padding:47px 0 55px}.hero-grid{grid-template-columns:1fr;gap:34px}.hero p{font-size:16px}.visual{transform:none}.features{grid-template-columns:1fr}.section{padding:52px 0}.hero h1{font-size:41px}.nav-cta{padding:9px 13px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header class="wrap nav">
+<a class="brand" href="/" aria-label="DaviSchool home"><span class="logo">D</span><span>DaviSchool</span></a>
+<a class="nav-cta" href="/login">Sign In <span aria-hidden="true">&nbsp;→</span></a>
+</header>
+<main>
+<section class="hero">
+<div class="wrap hero-grid">
+<div>
+<span class="eyebrow">School management, made clearer</span>
+<h1>More focus on learning.<br><span>Less admin stress.</span></h1>
+<p>DaviSchool Management System brings everyday school operations into one organised platform — from student and teacher records to academic assessments, marks, and reports.</p>
+<div class="actions"><a class="btn btn-primary" href="/login">Sign In to DaviSchool&nbsp; →</a><a class="btn btn-secondary" href="#features">Explore features</a></div>
+</div>
+<div class="visual" aria-label="Illustration of school management features">
+<div class="visual-top"><span class="visual-title">School operations</span><span class="status">One organised platform</span></div>
+<div class="stats">
+<div class="stat"><span class="stat-icon" aria-hidden="true">🎓</span><strong>Student records</strong><small>Keep learner information organised</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📚</span><strong>Academic management</strong><small>Support classes and subjects</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📝</span><strong>Marks and assessments</strong><small>Record and review performance</small></div>
+<div class="stat"><span class="stat-icon" aria-hidden="true">📊</span><strong>Reports</strong><small>Present academic progress clearly</small></div>
+</div>
+<div class="visual-note">Designed to bring key school workflows together while keeping authorised areas behind sign-in.</div>
+</div>
+</div>
+</section>
+<section class="section wrap" id="features">
+<h2>Tools for everyday school work</h2>
+<p class="section-intro">A single management platform to help school teams keep essential records and academic workflows in order.</p>
+<div class="features">
+<article class="feature"><div class="feature-icon" aria-hidden="true">👩‍🎓</div><h3>Student and staff records</h3><p>Manage student, teacher, and staff information in a central place for day-to-day school administration.</p></article>
+<article class="feature"><div class="feature-icon" aria-hidden="true">📘</div><h3>Academic workflows</h3><p>Organise classes, subjects, assessments, marks, and related academic tasks.</p></article>
+<article class="feature"><div class="feature-icon" aria-hidden="true">📄</div><h3>Performance reporting</h3><p>Prepare academic summaries and report cards to help communicate student progress.</p></article>
+</div>
+</section>
+<section class="section trust"><div class="wrap trust-inner"><h2>Built around secure access</h2><p>DaviSchool keeps its management workspace behind sign-in. This public page explains the platform; school records and administrative tools remain within the authenticated application.</p></div></section>
+<section class="bottom-cta"><h2>Ready to continue?</h2><p>Sign in to access your authorised DaviSchool workspace.</p><a class="btn" href="/login">Open DaviSchool Sign In&nbsp; →</a></section>
+</main>
+<footer class="footer"><div class="wrap footer-inner"><span>© DaviSchool Management System</span><span>School operations, organised.</span></div></footer>
+</body>
+</html>""")
+
+
+@router.get("/robots.txt", include_in_schema=False)
+def davischool_robots_txt():
+    return Response(
+        content="User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /logout\nSitemap: https://davischool.fastapicloud.dev/sitemap.xml\n",
+        media_type="text/plain",
+    )
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def davischool_sitemap_xml():
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://davischool.fastapicloud.dev/</loc></url></urlset>',
+        media_type="application/xml",
+    )
+
+
+@router.get("/login", response_class=HTMLResponse)
+def davischool_login_page(request: Request):
+    if request.session.get("email"):
+        return RedirectResponse("/app", status_code=303)
+    failed_login = bool(request.query_params.get("error"))
+    suspended_login = bool(request.query_params.get("suspended"))
+    error = "<div class='err'><span class='err-icon'>!</span><div><strong>Sign-in failed.</strong><br>Incorrect username or password. Please check your details and try again.</div></div>" if failed_login else ("<div class='err'><span class='err-icon'>!</span><div>This school account is suspended. Please contact the DaviSchool administrator.</div></div>" if suspended_login else "")
+    saved_username = escape(request.query_params.get("username", ""), quote=True)
+    login_focus = " autofocus" if failed_login else ""
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>Sign In | DaviSchool Management System</title><meta name="robots" content="noindex,nofollow"><meta name="description" content="Sign in to your DaviSchool Management System account."><style>*{{box-sizing:border-box}}html,body{{margin:0;width:100%;min-height:100%;height:auto;overscroll-behavior-y:none;overflow-y:auto;overflow-x:hidden}}body{{font-family:Arial,sans-serif;background:linear-gradient(135deg,#043b22 0%,#08783f 52%,#0b9a52 100%);display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pan-y}}.login-shell{{width:min(760px,92vw);max-height:calc(100dvh - 48px);display:grid;grid-template-columns:1fr 1fr;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 24px 70px rgba(2,55,31,.25)}}.brand-panel{{background:linear-gradient(145deg,#07552f,#0b7a42);color:#fff;padding:48px 42px;display:flex;flex-direction:column;justify-content:center;position:relative;min-height:520px;overflow:hidden}}.brand-panel:after{{content:'';position:absolute;width:230px;height:230px;border:1px solid rgba(255,255,255,.12);border-radius:50%;right:-75px;top:-65px}}.brand-icon{{width:68px;height:68px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 10px 24px rgba(0,0,0,.12)}}.davi-mark{{position:relative;width:42px;height:42px;border:6px solid #176B3A;border-left-width:8px;border-radius:8px 22px 22px 8px;background:#176B3A;overflow:hidden}}.davi-mark .d-letter{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:25px;line-height:1;font-weight:900;color:#fff;z-index:2}}.davi-mark:after{{content:'';position:absolute;left:0;right:0;bottom:0;height:9px;background:#2E8B57;transform:skewX(-18deg);transform-origin:left bottom}}.brand-title{{font-size:31px;font-weight:900;line-height:1.15;margin-bottom:12px}}.brand-text{{font-size:15px;line-height:1.7;color:#d9f3e4;max-width:330px}}.brand-line{{width:58px;height:4px;border-radius:10px;background:#b9efcf;margin:22px 0}}.login-panel{{padding:48px 42px;display:flex;flex-direction:column;justify-content:center}}.login-title{{font-size:28px;font-weight:900;color:#123c27;margin:0 0 7px}}.sub{{color:#64766c;margin-bottom:28px;font-size:14px}}label{{display:block;font-size:13px;font-weight:800;color:#284637;margin:15px 0 7px}}input{{width:100%;padding:13px 14px;text-align:center;border:1px solid #cfe0d5;border-radius:11px;font-size:15px;background:#fbfefc;outline:none;transition:.18s}}input:focus{{border-color:#16834a;box-shadow:0 0 0 3px rgba(22,131,74,.12);background:#fff}}.password-wrap{{position:relative;width:100%}}.password-wrap input{{padding-right:64px}}.password-toggle{{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:auto!important;margin:0!important;padding:5px 7px!important;border:0!important;background:transparent!important;color:#176B3A!important;box-shadow:none!important;font-size:12px!important;font-weight:800!important;cursor:pointer}}.password-toggle:hover{{transform:translateY(-50%)!important;box-shadow:none!important}}button{{width:100%;margin-top:22px;padding:14px;border:0;border-radius:11px;background:linear-gradient(135deg,#07552f,#16834a);color:#fff;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 18px rgba(7,85,47,.22);transition:.18s}}button:hover{{transform:translateY(-1px);box-shadow:0 11px 22px rgba(7,85,47,.28)}}.err{{display:flex;gap:9px;align-items:flex-start;background:#fff5f5;border:1px solid #fecaca;color:#991b1b;padding:11px;border-radius:10px;margin-bottom:15px;font-size:13px;line-height:1.4}}.err-icon{{width:20px;height:20px;min-width:20px;border-radius:50%;background:#dc2626;color:#fff;text-align:center;font-weight:900;line-height:20px}}@media(max-width:700px){{body{{height:auto;min-height:100dvh;align-items:flex-start;padding:16px 14px 24px;background:#f1faf4;overflow-y:auto;-webkit-overflow-scrolling:touch}}.login-shell{{display:block;width:100%;max-height:none;border-radius:20px}}.brand-panel{{min-height:auto;padding:30px 26px}}.brand-title{{font-size:25px}}.brand-text{{font-size:14px}}.login-panel{{padding:30px 26px 34px}}}}</style></head><body><main class='login-shell'><section class='brand-panel'><div class='brand-icon' aria-label='DaviSchool logo'><span class='davi-mark'></span></div><div class='brand-title'>DaviSchool<br>Management System</div><div class='brand-line'></div><div class='brand-text'>A modern school management platform for managing academics, students, teachers and school operations securely.</div></section><section class='login-panel'><h1 class='login-title'>Welcome back</h1><div class='sub'>Sign in to continue.</div>{error}<form method='post' action='/login'><label>Username</label><input name='email' type='text' value='{saved_username}' autocomplete='username' required><label>Password</label><div class='password-wrap'><input id='login-password' name='password' type='password' autocomplete='current-password' required{login_focus}><button type='button' class='password-toggle' aria-label='Show password' onclick="var i=document.getElementById('login-password');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Show':'Hide';this.setAttribute('aria-label',i.type==='password'?'Show password':'Hide password');i.focus();">Show</button></div><button type='submit'>Sign In</button></form></section></main></body></html>""")
+
+@router.post("/login")
+def davischool_login(request: Request, email: str = Form(...), password: str = Form(...)):
+    from app.main import verify_password
+    con = _db()
+    try:
+        _ensure_user_account_columns(con.cursor(), con)
+        login_value = email.strip().lower()
+        user = con.execute("SELECT * FROM users WHERE lower(email)=? OR lower(username)=? LIMIT 1", (login_value, login_value)).fetchone()
+    finally:
+        con.close()
+    if not user:
+        return RedirectResponse("/login?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
+    ok, legacy = verify_password(password, user["password"] or "")
+    # Generated teacher accounts keep the initial password in temporary_password.
+    # Accept that credential as a safe fallback and immediately replace the
+    # stored password with the normal hash, so teacher login works even if the
+    # account was created before the password hash was finalized.
+    if not ok and user["role"] == "teacher":
+        temporary_password = str(user["temporary_password"] or "") if "temporary_password" in user.keys() else ""
+        if temporary_password and password == temporary_password:
+            ok = True
+            legacy = True
+    if not ok:
+        return RedirectResponse("/login?error=1&username=" + quote(email.strip(), safe=""), status_code=303)
+    if user["role"] == "school_admin":
+        con = _db()
+        try:
+            school = con.execute("SELECT status FROM schools WHERE id=?", (user["school_id"],)).fetchone()
+        finally:
+            con.close()
+        status = str(school["status"] or "active").strip().lower() if school else "suspended"
+        if status not in ("active", "enabled"):
+            return RedirectResponse("/login?suspended=1", status_code=303)
+    request.session["email"] = user["email"]
+    request.session["role"] = user["role"]
+    request.session["school_id"] = user["school_id"]
+    request.session["user_id"] = user["id"]
+    request.session["teacher_id"] = user["teacher_id"] if "teacher_id" in user.keys() and user["teacher_id"] else None
+    request.session["student_id"] = user["student_id"] if "student_id" in user.keys() and user["student_id"] else None
+    if user["role"] == "teacher" and not request.session.get("teacher_id") and user["school_id"]:
+        con = _db()
+        try:
+            teacher_row = con.execute("SELECT id FROM teachers WHERE school_id=? AND lower(email)=lower(?) LIMIT 1", (user["school_id"], user["email"])).fetchone()
+            if teacher_row:
+                request.session["teacher_id"] = teacher_row["id"]
+                try:
+                    con.execute("UPDATE users SET teacher_id=? WHERE id=? AND school_id=?", (teacher_row["id"], user["id"], user["school_id"]))
+                    con.commit()
+                except Exception:
+                    pass
+        finally:
+            con.close()
+    request.session["name"] = user["full_name"] or user["email"]
+    if legacy:
+        from app.main import hash_password
+        con = _db()
+        con.execute("UPDATE users SET password=? WHERE id=?", (hash_password(password), user["id"]))
+        con.commit(); con.close()
+    return RedirectResponse("/app", status_code=303)
+
+@router.get("/logout")
+def davischool_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/", status_code=303)
+
+def _modern_icon(name, size=20):
+    """Return a consistent inline SVG icon without relying on device emoji fonts."""
+    paths = {
+        "dashboard": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+        "students": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+        "staff": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        "academics": '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+        "attendance": '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+        "calendar": '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+        "finance": '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M7 15h4"/>',
+        "accounting": '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h2M12 14h2M8 18h2M12 18h2"/>',
+        "announcement": '<path d="M3 11v2a2 2 0 0 0 2 2h2l3 5h2l-2-5 10-4V5L7 9H5a2 2 0 0 0-2 2Z"/><path d="M21 8v8"/>',
+        "users": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>',
+        "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+        "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.55v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.55-1.03H6v-2.55h.85A1.7 1.7 0 0 0 8.4 10a1.7 1.7 0 0 0-.34-1.88L8 8.06l1.8-1.8.06.06A1.7 1.7 0 0 0 11.74 6 1.7 1.7 0 0 0 12.77 4.45V4h2.55v.45A1.7 1.7 0 0 0 16.35 6a1.7 1.7 0 0 0 1.88.32l.06-.06 1.8 1.8-.06.06A1.7 1.7 0 0 0 19.7 10c.15.62.7 1.03 1.33 1.03H22v2.55h-.97A1.7 1.7 0 0 0 19.4 15Z"/>',
+        "audit": '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+        "school": '<path d="m3 10 9-6 9 6"/><path d="M5 10v10h14V10M3 20h18M9 20v-6h6v6"/>',
+        "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+        "key": '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l2 2M14 9l2 2"/>',
+        "marks": '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+        "analysis": '<path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V7M16 16v-8"/>',
+        "grading": '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>',
+        "allocation": '<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6"/><path d="M17 15v6M14 18h6"/>',
+        "report": '<path d="M6 2h9l5 5v15H6z"/><path d="M15 2v6h6M9 13h6M9 17h6"/>',
+        "exam": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11l1.5 1.5L12 10M8 16h8"/>',
+        "subject": '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M4 5.5v13"/>',
+        "correction": '<path d="M4 4h16v16H4z"/><path d="m8 14 2-2 5-5 2 2-5 5-2 2H8zM15 7l2 2"/>'
+    }
+    path = paths.get(name, paths["dashboard"])
+    return f'<svg class="modern-icon icon-{name}" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{path}</svg>'
+
+def _db():
+    from app.main import get_db
+    return get_db()
+
+def _ensure_user_account_columns(cur, con=None):
+    """Ensure generated-account columns exist once per application process."""
+    global _USER_ACCOUNT_COLUMNS_READY
+    if _USER_ACCOUNT_COLUMNS_READY:
+        return
+    cur.execute("SELECT * FROM users LIMIT 0")
+    columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cur.description or [])}
+    changed = False
+    for column, definition in (("username", "TEXT"), ("teacher_id", "INTEGER"), ("student_id", "INTEGER"), ("temporary_password", "TEXT"), ("created_by_role", "TEXT"), ("created_by_email", "TEXT")):
+        if column not in columns:
+            cur.execute("ALTER TABLE users ADD COLUMN %s %s" % (column, definition))
+            columns.add(column)
+            changed = True
+    if changed and con is not None:
+        con.commit()
+    _USER_ACCOUNT_COLUMNS_READY = True
+
+def _pdf_response(pdf_bytes, filename):
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("_") or "davischool.pdf"
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
+
+
+def _pdf_build(story, pagesize, title, page_border=False):
+    from io import BytesIO
+    from reportlab.platypus import SimpleDocTemplate, PageBreak
+    from reportlab.lib.units import mm
+    buffer = BytesIO()
+    generated_at = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S EAT")
+
+    def draw_footer(canvas, doc):
+        canvas.saveState()
+        if page_border:
+            # Keep the report-card frame inside the printable page area.
+            canvas.setStrokeColorRGB(0.09, 0.42, 0.23)
+            canvas.setLineWidth(0.7)
+            canvas.line(6 * mm, 8 * mm, 6 * mm, pagesize[1] - 8 * mm)
+            canvas.line(pagesize[0] - 6 * mm, 8 * mm, pagesize[0] - 6 * mm, pagesize[1] - 8 * mm)
+        canvas.setFont("Helvetica", 7)
+        footer = "DaviSchool Management System  ·  Generated: %s  ·  Page %d" % (
+            generated_at, canvas.getPageNumber()
+        )
+        canvas.setFillColorRGB(0.09, 0.42, 0.23)
+        canvas.drawCentredString(pagesize[0] / 2, 6 * mm, footer)
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagesize,
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=14 * mm,
+        title=title,
+        author="DaviSchool Management System",
+    )
+    try:
+        doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
+        return buffer.getvalue()
+    except Exception as exc:
+        print("DAVISCHOOL PDF STORY FALLBACK:", repr(exc), flush=True)
+
+    # Emergency fallback: build a plain PDF without Platypus so a malformed
+    # flowable, font, or table cannot turn the download into HTTP 500.
+    try:
+        from reportlab.pdfgen import canvas
+        fallback_buffer = BytesIO()
+        c = canvas.Canvas(fallback_buffer, pagesize=pagesize)
+        c.setTitle(str(title))
+        c.setAuthor("DaviSchool Management System")
+        y = pagesize[1] - 18 * mm
+
+        def ascii_text(value):
+            return str(value).encode("ascii", "replace").decode("ascii")
+
+        c.setFont("Helvetica-Bold", 13)
+        c.drawString(12 * mm, y, ascii_text(title))
+        y -= 9 * mm
+        c.setFont("Helvetica", 7.5)
+
+        try:
+            for item in story:
+                lines = []
+                if hasattr(item, "getPlainText"):
+                    lines = [item.getPlainText()]
+                elif hasattr(item, "_cellvalues"):
+                    for row in item._cellvalues:
+                        vals = []
+                        for cell in row:
+                            if hasattr(cell, "getPlainText"):
+                                vals.append(cell.getPlainText())
+                            else:
+                                vals.append(str(cell))
+                        lines.append(" | ".join(vals))
+                for line in lines:
+                    text_line = re.sub(r"\s+", " ", str(line)).strip()
+                    if not text_line:
+                        continue
+                    text_line = ascii_text(text_line)
+                    for start_at in range(0, len(text_line), 115):
+                        if y < 18 * mm:
+                            c.setFont("Helvetica", 7)
+                            c.drawCentredString(
+                                pagesize[0] / 2,
+                                7 * mm,
+                                "DaviSchool Management System - Generated: %s - Page %d"
+                                % (generated_at, c.getPageNumber()),
+                            )
+                            c.showPage()
+                            y = pagesize[1] - 18 * mm
+                            c.setFont("Helvetica", 7.5)
+                        c.drawString(12 * mm, y, text_line[start_at:start_at + 115])
+                        y -= 4.5 * mm
+        except Exception as fallback_story_exc:
+            print("DAVISCHOOL PDF TEXT FALLBACK:", repr(fallback_story_exc), flush=True)
+
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(
+            pagesize[0] / 2,
+            7 * mm,
+            "DaviSchool Management System - Generated: %s - Page %d"
+            % (generated_at, c.getPageNumber()),
+        )
+        c.save()
+        return fallback_buffer.getvalue()
+    except Exception as fallback_exc:
+        print("DAVISCHOOL PDF MINIMAL FALLBACK:", repr(fallback_exc), flush=True)
+        # Last-resort PDF: no story parsing, no Unicode, no tables.
+        from reportlab.pdfgen import canvas
+        minimal_buffer = BytesIO()
+        c = canvas.Canvas(minimal_buffer, pagesize=pagesize)
+        c.setTitle("DaviSchool Management System")
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(12 * mm, pagesize[1] - 18 * mm, "DaviSchool Management System")
+        c.setFont("Helvetica", 9)
+        c.drawString(12 * mm, pagesize[1] - 28 * mm, "PDF generated successfully.")
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(
+            pagesize[0] / 2,
+            7 * mm,
+            "DaviSchool Management System - Generated: %s - Page %d"
+            % (generated_at, c.getPageNumber()),
+        )
+        c.save()
+        return minimal_buffer.getvalue()
+
+
+def _pdf_styles():
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    styles = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle("DaviTitle", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER, spaceAfter=5, textColor="#176B3A"),
+        "subtitle": ParagraphStyle("DaviSubtitle", parent=styles["Normal"], fontSize=8, leading=10, alignment=TA_CENTER, spaceAfter=8, textColor="#176B3A"),
+        "normal": ParagraphStyle("DaviNormal", parent=styles["Normal"], fontSize=8, leading=10),
+        "report_student_name": ParagraphStyle("DaviReportStudentName", parent=styles["Normal"], fontSize=12, leading=14, spaceAfter=2, fontName="Helvetica-Bold"),
+        "small": ParagraphStyle("DaviSmall", parent=styles["Normal"], fontSize=7, leading=9),
+        "table": ParagraphStyle("DaviTable", parent=styles["Normal"], fontSize=6.5, leading=8),
+        "table_head": ParagraphStyle("DaviTableHead", parent=styles["Normal"], fontSize=6.5, leading=8, alignment=TA_CENTER),
+    }
+
+
+def _pdf_school_header(school_row, styles, title, subtitle=""):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.units import mm
+    from io import BytesIO
+    name = str(school_row["name"] or "DaviSchool") if school_row else "DaviSchool"
+    address_lines = []
+    right_contact_lines = []
+    if school_row:
+        postal_parts = []
+        if "postal_address" in school_row.keys() and school_row["postal_address"]:
+            postal_parts.append("P.O. Box " + str(school_row["postal_address"]))
+        if "postal_code" in school_row.keys() and school_row["postal_code"]:
+            postal_parts.append(str(school_row["postal_code"]))
+        if postal_parts:
+            address_lines.append(" ".join(postal_parts))
+        if "email" in school_row.keys() and school_row["email"]:
+            address_lines.append("Email: " + str(school_row["email"]))
+        if "phone" in school_row.keys() and school_row["phone"]:
+            address_lines.append("Phone: " + str(school_row["phone"]))
+    logo_flowable = Paragraph("SCHOOL", styles["title"])
+    logo_data = str(school_row["logo_data"] or "") if school_row and "logo_data" in school_row.keys() else ""
+    if logo_data:
+        try:
+            from reportlab.platypus import Image
+            raw = logo_data.split(",", 1)[1] if "," in logo_data and logo_data.split(",", 1)[0].startswith("data:") else logo_data
+            logo_flowable = Image(BytesIO(base64.b64decode(raw)), width=22*mm, height=18*mm)
+        except Exception:
+            pass
+    centered_small = ParagraphStyle("DaviHeaderCentered", parent=styles["small"], alignment=TA_CENTER)
+    text = [Paragraph(escape(name).upper(), styles["title"])]
+    text.extend(Paragraph(escape(line), centered_small) for line in address_lines)
+    if subtitle:
+        text.append(Paragraph(escape(subtitle), centered_small))
+    table = Table([[logo_flowable, text, logo_flowable]], colWidths=[30*mm, None, 30*mm])
+    table.setStyle(TableStyle([
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LINEBELOW",(0,0),(-1,-1),1.8,colors.HexColor("#176B3A")),
+        ("LINEABOVE",(0,0),(-1,-1),1.0,colors.HexColor("#2E8B57")),
+        ("BOTTOMPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),3),
+        ("LEFTPADDING",(0,0),(-1,-1),4),
+        ("RIGHTPADDING",(0,0),(-1,-1),4),
+    ]))
+    result = [table, Spacer(1, 5)]
+    if str(title or "").strip():
+        result.append(Paragraph(escape(title), styles["subtitle"]))
+    return result
+
+def _shell(title, name, role, body, school_id=None):
+    # Sidebar visibility follows the same permission vocabulary enforced by
+    # protected routes. Super Admin remains on platform-level navigation.
+    if role == "super_admin":
+        nav = [
+            ("/app",_modern_icon("dashboard"),"Platform Overview",None),
+            ("/schools/manage",_modern_icon("school"),"Manage Schools",None),
+            ("/account/change-password",_modern_icon("key"),"My Account",None),
+        ]
+    else:
+        nav = [
+            ("/app",_modern_icon("dashboard"),"Overview",None),
+            ("/app/students",_modern_icon("students"),"Students","students.view"),
+            ("/app/staff",_modern_icon("staff"),"Staff & Teachers","staff.view"),
+            ("/app/academics",_modern_icon("academics"),"Academics","marks.view"),
+            ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
+            ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
+            ("/app/finance",_modern_icon("finance"),"Fees & Finance","fees.view"),
+            ("/app/accounting",_modern_icon("accounting"),"Accounting","finance.view"),
+            ("/app/announcements",_modern_icon("announcement"),"Announcements","communications.view"),
+            ("/app/users",_modern_icon("users"),"Users","users.manage"),
+            ("/app/roles",_modern_icon("shield"),"Roles & Permissions","settings.manage"),
+            ("/app/school-settings",_modern_icon("settings"),"School Settings","settings.view"),
+            ("/app/audit",_modern_icon("audit"),"Audit Trail","audit.view"),
+        ]
+        if role not in ("school_admin","registrar") and school_id:
+            con = _db()
+            try:
+                cur = con.cursor()
+                nav = [item for item in nav if item[3] is None or _permission_enabled(cur, int(school_id), role, item[3])]
+            finally:
+                con.close()
+    # Teachers receive a focused teaching workspace with only teacher-facing destinations.
+    teacher_locked = (role == "teacher")
+    if teacher_locked:
+        teacher_nav = [
+            ("/app",_modern_icon("dashboard"),"Overview"),
+            ("/app#teacher-classes",_modern_icon("school"),"My Classes"),
+            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects"),
+            ("/app/academics/marks",_modern_icon("marks"),"Record Marks"),
+            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
+        ]
+        # Keep the entry visible in every teacher workspace. The page itself
+        # verifies the teacher's current class-teacher assignment before showing class data.
+        teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
+        teacher_nav.insert(5,("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring"))
+        links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
+    else:
+        links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
+    initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
+    if teacher_locked:
+        avatar_html = "<div class='avatar-wrap' id='teacherProfileMenu'><button type='button' class='avatar' id='teacherAvatarButton' aria-label='Open account menu' aria-expanded='false' onclick='toggleTeacherProfileMenu(event)'>" + escape(initials) + "</button><div class='logout-tab' id='teacherLogoutTab'><a href='/logout'>Log out</a></div></div>"
+    else:
+        avatar_html = "<div class='avatar'>" + escape(initials) + "</div>"
+    return f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{escape(title)} · DaviSchool</title>
+<style>
+*{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#EAF3E8;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
+.app{{display:flex;min-height:100vh}}.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;padding:11px 12px}}.teacher-portal .nav:hover,.teacher-portal .nav:focus-visible{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a}}.teacher-portal .nav.active{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a;font-weight:900}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
+.sidebar-brand{{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;color:#fff}}.sidebar-login-logo{{width:48px;height:48px;min-width:48px;border-radius:13px;background:#176B3A;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.12)}}.sidebar-login-logo .davi-mark{{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#176B3A;font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;overflow:visible}}.sidebar-login-logo .davi-mark:before{{content:'D';position:absolute;left:50%;top:50%;transform:translate(-50%,-53%) skew(-7deg);font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.08);z-index:1}}.sidebar-login-logo .davi-mark .d-letter{{display:none}}.sidebar-login-logo .davi-mark:after{{content:'';display:none}}.sidebar-brand-title{{font-size:16px;font-weight:900;line-height:1.15;letter-spacing:-.2px;color:#fff;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center}}.brand{{font-size:17px;font-weight:900;color:white;padding:8px 10px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;line-height:1.15}}.brand-logo{{width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.16)}}.brand-logo .davi-mark{{width:24px;height:24px;border-width:4px;border-left-width:5px;border-radius:5px 13px 13px 5px}}.brand-logo .davi-mark:after{{height:6px}}.brand small{{display:none}}
+.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
+.main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}.top .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:#176B3A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;line-height:1;border:0;box-shadow:0 2px 7px rgba(23,107,58,.22)}}
+.teacher-portal .avatar-wrap{{position:relative}}.teacher-portal .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;border:0;cursor:pointer;font-family:inherit}}.teacher-portal .avatar-wrap .logout-tab{{position:absolute;top:calc(100% + 8px);right:0;min-width:120px;background:#fff;border:1px solid #d8e3f0;border-radius:10px;box-shadow:0 10px 24px #00000018;padding:5px;display:none;z-index:1100}}.teacher-portal .avatar-wrap.open .logout-tab{{display:block}}.teacher-portal .logout-tab a{{display:block;padding:9px 12px;border-radius:7px;color:#172033;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap}}.teacher-portal .logout-tab a:hover,.teacher-portal .logout-tab a:focus-visible{{background:#176B3A;color:#fff}}
+.top-system-title{{font-size:18px;font-weight:900;color:#176B3A;line-height:1.1;margin-bottom:2px}}.top-welcome{{font-size:15px;color:#172033;line-height:1.15}}.page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:22px 0}}.card{{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:18px;box-shadow:0 2px 8px #00000005}}.kpi{{font-size:28px;font-weight:900;margin-top:10px}}.label{{font-size:11px;color:#64748b;text-transform:uppercase;font-weight:800}}
+.section{{margin-top:18px}}.section h2{{font-size:16px;margin:0 0 12px}}.actions{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative;z-index:1}}.action{{display:block;position:relative;z-index:2;background:#C8E6C9;border:1px solid #A5D6A7;border-radius:14px;padding:15px;text-decoration:none;color:#1f3b2a;font-weight:800;font-size:13px;cursor:pointer;pointer-events:auto}}.tile{{background:#fff;border:1px solid #e2ebe3;color:#1f3b2a}}.action:hover,.action:focus-visible,.tile:hover,.tile:focus-visible{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important;box-shadow:0 6px 16px #176B3A33;transform:translateY(-1px)}}.action:hover small,.action:focus-visible small,.tile:hover small,.tile:focus-visible small{{color:#fff!important}}.action,.tile{{transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}}.actions > .action{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:105px}}.action span{{font-size:21px;display:block;margin-bottom:8px}}.actions > .action small{{display:block;text-align:center}}
+table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}}.audit-table-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;border-radius:14px}}.audit-table-scroll table{{min-width:720px;margin:0}}th,td{{padding:12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:12px}}th{{background:#f8fafc;color:#64748b;font-size:10px;text-transform:uppercase}}
+.ds-action-cell{{position:relative;min-width:88px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}}
+.ds-action-cell:not(.ds-action-open)>*{{opacity:0;visibility:hidden;pointer-events:none;transform:scale(.98)}}
+.ds-action-cell.ds-action-open{{background:#176B3A!important;color:#fff!important;border-color:#176B3A!important}}
+.ds-action-cell.ds-action-open>*{{opacity:1;visibility:visible;pointer-events:auto;transform:none}}
+.ds-action-cell>*{{transition:opacity .12s ease,visibility .12s ease,transform .12s ease}}
+.correction-subject-row{{cursor:pointer;transition:background .15s ease,box-shadow .15s ease}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4!important;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row.selected .ds-action-cell{{background:#176B3A!important;color:#fff!important}}.correction-subject-row.selected .ds-action-cell>*{{opacity:1!important;visibility:visible!important;pointer-events:auto!important;transform:none!important}}
+.ds-action-cell.ds-action-open .action{{background:#fff!important;color:#176B3A!important;border-color:#fff!important;box-shadow:none!important}}
+.ds-action-cell.ds-action-open .action:hover,.ds-action-cell.ds-action-open .action:focus-visible{{background:#0F4D2A!important;color:#fff!important;border-color:#0F4D2A!important}}
+@media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
+@media(max-width:600px){{.side{{width:176px!important;max-width:70vw;z-index:1201;box-shadow:8px 0 28px rgba(0,0,0,.18)}}.main{{margin-left:0!important;width:100%;min-width:0}}.sidebar-hidden .side{{transform:translateX(-105%);pointer-events:none}}.sidebar-open:not(.sidebar-hidden)::after{{content:'';position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1200;pointer-events:none}}.top{{z-index:1202;padding:0 14px;position:sticky}}.sidebar-toggle{{position:relative;z-index:1300;pointer-events:auto;touch-action:manipulation}}.page{{width:100%;min-width:0}}.actions > .academic-manager-tile[href="/app/academics/submission-tracker"]{{grid-column:1 / -1;min-height:105px}}.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:0!important}}.side{{width:176px!important;max-width:70vw!important;flex:0 0 176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
+</style></head><body class='{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
+<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+// Shared workspace performance helpers: warm likely navigation targets on intent,
+// and prevent accidental double-submits without changing form payloads or routes.
+(function(){{
+  var warmed=Object.create(null);
+  function eligible(link){{
+    if(!link || !link.href || link.target==='_blank' || link.hasAttribute('download'))return false;
+    var raw=link.getAttribute('href')||'';
+    if(!raw || raw.charAt(0)==='#' || /^javascript:/i.test(raw))return false;
+    try{{
+      var u=new URL(link.href,window.location.href);
+      if(u.origin!==window.location.origin || (u.protocol!=='http:'&&u.protocol!=='https:'))return false;
+      if(/\\/(logout|login)(\\/|$)/i.test(u.pathname))return false;
+      if(/\\.(pdf|csv|xlsx?|zip)(?:$)/i.test(u.pathname))return false;
+      if(u.search && u.searchParams.has('download'))return false;
+      return true;
+    }}catch(e){{return false;}}
+  }}
+  function warm(link){{
+    if(!eligible(link))return;
+    var url=link.href;
+    if(warmed[url])return;
+    warmed[url]=true;
+    try{{
+      var hint=document.createElement('link');
+      hint.rel='prefetch';hint.href=url;hint.as='document';
+      document.head.appendChild(hint);
+    }}catch(e){{}}
+  }}
+  document.addEventListener('pointerover',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(link && (!event.relatedTarget || !link.contains(event.relatedTarget)))warm(link);
+  }},{{passive:true}});
+  document.addEventListener('focusin',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(link)warm(link);
+  }});
+  // Give immediate feedback for every in-app link, including Academic Manager
+  // tiles, sidebar navigation, dashboard cards and ordinary page links.
+  document.addEventListener('click',function(event){{
+    if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!eligible(link))return;
+    link.setAttribute('aria-busy','true');
+    link.classList.add('ds-navigating');
+  }},true);
+  document.addEventListener('submit',function(event){{
+    var form=event.target;
+    if(!form || !form.tagName || form.tagName.toLowerCase()!=='form')return;
+    if(form.matches('.marks-filter-form,[data-allow-repeat-submit="true"]'))return;
+    if(form.dataset.daviSubmitting==='1'){{
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }}
+    form.dataset.daviSubmitting='1';
+    // Give immediate feedback without disabling controls or changing submitted values.
+    form.setAttribute('aria-busy','true');
+    var submitter=event.submitter;
+    if(submitter && submitter.tagName==='BUTTON'){{
+      submitter.setAttribute('aria-busy','true');
+      submitter.classList.add('ds-processing');
+
+    }}
+  }},true);
+  window.addEventListener('pageshow',function(){{
+    document.querySelectorAll('form[data-davi-submitting="1"]').forEach(function(form){{
+      delete form.dataset.daviSubmitting;
+      form.removeAttribute('aria-busy');
+    }});
+    document.querySelectorAll('button.ds-processing').forEach(function(button){{
+      button.classList.remove('ds-processing');
+      button.removeAttribute('aria-busy');
+    }});
+    document.querySelectorAll('a.ds-navigating').forEach(function(link){{
+      link.classList.remove('ds-navigating');
+      link.removeAttribute('aria-busy');
+    }});
+  }});
+  if(!document.getElementById('davi-submit-feedback-style')){{
+    var style=document.createElement('style');
+    style.id='davi-submit-feedback-style';
+    style.textContent='.ds-processing{{opacity:.78;cursor:progress!important}}button[aria-busy="true"]{{pointer-events:none}}button.ds-processing::after{{content:" …"}}.ds-navigating{{cursor:progress!important;opacity:.76;transition:opacity .08s ease}}a.ds-navigating{{pointer-events:none}}';
+    document.head.appendChild(style);
+  }}
+}})();
+window.selectCorrectionSubject=function(row,event){{
+  if(!row)return;
+  if(event&&event.target&&event.target.closest&&event.target.closest('a,button,input,select,textarea,form'))return;
+  document.querySelectorAll('.correction-subject-row.selected').forEach(function(other){{
+    if(other!==row){{
+      other.classList.remove('selected');
+      var otherAction=other.querySelector('.ds-action-cell');
+      if(otherAction){{otherAction.classList.remove('ds-action-open');otherAction.setAttribute('aria-expanded','false');}}
+    }}
+  }});
+  var was=row.classList.contains('selected');
+  row.classList.toggle('selected',!was);
+  var action=row.querySelector('.ds-action-cell') || row.lastElementChild;
+  if(action){{
+    action.classList.toggle('ds-action-open',!was);
+    action.setAttribute('aria-expanded',!was?'true':'false');
+  }}
+}};
+function setupDaviActionCells(){{
+  document.querySelectorAll('table').forEach(function(table){{
+    var headerRow=table.querySelector('thead tr');
+    if(!headerRow)return;
+    var headers=Array.prototype.slice.call(headerRow.children);
+    var actionIndex=-1;
+    headers.some(function(header,index){{
+      if(String(header.textContent||'').trim().toLowerCase()==='action'){{
+        actionIndex=index;
+        return true;
+      }}
+      return false;
+    }});
+    if(actionIndex<0)return;
+    table.querySelectorAll('tbody tr').forEach(function(row){{
+      var cells=row.children;
+      if(!cells || cells.length<=actionIndex)return;
+      var cell=cells[actionIndex];
+      if(cell.dataset.daviActionToggle==='1')return;
+      cell.dataset.daviActionToggle='1';
+      cell.classList.add('ds-action-cell');
+      cell.setAttribute('aria-expanded','false');
+      cell.addEventListener('click',function(event){{
+        if(event.target.closest && event.target.closest('a,button,input,select,textarea'))return;
+        var open=!cell.classList.contains('ds-action-open');
+        table.querySelectorAll('.ds-action-cell.ds-action-open').forEach(function(other){{
+          if(other!==cell){{
+            other.classList.remove('ds-action-open');
+            other.setAttribute('aria-expanded','false');
+          }}
+        }});
+        cell.classList.toggle('ds-action-open',open);
+        cell.setAttribute('aria-expanded',open?'true':'false');
+      }});
+    }});
+  }});
+}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupDaviActionCells);
+else setupDaviActionCells();
+}})();</script><script>(function(){{
+  function applySidebarState(hidden){{
+    try{{
+      document.body.classList.toggle('sidebar-hidden', !!hidden);
+      document.body.classList.toggle('sidebar-open', !hidden);
+    }}catch(e){{}}
+    var b=document.getElementById('sidebarToggle');
+    if(b){{b.setAttribute('aria-label',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('title',hidden?'Show sidebar':'Hide sidebar');b.setAttribute('aria-expanded',hidden?'false':'true');}}
+  }}
+  function toggleSidebar(){{
+    var hidden=!document.body.classList.contains('sidebar-hidden');
+    applySidebarState(hidden);
+    try{{localStorage.setItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }',hidden?'1':'0');}}catch(e){{}}
+  }}
+  window.toggleSidebar=toggleSidebar;
+  function initSidebar(){{
+    try{{
+      var mobile=window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+      var saved=localStorage.getItem('{ "davischool_teacher_sidebar_hidden" if teacher_locked else "davischool_sidebar_hidden" }')==='1';
+      applySidebarState(mobile || saved);
+    }}catch(e){{applySidebarState(!!(window.matchMedia && window.matchMedia('(max-width: 760px)').matches));}}
+  }}
+  // Delegate from document so the control keeps working after Academic Manager
+  // tile navigation replaces the document using the prefetched HTML cache.
+  function handleSidebarToggle(event){{
+    var target=event.target;
+    var button=target&&target.closest?target.closest('[data-sidebar-toggle="1"]'):null;
+    if(!button)return false;
+    if(event.cancelable)event.preventDefault();
+    event.stopPropagation();
+    if(event.stopImmediatePropagation)event.stopImmediatePropagation();
+    toggleSidebar();
+    return true;
+  }}
+  // Pointer events are more reliable than synthesized touch clicks in some
+  // hosted mobile webviews; retain click handling for mouse and keyboard users.
+  var pointerHandled=false;
+  document.addEventListener('pointerup',function(event){{
+    pointerHandled=handleSidebarToggle(event);
+  }},true);
+  document.addEventListener('click',function(event){{
+    if(pointerHandled){{pointerHandled=false;return;}}
+    handleSidebarToggle(event);
+  }},true);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initSidebar,{{once:true}});else initSidebar();
+}})();</script>{"<script>function toggleTeacherProfileMenu(event){{if(event)event.stopPropagation();var wrap=document.getElementById('teacherProfileMenu');var button=document.getElementById('teacherAvatarButton');if(!wrap||!button)return;var open=wrap.classList.toggle('open');button.setAttribute('aria-expanded',open?'true':'false')}}document.addEventListener('click',function(event){{var wrap=document.getElementById('teacherProfileMenu');if(!wrap)return;if(!wrap.contains(event.target)){{wrap.classList.remove('open');var button=document.getElementById('teacherAvatarButton');if(button)button.setAttribute('aria-expanded','false')}}}});</script>" if teacher_locked else ""}<script>(function(){{
+  // Warm the exact browser Back destinations in the HTTP cache while the
+  // current page is being viewed. This keeps the existing two-step history
+  // rule intact but makes Back return much faster.
+  try{{
+    var targets=[];
+    function addTarget(value){{
+      if(!value)return;
+      try{{
+        var u=new URL(value,window.location.href);
+        if(u.origin!==window.location.origin)return;
+        if(u.protocol!=='http:' && u.protocol!=='https:')return;
+        var s=u.toString();
+        if(targets.indexOf(s)<0)targets.push(s);
+      }}catch(e){{}}
+    }}
+    // The exact page that opened this page is the highest-priority Back target.
+    addTarget(document.referrer);
+    // The two-step workspace is also warmed so the second Back is immediate.
+    var path=window.location.pathname;
+    var roots=['/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/app'];
+    var root='/app';
+    roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
+    var u=new URL(window.location.href);
+    // Warm the exact same-page unfiltered URL as well as the workspace root.
+    // Back from a filtered display restores this URL and currently reloads it
+    // to render the default data; prefetching only the root missed that request.
+    var unfilteredCurrent=new URL(u.toString());
+    Array.from(unfilteredCurrent.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfilteredCurrent.searchParams.delete(k);}});
+    if(unfilteredCurrent.pathname===path && u.searchParams.size>0)addTarget(unfilteredCurrent.toString());
+    var unfilteredRoot=new URL(u.toString());
+    unfilteredRoot.pathname=root;
+    Array.from(unfilteredRoot.searchParams.keys()).forEach(function(k){{if(k!=='ds_tab')unfilteredRoot.searchParams.delete(k);}});
+    addTarget(unfilteredRoot.toString());
+    var originKey='davischool-two-step-origin:'+root;
+    try{{addTarget(sessionStorage.getItem(originKey));}}catch(e){{}}
+    targets.slice(0,3).forEach(function(url){{
+      var link=document.createElement('link');
+      link.rel='prefetch';
+      link.href=url;
+      link.as='document';
+      document.head.appendChild(link);
+      // Native prefetch is low priority; do not issue a duplicate fetch for the same page.
+    }});
+  }}catch(e){{}}
+}})();</script></script><script>(function(){{let lastPing=0;let lastActivity=Date.now();const PING_EVERY=60000;const ACTIVE_WINDOW=120000;function markActivity(){{lastActivity=Date.now();ping(true);}}function ping(force){{const now=Date.now();if(!force && now-lastActivity>ACTIVE_WINDOW)return;if(now-lastPing<60000)return;lastPing=now;try{{fetch('/app/session-keepalive',{{method:'GET',credentials:'same-origin',cache:'no-store'}}).catch(function(){{}});}}catch(e){{}}}}['click','dblclick','mousedown','pointerdown','touchstart','touchmove','keydown','input','change','scroll','wheel'].forEach(function(ev){{document.addEventListener(ev,markActivity,{{passive:true}});}});setInterval(function(){{if(Date.now()-lastActivity<=ACTIVE_WINDOW)ping(false);}},PING_EVERY);}})();</script><script>(function(){{
+// Shared route classifier used by every filter-history handler in this page.
+function isSystemPath(path){{
+  path=String(path||'/').split('#')[0].replace(/\\/+$/,'')||'/';
+  return path==='/app'||path.indexOf('/app/')===0||path==='/school'||path.indexOf('/school/')===0||path==='/schools'||path.indexOf('/schools/')===0||path==='/super'||path.indexOf('/super/')===0||path==='/portal'||path.indexOf('/portal/')===0||path==='/dashboard'||path.indexOf('/dashboard/')===0||path==='/teacher'||path.indexOf('/teacher/')===0||path==='/student'||path.indexOf('/student/')===0||path==='/parent'||path.indexOf('/parent/')===0||path==='/account'||path.indexOf('/account/')===0;
+}}
+// Two-step browser history rule for the school workspace.
+(function(){{
+  try{{
+    var WORKSPACES=['/app','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/schools/manage','/super/global-control/dashboard','/account/change-password'];
+    function cleanPath(path){{path=String(path||'/').split('#')[0];if(path.length>1)path=path.replace(/\\/+$/,'');return path;}}
+    function workspace(path){{path=cleanPath(path);var best='/';WORKSPACES.forEach(function(root){{if(path===root || (root!=='/app' && path.indexOf(root+'/')===0) || (root==='/app' && path.indexOf('/app/')===0)){{if(root.length>best.length)best=root;}}}});return best;}}
+    function isFiltered(url){{var u=url instanceof URL?url:new URL(url,window.location.href);return Array.from(u.searchParams.keys()).some(function(k){{return k!=='ds_tab';}});}}
+    function unfilteredUrl(url){{var u=new URL(url,window.location.href);var keep=u.searchParams.get('ds_tab');u.search='';if(keep!==null)u.searchParams.set('ds_tab',keep);return u.toString();}}
+    function isSystemPath(path){{path=cleanPath(path);return path==='/app'||path.indexOf('/app/')===0||path==='/school'||path.indexOf('/school/')===0||path==='/schools'||path.indexOf('/schools/')===0||path==='/super'||path.indexOf('/super/')===0||path==='/portal'||path.indexOf('/portal/')===0||path==='/dashboard'||path.indexOf('/dashboard/')===0||path==='/teacher'||path.indexOf('/teacher/')===0||path==='/student'||path.indexOf('/student/')===0||path==='/parent'||path.indexOf('/parent/')===0||path==='/account'||path.indexOf('/account/')===0;}}
+    var root=workspace(window.location.pathname);
+    var filterPathKey='davischool-filter-started:'+cleanPath(window.location.pathname);
+    var filterPendingKey='davischool-filter-pending:'+cleanPath(window.location.pathname);
+    var state=(history.state && typeof history.state==='object')?history.state:{{}};
+    var filterStarted=false,filterPending=false;
+    try{{filterStarted=sessionStorage.getItem(filterPathKey)==='1';filterPending=sessionStorage.getItem(filterPendingKey)==='1';}}catch(e){{}}
+    if(isSystemPath(window.location.pathname) && isFiltered(window.location.href)){{
+      var currentUrl=window.location.href;
+      if(filterPending || (!filterStarted && (state.daviHistoryStep!=='filtered' || state.daviWorkspace!==root))){{
+        history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root,daviFilterDefault:true}},'',unfilteredUrl(currentUrl));
+        history.pushState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
+      }}else{{
+        history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:root}},'',currentUrl);
+      }}
+      try{{sessionStorage.removeItem(filterPendingKey);sessionStorage.setItem(filterPathKey,'1');}}catch(e){{}}
+    }}else if(isSystemPath(window.location.pathname)){{
+      if(state.daviHistoryStep!=='workspace' || state.daviWorkspace!==root){{history.replaceState({{daviHistoryStep:'workspace',daviWorkspace:root}},'',window.location.href);}}
+      try{{sessionStorage.removeItem(filterPendingKey);sessionStorage.removeItem(filterPathKey);}}catch(e){{}}
+    }}
+    document.addEventListener('click',function(event){{
+      var link=event.target.closest?event.target.closest('a'):null;
+      if(!link || event.defaultPrevented || link.target==='_blank' || link.hasAttribute('download'))return;
+      if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var target;try{{target=new URL(link.href,window.location.href);}}catch(e){{return;}}
+      if(target.origin!==window.location.origin)return;
+      var currentRoot=workspace(window.location.pathname),targetRoot=workspace(target.pathname);
+      if(currentRoot==='/' || targetRoot==='/' || currentRoot!==targetRoot)return;
+      var currentPath=cleanPath(window.location.pathname),targetPath=cleanPath(target.pathname);
+      if(currentPath!==currentRoot && cleanPath(target.pathname)!==targetRoot){{event.preventDefault();window.location.replace(target.toString());}}
+    }},true);
+  }}catch(e){{console.warn('DaviSchool navigation handler:',e);}}
+}})();
+// Marks Corrections POST filters use an explicit, deterministic two-step history rule.
+// Do not rely on sessionStorage to decide whether the first filter has happened.
+// The URL itself is the source of truth:
+//   unfiltered workspace -> duplicate unfiltered history entry -> filtered page
+// Therefore Back #1 always returns to the unfiltered workspace and Back #2 to
+// the page that opened Marks Corrections. Further filters replace the current
+// filtered entry instead of creating a chain.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  if(!form.matches('.marks-filter-form'))return;
+  if(form.hasAttribute('data-no-history-filter'))return;
+  try{{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin || !isSystemPath(url.pathname))return;
+
+    var current=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    current.searchParams.forEach(function(value,key){{
+      if(key!=='ds_tab')hasRealCurrentQuery=true;
+    }});
+
+    event.preventDefault();
+    var data=new FormData(form);
+
+    fetch(url.toString(),{{
+      method:'POST',
+      body:data,
+      credentials:'same-origin',
+      redirect:'follow',
+      cache:'no-store'
+    }}).then(function(response){{
+      var finalUrl=response.url || url.toString();
+
+      if(!hasRealCurrentQuery){{
+        // We are on the real, unfiltered Marks Corrections workspace.
+        // First create a second copy of THIS exact workspace entry. Then
+        // perform a normal navigation to the filtered result. The browser
+        // history becomes:
+        //   Academics -> Marks Corrections (default) -> Marks Corrections (filtered)
+        // so Back is guaranteed to take two steps.
+        try{{sessionStorage.setItem('davischool-filter-started:'+window.location.pathname,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
+        window.location.replace(finalUrl);
+      }}else{{
+        // Already filtered: changing filters must not add another Back step.
+        history.replaceState({{daviHistoryStep:'filtered',daviWorkspace:'/app/academics/marks-corrections',daviFilterStep:true}},'',finalUrl);
+        try{{sessionStorage.setItem('davischool-filter-started:'+window.location.pathname,'1');sessionStorage.removeItem('davischool-filter-pending:'+window.location.pathname);}}catch(e){{}}
+        window.location.reload();
+      }}
+    }}).catch(function(){{form.submit();}});
+  }}catch(e){{form.submit();}}
+}},true);
+
+// GET filter/search forms use a two-stage history rule across the system.
+// The first filter/search action creates ONE history entry so the original
+// unfiltered page remains the Back destination. Further filter/search changes
+// replace that filtered entry, preventing a chain of intermediate displays.
+// Ordinary links to records/pages are intentionally left as normal navigation.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='get')return;
+  if(form.hasAttribute('data-native-get'))return;
+  if(form.hasAttribute('data-no-history-filter'))return;
+  try{{
+    var action=form.getAttribute('action') || window.location.href;
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin || !isSystemPath(url.pathname)){{form.submit();return;}}
+    if(url.pathname!==window.location.pathname){{form.submit();return;}}
+    var data=new FormData(form);
+    var params=new URLSearchParams();
+    data.forEach(function(value,key){{params.append(key,value);}});
+    url.search=params.toString();
+    var pathKey='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasRealCurrentQuery=true;}});
+    var started=false;
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(pathKey);
+      started=sessionStorage.getItem(pathKey)==='1';
+    }}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(pathKey,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
+      window.location.replace(url.toString());
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{form.submit();}}
+}},true);
+
+// Enforce the two-step Back rule without mistaking filter history for leaving the tile.
+(function(){{
+  var originKey='davischool-two-step-origin-url';
+  var activeKey='davischool-two-step-active-url';
+  function isSystem(path){{
+    path=String(path||'/').split('#')[0].replace(/\\/+$/,'')||'/';
+    return /^\\/(app|school|schools|super|portal|dashboard|teacher|student|parent|account)(\\/|$)/.test(path);
+  }}
+  function normalizedUrl(value){{
+    var u=new URL(value,window.location.href);
+    u.hash='';
+    return u.toString();
+  }}
+  document.addEventListener('click',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!link||link.target==='_blank'||link.hasAttribute('download')||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    try{{
+      var target=new URL(link.href,window.location.href);
+      if(target.origin!==window.location.origin||!isSystem(target.pathname)||normalizedUrl(target.href)===normalizedUrl(window.location.href))return;
+      sessionStorage.setItem(originKey,normalizedUrl(window.location.href));
+      sessionStorage.setItem(activeKey,normalizedUrl(target.href));
+    }}catch(e){{}}
+  }},true);
+  window.addEventListener('popstate',function(event){{
+    try{{
+      // This is the first Back: the filter helper's synthetic default entry.
+      // Keep the originating tile marker so the next Back can return to its parent.
+      if(event&&event.state&&event.state.daviFilterDefault)return;
+      var active=sessionStorage.getItem(activeKey);
+      var origin=sessionStorage.getItem(originKey);
+      if(!active||!origin)return;
+      var current=normalizedUrl(window.location.href);
+      var activeUrl=new URL(active,window.location.href);
+      var currentUrl=new URL(current,window.location.href);
+      if(currentUrl.pathname===activeUrl.pathname)return;
+      if(current===origin){{
+        sessionStorage.removeItem(activeKey);
+        sessionStorage.removeItem(originKey);
+        return;
+      }}
+      // Back left the tile page instead of its originating workspace. Restore
+      // the exact parent URL (including its tab/session query parameters).
+      sessionStorage.removeItem(activeKey);
+      sessionStorage.removeItem(originKey);
+      window.location.replace(origin);
+    }}catch(e){{}}
+  }});
+}})();
+// Warm the server-rendered default view while the filtered view is open.
+// Back can then reuse the browser's prefetched response instead of starting cold.
+try{{
+  if(isSystemPath(window.location.pathname) && isFiltered(window.location.href)){{
+    var defaultUrl=unfilteredUrl(window.location.href);
+    var prefetch=document.createElement('link');
+    prefetch.rel='prefetch';prefetch.href=defaultUrl;prefetch.as='document';
+    document.head.appendChild(prefetch);
+  }}
+}}catch(e){{}}
+// When the user returns with Back, the next filter cycle must start from the
+// unfiltered page again. Clear filter-history markers for the current page.
+window.addEventListener('popstate',function(event){{
+  try{{
+    sessionStorage.removeItem('davischool-filter-started:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-filter-pending:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-post-filter:'+window.location.pathname);
+    sessionStorage.removeItem('davischool-marksheet-filter-started');
+  }}catch(e){{}}
+  // pushState entries share the rendered document. Reload when Back reaches the
+  // synthetic default entry so the server renders the genuinely unfiltered data.
+  if(event && event.state && event.state.daviFilterDefault){{
+    var hasFilter=false;
+    try{{new URL(window.location.href).searchParams.forEach(function(value,key){{if(key!=='ds_tab')hasFilter=true;}});}}catch(e){{}}
+    if(!hasFilter)window.location.reload();
+  }}
+}});
+// Query-string links on the same page are treated as filter/display changes.
+// The first such link preserves the unfiltered page; subsequent changes replace
+// the current filtered display instead of creating additional Back entries.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a') : null;
+  if(!link || event.defaultPrevented)return;
+  if(link.hasAttribute('data-native-get') || link.hasAttribute('data-no-history-filter'))return;
+  if(link.target==='_blank' || link.hasAttribute('download'))return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin!==window.location.origin || url.pathname!==window.location.pathname || !url.search)return;
+    if(!isSystemPath(url.pathname))return;
+    var key='davischool-filter-started:'+window.location.pathname;
+    var currentUrl=new URL(window.location.href);
+    var hasRealCurrentQuery=false;
+    currentUrl.searchParams.forEach(function(value,keyName){{if(keyName!=='ds_tab')hasRealCurrentQuery=true;}});
+    var started=false;
+    try{{
+      if(!hasRealCurrentQuery)sessionStorage.removeItem(key);
+      started=sessionStorage.getItem(key)==='1';
+    }}catch(e){{}}
+    event.preventDefault();
+    if(!started){{
+      try{{sessionStorage.setItem(key,'1');sessionStorage.setItem('davischool-filter-pending:'+window.location.pathname,'1');}}catch(e){{}}
+      window.location.replace(url.toString());
+    }}else{{
+      window.location.replace(url.toString());
+    }}
+  }}catch(e){{}}
+}},true);
+
+// MarkSheet pagination changes the displayed page within the same workspace.
+// Replace that navigation entry so Back does not replay every MarkSheet page
+// visited while browsing the student list.
+document.addEventListener('click',function(event){{
+  var link=event.target.closest ? event.target.closest('a.marksheet-page-nav') : null;
+  if(!link || event.defaultPrevented)return;
+  try{{
+    var url=new URL(link.href,window.location.href);
+    if(url.origin===window.location.origin){{event.preventDefault();window.location.replace(url.toString());}}
+  }}catch(e){{}}
+}},true);
+// Keep routine school data-entry saves from filling the phone/browser Back stack.
+// A successful POST is followed by a normal page load, but replace that entry
+// so repeated saves on the same workspace do not require dozens of Back presses.
+document.addEventListener('submit',function(event){{
+  var form=event.target;
+  if(!form || String(form.method||'get').toLowerCase()!=='post')return;
+  if(form.hasAttribute('data-native-post'))return;
+  var submitter=event.submitter;
+  var action=(submitter && (submitter.getAttribute('formaction') || submitter.formAction)) || form.getAttribute('action') || window.location.href;
+  var method=(submitter && (submitter.getAttribute('formmethod') || submitter.formMethod)) || form.getAttribute('method') || 'get';
+  try{{
+    var url=new URL(action,window.location.href);
+    if(url.origin!==window.location.origin)return;
+    if(!isSystemPath(url.pathname))return;
+    var path=url.pathname.toLowerCase();
+    if(path==='/app/academics/overall-grading/add' || path==='/app/report-cards/overall-grade-comments' || path.indexOf('/app/academics/overall-grading/delete/')===0 || path==='/app/academics/marks/save' || path==='/app/academics/marks/save-draft' || path==='/app/academics/marks/delete' || path==='/app/academics/marks/finalize' || path==='/app/academics/marks-corrections/lock' || path==='/app/academics/marks/unfinalize' || path==='/app/academics/marks-corrections/approve' || path==='/app/academics/marks-corrections/reject' || path==='/app/academics/marks-corrections/clear' || path==='/app/users' || path==='/app/users/add' || path==='/app/exams' || path==='/app/exams/add' || path==='/app/report-card-settings' || path==='/app/classes/class-teacher' || path==='/app/classes/add' || path==='/app/academics/grading/add' || path==='/app/academics/assessments/add' || path==='/app/academics/assessments/edit' || path==='/app/academics/assessments/delete' || path.indexOf('/app/academics/grading/edit/')===0 || path.indexOf('/app/academics/grading/delete/')===0 || path.indexOf('/app/academics/allocations/delete/')===0 || path.indexOf('/app/academics/allocations/edit/')===0 || path.indexOf('/app/subjects/delete/')===0 || path.indexOf('/app/exams/delete/')===0 || path.indexOf('/app/exams/edit/')===0 || path.indexOf('/app/classes/delete/')===0 || path.indexOf('/app/classes/edit/')===0 || path==='/app/subjects/add' || path==='/app/students/add' || path==='/app/staff/add' || path.indexOf('/app/students/edit/')===0)return;
+    if(path.indexOf('/pdf')===0 || path.indexOf('/print')===0 || path.indexOf('/download')===0 || path.indexOf('/export')===0 || form.target==='_blank' || form.hasAttribute('download'))return;
+    event.preventDefault();
+    var data=new FormData(form);
+    if(submitter && submitter.name && !data.has(submitter.name))data.append(submitter.name,submitter.value||'');
+    fetch(url.toString(),{{method:String(method).toUpperCase(),body:data,credentials:'same-origin',redirect:'follow',headers:{{'X-DaviSchool-History':'replace'}}}})
+      .then(function(response){{
+        if(!response.ok){{window.location.href=response.url||url.toString();return;}}
+        window.location.replace(response.url||url.toString());
+      }})
+      .catch(function(){{window.location.href=url.toString();}});
+  }}catch(e){{}}
+}},true);
+}})();</script></main></div></body></html>"""
+@router.get("/app/session-keepalive")
+def session_keepalive(request: Request):
+    """Refresh an active authenticated session when the user is interacting with the workspace."""
+    if "email" not in request.session:
+        return JSONResponse({"authenticated": False}, status_code=401)
+    request.session["_last_activity"] = datetime.now().timestamp()
+    return JSONResponse({"authenticated": True})
+
+def _school_session(request):
+    # Cache the authenticated school check for the lifetime of this request.
+    # This avoids repeated remote PostgreSQL round trips when page helpers
+    # call _school_session() more than once during one request.
+    cached = getattr(request.state, "davischool_school_session", None)
+    if cached is not None:
+        return cached
+    role = str(request.session.get("role", ""))
+    if "email" not in request.session or role not in ("school_admin", "registrar", "teacher"):
+        request.state.davischool_school_session = None
+        return None
+    sid = int(request.session.get("school_id") or 0)
+    if not sid:
+        request.state.davischool_school_session = None
+        return None
+    con = _db()
+    try:
+        school = con.execute("SELECT status FROM schools WHERE id=?", (sid,)).fetchone()
+    finally:
+        con.close()
+    status = str(school["status"] or "active").strip().lower() if school else "suspended"
+    if status not in ("active", "enabled"):
+        request.session.clear()
+        request.state.davischool_school_session = None
+        return None
+    request.state.davischool_school_session = sid
+    return sid
+
+def _audit(cur, school_id, request, action, details):
+    ts=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("INSERT INTO system_audit(school_id,user_email,action,details,timestamp) VALUES(?,?,?,?,?)",
+                (school_id,request.session.get("email",""),action,details,ts))
+
+def _is_school_admin_like(request):
+    """School-level administrator-equivalent roles retain separate account identities."""
+    return str(request.session.get("role","")) in ("school_admin","registrar")
+
+def _permission_enabled(cur, school_id, role, permission):
+    row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
+                    (school_id,role,permission)).fetchone()
+    return True if row is None else bool(int(row["enabled"] or 0))
+
+def _require_permission(request, school_id, permission):
+    """School Admin and Registrar share full school-level access; Super Admin remains platform-level."""
+    role=str(request.session.get("role",""))
+    # Registrar is a separate account identity, but has the same school-side
+    # capabilities as School Admin. This bypass applies only to school-module
+    # permissions and does not grant any Super Admin/platform-level routes.
+    if role in ("super_admin", "school_admin", "registrar"):
+        return True
+    cache=getattr(request.state,"davischool_permission_cache",None)
+    if cache is None:
+        cache={}
+        request.state.davischool_permission_cache=cache
+    key=(int(school_id),role,str(permission))
+    if key in cache:
+        return cache[key]
+    con=_db()
+    try:
+        allowed=_permission_enabled(con.cursor(),school_id,role,permission)
+    finally:
+        con.close()
+    cache[key]=allowed
+    return allowed
+
+def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None):
+    """Restrict teacher academic actions to their allocated class/subject."""
+    if str(request.session.get("role","")) != "teacher":
+        return True
+    teacher_id = request.session.get("teacher_id")
+    if not teacher_id:
+        return False
+    if subject_id:
+        current = cur.execute(
+            "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+            (school_id, teacher_id, class_id, subject_id)
+        ).fetchone()
+        if current:
+            return True
+        try:
+            _ensure_teacher_assignment_history_tables(cur)
+            if cur.execute(
+                "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? AND subject_id=? LIMIT 1",
+                (school_id, teacher_id, class_id, subject_id)
+            ).fetchone():
+                return True
+            # Allow the teacher's current allocation to follow the same active
+            # cohort back to a former class for historical review of this subject.
+            return bool(cur.execute("""SELECT 1
+                FROM teacher_allocations current_alloc
+                JOIN students st ON st.school_id=current_alloc.school_id
+                  AND st.class_id=current_alloc.class_id
+                JOIN marks historical_mark ON historical_mark.school_id=st.school_id
+                  AND historical_mark.student_id=st.id
+                  AND historical_mark.class_id=?
+                  AND historical_mark.subject_id=current_alloc.subject_id
+                WHERE current_alloc.school_id=? AND current_alloc.teacher_id=?
+                  AND current_alloc.subject_id=?
+                  AND lower(coalesce(st.status,'active'))='active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM student_graduations sg
+                    WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                  )
+                LIMIT 1""",(class_id,school_id,teacher_id,subject_id)).fetchone())
+        except Exception:
+            return False
+    current = cur.execute(
+        "SELECT 1 FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
+        (school_id, teacher_id, class_id)
+    ).fetchone()
+    if current:
+        return True
+    try:
+        _ensure_teacher_assignment_history_tables(cur)
+        return bool(cur.execute(
+            "SELECT 1 FROM teacher_allocation_history WHERE school_id=? AND teacher_id=? AND class_id=? LIMIT 1",
+            (school_id, teacher_id, class_id)
+        ).fetchone())
+    except Exception:
+        return False
+
+def _school_page(request, title, body):
+    sid=_school_session(request)
+    if not sid: return RedirectResponse("/")
+    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid))
+
+def _teacher_exam_cohort(cur, school_id, current_class_id, exam_year):
+    """Resolve current learners to the class they belonged to in a selected exam year."""
+    _ensure_student_promotion_cohort_tables(cur)
+    current_class_id=int(current_class_id)
+    try: exam_year=int(exam_year or 0)
+    except (TypeError,ValueError): exam_year=0
+    rows=cur.execute("""SELECT st.id student_id,
+        CASE WHEN ?>0 THEN COALESCE(
+          (SELECT h.from_class_id FROM student_class_history h
+           WHERE h.school_id=st.school_id AND h.student_id=st.id AND h.from_class_id IS NOT NULL
+             AND h.from_academic_year<=? AND h.to_academic_year>?
+           ORDER BY h.from_academic_year DESC,h.id DESC LIMIT 1),
+          (SELECT h.to_class_id FROM student_class_history h
+           WHERE h.school_id=st.school_id AND h.student_id=st.id AND h.to_class_id IS NOT NULL
+             AND h.to_academic_year<=?
+           ORDER BY h.to_academic_year DESC,h.id DESC LIMIT 1),
+          st.class_id
+        ) ELSE st.class_id END exam_class_id
+        FROM students st WHERE st.school_id=? AND st.class_id=?
+          AND lower(coalesce(st.status,'active'))='active'
+          AND NOT EXISTS(SELECT 1 FROM student_graduations g
+                         WHERE g.school_id=st.school_id AND g.student_id=st.id)
+        ORDER BY st.id""",
+        (exam_year,exam_year,exam_year,exam_year,school_id,current_class_id)).fetchall()
+    return [(int(r["student_id"]),int(r["exam_class_id"] or current_class_id)) for r in rows]
+
+
+@router.get("/app/class-teacher", response_class=HTMLResponse)
+def class_teacher_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app")
+    con=_db();cur=con.cursor()
+    if not _require_permission(request,sid,"class_teacher.view"):
+        con.close()
+        return HTMLResponse("Class Teacher access has been disabled by the School Admin.",403)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    _ensure_class_teacher_assignments_table(cur)
+    assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
+        FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+        WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
+    if not assignment:
+        con.close()
+        body="""<div class='page'><div class='card section'><h2>No class assigned</h2><div class='muted'>Your teacher profile is not currently assigned as a Class Teacher.</div></div></div>"""
+        return _school_page(request,"Students Register",body)
+    cid=int(assignment["class_id"])
+    _ensure_student_promotion_cohort_tables(cur)
+    # A final-class cohort remains in the same class row after graduation.
+    # Show only currently enrolled learners; archived graduates belong in the
+    # Graduation Records register, never in the active class-teacher register.
+    students=cur.execute("""SELECT s.id,s.admission_no,s.name,s.gender,s.parent_phone,s.status
+        FROM students s
+        WHERE s.school_id=? AND s.class_id=?
+          AND lower(coalesce(s.status,'active'))='active'
+          AND NOT EXISTS (
+              SELECT 1 FROM student_graduations g
+              WHERE g.school_id=s.school_id AND g.student_id=s.id
+          )
+        ORDER BY s.name""",(sid,cid)).fetchall()
+    con.close()
+    rows="".join(
+        f"<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['status'] or 'Active'))}</td></tr>"
+        for s in students
+    )
+    body=f"""<div class='page'>
+<div class='card section'><h2>Students Register ({len(students)})</h2><div style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Name</th><th>Gender</th><th>Status</th></tr></thead><tbody>{rows or "<tr><td colspan='4'>No currently enrolled students are assigned to this class.</td></tr>"}</tbody></table></div></div></div>"""
+    return _school_page(request,"Students Register",body)
+
+
+def _ensure_class_submission_followups_table(cur):
+    """Create and upgrade the follow-up log table on both fresh and existing databases."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS class_submission_followups(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        exam_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        class_teacher_id INTEGER NOT NULL,
+        subject_teacher_names TEXT,
+        followup_type TEXT NOT NULL DEFAULT 'Reminder',
+        note TEXT,
+        recorded_at TEXT NOT NULL
+    )""")
+    cur.execute("SELECT * FROM class_submission_followups LIMIT 0")
+    existing = {
+        str(col.name if hasattr(col, "name") else col[0]).lower()
+        for col in (cur.description or [])
+    }
+    # Older installations may already have the table but not all fields used
+    # by the follow-up form and activity log. Add only missing fields.
+    for column, definition in (
+        ("school_id", "INTEGER"),
+        ("class_id", "INTEGER"),
+        ("exam_id", "INTEGER"),
+        ("subject_id", "INTEGER"),
+        ("class_teacher_id", "INTEGER"),
+        ("subject_teacher_names", "TEXT"),
+        ("followup_type", "TEXT DEFAULT 'Reminder'"),
+        ("note", "TEXT"),
+        ("recorded_at", "TEXT"),
+    ):
+        if column in existing:
+            continue
+        cur.execute(
+            "ALTER TABLE class_submission_followups ADD COLUMN %s %s"
+            % (column, definition)
+        )
+
+@router.post("/app/class-monitoring/follow-up")
+def class_monitoring_follow_up(
+    request: Request,
+    exam_id: int = Form(...),
+    subject_id: int = Form(...),
+    followup_type: str = Form("Reminder"),
+    note: str = Form("")
+):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",status_code=303)
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id:
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        _ensure_student_promotion_cohort_tables(cur)
+        assignment=cur.execute("""SELECT a.class_id FROM class_teacher_assignments a
+            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
+        exam=cur.execute("SELECT id FROM exams WHERE school_id=? AND id=?",(sid,exam_id)).fetchone()
+        if not assignment or not exam:
+            return HTMLResponse("The class or examination could not be verified.",403)
+        class_id=int(assignment["class_id"])
+        _ensure_teacher_allocations_table(cur)
+        _ensure_teacher_assignment_history_tables(cur)
+        allowed=cur.execute("""SELECT 1 FROM teacher_allocations
+            WHERE school_id=? AND class_id=? AND subject_id=?
+            UNION ALL
+            SELECT 1 FROM teacher_allocation_history
+            WHERE school_id=? AND class_id=? AND subject_id=? LIMIT 1""",
+            (sid,class_id,subject_id,sid,class_id,subject_id)).fetchone()
+        if not allowed:
+            return HTMLResponse("This subject is not allocated to the assigned class.",403)
+        _ensure_teacher_assignment_history_tables(cur)
+        teacher_rows=cur.execute("""SELECT DISTINCT COALESCE(NULLIF(trim(t.name),''),NULLIF(trim(h.teacher_name),''),'Subject teacher') AS teacher_name
+            FROM teacher_allocations a LEFT JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
+            LEFT JOIN teacher_allocation_history h ON h.school_id=a.school_id AND h.class_id=a.class_id
+                AND h.subject_id=a.subject_id AND h.teacher_id=a.teacher_id
+            WHERE a.school_id=? AND a.class_id=? AND a.subject_id=?
+            UNION
+            SELECT DISTINCT COALESCE(NULLIF(trim(h.teacher_name),''),NULLIF(trim(t.name),''),'Subject teacher')
+            FROM teacher_allocation_history h LEFT JOIN teachers t ON t.id=h.teacher_id AND t.school_id=h.school_id
+            WHERE h.school_id=? AND h.class_id=? AND h.subject_id=?""",
+            (sid,class_id,subject_id,sid,class_id,subject_id)).fetchall()
+        teacher_names=", ".join(str(x["teacher_name"] or "") for x in teacher_rows if x["teacher_name"])
+        _ensure_class_submission_followups_table(cur)
+        kind=followup_type.strip().lower()
+        kind="Verbal follow-up" if kind=="verbal" else "Reminder"
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M")
+        cur.execute("""INSERT INTO class_submission_followups
+            (school_id,class_id,exam_id,subject_id,class_teacher_id,subject_teacher_names,followup_type,note,recorded_at)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid,class_id,exam_id,subject_id,teacher_id,teacher_names,kind,str(note or "").strip()[:500],now))
+        con.commit()
+    except Exception as exc:
+        con.rollback()
+        print("DAVISCHOOL CLASS MONITORING FOLLOW-UP WARNING:",repr(exc),flush=True)
+        return HTMLResponse("The follow-up could not be recorded. Please try again.",500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/class-monitoring?exam_id=%s&followup=recorded"%(exam_id),status_code=303)
+
+@router.get("/app/class-monitoring", response_class=HTMLResponse)
+def class_monitoring_page(request: Request):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/")
+    if str(request.session.get("role",""))!="teacher":
+        return RedirectResponse("/app",status_code=303)
+    teacher_id=int(request.session.get("teacher_id") or 0)
+    if not teacher_id:
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_class_teacher_assignments_table(cur)
+        _ensure_teacher_allocations_table(cur)
+        _ensure_teacher_assignment_history_tables(cur)
+        # Subject-teacher progress also reads the durable cohort and graduation snapshots.
+        # Ensure those tables exist before querying historical class membership.
+        _ensure_student_promotion_cohort_tables(cur)
+        assignment=cur.execute("""SELECT a.class_id,c.name class_name,c.level,c.stream
+            FROM class_teacher_assignments a
+            JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.teacher_id=? ORDER BY a.id DESC LIMIT 1""",(sid,teacher_id)).fetchone()
+        if not assignment:
+            # Subject teachers get an allocation-scoped workspace. This is deliberately
+            # separate from the class-teacher dashboard and never exposes other teachers'
+            # classes or subjects.
+            allocations=cur.execute("""SELECT DISTINCT a.class_id,a.subject_id,
+                COALESCE(NULLIF(trim(c.name),''),'Class') class_name,
+                COALESCE(NULLIF(trim(c.stream),''),'') stream,
+                COALESCE(NULLIF(trim(c.level),''),'') level,
+                COALESCE(NULLIF(trim(s.name),''),'Subject') subject_name
+                FROM teacher_allocations a
+                JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id
+                JOIN subjects s ON s.id=a.subject_id AND s.school_id=a.school_id
+                WHERE a.school_id=? AND a.teacher_id=?
+                ORDER BY class_name,stream,subject_name""",(sid,teacher_id)).fetchall()
+            exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
+            selected_raw=str(request.query_params.get("exam_id") or "").strip()
+            selected_id=int(selected_raw) if selected_raw.isdigit() else (int(exams[0]["id"]) if exams else 0)
+            exam=next((e for e in exams if int(e["id"])==selected_id),None)
+            if not exam and exams:
+                exam=exams[0]; selected_id=int(exam["id"])
+            try: exam_year=int(exam["year"] or "") if exam else 0
+            except (TypeError,ValueError): exam_year=0
+            cards=[]
+            total_pairs=complete_pairs=progress_pairs=pending_pairs=0
+            for allocation in allocations:
+                class_id=int(allocation["class_id"]); subject_id=int(allocation["subject_id"])
+                if exam:
+                    allocation_cohort=_teacher_exam_cohort(cur,sid,class_id,exam_year)
+                    allocation_ids=[student_id for student_id,_ in allocation_cohort]
+                    expected=len(allocation_ids)
+                    if allocation_ids:
+                        id_marks=",".join("?" for _ in allocation_ids)
+                        entered_row=cur.execute("""SELECT COUNT(DISTINCT student_id) n FROM marks
+                            WHERE school_id=? AND exam_id=? AND subject_id=? AND student_id IN ("""+id_marks+""")""",
+                            [sid,selected_id,subject_id]+allocation_ids).fetchone()
+                        entered=int(entered_row["n"] or 0) if entered_row else 0
+                    else:
+                        entered=0
+                else:
+                    expected=entered=0
+                if expected>0 and entered>=expected:
+                    status="Submitted"; css="complete"; complete_pairs+=1
+                elif entered>0:
+                    status="In progress"; css="progress"; progress_pairs+=1
+                else:
+                    status="Not started"; css="pending"; pending_pairs+=1
+                total_pairs+=1
+                pct=min(100,int(entered*100/expected)) if expected else 0
+                class_label=str(allocation["class_name"] or "Class") + ((" · "+str(allocation["stream"])) if allocation["stream"] else "")
+                cards.append("""<article class='cm-subject-card'>
+                  <div class='cm-subject-top'><div><h3>%s</h3><p>%s · %s</p><p>Allocated subject: <b>%s</b></p></div>
+                    <span class='cm-status %s'>%s</span></div>
+                  <div class='cm-progress-meta'><span>%s of %s learners have marks</span><b>%s%%</b></div>
+                  <div class='cm-progress'><span style='width:%s%%'></span></div>
+                  <div class='cm-teacher-actions'><a href='/app/academics/marks?exam_id=%s&amp;class_id=%s&amp;subject_id=%s'>Open marks entry</a></div>
+                </article>"""%(escape(class_label),escape(str(allocation["level"] or "")),
+                    escape(str(exam["name"] or "Select an examination") if exam else "No examination selected"),
+                    escape(str(allocation["subject_name"] or "Subject")),css,status,entered,expected,pct,pct,
+                    selected_id,class_id,subject_id))
+            con.close()
+            exam_options="".join("<option value='%s' %s>%s — %s %s</option>"%(int(e["id"]),"selected" if int(e["id"])==selected_id else "",escape(str(e["name"] or "Examination")),escape(str(e["term"] or "")),escape(str(e["year"] or ""))) for e in exams)
+            completion=int(complete_pairs*100/total_pairs) if total_pairs else 0
+            body="""<div class='page class-monitoring-page'>
+              <div class='cm-heading'><div><h1>My Submission Status</h1>
+                <p>Track marks progress for every class, stream and subject allocated to you.</p></div>
+                <a class='cm-back' href='/app/academics/marks'>Record Marks</a></div>
+              <div class='cm-class-line'><b>Subject-teacher workspace</b>
+                <span>Only your current teaching allocations are shown</span></div>
+              <form class='cm-filters' method='get' action='/app/class-monitoring'>
+                <label>Examination<select name='exam_id' onchange='this.form.submit()'>%s</select></label></form>
+              <nav class='cm-tabs' role='tablist' aria-label='My submission workspace'>
+                <button type='button' class='cm-tab active' role='tab' aria-selected='true' data-cm-tab='overview'>Overview</button>
+                <button type='button' class='cm-tab' role='tab' aria-selected='false' data-cm-tab='subjects'>My Submissions</button>
+              </nav>
+              <section class='cm-panel active' role='tabpanel' data-cm-panel='overview'>
+              <section class='cm-kpis'>
+                <div><small>Allocated subjects</small><strong>%s</strong></div>
+                <div><small>Fully submitted</small><strong>%s</strong></div>
+                <div><small>In progress</small><strong>%s</strong></div>
+                <div><small>Not started</small><strong>%s</strong></div>
+              </section>
+              <div class='cm-overall'><div><b>My submission completion</b><strong>%s%%</strong></div>
+                <div class='cm-overall-track'><span style='width:%s%%'></span></div></div>
+              </section>
+              <section class='cm-panel' role='tabpanel' data-cm-panel='subjects'>
+                <div class='cm-panel-heading'><h2>My allocated subjects</h2><p>Open marks entry for the class, stream and subject assigned to you.</p></div>
+                <section class='cm-subject-grid'>%s</section>
+                %s
+              </section>
+            </div>"""%(exam_options,total_pairs,complete_pairs,progress_pairs,pending_pairs,completion,completion,
+                "".join(cards) if cards else "<div class='cm-empty'>No current class and subject allocations were found for your teacher account.</div>",
+                "<p class='cm-empty'>Select an examination to view your submission progress.</p>" if not exam else "")
+            body+="""<style>
+              .class-monitoring-page{max-width:1180px}.cm-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+              .cm-heading h1{margin:0 0 5px;color:#174b2b}.cm-heading p{margin:0;color:#687a6d;font-size:13px}
+              .cm-tabs{display:flex;gap:7px;overflow-x:auto;white-space:nowrap;padding:5px 0 10px;margin:8px 0 14px;border-bottom:1px solid #dce9dd;scrollbar-width:thin}
+.cm-tab{flex:0 0 auto;border:1px solid #d5e4d7;border-radius:9px;background:#f4f8f3;color:#45624d;padding:10px 15px;font-size:12px;font-weight:800;cursor:pointer}
+.cm-tab.active{background:#176B3A;border-color:#176B3A;color:#fff;box-shadow:0 3px 9px #176b3a22}
+.cm-panel{display:none}.cm-panel.active{display:block}.cm-panel-heading{margin:4px 0 12px}.cm-panel-heading h2{margin:0 0 4px;color:#214b32;font-size:17px}.cm-panel-heading p{margin:0;color:#748277;font-size:12px}
+              .cm-back{padding:9px 13px;border-radius:9px;background:#e8f3e8;border:1px solid #cfe3d0;color:#14532d;text-decoration:none;font-size:12px;font-weight:800}
+              .cm-back:hover{background:#176B3A;color:#fff}.cm-back[href='/app/class-teacher']{background:#0b5d2e;border-color:#0b5d2e;color:#fff}.cm-back[href='/app/class-teacher']:hover{background:#084522;border-color:#084522;color:#fff}.cm-class-line{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0;padding:13px 15px;border:1px solid #dce9dd;border-radius:12px;background:#f6faf5;color:#4f6655;font-size:12px}
+              .cm-class-line b{color:#174b2b;font-size:14px}.cm-filters{display:flex;gap:12px;align-items:end;margin:14px 0}
+              .cm-filters label{display:grid;gap:6px;color:#45624d;font-size:12px;font-weight:800}.cm-filters select{min-width:240px;padding:10px;border:1px solid #cbded1;border-radius:9px;background:#fff}
+              .cm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+              .cm-kpis>div{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#eaf3e8;display:grid;gap:6px}
+              .cm-kpis small{color:#52715b;font-size:11px;font-weight:800}.cm-kpis strong{font-size:25px;color:#176B3A}
+              .cm-overall{padding:15px;border:1px solid #dce9dd;border-radius:12px;background:#fff;margin-bottom:16px}
+              .cm-overall>div:first-child{display:flex;justify-content:space-between;gap:12px;color:#31563c;font-size:13px}.cm-overall strong{color:#176B3A}
+              .cm-overall-track,.cm-progress{height:9px;background:#e5eee5;border-radius:99px;overflow:hidden;margin-top:10px}
+              .cm-overall-track span,.cm-progress span{display:block;height:100%;background:#176B3A;border-radius:99px}
+              .cm-subject-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+              .cm-subject-card{min-width:0;padding:15px;border:1px solid #dce9dd;border-radius:13px;background:#fff;box-shadow:0 3px 12px #173b2408}
+              .cm-subject-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.cm-subject-top h3{margin:0;color:#214b32;font-size:15px}
+              .cm-subject-top p{margin:5px 0 0;color:#65786a;font-size:11px}.cm-status{white-space:nowrap;padding:5px 9px;border-radius:99px;font-size:10px;font-weight:900}
+              .cm-status.complete{background:#dff5e6;color:#176b3a}.cm-status.progress{background:#fff0c2;color:#8a5a00}.cm-status.pending{background:#eef1ef;color:#5b6860}
+              .cm-progress-meta{display:flex;justify-content:space-between;gap:8px;margin-top:14px;color:#627468;font-size:11px}.cm-progress-meta b{color:#176B3A}
+              .cm-teacher-actions{margin-top:13px;padding-top:12px;border-top:1px solid #edf2ed}
+              .cm-teacher-actions a{display:inline-block;padding:9px 12px;border-radius:8px;background:#176B3A;color:#fff;text-decoration:none;font-size:11px;font-weight:800}
+              .cm-teacher-actions a:hover{background:#0f4d2a}.cm-empty{color:#7b8a7f;font-size:12px;padding:12px 0}
+              @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
+            @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
     </style>"""
-     body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
+            body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
             return _school_page(request,"Class Monitoring",body)
         class_id=int(assignment["class_id"])
         exams=cur.execute("SELECT id,name,term,year FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
@@ -1730,7 +3277,7 @@ def class_monitoring_page(request: Request):
       @media(max-width:760px){.cm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-subject-grid{grid-template-columns:1fr}.cm-actions form{grid-template-columns:1fr}.cm-filters select{min-width:0;width:100%}.cm-filters label{width:100%}}
     @media(max-width:520px){.cm-tab{padding:9px 11px;font-size:11px}}
     </style>"""
-     body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
+    body+="""<script>(function(){var root=document.querySelector('.class-monitoring-page');if(!root||root.dataset.tabsReady==='1')return;root.dataset.tabsReady='1';var tabs=root.querySelectorAll('[data-cm-tab]');var panels=root.querySelectorAll('[data-cm-panel]');tabs.forEach(function(tab){tab.addEventListener('click',function(){var target=tab.getAttribute('data-cm-tab');tabs.forEach(function(item){var active=item===tab;item.classList.toggle('active',active);item.setAttribute('aria-selected',active?'true':'false');});panels.forEach(function(panel){panel.classList.toggle('active',panel.getAttribute('data-cm-panel')===target);});});});})();</script>"""
     return _school_page(request,"Class Monitoring",body)
 
 
