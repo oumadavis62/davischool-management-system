@@ -850,6 +850,22 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
             "SELECT * FROM users WHERE lower(trim(COALESCE(username,'')))=lower(trim(?)) ORDER BY id DESC LIMIT 1",
             (login_id,)
         ).fetchone()
+        # Parent usernames are phone numbers. Match equivalent Kenyan formats
+        # (07..., 2547..., +2547...) without changing the stored username.
+        if not u:
+            phone_digits = re.sub(r"\\D", "", login_id)
+            phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)
+            if len(phone_key) >= 9:
+                try:
+                    parent_candidates = cur.execute("SELECT * FROM users WHERE lower(trim(COALESCE(role,'')))='parent' ORDER BY id DESC").fetchall()
+                    for candidate in parent_candidates:
+                        stored_phone = re.sub(r"\\D", "", str(candidate["username"] or candidate["email"] or ""))
+                        stored_key = ("254" + stored_phone[1:]) if len(stored_phone) == 10 and stored_phone.startswith("0") else (("254" + stored_phone) if len(stored_phone) == 9 else stored_phone)
+                        if stored_key == phone_key:
+                            u = candidate
+                            break
+                except Exception as phone_lookup_exc:
+                    print("DAVISCHOOL PARENT PHONE LOOKUP WARNING:", repr(phone_lookup_exc), flush=True)
         if not u:
             u = cur.execute(
                 "SELECT * FROM users WHERE lower(trim(COALESCE(email,'')))=lower(trim(?)) ORDER BY id DESC LIMIT 1",
@@ -886,6 +902,38 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         if not u:
             return RedirectResponse("/?error=1&username=" + quote(login_id, safe=""), status_code=303)
         valid, legacy_password = verify_password(password, u["password"])
+        # A parent may have used a sibling's admission number when the shared
+        # account was first created. During first login only, accept the
+        # documented admission-number@current-year credential for any linked
+        # child, then persist its hash and still require an immediate change.
+        if not valid and str(u["role"] or "").strip().lower() == "parent":
+            try:
+                must_change = bool(u["must_change_password"]) if "must_change_password" in u.keys() else False
+                if must_change:
+                    current_year = datetime.now(ZoneInfo("Africa/Nairobi")).year
+                    linked_admissions = []
+                    try:
+                        linked_rows = cur.execute("""SELECT s.admission_no
+                            FROM parent_student_links p
+                            JOIN students s ON s.id=p.student_id AND s.school_id=p.school_id
+                            WHERE p.user_id=? AND p.school_id=?""",
+                            (u["id"], u["school_id"])).fetchall()
+                        linked_admissions.extend(str(row["admission_no"] or "").strip() for row in linked_rows)
+                    except Exception:
+                        pass
+                    if u["student_id"]:
+                        own_student = cur.execute("SELECT admission_no FROM students WHERE id=? AND school_id=?",
+                            (u["student_id"], u["school_id"])).fetchone()
+                        if own_student:
+                            linked_admissions.append(str(own_student["admission_no"] or "").strip())
+                    submitted = str(password or "")
+                    if any(adm and hmac.compare_digest(submitted, adm + "@" + str(current_year)) for adm in linked_admissions):
+                        cur.execute("UPDATE users SET password=? WHERE id=?", (hash_password(submitted), u["id"]))
+                        con.commit()
+                        valid = True
+                        legacy_password = True
+            except Exception as parent_password_exc:
+                print("DAVISCHOOL PARENT FIRST LOGIN WARNING:", repr(parent_password_exc), flush=True)
         # Every School Users account stores the exact generated credential in
         # temporary_password. If the stored hash was created incorrectly or
         # belongs to an older account-migration format, accept only that exact
