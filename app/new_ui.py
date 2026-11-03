@@ -1978,13 +1978,13 @@ def students_page(request: Request):
     page_count = max(1, (int(total) + page_size - 1) // page_size)
     page_num = min(page_num, page_count)
     offset = (page_num - 1) * page_size
-    students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream,
+    students=cur.execute("""SELECT s.*,COALESCE(NULLIF(s.parent_name,''),NULLIF(s.guardian_name,''),'') AS register_parent_name,c.name class_name,c.stream class_stream,
         CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
              THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
         WHERE """ + where_sql + " ORDER BY LOWER(COALESCE(s.name,'')) ASC, LOWER(COALESCE(s.admission_no,'')) ASC LIMIT ? OFFSET ?",
         tuple(params + [page_size, offset])).fetchall()
-    print_students=cur.execute("""SELECT s.*,c.name class_name,c.stream class_stream,
+    print_students=cur.execute("""SELECT s.*,COALESCE(NULLIF(s.parent_name,''),NULLIF(s.guardian_name,''),'') AS register_parent_name,c.name class_name,c.stream class_stream,
         CASE WHEN EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)
              THEN 'Graduated' ELSE COALESCE(NULLIF(s.status,''),'Active') END AS display_status
         FROM students s LEFT JOIN classes c ON c.id=s.class_id
@@ -2002,9 +2002,9 @@ def students_page(request: Request):
     print_school_header = ("<div class='doc-header report-school-header'><div class='doc-logo'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span class='logo-fallback'>DAVISCHOOL</span>") + "</div><div class='doc-school-block'><div class='doc-school'>%s</div><div class='doc-contact'>%s</div></div><div class='doc-logo doc-logo-right'>" + ("<img src='%s' alt='School logo'>" % escape(print_school_logo, quote=True) if print_school_logo else "<span class='logo-fallback'>DAVISCHOOL</span>") + "</div></div><h1 class='register-title'>STUDENT REGISTER</h1>") % (print_school_name, print_school_contact)
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
-      <td>{escape(str(s['parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
+      <td>{escape(str(s['register_parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
       <td><a class='action' href='/app/students/edit/{s["id"]}{tab_q}'>Edit</a></td></tr>""" for s in students)
-    print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
+    print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['register_parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
     gender_opts = "".join(f"<option {'selected' if gender_filter == g else ''}>{g}</option>" for g in ("Male", "Female", "Other"))
@@ -2060,7 +2060,7 @@ function openStudentsPrintPreview(){
     return _school_page(request,"Students",body)
 
 @router.post("/app/students/add")
-def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form("")):
+def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form(""), guardian_name:str=Form("")):
     # Diagnose production-only login redirects without logging credentials or
     # session-cookie contents. This distinguishes a missing tab ID from a
     # session that exists but lacks the school-role fields.
@@ -2092,7 +2092,11 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
             cid=None
         else:
             class_stream = str(class_row["stream"] or "").strip()
-    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),parent_name.strip(),parent_phone.strip(),class_stream,"active"))
+    saved_parent_name = (parent_name or guardian_name or "").strip()
+    cur.execute("INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,admission,assessment_no.strip(),name.strip(),cid,gender.strip(),saved_parent_name,parent_phone.strip(),class_stream,"active"))
+    new_student_row = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission)).fetchone()
+    if new_student_row:
+        cur.execute("UPDATE students SET parent_name=? WHERE id=? AND school_id=?",(saved_parent_name,int(new_student_row["id"]),sid))
     # Record the year a newly enrolled learner entered the assigned class.
     # Class rows are reused after promotion, so current class_id alone must not
     # make a new learner part of an older cohort's roster.
