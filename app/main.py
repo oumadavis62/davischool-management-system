@@ -1056,33 +1056,89 @@ def change_password(request: Request,current_password:str=Form(...),new_password
 @app.get("/logout")
 def logout(request: Request): request.session.clear(); return RedirectResponse("/")
 
+
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request):
-    if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") == "school_admin": return RedirectResponse("/school/dashboard")
-    con = get_db(); cur = con.cursor()
-    cur.execute("SELECT COUNT(*) as c FROM schools"); total = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM schools WHERE lower(COALESCE(status,'active')) IN ('active','enabled')"); active_total = cur.fetchone()["c"]
-    cur.execute("SELECT COUNT(*) as c FROM students"); total_students = cur.fetchone()["c"]
+    if "email" not in request.session:
+        return RedirectResponse("/")
+    if request.session.get("role") == "school_admin":
+        return RedirectResponse("/school/dashboard")
+    if request.session.get("role") != "super_admin":
+        return RedirectResponse("/")
+    con = get_db()
+    cur = con.cursor()
+    cur.execute("SELECT COUNT(*) c FROM schools")
+    total = int(cur.fetchone()["c"] or 0)
+    cur.execute("SELECT COUNT(*) c FROM schools WHERE lower(COALESCE(status,'active')) IN ('active','enabled')")
+    active = int(cur.fetchone()["c"] or 0)
+    suspended = max(0, total-active)
+    cur.execute("SELECT COUNT(*) c FROM students")
+    learners = int(cur.fetchone()["c"] or 0)
+    cur.execute("SELECT COUNT(*) c FROM teachers")
+    staff = int(cur.fetchone()["c"] or 0)
+    cur.execute("SELECT COUNT(*) c FROM users WHERE lower(COALESCE(role,'')) IN ('school_admin','registrar')")
+    accounts = int(cur.fetchone()["c"] or 0)
+    cur.execute("SELECT COUNT(*) c FROM pending_schools")
+    pending = int(cur.fetchone()["c"] or 0)
     try:
-        cur.execute("SELECT COALESCE(SUM(CASE WHEN lower(COALESCE(status,'')) IN ('paid','complete','completed') THEN CAST(amount AS REAL) ELSE 0 END),0) as total FROM billing")
-        revenue_total = float(cur.fetchone()["total"] or 0)
+        cur.execute("SELECT COALESCE(SUM(CASE WHEN lower(COALESCE(status,'')) IN ('paid','complete','completed') THEN CAST(amount AS REAL) ELSE 0 END),0) total FROM billing")
+        revenue = float(cur.fetchone()["total"] or 0)
     except Exception:
-        revenue_total = 0.0
-    cur.execute("SELECT * FROM schools ORDER BY id DESC LIMIT 10"); recent = cur.fetchall(); con.close()
-    name = request.session.get("name","Davis Ouma"); email = request.session.get("email","oumadavis62@gmail.com"); initials = "".join([p[0] for p in name.split()][:2]).upper()
-    rows = ""
-    for s in recent:
-        st = str(s["status"] or "active").strip().lower()
-        active = st in ("active","enabled")
-        label = "Active" if active else "Suspended"
-        bg = "#dcfce7" if active else "#fee2e2"
-        fg = "#166534" if active else "#991b1b"
-        rows += f"<tr><td style='padding:10px 14px;font-size:12px;font-weight:600'>{s['name']}</td><td style='padding:10px 14px;font-size:12px'>{s['location']}</td><td><span style='background:{bg};color:{fg};padding:3px 8px;border-radius:12px;font-size:10px'>{label}</span></td><td style='padding:10px 14px;font-size:11px;color:#64748b'>Registered</td></tr>"
-    if not rows:
-        rows = "<tr><td colspan='4' style='padding:30px;text-align:center;color:#94a3b8'>No schools yet</td></tr>"
-    content = f"""<div style='padding:20px;max-width:1400px;margin:auto'><div style='margin-bottom:18px'><h2 style='margin:0;font-size:22px;font-weight:800'>📊 School Overview</h2><p style='margin:4px 0 0;color:#64748b;font-size:13px'>Welcome {name}</p></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🏫 TOTAL SCHOOLS</div><div style='font-size:32px;font-weight:900;margin:12px 0 8px'>{total}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>✅ ACTIVE SCHOOLS</div><div style='font-size:32px;font-weight:900;margin:12px 0 8px'>{active_total}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🔥 TOTAL REVENUE</div><div style='font-size:26px;font-weight:900;margin:12px 0 8px'>KES {revenue_total:,.2f}</div></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:18px'><div style='font-size:11px;color:#64748b'>🎓 TOTAL STUDENTS</div><div style='font-size:32px;font-weight:900;margin:10px 0 8px'>{total_students}</div></div></div><div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'><div style='padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9'><div style='font-weight:800;font-size:14px'>🏫 Recently Added Schools</div><a href='/schools/manage' style='font-size:12px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:11px;color:#64748b'><th style='padding:10px 14px'>Name</th><th>Location</th><th>Status</th><th>Date</th></tr></thead><tbody>{rows}</tbody></table></div><div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='font-weight:800;font-size:14px;margin-bottom:12px'>⚡ Quick Actions</div><a href='/schools/manage' style='display:block;text-align:center;background:white;border:1px solid #e2e8f0;padding:10px;border-radius:10px;text-decoration:none;color:#0b3d91;font-weight:600;font-size:13px;margin-bottom:10px'>🏫 Manage Schools</a><a href='/super/global-control/dashboard' style='display:block;text-align:center;background:#0b3d91;color:white;padding:10px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px'>🌍 Global Control</a></div></div></div></div>"""
-    return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header_html(initials, name, email)}{content}</body></html>")
+        revenue = 0.0
+    cur.execute("SELECT school_type,COUNT(*) c FROM schools GROUP BY school_type ORDER BY school_type")
+    school_types = cur.fetchall()
+    cur.execute("""SELECT s.id,s.name,s.location,s.school_type,s.status,COUNT(DISTINCT st.id) learners
+                   FROM schools s LEFT JOIN students st ON st.school_id=s.id
+                   GROUP BY s.id,s.name,s.location,s.school_type,s.status
+                   ORDER BY s.id DESC LIMIT 10""")
+    recent = cur.fetchall()
+    cur.execute("""SELECT a.school_id,sc.name school_name,a.user_email,a.action,a.details,a.timestamp
+                   FROM system_audit a LEFT JOIN schools sc ON sc.id=a.school_id
+                   ORDER BY a.id DESC LIMIT 10""")
+    activity = cur.fetchall()
+    cur.execute("""SELECT s.id,s.name FROM schools s
+                   LEFT JOIN users u ON u.school_id=s.id AND lower(COALESCE(u.role,''))='school_admin'
+                   GROUP BY s.id,s.name HAVING COUNT(u.id)=0 ORDER BY s.name""")
+    no_admin = cur.fetchall()
+    con.close()
+    name = request.session.get("name","Super Administrator")
+    email = request.session.get("email","")
+    initials = "".join(p[0] for p in name.split()[:2]).upper()
+    safe = lambda v: str(v or "—").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;").replace("'","&#39;")
+    type_total = max(1,sum(int(r["c"] or 0) for r in school_types))
+    type_html = "".join("<div class='type-row'><span>{}</span><div><i style='width:{:.1f}%'></i></div><b>{}</b></div>".format(safe(r["school_type"] or "Unspecified"),int(r["c"] or 0)/type_total*100,int(r["c"] or 0)) for r in school_types) or "<p class='muted'>No registered schools yet.</p>"
+    school_html = "".join("<tr><td><b>{}</b><small>{}</small></td><td>{}</td><td>{:,}</td><td><span class='status {}'>{}</span></td><td><a href='/schools/profile/{}'>Profile →</a></td></tr>".format(safe(r["name"]),safe(r["location"]),safe(r["school_type"]),int(r["learners"] or 0),"active" if str(r["status"] or "active").lower() in ("active","enabled") else "suspended","Active" if str(r["status"] or "active").lower() in ("active","enabled") else "Suspended",int(r["id"])) for r in recent) or "<tr><td colspan='5' class='empty'>No schools have been registered.</td></tr>"
+    activity_html = "".join("<div class='activity'><div><b>{}</b><small>{} · {}</small><small>{}</small></div><time>{}</time></div>".format(safe(a["action"]),safe(a["school_name"] or "Platform"),safe(a["user_email"]),safe(a["details"]),safe(a["timestamp"])) for a in activity) or "<p class='muted'>No platform audit events have been recorded yet.</p>"
+    alerts = []
+    if pending: alerts.append("<a href='/schools/manage?success=code_sent'>{} school registration request(s) awaiting verification</a>".format(pending))
+    if no_admin: alerts.append("<a href='/schools/manage'>{} school(s) have no School Admin account</a>".format(len(no_admin)))
+    if suspended: alerts.append("<a href='/schools/manage?status=suspended'>{} suspended school account(s)</a>".format(suspended))
+    alert_html = "".join("<div class='alert'>• {}</div>".format(x) for x in alerts) or "<div class='healthy'>No outstanding platform alerts from the available checks.</div>"
+    header = header_html(initials,name,email)
+    return HTMLResponse(f"""<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>DaviSchool Platform Overview</title>
+    <style>
+    *{{box-sizing:border-box}}body{{margin:0;font-family:Arial;background:#f1f8f1;color:#203126}}.wrap{{max-width:1480px;margin:auto;padding:22px}}
+    .hero{{background:linear-gradient(120deg,#14532d,#166534 65%,#23834a);color:white;padding:24px;border-radius:17px;display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:16px}}.hero h1{{margin:0;font-size:23px}}.hero p{{margin:7px 0 0;color:#d8f0dc;font-size:12px}}.actions{{display:flex;gap:8px;flex-wrap:wrap}}.actions a{{background:white;color:#14532d;padding:10px 13px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800}}
+    .stats{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;margin-bottom:15px}}.stat{{display:block;background:white;border:1px solid #dce9dc;border-radius:13px;padding:16px;text-decoration:none;color:#14532d}}.stat span{{font-size:10px;color:#718477;font-weight:800}}.stat b{{display:block;font-size:27px;margin:8px 0 4px}}.stat small{{font-size:10px;color:#718477}}
+    .layout{{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,.85fr);gap:14px}}.panel{{background:white;border:1px solid #dce9dc;border-radius:14px;margin-bottom:14px;overflow:hidden}}.panel-head{{padding:14px 16px;border-bottom:1px solid #edf3ed;display:flex;justify-content:space-between;gap:10px;align-items:center}}.panel-head b{{font-size:14px}}.panel-head a,.panel a{{color:#166534;text-decoration:none;font-size:11px;font-weight:800}}.panel-body{{padding:15px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:11px;text-align:left;border-bottom:1px solid #edf3ed;font-size:11px}}th{{font-size:10px;background:#f7fbf7;color:#718477}}td small{{display:block;color:#718477;margin-top:4px}}.status{{padding:4px 8px;border-radius:18px;font-size:10px;font-weight:800}}.status.active{{background:#dcfce7;color:#166534}}.status.suspended{{background:#fee2e2;color:#991b1b}}.table-scroll{{overflow:auto}}.type-row{{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:11px}}.type-row span{{flex:1}}.type-row div{{width:38%;height:8px;background:#edf4ed;border-radius:10px;overflow:hidden}}.type-row i{{display:block;height:100%;background:#2f855a;border-radius:10px}}.type-row b{{min-width:20px;text-align:right}}.activity{{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.activity:last-child{{border:0}}.activity small{{display:block;color:#718477;margin-top:4px}}.activity time{{font-size:10px;color:#718477;white-space:nowrap}}.alert{{padding:10px 0;border-bottom:1px solid #edf3ed;font-size:11px}}.alert a{{color:#8a5a00}}.healthy{{padding:11px;background:#e9f6eb;color:#166534;border-radius:9px;font-size:11px}}.muted,.empty{{color:#94a3b8;font-size:11px}}.empty{{text-align:center;padding:22px}}
+    @media(max-width:1050px){{.stats{{grid-template-columns:repeat(3,1fr)}}}}@media(max-width:760px){{.wrap{{padding:12px}}.hero{{align-items:flex-start;flex-direction:column}}.hero h1{{font-size:20px}}.stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.layout{{grid-template-columns:1fr}}.table-scroll table{{min-width:620px}}}}
+    </style></head><body>{header}<main class='wrap'>
+    <section class='hero'><div><h1>DaviSchool Platform Overview</h1><p>Monitor schools, access, platform activity and operational health in one place.</p></div><div class='actions'><a href='/schools/manage'>＋ Manage Schools</a><a href='/super/global-control/dashboard'>Global Control →</a></div></section>
+    <section class='stats'>
+    <a class='stat' href='/schools/manage'><span>REGISTERED SCHOOLS</span><b>{total:,}</b><small>All school accounts</small></a>
+    <a class='stat' href='/schools/manage?status=active'><span>ACTIVE SCHOOLS</span><b>{active:,}</b><small>Enabled accounts</small></a>
+    <a class='stat' href='/schools/manage?status=suspended'><span>SUSPENDED SCHOOLS</span><b>{suspended:,}</b><small>Restricted accounts</small></a>
+    <a class='stat' href='/super/global-control/students'><span>LEARNERS</span><b>{learners:,}</b><small>Across all schools</small></a>
+    <a class='stat' href='/super/global-control/teachers'><span>STAFF</span><b>{staff:,}</b><small>{accounts:,} admin / registrar accounts</small></a>
+    </section>
+    <section class='layout'><div>
+    <section class='panel'><div class='panel-head'><b>Recently Added Schools</b><a href='/schools/manage'>View all →</a></div><div class='table-scroll'><table><thead><tr><th>SCHOOL</th><th>LEVEL</th><th>LEARNERS</th><th>STATUS</th><th></th></tr></thead><tbody>{school_html}</tbody></table></div></section>
+    <section class='panel'><div class='panel-head'><b>Recent Platform Activity</b><a href='/super/global-control/system-settings/system-audit'>Audit trail →</a></div><div class='panel-body'>{activity_html}</div></section>
+    </div><div>
+    <section class='panel'><div class='panel-head'><b>School Distribution</b></div><div class='panel-body'>{type_html}</div></section>
+    <section class='panel'><div class='panel-head'><b>Attention Required</b></div><div class='panel-body'>{alert_html}</div></section>
+    <section class='panel'><div class='panel-head'><b>Platform Billing Summary</b></div><div class='panel-body'><span class='muted'>RECORDED PAID / COMPLETED BILLING</span><div style='font-size:25px;color:#14532d;font-weight:900;margin:8px 0'>KES {revenue:,.2f}</div><span class='muted'>Based on billing records; this is not a live subscription entitlement check.</span><p><a href='/super/global-control/system-settings/billing-payments'>Open billing records →</a></p></div></section>
+    </div></section></main></body></html>""")
 
 @app.get("/schools/manage", response_class=HTMLResponse)
 def manage_schools(request: Request, success: str = "", pending_id: str = "", new_pass: str = "", school_email: str = "", school_name: str = "", message: str = ""):
