@@ -2677,7 +2677,7 @@ def parent_portal(request: Request):
         page = portal_page(request, "Parent Portal", body)
         if isinstance(page, HTMLResponse):
             # Add a scoped visual system without changing teacher/student/admin pages.
-            page.body = page.body.replace(
+            page = HTMLResponse(page.body.decode("utf-8").replace(
                 "</style>",
                 """.parent-dashboard{max-width:1080px;margin:0 auto;color:#183b29}
                 .parent-welcome{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:8px 0 22px}
@@ -2711,7 +2711,7 @@ def parent_portal(request: Request):
                 .parent-empty-icon{font-size:30px;color:#16834a}.parent-empty h2{color:#123d27}.parent-empty p{color:#64766c}
                 @media(max-width:680px){.parent-welcome{display:block}.parent-child-form{margin-top:15px}.parent-summary-grid,.parent-fee-grid{grid-template-columns:1fr 1fr}.parent-summary:last-child{grid-column:1/-1}.parent-summary,.parent-fee-item{padding:13px}.parent-summary strong,.parent-fee-item strong{font-size:18px}.parent-card-heading{align-items:flex-start}.parent-text-button{font-size:11px;padding:4px 0}.parent-section-heading h2,.parent-card-heading h2{font-size:19px}}
                 </style>"""
-            )
+            ))
         return page
     finally:
         try:
