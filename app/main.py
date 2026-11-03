@@ -4495,28 +4495,3 @@ def exit_super_admin_portal_preview(request: Request):
     return RedirectResponse("/super/portal-management", 303)
 
 
-@app.middleware("http")
-async def protect_super_admin_portal_preview(request: Request, call_next):
-    """Keep portal preview read-only and visibly returnable to the control centre."""
-    if request.session.get("is_portal_preview") and request.method in ("POST","PUT","PATCH","DELETE"):
-        return HTMLResponse(
-            "<!doctype html><html><body style='font-family:Arial;padding:28px;background:#f1f8f1;color:#203126'>"
-            "<h2>Preview mode is read-only</h2><p>Data changes are disabled in the Super Admin portal preview.</p>"
-            "<a href='/super/portal-management/exit'>Return to Portal Management</a></body></html>", status_code=403)
-    response = await call_next(request)
-    if request.session.get("is_portal_preview") and "text/html" in str(response.headers.get("content-type","")) and hasattr(response,"body"):
-        banner = ("<div style='position:sticky;top:0;z-index:99999;background:#123d27;color:#fff;padding:9px 13px;"
-                  "display:flex;justify-content:space-between;align-items:center;gap:10px;font:12px Arial;box-shadow:0 2px 8px #0002'>"
-                  "<span><b>SUPER ADMIN PREVIEW</b> · Demonstration data only · Read-only</span>"
-                  "<a href='/super/portal-management/exit' style='color:#fff;background:#287447;padding:7px 10px;border-radius:7px;"
-                  "text-decoration:none;font-weight:800'>Return to Control Centre</a></div>")
-        try:
-            html = response.body.decode("utf-8")
-            if "</body>" in html:
-                html = html.replace("</body>", banner + "</body>", 1)
-                headers = {k:v for k,v in response.headers.items() if k.lower() != "content-length"}
-                response = HTMLResponse(html, status_code=response.status_code, headers=headers)
-                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        except Exception:
-            pass
-    return response
