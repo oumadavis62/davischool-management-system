@@ -1967,7 +1967,7 @@ def global_set_marks_delete(cid: int, request: Request):
 @app.get("/school/dashboard", response_class=HTMLResponse)
 def school_dashboard(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/")
     if request.session.get("role")=="super_admin" and request.session.get("school_id",0)==0: return RedirectResponse("/dashboard")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
@@ -2116,7 +2116,7 @@ def add_class(request: Request, class_name: str = Form(...), stream: str = Form(
     # Keep the school-admin session attached to the school when this form is
     # submitted. If the session's school_id is missing/stale, recover it from
     # the authenticated school-admin account instead of sending the user to login.
-    if request.session.get("role") not in ("school_admin", "super_admin") or not request.session.get("email"):
+    if request.session.get("role") not in ("school_admin", "registrar", "super_admin") or not request.session.get("email"):
         return RedirectResponse("/", 303)
     school = get_school_obj(request)
     if not school:
@@ -2407,12 +2407,12 @@ def sys_add_class(request: Request, class_name: str = Form(...), stream: str = F
 @app.get("/school/system-settings/delete-class/{cid}")
 def sys_del_class(request: Request, cid: int):
     school_obj=get_school_obj(request)
-    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/",303)
+    if not school_obj or request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/",303)
     con=get_db(); con.execute("DELETE FROM classes WHERE id=? AND school_id=?",(cid,school_obj["id"])); con.commit(); con.close(); return RedirectResponse("/school/system-settings/classes",303)
 @app.post("/school/system-settings/add-user")
 def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form(...), password: str = Form(...), role: str = Form(...), teacher_id: str = Form(""), student_id: str = Form("")):
     school_obj = get_school_obj(request)
-    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"] or not _role_permission(request,"users.manage"):
+    if not school_obj or request.session.get("role") not in ["school_admin","registrar","super_admin"] or not _role_permission(request,"users.manage"):
         return RedirectResponse("/",303)
     role_v=role.strip().lower()
     allowed={"teacher","parent","student","school_admin","accountant","registrar"}
@@ -2443,7 +2443,7 @@ def sys_add_user(request: Request, full_name: str = Form(...), email: str = Form
 @app.get("/school/system-settings/delete-user/{uid}")
 def sys_del_user(request: Request, uid: int):
     school_obj=get_school_obj(request)
-    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/",303)
+    if not school_obj or request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/",303)
     con=get_db(); cur=con.cursor()
     user=cur.execute("SELECT role FROM users WHERE id=? AND school_id=?",(uid,school_obj["id"])).fetchone()
     if not user:
@@ -2473,7 +2473,7 @@ def sys_backup_download(request: Request):
 @app.get("/school/system-settings/audit/clear")
 def sys_audit_clear(request: Request):
     school_obj = get_school_obj(request)
-    if not school_obj or request.session.get("role") not in ["school_admin","super_admin"] or not _role_permission(request,"settings.manage"):
+    if not school_obj or request.session.get("role") not in ["school_admin","registrar","super_admin"] or not _role_permission(request,"settings.manage"):
         return RedirectResponse("/",303)
     con=get_db(); cur=con.cursor(); cur.execute("DELETE FROM system_audit WHERE school_id=?",(school_obj["id"],)); con.commit(); con.close()
     return RedirectResponse("/school/system-settings/system-audit",303)
@@ -2866,7 +2866,7 @@ def global_promote(request: Request, from_class: int = Form(...), to_class: int 
 
 # === ADDITIVE PORTALS + FINANCE MODULES ===
 def portal_guard(request):
-    return request.session.get("role") in ["teacher", "parent", "student"] and request.session.get("school_id", 0) != 0
+    return request.session.get("role") in ["teacher", "parent", "student", "accountant", "registrar"] and request.session.get("school_id", 0) != 0
 
 @app.get("/portal", response_class=HTMLResponse)
 def portal(request: Request):
@@ -2877,6 +2877,10 @@ def portal(request: Request):
         return RedirectResponse("/portal/parent",303)
     if role == "student":
         return RedirectResponse("/portal/student",303)
+    if role == "accountant":
+        return RedirectResponse("/school/finance",303)
+    if role == "registrar":
+        return RedirectResponse("/school/dashboard",303)
     return RedirectResponse("/portal/teacher",303)
 
 def portal_page(request, title, body):
@@ -3200,7 +3204,7 @@ def module_page(request, title, active, body, global_mode=False):
         school = get_school_obj(request)
         if not school: return RedirectResponse("/dashboard")
         role_modules={"teacher":{"record-marks":"marks.edit","attendance":"attendance.edit","analysis":"reports.view","timetable":"timetable.view"},"accountant":{"fees":"fees.view","finance":"finance.view"},"registrar":{"students":"students.view","staff":"staff.view"}}
-        if role not in ["school_admin","super_admin"]:
+        if role not in ["school_admin","registrar","super_admin"]:
             permission=role_modules.get(role,{}).get(active)
             if not permission or not _role_permission(request,permission):
                 return RedirectResponse("/portal" if role in ("teacher","accountant","registrar","parent","student") else "/")
@@ -3697,10 +3701,9 @@ def global_other(path: str, request: Request):
 def _school_user(request: Request):
     # Legacy /school routes are retained for compatibility, but the unified
     # /app workspace and dedicated role portals are now the supported workflow.
-    # Do not expose legacy school controls to teacher/accountant/registrar/
-    # parent/student sessions.
+    # School Admin and Registrar share school-level administration access.
     role = str(request.session.get("role", ""))
-    if role not in {"school_admin", "super_admin"}:
+    if role not in {"school_admin", "registrar", "super_admin"}:
         return None
     school = get_school_obj(request)
     if not school or not request.session.get("email"):
@@ -3841,7 +3844,7 @@ def school_academics(request:Request):
 
 def _school_admin_guard(request: Request):
     school = _school_user(request)
-    if not school or request.session.get("role") not in ("school_admin", "super_admin"):
+    if not school or request.session.get("role") not in ("school_admin", "registrar", "super_admin"):
         return None
     return school
 
@@ -4006,7 +4009,7 @@ def school_student_analysis_printable(student_id:int, request:Request):
 @app.get("/school/{path:path}", response_class=HTMLResponse)
 def school_other(path: str, request: Request):
     if "email" not in request.session: return RedirectResponse("/")
-    if request.session.get("role") not in ["school_admin","super_admin"]: return RedirectResponse("/")
+    if request.session.get("role") not in ["school_admin","registrar","super_admin"]: return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
     con=get_db(); cur=con.cursor(); school_id=sid(request)
@@ -4034,7 +4037,7 @@ def school_other(path: str, request: Request):
 # === DAVISCHOOL OPERATIONS COMPLETION ===
 def _require_school_admin(request: Request):
     school=_school_user(request)
-    if not school or request.session.get('role') not in ('school_admin','super_admin'): return None
+    if not school or request.session.get('role') not in ('school_admin','registrar','super_admin'): return None
     return school
 
 @app.get('/school/finance', response_class=HTMLResponse)
