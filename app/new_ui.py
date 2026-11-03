@@ -5450,6 +5450,30 @@ def parent_portal(request: Request):
     late_att = int(attendance_summary["late"] or 0) if attendance_summary and "late" in attendance_summary.keys() else 0
     excused_att = int(attendance_summary["excused"] or 0) if attendance_summary and "excused" in attendance_summary.keys() else 0
     attendance_pct = (present_att / total_att * 100) if total_att else 0
+    # Build a concise, date-ordered activity feed from records already visible
+    # to this parent. No academic mean, grade or exam information is exposed here.
+    parent_activity = []
+    for row in attendance:
+        status_text = str(row["status"] or "Present").strip() or "Present"
+        parent_activity.append((str(row["date"] or ""), "Attendance", status_text))
+    for row in parent_notices:
+        parent_activity.append((str(row["created_at"] or ""), "School notice", str(row["title"] or "School announcement")))
+    for row in parent_message_rows:
+        parent_activity.append((str(row["created_at"] or ""), "Parent message", str(row["subject"] or "Message") + " · " + str(row["status"] or "Open")))
+    for row in payment_rows:
+        parent_activity.append((str(row["date"] or ""), "Fee payment", "KES " + format(float(row["amount"] or 0), ",.2f") + ((" · " + str(row["reference"])) if row["reference"] else "")))
+    parent_activity.sort(key=lambda item: item[0], reverse=True)
+    activity_icons = {"Attendance": "✓", "School notice": "!", "Parent message": "✉", "Fee payment": "K"}
+    activity_html = "".join(
+        "<article class='parent-activity-item'><span class='parent-activity-icon'>" + activity_icons.get(kind, "•") +
+        "</span><div class='parent-activity-copy'><div class='parent-activity-heading'>" + escape(kind) +
+        "</div><div class='parent-activity-detail'>" + escape(detail) +
+        "</div><small>" + escape(stamp or "Date not recorded") + "</small></div></article>"
+        for stamp, kind, detail in parent_activity[:7]
+    )
+    if not activity_html:
+        activity_html = "<div class='empty'>There are no recent school updates to display yet.</div>"
+    attendance_width = max(0.0, min(100.0, attendance_pct))
     result_count = len(marks)
     school_contact = " · ".join(x for x in [
         str(school["phone"] or "").strip() if school else "",
@@ -5475,8 +5499,22 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 .parent-tab{{flex:0 0 auto;border:0;background:transparent;color:#607267;padding:11px 15px;border-radius:10px 10px 0 0;font:800 13px Arial;cursor:pointer}}
 .parent-tab.active{{background:#e7f5eb;color:#086338;box-shadow:inset 0 -3px #16834a}}
 .parent-view[hidden]{{display:none!important}}.parent-platform-footer{{display:flex;align-items:center;justify-content:center;gap:9px;margin:30px auto 8px;padding:14px 0 4px;border-top:1px solid #dce9df;color:#688071;font-size:12px;font-weight:700;letter-spacing:.02em}}.parent-platform-logo{{width:25px;height:25px;flex:0 0 25px;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:7px;box-shadow:0 2px 7px #173d2915}}.parent-platform-logo .davi-mark{{position:relative;width:17px;height:17px;border:2px solid #176b3a;border-left-width:3px;border-radius:3px 9px 3px 3px;background:#176b3a;overflow:hidden}}.parent-platform-logo .davi-mark:after{{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:#2e8b57;transform:skewX(-18deg);transform-origin:left bottom}}.parent-platform-footer strong{{color:#176b3a;font-weight:900}}
-.parent-overview-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}}
-@media(max-width:720px){{.parent-overview-summary{{grid-template-columns:1fr 1fr}}.parent-tab{{padding:10px 12px}}}}
+.parent-learner-banner{{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:23px 25px;background:linear-gradient(120deg,#fff,#f7fcf8);border:1px solid #dcebe0;border-radius:18px;box-shadow:0 7px 22px #173d2910}}
+.parent-learner-main{{display:flex;align-items:center;gap:15px;min-width:0}}.parent-learner-avatar{{width:54px;height:54px;flex:0 0 54px;border-radius:16px;display:grid;place-items:center;background:#e4f3e8;color:#176b3a;font-size:22px;font-weight:900}}
+.parent-learner-name{{font-size:21px;font-weight:900;color:#17452d;overflow-wrap:anywhere}}.parent-learner-meta{{display:flex;gap:8px 16px;flex-wrap:wrap;margin-top:6px;color:#688071;font-size:12px}}
+.parent-learner-class{{padding:10px 14px;border-radius:12px;background:#e8f5eb;color:#176b3a;font-size:13px;font-weight:900}}
+.parent-learner-switch{{display:flex;align-items:center;gap:8px;flex-wrap:wrap}}.parent-learner-switch label{{font-size:12px;font-weight:800;color:#557060}}
+.parent-overview-grid{{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:16px;margin-top:16px}}
+.parent-overview-panel{{background:#fff;border:1px solid #dfebe2;border-radius:16px;padding:20px;box-shadow:0 5px 18px #173d2910;min-width:0}}
+.parent-overview-panel h2{{font-size:16px;margin:0 0 15px;color:#17452d}}
+.parent-attendance-number{{font-size:30px;font-weight:900;color:#176b3a;line-height:1.1}}.parent-attendance-caption{{font-size:12px;color:#688071;margin-top:5px}}
+.parent-progress-track{{height:10px;background:#edf3ee;border-radius:99px;overflow:hidden;margin:17px 0 14px}}.parent-progress-fill{{height:100%;width:{attendance_width:.1f}%;background:linear-gradient(90deg,#16834a,#65b77c);border-radius:99px;transition:width .3s ease}}
+.parent-attendance-breakdown{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}}
+.parent-attendance-count{{padding:10px 8px;border-radius:10px;background:#f5faf6;text-align:center}}.parent-attendance-count strong{{display:block;color:#17452d;font-size:17px}}.parent-attendance-count span{{display:block;margin-top:3px;color:#688071;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}}
+.parent-activity-list{{display:grid;gap:0}}.parent-activity-item{{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid #edf2ee}}.parent-activity-item:last-child{{border-bottom:0;padding-bottom:0}}
+.parent-activity-icon{{width:30px;height:30px;flex:0 0 30px;border-radius:10px;display:grid;place-items:center;background:#e8f5eb;color:#176b3a;font-size:13px;font-weight:900}}
+.parent-activity-copy{{min-width:0}}.parent-activity-heading{{font-size:12px;font-weight:900;color:#315b41}}.parent-activity-detail{{font-size:13px;color:#294735;margin-top:3px;overflow-wrap:anywhere}}.parent-activity-copy small{{display:block;font-size:10px;color:#829287;margin-top:4px}}
+@media(max-width:720px){{.parent-overview-grid{{grid-template-columns:1fr}}.parent-learner-banner{{padding:18px}}.parent-learner-main{{align-items:flex-start}}.parent-attendance-breakdown{{grid-template-columns:repeat(2,minmax(0,1fr))}}.parent-tab{{padding:10px 12px}}}}
 @media(max-width:720px){{.stats{{grid-template-columns:1fr 1fr}}.columns{{grid-template-columns:1fr}}main{{margin-top:20px}}.stat:last-child{{grid-column:1/-1}}}}
 </style></head><body><header><div class='brand'>{logo_html}<span class='brand-copy'><span class='brand-name'>{school_name}</span></span></div><div class='parent-top-right'><div class='parent-top-welcome'>Welcome back,<strong>{escape(str(request.session.get("name") or "Parent"))}</strong><div class='parent-top-role'>Parent</div></div><details class='parent-account-menu'><summary class='parent-top-avatar' aria-label='Open parent account menu'>{escape((str(request.session.get("name") or "P").strip()[:1] or "P").upper())}</summary><a class='parent-logout' href='/logout'>Log out ↗</a></details></div></header>
 <main><section class='welcome'><h1>Your child's school overview</h1><div class='muted'>Academic progress, attendance and school updates in one place.</div></section>
@@ -5490,8 +5528,14 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 <button type='button' class='parent-tab' data-view='contact' onclick="parentShow('contact')">School Contact</button>
 </nav>
 <section class='parent-view' id='parent-overview'>
-<section class='panel' style='display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap'><div><div class='muted'>Learner</div><strong style='font-size:20px'>{learner_name}</strong><div class='muted'>Admission No. {admission}</div></div><div><div class='muted'>Current class</div><strong style='font-size:18px'>{class_label}</strong></div>{("<form method='get' action='/app/parent'><select name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
-<section class='stats'><div class='stat'><small>Assessments recorded</small><strong>{result_count}</strong></div><div class='stat'><small>Attendance recorded</small><strong>{total_att}</strong></div><div class='stat'><small>Present</small><strong>{present_att}</strong></div><div class='stat'><small>Absent</small><strong>{absent_att}</strong></div><div class='stat'><small>Late</small><strong>{late_att}</strong></div><div class='stat'><small>Attendance rate</small><strong>{attendance_pct:.1f}%</strong></div></section>
+<section class='parent-learner-banner'>
+<div class='parent-learner-main'><div class='parent-learner-avatar' aria-hidden='true'>{escape((str(student["name"] or "L").strip()[:1] or "L").upper())}</div><div><div class='muted'>Learner profile</div><div class='parent-learner-name'>{learner_name}</div><div class='parent-learner-meta'><span>Admission No. {admission}</span><span>Current class: {class_label}</span></div></div></div>
+{("<form method='get' action='/app/parent' class='parent-learner-switch'><label for='parent-child-select'>Linked learner</label><select id='parent-child-select' name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else "<div class='parent-learner-class'>"+class_label+"</div>"}
+</section>
+<div class='parent-overview-grid'>
+<section class='parent-overview-panel'><h2>Attendance snapshot</h2><div class='parent-attendance-number'>{attendance_pct:.1f}%</div><div class='parent-attendance-caption'>Attendance rate based on recorded attendance</div><div class='parent-progress-track' role='progressbar' aria-label='Attendance rate' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{attendance_pct:.1f}'><div class='parent-progress-fill'></div></div><div class='parent-attendance-breakdown'><div class='parent-attendance-count'><strong>{present_att}</strong><span>Present</span></div><div class='parent-attendance-count'><strong>{absent_att}</strong><span>Absent</span></div><div class='parent-attendance-count'><strong>{late_att}</strong><span>Late</span></div><div class='parent-attendance-count'><strong>{excused_att}</strong><span>Excused</span></div></div><div class='muted' style='margin-top:12px'>{total_att} attendance records in total</div></section>
+<section class='parent-overview-panel'><h2>Recent activity</h2><div class='parent-activity-list'>{activity_html}</div></section>
+</div>
 </section>
 <section class='parent-view' id='parent-academics' hidden><section class='panel'>
 <h2>Academic results</h2>
