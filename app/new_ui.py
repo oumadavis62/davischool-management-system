@@ -9619,8 +9619,9 @@ def marks_correction_requests(request: Request):
             action=(f"<form method='post' action='/app/academics/marks-corrections/lock" + tab_q + "' style='display:inline'>"
                     f"<input type='hidden' name='exam_id' value='{key[0]}'><input type='hidden' name='class_id' value='{key[1]}'><input type='hidden' name='subject_id' value='{key[2]}'><input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ''))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ''))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ''))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ''))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ''))}'><input type='hidden' name='return_load' value='1'>"
                     f"<button class='lock-btn' type='submit' onclick='if(confirm(&quot;Lock and submit these subject marks?&quot;)){{this.form.submit();}} return false;'>🔒 Lock</button></form>")
+        row_number=len(marks_rows.split("<tr")) if marks_rows else 1
         marks_rows += (
-            f"<tr class='correction-subject-row' tabindex='0' onclick='selectCorrectionSubject(this,event)'><td>{escape(str(r['exam_name'] or ''))}</td>"
+            f"<tr class='correction-subject-row'><td><input class='mc-row-select' type='checkbox' value='{key[0]}:{key[1]}:{key[2]}' aria-label='Select {escape(str(r['subject_name'] or 'subject'))}' onchange='updateBulkSelection()'></td><td>{row_number}</td><td>{escape(str(r['exam_name'] or ''))}</td>"
             f"<td>{escape(str(r['class_name'] or ''))}{(' · '+escape(str(r['stream'] or ''))) if r['stream'] else ''}</td>"
             f"<td><b>{escape(str(r['subject_name'] or ''))}</b></td>"
             f"<td>{escape(str(r['mark_term'] or ''))}</td><td>{escape(str(r['mark_year'] or ''))}</td>"
@@ -9677,9 +9678,12 @@ def marks_correction_requests(request: Request):
 <div class='mc-toolbar'><div class='mc-tabs'><button id='mcSavedTab' class='active' type='button' onclick='switchCorrectionPanel("saved")'>Saved Marks <span>{int(assessment_stats["total"] or 0)}</span></button><button id='mcRequestsTab' type='button' onclick='switchCorrectionPanel("requests")'>Teacher Requests <span>{len(request_rows)}</span></button></div>
 <input id='mcTableSearch' type='search' placeholder='Search assessments…' oninput='searchCorrectionRows()'></div>
 {filter_summary}
-<section class='card section mc-panel' id='mcSavedPanel'><h2>Saved &amp; Submitted Subject Marks</h2><p class='mc-help'>Each row represents one examination, class and subject assessment.</p>
-<div class='mc-table-scroll'><table id='mcSavedTable'><thead><tr><th>#</th><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{marks_rows or "<tr><td colspan='10' class='mc-empty'>"+("No saved assessments match these filters." if load_requested else "Choose Filters to load saved subject assessments.")+"</td></tr>"}</tbody></table></div></section>
+<section class='card section mc-panel' id='mcSavedPanel'><h2>Saved &amp; Submitted Subject Marks</h2><p class='mc-help'>Each row represents one examination, class and subject assessment.</p><form id='mcBulkForm' method='post' action='/app/academics/marks-corrections/bulk' class='mc-bulk-form' onsubmit='return prepareBulkAction()'>
+<input type='hidden' name='selected_keys' id='mcSelectedKeys' value=''>
+<input type='hidden' name='return_exam_id' value='{escape(str(exam_filter or ''))}'><input type='hidden' name='return_class_id' value='{escape(str(class_filter or ''))}'><input type='hidden' name='return_subject_id' value='{escape(str(subject_filter or ''))}'><input type='hidden' name='return_year' value='{escape(str(year_filter or ''))}'><input type='hidden' name='return_term' value='{escape(str(term_filter or ''))}'><input type='hidden' name='return_load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'>
+<span id='mcSelectionCount'>0 subjects selected</span><div><button type='submit' name='bulk_action' value='unlock' class='mc-bulk-unlock'>🔓 Reopen selected</button><button type='submit' name='bulk_action' value='lock' class='mc-bulk-lock'>🔒 Lock selected</button></div></form>
+<div class='mc-table-scroll'><table id='mcSavedTable'><thead><tr><th><input id='mcSelectAll' type='checkbox' aria-label='Select all assessments' onchange='toggleAllAssessments(this)'></th><th>#</th><th>Examination</th><th>Class / Stream</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{marks_rows or "<tr><td colspan='11' class='mc-empty'>"+("No saved assessments match these filters." if load_requested else "Choose Filters to load saved subject assessments.")+"</td></tr>"}</tbody></table></div></section>
 <section class='card section mc-panel' id='mcRequestsPanel' hidden><div class='mc-requests-head'><div><h2>Teacher Correction Requests</h2><p class='mc-help'>Review requests submitted by teachers and reopen marks only when approved.</p></div>
 <form method='post' action='/app/academics/marks-corrections/clear' data-native-post='1' data-no-history-filter='1' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><button class='mc-danger' type='submit'>Clear all requests</button></form></div>
 <div class='mc-table-scroll'><table id='mcRequestsTable'><thead><tr><th>#</th><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>{request_rows_html or "<tr><td colspan='9' class='mc-empty'>No teacher correction requests yet.</td></tr>"}</tbody></table></div></section>
@@ -9720,6 +9724,12 @@ def marks_correction_requests(request: Request):
 .mc-panel .btn,.mc-panel .btnlink,.mc-panel .lock-btn,.mc-panel .unlock-btn{{display:inline-block!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:10px;font-weight:850;white-space:nowrap;cursor:pointer}}
 .mc-panel .unlock-btn{{background:#a16207!important}}.mc-panel .btnlink{{background:#fff!important;border:1px solid #e4c5c0!important;color:#a33c2d!important}}
 .mc-panel .correction-subject-row{{cursor:default}}.mc-panel .correction-subject-row .lock-btn,.mc-panel .correction-subject-row .unlock-btn{{display:inline-block!important}}
+.mc-bulk-form{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:15px 0;padding:12px 14px;border:1px solid #dce9df;border-radius:12px;background:#f5faf6;color:#52705d;font-size:11px;font-weight:850}}
+.mc-bulk-form>div{{display:flex;gap:8px;flex-wrap:wrap}}
+.mc-bulk-form button{{border:0;border-radius:8px;padding:9px 12px;font-size:10px;font-weight:900;cursor:pointer}}
+.mc-bulk-unlock{{background:#fff0d8;color:#925b0b}}.mc-bulk-lock{{background:#176b3a;color:#fff}}
+.mc-row-select,#mcSelectAll{{width:16px;height:16px;accent-color:#176b3a;cursor:pointer}}
+.mc-table-scroll table{{min-width:1040px}}
 .mc-filter-summary{{margin:0 0 12px;color:#55745e;font-size:12px}}
 @media(max-width:900px){{.mc-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
 @media(max-width:600px){{.marks-correction-workspace{{padding:17px 13px 30px!important}}.mc-heading{{align-items:flex-start;flex-direction:column}}.mc-filter-trigger{{width:100%}}.mc-tabs{{width:100%}}.mc-tabs button{{flex:1;padding:9px 6px;font-size:11px}}#mcTableSearch{{width:100%}}.mc-filter-dialog .filter-grid{{grid-template-columns:1fr}}.mc-panel{{padding:13px!important}}}}
@@ -9729,9 +9739,101 @@ function switchCorrectionPanel(which){{
 var saved=which==='saved';document.getElementById('mcSavedPanel').hidden=!saved;document.getElementById('mcRequestsPanel').hidden=saved;
 document.getElementById('mcSavedTab').classList.toggle('active',saved);document.getElementById('mcRequestsTab').classList.toggle('active',!saved);
 document.getElementById('mcTableSearch').placeholder=saved?'Search assessments…':'Search teacher requests…';searchCorrectionRows();}}
+function toggleAllAssessments(master){{
+ document.querySelectorAll('#mcSavedTable .mc-row-select').forEach(function(box){{box.checked=master.checked&&!box.closest('tr').hidden;}});
+ updateBulkSelection();
+}}
+function updateBulkSelection(){{
+ var boxes=Array.from(document.querySelectorAll('#mcSavedTable .mc-row-select'));
+ var chosen=boxes.filter(function(box){{return box.checked;}});
+ var master=document.getElementById('mcSelectAll');
+ if(master){{master.checked=boxes.length>0&&chosen.length===boxes.length;master.indeterminate=chosen.length>0&&chosen.length<boxes.length;}}
+ var count=document.getElementById('mcSelectionCount');if(count)count.textContent=chosen.length+' subject'+(chosen.length===1?'':'s')+' selected';
+}}
+function prepareBulkAction(){{
+ var chosen=Array.from(document.querySelectorAll('#mcSavedTable .mc-row-select:checked')).map(function(box){{return box.value;}});
+ if(!chosen.length){{alert('Select at least one subject assessment first.');return false;}}
+ document.getElementById('mcSelectedKeys').value=chosen.join(',');
+ var submitter=document.activeElement;var action=submitter&&submitter.value==='unlock'?'reopen':'lock';
+ return confirm((action==='reopen'?'Reopen':'Lock and submit')+' '+chosen.length+' selected subject assessment(s)?');
+}}
 function searchCorrectionRows(){{var q=(document.getElementById('mcTableSearch').value||'').toLowerCase();var table=document.getElementById(document.getElementById('mcSavedPanel').hidden?'mcRequestsTable':'mcSavedTable');if(table)table.querySelectorAll('tbody tr').forEach(function(row){{row.hidden=!!q&&!row.innerText.toLowerCase().includes(q);}});}}
 </script>"""
     return _school_page(request,"Marks Corrections",body)
+
+@router.post("/app/academics/marks-corrections/bulk")
+def bulk_update_marks_corrections(
+    request: Request,
+    selected_keys: str=Form(""),
+    bulk_action: str=Form(""),
+    return_exam_id: str=Form(""),
+    return_class_id: str=Form(""),
+    return_subject_id: str=Form(""),
+    return_year: str=Form(""),
+    return_term: str=Form(""),
+    return_load: str=Form("1"),
+    ds_tab: str=Form("")
+):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _is_school_admin_like(request):
+        return HTMLResponse("Only the school administrator can manage marks locks.",403)
+    if not _require_permission(request,sid,"marks.edit"):
+        return HTMLResponse("You do not have permission to change marks locks.",403)
+    action=str(bulk_action or "").strip().lower()
+    if action not in ("lock","unlock"):
+        return HTMLResponse("Invalid bulk action.",400)
+    keys=[]
+    for item in str(selected_keys or "").split(","):
+        parts=item.split(":")
+        if len(parts)!=3:continue
+        try:key=tuple(int(value) for value in parts)
+        except (TypeError,ValueError):continue
+        if key not in keys:keys.append(key)
+    if not keys or len(keys)>500:
+        return HTMLResponse("Select between 1 and 500 subject assessments.",400)
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_academic_locks_table(cur)
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        changed=0
+        for exam_id,class_id,subject_id in keys:
+            valid=cur.execute("""
+                SELECT 1 FROM exams e
+                JOIN classes c ON c.id=? AND c.school_id=e.school_id
+                JOIN subjects s ON s.id=? AND s.school_id=e.school_id
+                WHERE e.id=? AND e.school_id=? AND EXISTS(
+                    SELECT 1 FROM marks m WHERE m.school_id=e.school_id
+                    AND m.exam_id=e.id AND m.class_id=? AND m.subject_id=? AND m.marks IS NOT NULL
+                ) LIMIT 1
+            """,(class_id,subject_id,exam_id,sid,class_id,subject_id)).fetchone()
+            if not valid:continue
+            if action=="unlock":
+                cur.execute("DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,exam_id,class_id,subject_id))
+                if cur.rowcount:
+                    changed+=1
+                    _audit(cur,sid,request,"MARKS_UNFINALIZE",f"Bulk reopened marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+            else:
+                cur.execute("DELETE FROM academic_locks WHERE school_id=? AND exam_id=? AND class_id=? AND subject_id=?",(sid,exam_id,class_id,subject_id))
+                cur.execute("INSERT INTO academic_locks(school_id,exam_id,class_id,subject_id,status,finalized_by,finalized_at) VALUES(?,?,?,?,?,?,?)",(sid,exam_id,class_id,subject_id,"finalized",request.session.get("email",""),now))
+                changed+=1
+                _audit(cur,sid,request,"MARKS_FINALIZE",f"Bulk locked marks for exam {exam_id}, class {class_id}, subject {subject_id}")
+        con.commit()
+    except Exception as exc:
+        con.rollback()
+        print("DAVISCHOOL BULK MARKS LOCK ERROR:",repr(exc),flush=True)
+        return HTMLResponse("The selected subject assessments could not be updated. No changes were saved.",500)
+    finally:
+        con.close()
+    params=[]
+    if return_load:params.append("load=1")
+    for name,value in (("exam_id",return_exam_id),("class_id",return_class_id),("subject_id",return_subject_id),("year",return_year),("term",return_term)):
+        if str(value or "").strip():params.append(name+"="+quote(str(value).strip(),safe=""))
+    if ds_tab:params.append("ds_tab="+quote(str(ds_tab),safe=""))
+    suffix=("?"+"&".join(params)) if params else ""
+    response=RedirectResponse("/app/academics/marks-corrections"+suffix,303)
+    response.headers["X-DaviSchool-Bulk-Updated"]=str(changed)
+    return response
 
 @router.post("/app/academics/marks-corrections/approve")
 def approve_marks_correction(request: Request, request_id:int=Form(...)):
