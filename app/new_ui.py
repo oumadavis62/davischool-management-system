@@ -8781,7 +8781,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
           form_actions=form_actions,outside_actions=outside_actions)+
       """<style>
       .marks-entry-page>.muted{max-width:760px;margin:4px 0 18px;color:#607166;font-size:14px;line-height:1.5}
-      .marks-workspace{margin:18px 0 16px;padding:20px 22px;border:1px solid #d4e4d7;border-radius:18px;background:linear-gradient(135deg,#f7fbf7 0%,#edf6ef 55%,#e2f0e5 100%);box-shadow:0 8px 24px rgba(31,76,43,.07)}
+      .marks-workspace{margin:18px 0 16px;padding:20px 22px;border:1px solid #d4e4d7;border-radius:18px;background:linear-gradient(135deg,#f7fbf7 0%%,#edf6ef 55%%,#e2f0e5 100%%);box-shadow:0 8px 24px rgba(31,76,43,.07)}
       .marks-workspace-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
       .marks-workspace-eyebrow{display:block;margin-bottom:7px;color:#54745c;font-size:10px;font-weight:900;letter-spacing:1.5px}
       .marks-workspace-top h2{margin:0;color:#204b30;font-size:22px;line-height:1.25}
