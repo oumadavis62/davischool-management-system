@@ -3525,7 +3525,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                         tracker_pending_classes += 1
                     subject_lines=[]
                     for subject_id in expected_subject_ids:
-                        marked_ids=marked_by_subject.get(subject_id,set())
+                        marked_ids=marked_by_subject.get(subject_id,set()) & roster_ids
                         entered=len(marked_ids)
                         missing_rows=[learner for learner in roster_rows if int(learner["student_id"]) not in marked_ids]
                         if active_count and entered>=active_count:
