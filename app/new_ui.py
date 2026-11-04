@@ -8421,7 +8421,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             selected_exam_year=cur.execute("SELECT year FROM exams WHERE school_id=? AND id=?",(sid,eid)).fetchone()
             allocation_year=str(selected_exam_year["year"] or "") if selected_exam_year else ""
             allowed_student_ids=_student_subject_allocation_ids(cur,sid,allocation_year,cid,subid)
-            if allowed_student_ids is not None:\n                students=[student for student in students if int(student["id"]) in allowed_student_ids]
+            if allowed_student_ids is not None:
+                students=[student for student in students if int(student["id"]) in allowed_student_ids]
         try:
             cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
             out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
