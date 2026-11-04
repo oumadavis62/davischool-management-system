@@ -674,6 +674,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/report-cards", "Report Cards")
             + _nav_sub("/app/academics/assessments", "SBA/CBA")
             + _nav_sub("/app/academics/subject-allocation", "Subject Allocations")
+            + _nav_sub("/app/subjects", "Subjects")
             + _nav_sub("/app/academics/allocations", "Teacher Allocations")
             + _nav_sub("/app/exams", "Examination")
             + _nav_sub("/app/academics/grading", "Grade and Points")
