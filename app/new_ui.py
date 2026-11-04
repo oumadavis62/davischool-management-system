@@ -8270,25 +8270,26 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     # not solely from archived allocations. A current Grade 8
                     # English allocation can therefore open Grade 7 English
                     # marks for the same active learners in a prior-year exam.
-                    current_pairs={(int(a["class_id"]),int(a["subject_id"]))
-                                   for a in allocations if a["class_id"] is not None and a["subject_id"] is not None}
+                    # Find all prior-class marks for the teacher's current
+                    # allocations in one database query, rather than one query
+                    # for every allocated class/subject pair.
+                    cohort_mark_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
+                        FROM marks m
+                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                        JOIN teacher_allocations ta ON ta.school_id=st.school_id
+                          AND ta.teacher_id=? AND ta.class_id=st.class_id
+                          AND ta.subject_id=m.subject_id
+                        WHERE m.school_id=? AND m.exam_id=? AND m.class_id IS NOT NULL
+                          AND lower(coalesce(st.status,'active'))='active'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM student_graduations sg
+                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                          )""",(teacher_id_for_exam_filter,sid,eid)).fetchall()
                     historical_class_subjects=set()
-                    for current_class_id,current_subject_id in current_pairs:
-                        cohort_mark_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
-                            FROM marks m
-                            JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                            WHERE m.school_id=? AND m.exam_id=? AND m.class_id IS NOT NULL
-                              AND m.subject_id=?
-                              AND st.class_id=?
-                              AND lower(coalesce(st.status,'active'))='active'
-                              AND NOT EXISTS (
-                                  SELECT 1 FROM student_graduations sg
-                                  WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                              )""",(sid,eid,current_subject_id,current_class_id)).fetchall()
-                        for mark_row in cohort_mark_rows:
-                            old_id=int(mark_row["class_id"])
-                            if old_id in participating_ids:
-                                historical_class_subjects.add((old_id,int(mark_row["subject_id"])))
+                    for mark_row in cohort_mark_rows:
+                        old_id=int(mark_row["class_id"])
+                        if old_id in participating_ids:
+                            historical_class_subjects.add((old_id,int(mark_row["subject_id"])))
                     for historical_class_id,historical_subject_id in historical_class_subjects:
                         if not any(int(c["id"])==historical_class_id for c in classes):
                             former_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
