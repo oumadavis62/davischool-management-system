@@ -3954,6 +3954,10 @@ def class_marksheets_csv(
     # Do not filter historical learners by their current stream.
     student_query += " ORDER BY name"
     students = cur.execute(student_query, student_params).fetchall()
+    allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+    allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                        if exam_key in set(selected_exam_ids) and class_key in set(selected_class_ids)}
+    students=[student for student in students if int(student["id"]) in allocated_students]
 
     selected_subject_ids = []
     for raw_id in str(subject_ids or "").split(","):
@@ -4316,6 +4320,10 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
     student_query += " ORDER BY name"
     try:
         students = cur.execute(student_query, student_params).fetchall() if cid else []
+        allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                            if exam_key in set(selected_exam_ids) and class_key in set(selected_class_ids)}
+        students=[student for student in students if int(student["id"]) in allocated_students]
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET STUDENT QUERY FAILED:", repr(exc), flush=True)
         try:
@@ -4336,7 +4344,13 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         # marks from the other streams in the same grade.
         student_ids_for_marks = [int(st["id"]) for st in students]
         student_marks_placeholders = ",".join("?" for _ in student_ids_for_marks)
-        mark_query = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=? AND student_id IN (" + student_marks_placeholders + ")"
+        _ensure_student_subject_allocations_table(cur)
+        mark_query = ("SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
+                      "ON e.school_id=m.school_id AND e.id=m.exam_id "
+                      "WHERE m.school_id=? AND m.exam_id=? AND m.student_id IN (" + student_marks_placeholders + ") "
+                      "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+                      "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+                      "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)")
         mark_params = [sid, eid] + student_ids_for_marks
         if term:
             mark_query += " AND term=?"
@@ -4363,7 +4377,11 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 cur = con.cursor()
             try:
                 fallback_rows = cur.execute(
-                    "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND exam_id=?",
+                    "SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
+                    "ON e.school_id=m.school_id AND e.id=m.exam_id WHERE m.school_id=? AND m.exam_id=? "
+                    "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+                    "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+                    "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)",
                     (sid, eid)
                 ).fetchall()
                 allowed_students = {int(st["id"]) for st in students}
@@ -4912,6 +4930,10 @@ def class_marksheets_pdf(
         # Do not filter historical learners by their current stream.
         student_sql += " ORDER BY name"
         students = cur.execute(student_sql, student_params).fetchall()
+        allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                            if exam_key in set(selected_exam_ids) and class_key in set(selected_class_ids)}
+        students=[student for student in students if int(student["id"]) in allocated_students]
 
         # Preserve the complete exam subject set for Class Mean eligibility.
         # Display-only subject filtering must not make a partially completed exam
@@ -11044,6 +11066,10 @@ def report_cards_class_preview(request: Request, exam_ids: str="", class_id: str
         grading_rules=_load_grading_rules(cur,sid)
         overall_rules=_load_overall_grading_rules(cur,sid)
         # Batch selected marks and subject comments to avoid hundreds of database round trips.
+        allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                            if exam_key in set(selected_exam_ids) and class_key==cid}
+        students=[student for student in students if int(student["id"]) in allocated_students]
         bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
         bulk_comment_map={}
         student_ids=[int(x["id"]) for x in students]
@@ -11197,8 +11223,14 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
     rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
-        rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m JOIN subjects sub ON sub.id=m.subject_id
-          WHERE m.school_id=? AND m.student_id=? AND m.exam_id=? ORDER BY sub.name""",(sid,stid,eid)).fetchall()
+        _ensure_student_subject_allocations_table(cur)
+        rows=cur.execute("""SELECT sub.id subject_id,sub.name,m.marks FROM marks m
+          JOIN subjects sub ON sub.id=m.subject_id JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+          WHERE m.school_id=? AND m.student_id=? AND m.exam_id=?
+            AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id
+              AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id
+              AND a.subject_id=m.subject_id AND a.student_id=m.student_id)
+          ORDER BY sub.name""",(sid,stid,eid)).fetchall()
         # A report is final only when every subject with a mark for this student
         # has been finalized for the student's class.
         _ensure_academic_locks_table(cur)
