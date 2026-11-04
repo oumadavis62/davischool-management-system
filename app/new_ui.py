@@ -631,7 +631,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             submenu = "".join(_nav_sub(url, item_label) for url, item_label in items)
             return (
                 f"<details class='nav-group nav-nested-group' id='{group_id}' {is_open}>"
-                + f"<summary class='nav-sub nav-subgroup-summary'><span class='nav-sub-icon'>{_modern_icon('settings' if label == 'Dean Settings' else 'analysis')}</span><b>{escape(label)}</b><span class='nav-chevron'>▾</span></summary>"
+                + f"<summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>{_modern_icon('settings' if label == 'Dean Settings' else 'analysis')}</span><b>{escape(label)}</b><span class='nav-chevron'>▾</span></summary>"
                 + f"<div class='nav-submenu nav-nested-submenu'>{submenu}</div></details>"
             )
 
