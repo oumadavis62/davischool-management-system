@@ -2515,7 +2515,8 @@ def student_edit_page(request: Request,student_id:int,modal:int=0):
     con.close()
     if not st:return HTMLResponse("Student not found.",404)
     opts="".join(f"<option value='{c['id']}' {'selected' if st['class_id'] and int(st['class_id'])==int(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' action='/app/students/edit/{student_id}{tab_q}{'&' if tab_q else '?'}modal=1' if modal else '/app/students/edit/{student_id}{tab_q}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+    edit_action=f"/app/students/edit/{student_id}{tab_q}" + (("&" if tab_q else "?") + "modal=1" if modal else "")
+    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <label>Admission number<input name='admission_no' value='{escape(str(st['admission_no'] or ''))}' required class='field'></label>
 <label>Full name<input name='name' value='{escape(str(st['name'] or ''))}' required class='field'></label>
 <label>Assessment number<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''))}' class='field'></label>
