@@ -4183,7 +4183,7 @@ def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year
               "AND (NOT EXISTS (SELECT 1 FROM student_subject_allocations legacy WHERE legacy.school_id=m.school_id "
               "AND legacy.academic_year=CAST(e.year AS TEXT)) OR EXISTS (SELECT 1 FROM student_subject_allocations a "
               "WHERE a.school_id=m.school_id AND a.academic_year=CAST(e.year AS TEXT) "
-              "AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id)))")
+              "AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id))")
     base_params = [sid] + list(student_ids) + list(exam_ids)
 
     rows = None
