@@ -694,10 +694,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
             "/app/academics/grading", "/app/academics/submission-tracker",
             "/app/academics/marks-corrections", "/app/students/promotion",
         ))
-        spreadsheet_active = request_path.startswith((
-            "/app/academics/marksheets", "/app/academics/analysis",
-            "/app/academics/marksheet-analysis",
-        ))
+        # Keep Spreadsheet expanded whenever Academic Manager is open so
+        # Class MarkSheets is reachable with one click, without an extra submenu tap.
+        spreadsheet_active = True
         academic_group = (
             "<details class='nav-group' id='academicManagerNav' "
             + ("open" if request_path.startswith((
@@ -1338,7 +1337,12 @@ document.addEventListener('submit',function(event){{
     if(!group||group.tagName!=='DETAILS'||!group.classList.contains('nav-group')||!group.open)return;
     var menu=group.querySelector(':scope > .nav-submenu');
     if(!menu)return;
-    menu.querySelectorAll(':scope > a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
+    if(group.id==='academicManagerNav'){{
+      var spreadsheet=document.getElementById('academicSpreadsheetNav');
+      if(spreadsheet)spreadsheet.querySelectorAll('a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
+    }}else{{
+      menu.querySelectorAll(':scope > a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
+    }}
   }},true);
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
