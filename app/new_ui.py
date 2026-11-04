@@ -705,12 +705,13 @@ def _shell(title, name, role, body, school_id=None, request=None):
             )) else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('academics')}</span><b>Academic Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
-            + _nav_sub("/app/academics/marks", "Marks Entry")
             + _academic_dropdown("Dean Settings", dean_routes, dean_active, "academicDeanSettingsNav")
+            + _nav_sub("/app/academics/marks", "Marks Entry")
             + _academic_dropdown("Spreadsheet", spreadsheet_routes, spreadsheet_active, "academicSpreadsheetNav")
             + _nav_sub("/app/report-cards", "Report Cards")
             + _nav_sub("/app/academics/assessments", "SBA/CBA")
             + _nav_sub("/app/classes", "Classes and Streams")
+            + _nav_sub("/app/students/graduation-records", "Graduation Records")
             + "</div></details>"
         )
         links = "".join(
