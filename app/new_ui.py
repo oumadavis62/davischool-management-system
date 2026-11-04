@@ -12097,7 +12097,7 @@ function printGraduationRegister(){
 </script>"""
     graduation_print_script = graduation_print_script.replace("__GRADUATION_PRINT_HEADER__", json.dumps(graduation_print_header, ensure_ascii=False))
     body = f"""<div class='page students-list-page'>
-<h1>Graduation Records</h1>
+<header class='students-page-heading'><div><div class='students-eyebrow'>STUDENT MANAGEMENT / ALUMNI</div><h1>Alumni List</h1>
 <div class='muted'>Explore former learners by graduation year and final class while preserving their academic history.</div></div></header>
 <div class='card section'><form method='get' action='/app/students/graduation-records' class='graduation-filters'>
 <label>Graduation Year<select name='graduation_year' class='field'>{year_options}</select></label>
