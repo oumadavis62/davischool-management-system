@@ -9635,9 +9635,101 @@ def marks_correction_requests(request: Request):
 
     filter_summary = ""
     if load_requested:
-        filter_summary = "<div class='muted' style='margin-top:10px'>Showing %d saved subject assessment(s) matching the selected filters.</div>" % len(saved_rows)
+        filter_summary = "<div class='mc-filter-summary'>Showing %d saved subject assessment(s) matching the selected filters.</div>" % len(saved_rows)
 
-    body=f"""<div class='page'><h1>Marks Corrections</h1>
+    assessment_stats=cur.execute("""
+        SELECT COUNT(*) total,
+               COALESCE(SUM(CASE WHEN locked=1 THEN 1 ELSE 0 END),0) locked,
+               COALESCE(SUM(CASE WHEN locked=0 THEN 1 ELSE 0 END),0) unlocked
+        FROM (
+            SELECT m.exam_id,m.class_id,m.subject_id,
+                   MAX(CASE WHEN al.status='finalized' THEN 1 ELSE 0 END) locked
+            FROM marks m LEFT JOIN academic_locks al
+              ON al.school_id=m.school_id AND al.exam_id=m.exam_id
+             AND al.class_id=m.class_id AND al.subject_id=m.subject_id
+            WHERE m.school_id=? AND m.exam_id IS NOT NULL
+              AND m.class_id IS NOT NULL AND m.subject_id IS NOT NULL AND m.marks IS NOT NULL
+            GROUP BY m.exam_id,m.class_id,m.subject_id
+        ) grouped_assessments
+    """,(sid,)).fetchone()
+    pending_requests=sum(1 for row in request_rows if str(row["status"] or "").lower()=="pending")
+
+    body=f"""<div class='page marks-correction-workspace'><div class='mc-eyebrow'>ACADEMIC MANAGER / ASSESSMENT CONTROL</div><div class='mc-heading'><div><h1>Marks Correction</h1>
+<p>Review saved assessments, manage submission locks and respond to teacher correction requests.</p></div>
+<button type='button' class='mc-filter-trigger' onclick="document.getElementById('mcFilterDialog').showModal()">⚙ Filters</button></div>
+<section class='mc-stats'>
+<article><small>Saved assessments</small><strong>{int(assessment_stats["total"] or 0)}</strong></article>
+<article><small>Locked / submitted</small><strong>{int(assessment_stats["locked"] or 0)}</strong></article>
+<article><small>Unlocked assessments</small><strong>{int(assessment_stats["unlocked"] or 0)}</strong></article>
+<article><small>Pending requests</small><strong>{pending_requests}</strong></article></section>
+<dialog id='mcFilterDialog' class='mc-filter-dialog'><form method='get' action='/app/academics/marks-corrections' class='marks-filter-form'>
+<div class='mc-dialog-head'><h2>Filter assessments</h2><button type='button' onclick="document.getElementById('mcFilterDialog').close()">×</button></div>
+<div class='filter-grid'>
+<label>Examination<select name='exam_id' class='field'><option value=''>All Examinations</option>{exam_options}</select></label>
+<label>Class / Stream<select name='class_id' class='field'><option value=''>All Classes</option>{class_options}</select></label>
+<label>Subject<select name='subject_id' class='field'><option value=''>All Subjects</option>{subject_options}</select></label>
+<label>Year<select name='year' class='field'><option value=''>All Years</option>{year_options}</select></label>
+<label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label></div>
+<input type='hidden' name='load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'>
+<div class='mc-dialog-actions'><a href='/app/academics/marks-corrections'>Reset</a><button class='load-btn' type='submit'>Apply filters</button></div></form></dialog>
+<div class='mc-toolbar'><div class='mc-tabs'><button id='mcSavedTab' class='active' type='button' onclick='switchCorrectionPanel("saved")'>Saved Marks <span>{int(assessment_stats["total"] or 0)}</span></button><button id='mcRequestsTab' type='button' onclick='switchCorrectionPanel("requests")'>Teacher Requests <span>{len(request_rows)}</span></button></div>
+<input id='mcTableSearch' type='search' placeholder='Search assessments…' oninput='searchCorrectionRows()'></div>
+{filter_summary}
+<section class='card section mc-panel' id='mcSavedPanel'><h2>Saved &amp; Submitted Subject Marks</h2><p class='mc-help'>Each row represents one examination, class and subject assessment.</p>
+<div class='mc-table-scroll'><table id='mcSavedTable'><thead><tr><th>#</th><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>{marks_rows or "<tr><td colspan='10' class='mc-empty'>"+("No saved assessments match these filters." if load_requested else "Choose Filters to load saved subject assessments.")+"</td></tr>"}</tbody></table></div></section>
+<section class='card section mc-panel' id='mcRequestsPanel' hidden><div class='mc-requests-head'><div><h2>Teacher Correction Requests</h2><p class='mc-help'>Review requests submitted by teachers and reopen marks only when approved.</p></div>
+<form method='post' action='/app/academics/marks-corrections/clear' data-native-post='1' data-no-history-filter='1' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><button class='mc-danger' type='submit'>Clear all requests</button></form></div>
+<div class='mc-table-scroll'><table id='mcRequestsTable'><thead><tr><th>#</th><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead><tbody>{request_rows_html or "<tr><td colspan='9' class='mc-empty'>No teacher correction requests yet.</td></tr>"}</tbody></table></div></section>
+</div>
+<style>
+.marks-correction-workspace{{max-width:1480px!important;padding:25px 26px 42px!important;color:#183b2a}}
+.mc-eyebrow{{font-size:10px;letter-spacing:1.5px;font-weight:900;color:#43845b;margin-bottom:8px}}
+.mc-heading{{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:20px}}
+.mc-heading h1{{font-size:clamp(25px,3vw,32px);font-weight:900;color:#173e2a;margin:0 0 7px}}
+.mc-heading p,.mc-help{{margin:0;color:#718477;font-size:12px;line-height:1.55}}
+.mc-filter-trigger,.load-btn{{border:0;border-radius:10px;background:linear-gradient(135deg,#176b3a,#2e8b57);color:#fff;font-weight:850;padding:11px 16px;cursor:pointer}}
+.mc-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:0 0 22px}}
+.mc-stats article{{background:#fff;border:1px solid #dce9df;border-radius:15px;padding:17px;box-shadow:0 5px 16px #184b2d0b}}
+.mc-stats small{{display:block;color:#718477;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.5px}}
+.mc-stats strong{{display:block;margin-top:7px;color:#183e2a;font-size:26px;font-weight:900}}
+.mc-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 14px}}
+.mc-tabs{{display:flex;gap:5px;background:#e2eee4;padding:5px;border-radius:11px}}
+.mc-tabs button{{border:0;background:transparent;color:#52705d;border-radius:8px;padding:10px 13px;font-size:12px;font-weight:850;cursor:pointer}}
+.mc-tabs button.active{{background:#fff;color:#176b3a;box-shadow:0 2px 7px #184b2d18}}
+.mc-tabs span{{margin-left:5px;background:#eaf4ec;border-radius:20px;padding:3px 6px}}
+#mcTableSearch{{height:39px;width:min(290px,100%);border:1px solid #d7e5da;border-radius:10px;background:#fff;padding:0 12px}}
+.mc-panel{{margin:0 0 16px!important;padding:19px!important;border:1px solid #dce9df!important;border-radius:16px!important;background:#fff;box-shadow:0 5px 18px #184b2d0d}}
+.mc-panel h2{{margin:0 0 5px;color:#19452f;font-size:17px;font-weight:900}}
+.mc-table-scroll{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e3ece5;border-radius:12px;margin-top:14px}}
+.mc-table-scroll table{{min-width:920px;border:0;border-collapse:separate;border-spacing:0}}
+.mc-table-scroll th{{background:#edf5ef;color:#52705d;font-size:10px;padding:12px 11px;white-space:nowrap}}
+.mc-table-scroll td{{padding:12px 11px;border-bottom:1px solid #edf2ee;color:#304d3a;font-size:11px;vertical-align:middle}}
+.mc-empty{{text-align:center!important;padding:28px!important;color:#829487!important}}
+.mc-filter-dialog{{width:min(640px,calc(100% - 28px));border:1px solid #d8e7dc;border-radius:18px;padding:22px;background:#fbfefb;box-shadow:0 24px 80px #102b1d35}}
+.mc-filter-dialog::backdrop{{background:#0d251878;backdrop-filter:blur(3px)}}
+.mc-dialog-head,.mc-requests-head,.mc-dialog-actions{{display:flex;align-items:center;justify-content:space-between;gap:12px}}
+.mc-dialog-head h2{{margin:0 0 16px;color:#19452f}}
+.mc-filter-dialog .filter-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+.mc-filter-dialog label{{display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:850;color:#46614e}}
+.mc-filter-dialog .field{{width:100%;min-height:42px;border:1px solid #d6e4d9;border-radius:9px;background:#fff;padding:9px 11px}}
+.mc-dialog-actions{{margin-top:18px}}.mc-dialog-actions a{{color:#63816c;font-size:12px;font-weight:800;text-decoration:none}}
+.mc-danger{{border:1px solid #f0c8c2;background:#fff8f6;color:#a33c2d;border-radius:9px;padding:9px 12px;font-size:11px;font-weight:850;cursor:pointer}}
+.mc-panel .btn,.mc-panel .btnlink,.mc-panel .lock-btn,.mc-panel .unlock-btn{{display:inline-block!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:10px;font-weight:850;white-space:nowrap;cursor:pointer}}
+.mc-panel .unlock-btn{{background:#a16207!important}}.mc-panel .btnlink{{background:#fff!important;border:1px solid #e4c5c0!important;color:#a33c2d!important}}
+.mc-panel .correction-subject-row{{cursor:default}}.mc-panel .correction-subject-row .lock-btn,.mc-panel .correction-subject-row .unlock-btn{{display:inline-block!important}}
+.mc-filter-summary{{margin:0 0 12px;color:#55745e;font-size:12px}}
+@media(max-width:900px){{.mc-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
+@media(max-width:600px){{.marks-correction-workspace{{padding:17px 13px 30px!important}}.mc-heading{{align-items:flex-start;flex-direction:column}}.mc-filter-trigger{{width:100%}}.mc-tabs{{width:100%}}.mc-tabs button{{flex:1;padding:9px 6px;font-size:11px}}#mcTableSearch{{width:100%}}.mc-filter-dialog .filter-grid{{grid-template-columns:1fr}}.mc-panel{{padding:13px!important}}}}
+</style>
+<script>
+function switchCorrectionPanel(which){{
+var saved=which==='saved';document.getElementById('mcSavedPanel').hidden=!saved;document.getElementById('mcRequestsPanel').hidden=saved;
+document.getElementById('mcSavedTab').classList.toggle('active',saved);document.getElementById('mcRequestsTab').classList.toggle('active',!saved);
+document.getElementById('mcTableSearch').placeholder=saved?'Search assessments…':'Search teacher requests…';searchCorrectionRows();}}
+function searchCorrectionRows(){{var q=(document.getElementById('mcTableSearch').value||'').toLowerCase();var table=document.getElementById(document.getElementById('mcSavedPanel').hidden?'mcRequestsTable':'mcSavedTable');if(table)table.querySelectorAll('tbody tr').forEach(function(row){{row.hidden=!!q&&!row.innerText.toLowerCase().includes(q);}});}}
+</script>"""
+
 <div class='muted'>Select the examination, class, subject, year and term, then click <b>Load</b> to display the saved subject marks for that selection.</div>
 <div class='card section'>
 <h2>Load Saved & Submitted Subject Marks</h2>
@@ -9650,7 +9742,7 @@ def marks_correction_requests(request: Request):
 <label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label>
 </div>
 <div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px'>
-<input type='hidden' name='load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>Load Students</button>
+<input type='hidden' name='load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>Load Assessments</button>
 <a class='clear-btn' href='/app/academics/marks-corrections'>Clear</a>
 </div>
 </form>
@@ -9677,7 +9769,7 @@ def marks_correction_requests(request: Request):
 .btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
 .btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
 .unlock-btn{{background:#b45309}}
-.lock-btn{{background:#176B3A}}.correction-subject-row{{cursor:pointer;transition:background .15s,box-shadow .15s}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row .lock-btn,.correction-subject-row .unlock-btn{{display:none}}.correction-subject-row.selected .lock-btn,.correction-subject-row.selected .unlock-btn{{display:inline-block}}.correction-subject-row:focus{{outline:2px solid #176B3A;outline-offset:-2px}}
+.lock-btn{{background:#176B3A}}.correction-subject-row{{cursor:pointer;transition:background .15s,box-shadow .15s}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row .lock-btn,.correction-subject-row .unlock-btn{{display:inline-block}}.correction-subject-row:focus{{outline:2px solid #176B3A;outline-offset:-2px}}
 @media(max-width:900px){{.filter-grid{{grid-template-columns:repeat(2,minmax(150px,1fr))}}}}
 @media(max-width:560px){{.filter-grid{{grid-template-columns:1fr}}}}
 </style>"""
