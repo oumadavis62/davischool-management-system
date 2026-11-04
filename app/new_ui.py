@@ -9547,6 +9547,23 @@ def marks_correction_requests(request: Request):
         ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.id DESC
     """,(sid,)).fetchall()
 
+    assessment_stats=cur.execute("""
+        SELECT COUNT(*) total,
+               COALESCE(SUM(CASE WHEN locked=1 THEN 1 ELSE 0 END),0) locked,
+               COALESCE(SUM(CASE WHEN locked=0 THEN 1 ELSE 0 END),0) unlocked
+        FROM (
+            SELECT m.exam_id,m.class_id,m.subject_id,
+                   MAX(CASE WHEN al.status='finalized' THEN 1 ELSE 0 END) locked
+            FROM marks m LEFT JOIN academic_locks al
+              ON al.school_id=m.school_id AND al.exam_id=m.exam_id
+             AND al.class_id=m.class_id AND al.subject_id=m.subject_id
+            WHERE m.school_id=? AND m.exam_id IS NOT NULL
+              AND m.class_id IS NOT NULL AND m.subject_id IS NOT NULL AND m.marks IS NOT NULL
+            GROUP BY m.exam_id,m.class_id,m.subject_id
+        ) grouped_assessments
+    """,(sid,)).fetchone()
+    pending_requests=sum(1 for row in request_rows if str(row["status"] or "").lower()=="pending")
+
     con.close()
 
     exam_options="".join(
@@ -9637,22 +9654,7 @@ def marks_correction_requests(request: Request):
     if load_requested:
         filter_summary = "<div class='mc-filter-summary'>Showing %d saved subject assessment(s) matching the selected filters.</div>" % len(saved_rows)
 
-    assessment_stats=cur.execute("""
-        SELECT COUNT(*) total,
-               COALESCE(SUM(CASE WHEN locked=1 THEN 1 ELSE 0 END),0) locked,
-               COALESCE(SUM(CASE WHEN locked=0 THEN 1 ELSE 0 END),0) unlocked
-        FROM (
-            SELECT m.exam_id,m.class_id,m.subject_id,
-                   MAX(CASE WHEN al.status='finalized' THEN 1 ELSE 0 END) locked
-            FROM marks m LEFT JOIN academic_locks al
-              ON al.school_id=m.school_id AND al.exam_id=m.exam_id
-             AND al.class_id=m.class_id AND al.subject_id=m.subject_id
-            WHERE m.school_id=? AND m.exam_id IS NOT NULL
-              AND m.class_id IS NOT NULL AND m.subject_id IS NOT NULL AND m.marks IS NOT NULL
-            GROUP BY m.exam_id,m.class_id,m.subject_id
-        ) grouped_assessments
-    """,(sid,)).fetchone()
-    pending_requests=sum(1 for row in request_rows if str(row["status"] or "").lower()=="pending")
+
 
     body=f"""<div class='page marks-correction-workspace'><div class='mc-eyebrow'>ACADEMIC MANAGER / ASSESSMENT CONTROL</div><div class='mc-heading'><div><h1>Marks Correction</h1>
 <p>Review saved assessments, manage submission locks and respond to teacher correction requests.</p></div>
