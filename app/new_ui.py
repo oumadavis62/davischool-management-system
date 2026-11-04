@@ -302,6 +302,11 @@ def _student_subject_allocation_ids(cur, school_id, academic_year, class_id, sub
     rows=cur.execute("""SELECT student_id FROM student_subject_allocations
         WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?""",
         (school_id,str(academic_year or "").strip(),int(class_id),int(subject_id))).fetchall()
+    # A missing/empty register means this class/subject predates optional
+    # learner allocation. Return None so callers preserve the cohort already
+    # selected by the exam/class filters instead of hiding every learner.
+    if not rows:
+        return None
     return {int(row["student_id"]) for row in rows}
 
 
@@ -8416,7 +8421,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             selected_exam_year=cur.execute("SELECT year FROM exams WHERE school_id=? AND id=?",(sid,eid)).fetchone()
             allocation_year=str(selected_exam_year["year"] or "") if selected_exam_year else ""
             allowed_student_ids=_student_subject_allocation_ids(cur,sid,allocation_year,cid,subid)
-            students=[student for student in students if int(student["id"]) in allowed_student_ids]
+            if allowed_student_ids is not None:\n                students=[student for student in students if int(student["id"]) in allowed_student_ids]
         try:
             cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
             out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
@@ -8703,7 +8708,7 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         # Load the existing per-student state in batches, rather than doing
         # several SELECTs for every learner in a class.
         allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
-        students=[student for student in students if int(student["id"]) in allocation_ids]
+        if allocation_ids is not None:\n            students=[student for student in students if int(student["id"]) in allocation_ids]
         student_ids=[int(st["id"]) for st in students]
         draft_students=set()
         marks_by_student={}
@@ -8910,7 +8915,7 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                        ))
                    ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,exam_id)).fetchall()
     eligible_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
-    students=[student for student in students if int(student["id"]) in eligible_ids]
+    if eligible_ids is not None:\n        students=[student for student in students if int(student["id"]) in eligible_ids]
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
