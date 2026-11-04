@@ -5238,10 +5238,11 @@ function printDocument(){
     # Entries in the distribution table must include every displayed grade,
     # including X. This keeps the total consistent with the grade columns.
     overall_entries = sum(overall_grade_counts.get(g, 0) for g in distribution_grades)
-    # Mean of eligible students' TOTAL MARKS. Partial exam attempts are included.
+    # Average each assessed learner's score over the subjects they sat.
+    # This keeps every class mean on a 0–100% scale, including partial attempts.
     overall_class_mean = (
-        sum(float(item[1] or 0) for item in mean_eligible_students)
-        / len(mean_eligible_students)
+        sum(float(item[1] or 0) / int(item[3]) for item in mean_eligible_students if int(item[3] or 0) > 0)
+        / len([item for item in mean_eligible_students if int(item[3] or 0) > 0])
         if mean_eligible_students else None
     )
     # Identify the exact class/stream scope automatically so the overall
@@ -5716,16 +5717,16 @@ def class_marksheets_pdf(
         ))
         if ordered_grades:
             overall_entries_pdf = sum(grade_counts.get(g, 0) for g in ordered_grades)
-            # PDF Class Mean must use eligible students' actual total marks,
-            # matching the MarkSheet HTML calculation. Partial exam attempts count;
-            # only students with no recorded exam mark are excluded.
+            # PDF class mean uses each assessed learner's percentage average,
+            # matching the on-screen MarkSheet. Partial attempts count; non-sitters do not.
             mean_eligible_students_pdf = [
                 item for item in computed
                 if int(item.get("count", 0) or 0) > 0
             ]
             overall_class_mean_pdf = (
-                sum(float(item.get("total", 0) or 0) for item in mean_eligible_students_pdf)
-                / len(mean_eligible_students_pdf)
+                sum(float(item.get("total", 0) or 0) / int(item.get("count", 0))
+                    for item in mean_eligible_students_pdf if int(item.get("count", 0) or 0) > 0)
+                / len([item for item in mean_eligible_students_pdf if int(item.get("count", 0) or 0) > 0])
                 if mean_eligible_students_pdf else None
             )
             overall_rows = [
@@ -5733,7 +5734,7 @@ def class_marksheets_pdf(
                 + [Paragraph("Entries", styles["table_head"]), Paragraph("Class Mean", styles["table_head"])],
                 [Paragraph(str(grade_counts[g]), styles["table"]) for g in ordered_grades]
                 + [Paragraph(str(overall_entries_pdf), styles["table"]),
-                   Paragraph(("%.2f" % overall_class_mean_pdf) if overall_class_mean_pdf is not None else "—", styles["table"])],
+                   Paragraph(("%.2f%%" % overall_class_mean_pdf) if overall_class_mean_pdf is not None else "—", styles["table"])],
             ]
             grade_col_width = max(22 * mm, min(34 * mm, 150 * mm / len(ordered_grades)))
             overall_table = Table(
