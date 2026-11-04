@@ -5012,7 +5012,7 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         f"&term={quote(str(term or ''), safe='')}"
         f"&year={quote(str(year or ''), safe='')}"
         f"&stream={quote(str(stream or ''), safe='')}"
-        f"&subject_ids={quote(','.join(str(x) for x in selected_subject_ids), safe='')}"
+        f"&subject_ids={quote(subject_ids_value, safe='')}"
         f"&subject_metrics={quote(subject_metrics or '', safe='')}"
         f"&overall_metrics={quote(','.join(overall_metric_list), safe='')}"
     )
