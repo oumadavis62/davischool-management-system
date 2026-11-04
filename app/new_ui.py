@@ -665,20 +665,21 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + ("open" if request_path.startswith((
                 "/app/academics", "/app/exams", "/app/report-cards",
                 "/app/subjects", "/app/students/promotion",
-                            )) else "") + ">"
+            )) else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('academics')}</span><b>Academic Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
-            + _academic_dropdown("Dean Settings", dean_routes, dean_active, "academicDeanSettings")
             + _nav_sub("/app/academics/marks", "Marks Entry")
-            + "<details class='nav-group nav-nested-group' id='academicSpreadsheet' "
-            + ("open" if spreadsheet_active else "") + ">"
-            + "<summary class='nav-sub nav-subgroup-summary'><span class='nav-sub-icon'>" + _modern_icon("marks") + "</span><b>Spreadsheet</b><span class='nav-chevron'>▾</span></summary>"
-            + "<div class='nav-submenu nav-nested-submenu'>"
-            + "".join(_nav_sub(url, label) for url, label in spreadsheet_routes)
-            + _academic_dropdown("Exam Analysis", exam_analysis_routes, request_path.startswith("/app/academics/analysis"), "academicExamAnalysis")
-            + "</div></details>"
+            + _nav_sub("/app/academics/marksheets", "Class MarkSheets")
+            + _nav_sub("/app/academics/analysis", "Class MarkSheet Analysis")
             + _nav_sub("/app/report-cards", "Report Cards")
             + _nav_sub("/app/academics/assessments", "SBA/CBA")
+            + _nav_sub("/app/academics/subject-allocation", "Subject Allocations")
+            + _nav_sub("/app/academics/allocations", "Teacher Allocations")
+            + _nav_sub("/app/exams", "Examination")
+            + _nav_sub("/app/academics/grading", "Grade and Points")
+            + _nav_sub("/app/academics/submission-tracker", "Examination Tracker")
+            + _nav_sub("/app/academics/marks-corrections", "Marks Correction")
+            + _nav_sub("/app/students/promotion", "Promotion/Transfer")
             + _nav_sub("/app/classes", "Classes and Streams")
             + "</div></details>"
         )
