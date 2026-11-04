@@ -5256,7 +5256,7 @@ function printDocument(){
             "<div class='marksheet-scroll distribution-scroll'><div class='distribution-title'>" + overall_distribution_label + "</div>"
             "<table class='grade-distribution overall-distribution'><thead><tr>" +
             "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
-            "<th>Entries</th><th>Class Mean</th></tr></thead><tbody><tr>" +
+            "<th>Entries</th><th>Class Mean %</th></tr></thead><tbody><tr>" +
             "".join("<td>%d</td>" % overall_grade_counts.get(g, 0) for g in distribution_grades) +
             "<td>%d</td><td>%s</td>" % (overall_entries, ("%.2f%%" % overall_class_mean) if overall_class_mean is not None else "—") +
             "</tr></tbody></table></div>"
@@ -5731,7 +5731,7 @@ def class_marksheets_pdf(
             )
             overall_rows = [
                 [Paragraph(escape(g), styles["table_head"]) for g in ordered_grades]
-                + [Paragraph("Entries", styles["table_head"]), Paragraph("Class Mean", styles["table_head"])],
+                + [Paragraph("Entries", styles["table_head"]), Paragraph("Class Mean %", styles["table_head"])],
                 [Paragraph(str(grade_counts[g]), styles["table"]) for g in ordered_grades]
                 + [Paragraph(str(overall_entries_pdf), styles["table"]),
                    Paragraph(("%.2f%%" % overall_class_mean_pdf) if overall_class_mean_pdf is not None else "—", styles["table"])],
