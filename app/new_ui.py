@@ -596,6 +596,10 @@ def _shell(title, name, role, body, school_id=None, request=None):
         def _nav_sub(url, label):
             route = url.split("?", 1)[0]
             active = request_path == route or (route != "/app/academics" and request_path.startswith(route + "/"))
+            if label == "Students List":
+                active = request_path == route and not request.query_params.get("status")
+            elif label == "Transferred/Inactive List":
+                active = request_path == route and request.query_params.get("status") == "inactive,transferred"
             icons = {"Students List":"students", "Transferred/Inactive List":"users", "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"attendance", "Alumni List":"students", "Staff List":"staff", "Former Staff":"users", "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam", "Grade and Points":"grading", "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion/Transfer":"allocation", "Class MarkSheets":"marks", "Class MarkSheet Analysis":"analysis", "Marks Entry":"marks", "Report Cards":"report", "SBA/CBA":"subject", "Classes and Streams":"school"}
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
