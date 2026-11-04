@@ -92,6 +92,21 @@ def translate_sql(sql: str) -> str:
         if "ON CONFLICT" not in q.upper():
             q = q.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
 
+    pragma_table_info = re.match(
+        r"^\s*PRAGMA\s+table_info\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*;?\s*$",
+        q,
+        flags=re.IGNORECASE,
+    )
+    if pragma_table_info:
+        table_name = pragma_table_info.group(1)
+        return (
+            "SELECT ordinal_position - 1 AS cid, column_name AS name, "
+            "data_type AS type, 0 AS notnull, NULL AS dflt_value, "
+            "0 AS pk FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='%s' "
+            "ORDER BY ordinal_position" % table_name.lower()
+        )
+
     if re.match(r"^\s*PRAGMA\b", q, flags=re.IGNORECASE):
         return "SELECT 1 AS pragma_ignored"
 
