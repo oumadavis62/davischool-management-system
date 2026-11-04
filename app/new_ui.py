@@ -8664,6 +8664,39 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             print("DAVISCHOOL MARKS CORRECTION READ FALLBACK:", repr(exc), flush=True)
             pending_correction = None
     rule_note="Custom grading: %s rule(s)"%len(grading_rules) if grading_rules else "Using default A-E grading until you configure this subject."
+    # Compact assessment context; preserve the existing filter popup, table,
+    # scroll container, permissions, and marks-saving workflow unchanged.
+    selected_exam_row=next((row for row in all_exams if int(row["id"])==eid),None) if eid else None
+    selected_class_row=next((row for row in all_classes if int(row["id"])==cid),None) if cid else None
+    selected_subject_row=next((row for row in subjects if int(row["id"])==subid),None) if subid else None
+    learner_count=len(students)
+    entered_count=sum(1 for student in students if str(student["marks"] or "").strip()!="")
+    remaining_count=max(0,learner_count-entered_count)
+    progress_pct=int(round((entered_count*100.0)/learner_count)) if learner_count else 0
+    selection_context=""
+    if selected_exam_row and selected_class_row and selected_subject_row:
+        selected_year_label=str(selected_exam_row["year"] or year_filter or "—")
+        selected_exam_label=str(selected_exam_row["name"] or "—")
+        selected_class_label=str(selected_class_row["name"] or "—")
+        if str(selected_class_row["stream"] or "").strip():
+            selected_class_label += " " + str(selected_class_row["stream"]).strip()
+        selected_subject_label=str(selected_subject_row["name"] or "—")
+        entry_state=("FINALIZED & LOCKED" if locked else
+                     ("COMPLETE" if learner_count and entered_count==learner_count else
+                      ("IN PROGRESS" if entered_count else "NOT STARTED")))
+        selection_context=(
+            "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:9px;margin:10px 0 12px;padding:12px;background:#f8fbf8;border:1px solid #dce9de;border-radius:10px'>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>ACADEMIC YEAR</small><strong>"+escape(selected_year_label)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>EXAMINATION</small><strong>"+escape(selected_exam_label)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>CLASS / STREAM</small><strong>"+escape(selected_class_label)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>SUBJECT</small><strong>"+escape(selected_subject_label)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>LEARNERS</small><strong>"+str(learner_count)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>MARKS ENTERED</small><strong>"+str(entered_count)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>REMAINING</small><strong>"+str(remaining_count)+"</strong></div>"
+            "<div><small style='display:block;color:#647568;font-weight:800;font-size:10px'>ENTRY STATUS</small><strong>"+escape(entry_state)+"</strong></div>"
+            "<div style='grid-column:1/-1'><div style='display:flex;justify-content:space-between;gap:8px;margin-bottom:5px;font-size:11px;color:#536b58'><span>Entry progress</span><strong>"+str(progress_pct)+"%</strong></div>"
+            "<div style='height:6px;background:#e5eee6;border-radius:8px;overflow:hidden'><div style='height:6px;width:"+str(progress_pct)+"%;background:#39834d;border-radius:8px'></div></div></div></div>"
+        )
     grading_link="" if role=="teacher" else "<a href='/app/academics/grading?subject_id=%s' style='margin-left:10px;font-weight:800'>Set / Edit Grade & Points</a>"%subid
     # Teacher forms default to PRIVATE DRAFT saving. Submit & Lock explicitly
     # overrides the form action to publish and lock the marks. School Admin keeps
@@ -8736,12 +8769,13 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<label>Class<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select></label>"
       "<label>Subject<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select></label></div>"
       "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit'>Load Students</button></div></section></div></form>"
-      "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>"
+      "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>{selection_context}"
       "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
       "<div class='marks-table-scroll'><table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table></div>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
           bg=("#fee2e2" if locked else "#f0fdf4"),
           status=("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),
+          selection_context=selection_context,
           action=form_action,eid=eid,cid=cid,subid=subid,out_of=out_of,
           rows=rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",
           form_actions=form_actions,outside_actions=outside_actions)+
