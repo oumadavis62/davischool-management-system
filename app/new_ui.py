@@ -609,7 +609,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/students", "Students List")
-            + _nav_sub("/app/students?status=inactive%2Ctransferred", "Transferred/Inactive List")
             + _nav_sub("/app/attendance", "Attendance Sheet")
             + _nav_sub("/app/student-attendance-report", "Attendance Report")
             + _nav_sub("/app/students/id-cards", "ID Cards")
