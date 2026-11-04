@@ -2456,7 +2456,7 @@ def staff_attendance_sheet(request: Request, attendance_date: str=""):
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.view"):
         return HTMLResponse("You do not have permission to view staff attendance.",403)
-    day=attendance_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",attendance_date or "") else datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    day=attendance_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",attendance_date or "") else datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
     con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
     staff=cur.execute("""SELECT id,name,role,department FROM teachers
         WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name""",(sid,)).fetchall()
@@ -2474,7 +2474,7 @@ async def staff_attendance_save(request: Request, attendance_date: str=Form(...)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"staff.edit"):
         return HTMLResponse("You do not have permission to edit staff attendance.",403)
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",attendance_date or ""):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}",attendance_date or ""):
         return HTMLResponse("Choose a valid attendance date.",400)
     form=await request.form();con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
     staff=cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left'",(sid,)).fetchall()
@@ -2501,8 +2501,8 @@ def staff_attendance_report(request: Request, start_date: str="", end_date: str=
     if not _require_permission(request,sid,"staff.view"):
         return HTMLResponse("You do not have permission to view staff attendance reports.",403)
     today=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
-    end=end_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",end_date or "") else today
-    start=start_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",start_date or "") else end[:8]+"01"
+    end=end_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",end_date or "") else today
+    start=start_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",start_date or "") else end[:8]+"01"
     con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
     rows=cur.execute("""SELECT t.id staff_id,t.name,t.role,t.department,
         COUNT(a.id) days, SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) present,
