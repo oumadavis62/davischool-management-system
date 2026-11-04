@@ -3784,7 +3784,10 @@ def school_teacher_edit(teacher_id:int, request:Request):
 def school_teacher_edit_save(teacher_id:int, request:Request, name:str=Form(...), tsc_no:str=Form(""), id_no:str=Form(""), gender:str=Form(""), role:str=Form(""), department:str=Form(""), phone:str=Form(""), email:str=Form(""), employment_type:str=Form("Teaching")):
     school=_school_user(request)
     if not school: return RedirectResponse("/",303)
-    con=get_db(); department=department.strip()\n    allowed_departments=_staff_department_choices(role)\n    if department and department not in allowed_departments: department=''\n    con.execute("UPDATE teachers SET name=?,tsc_no=?,id_no=?,gender=?,role=?,department=?,phone=?,email=?,employment_type=? WHERE id=? AND school_id=?",(name.strip().upper(),tsc_no.strip(),id_no.strip(),gender,role.strip(),department,phone.strip(),email.strip(),employment_type.strip(),teacher_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
+    con=get_db(); department=department.strip()
+    allowed_departments=_staff_department_choices(role)
+    if department and department not in allowed_departments: department=''
+    con.execute("UPDATE teachers SET name=?,tsc_no=?,id_no=?,gender=?,role=?,department=?,phone=?,email=?,employment_type=? WHERE id=? AND school_id=?",(name.strip().upper(),tsc_no.strip(),id_no.strip(),gender,role.strip(),department,phone.strip(),email.strip(),employment_type.strip(),teacher_id,school["id"])); con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 
 @app.get("/school/classes/{class_id}/edit", response_class=HTMLResponse)
 def school_class_edit(class_id:int, request:Request):
