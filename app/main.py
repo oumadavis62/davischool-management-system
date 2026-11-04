@@ -2601,13 +2601,15 @@ def global_teachers(request: Request):
     body = staff_manager_html(teachers, "ALL SCHOOLS — Global Control", is_global=True)
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
 @app.post("/super/global-control/teachers/add")
-def global_add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""), id_no: str = Form(...), gender: str = Form(...), role: str = Form(...), phone: str = Form(...), email: str = Form(""), employment_type: str = Form("Teaching")):
+def global_add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""), id_no: str = Form(...), gender: str = Form(...), role: str = Form(...), department: str = Form(""), phone: str = Form(...), email: str = Form(""), employment_type: str = Form("Teaching")):
     if request.session.get("role")!="super_admin": return RedirectResponse("/")
     con = get_db(); cur = con.cursor(); cur.execute("SELECT id FROM schools"); schools = cur.fetchall()
     for sch in schools:
         cur.execute("SELECT id FROM teachers WHERE school_id=? AND id_no=?", (sch["id"], id_no.strip()))
         if not cur.fetchone():
-            cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role, employment_type) VALUES (?,?,?,?,?,?,?,?,?)", (sch["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender.strip(), id_no.strip(), role.strip(), employment_type.strip()))
+            valid_departments=_staff_department_choices(role)
+            selected_department=department.strip() if department.strip() in valid_departments else ''
+            cur.execute("INSERT INTO teachers (school_id, name, email, phone, tsc_no, gender, id_no, role, employment_type, department) VALUES (?,?,?,?,?,?,?,?,?,?)", (sch["id"], name.strip().upper(), email.strip(), phone.strip(), tsc_no.strip(), gender.strip(), id_no.strip(), role.strip(), employment_type.strip(), selected_department))
     con.commit(); con.close(); return RedirectResponse("/super/global-control/teachers",303)
 @app.get("/super/global-control/teachers/delete/{tid}")
 def global_del_teacher(tid: int, request: Request):
