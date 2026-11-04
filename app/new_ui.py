@@ -5257,7 +5257,7 @@ function printDocument(){
             "".join("<th>%s</th>" % escape(g) for g in distribution_grades) +
             "<th>Entries</th><th>Class Mean</th></tr></thead><tbody><tr>" +
             "".join("<td>%d</td>" % overall_grade_counts.get(g, 0) for g in distribution_grades) +
-            "<td>%d</td><td>%s</td>" % (overall_entries, ("%.2f" % overall_class_mean) if overall_class_mean is not None else "—") +
+            "<td>%d</td><td>%s</td>" % (overall_entries, ("%.2f%%" % overall_class_mean) if overall_class_mean is not None else "—") +
             "</tr></tbody></table></div>"
         )
 
@@ -5298,7 +5298,7 @@ function printDocument(){
         "<div class='marksheet-stat'><span>LEARNERS</span><strong>%s</strong><small>Selected class scope</small></div>"
         "<div class='marksheet-stat'><span>SUBJECTS</span><strong>%s</strong><small>Displayed subjects</small></div>"
         "<div class='marksheet-stat'><span>MARK ENTRIES</span><strong>%s</strong><small>Recorded results</small></div>"
-        "<div class='marksheet-stat'><span>CLASS MEAN</span><strong>%s</strong><small>Mean total per assessed learner</small></div></div>") % (
+        "<div class='marksheet-stat'><span>CLASS MEAN</span><strong>%s</strong><small>Average learner score out of 100%</small></div></div>") % (
         total_students, len(subjects), marksheet_entry_count,
         ("%.2f" % marksheet_mean_value) if marksheet_mean_value is not None else "—")
     body = (
