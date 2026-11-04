@@ -4610,16 +4610,23 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         # Keep the full exam subject count before any display-only subject
         # filtering. Full-exam eligibility must always use the complete exam.
         full_exam_subject_count = len(subjects)
+        subject_selection_explicit_none = str(subject_ids or "").strip() == "__none__"
         selected_subject_ids = []
-        for raw_id in str(subject_ids or "").split(","):
-            try:
-                if raw_id.strip():
-                    selected_subject_ids.append(int(raw_id.strip()))
-            except ValueError:
-                pass
-        if selected_subject_ids:
+        if not subject_selection_explicit_none:
+            for raw_id in str(subject_ids or "").split(","):
+                try:
+                    if raw_id.strip():
+                        value = int(raw_id.strip())
+                        if value not in selected_subject_ids:
+                            selected_subject_ids.append(value)
+                except (TypeError, ValueError):
+                    pass
+        if subject_selection_explicit_none:
+            subjects = []
+        elif selected_subject_ids:
             selected_set = set(selected_subject_ids)
             subjects = [s for s in subjects if int(s["id"]) in selected_set]
+        subject_ids_value = "__none__" if subject_selection_explicit_none else ",".join(str(x) for x in selected_subject_ids)
         subject_metric_map = {}
         for part in str(subject_metrics or "").split(","):
             if ":" not in part:
