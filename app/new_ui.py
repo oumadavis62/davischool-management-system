@@ -2199,6 +2199,7 @@ def students_page(request: Request):
     where_sql = " AND ".join(where)
     total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE " + where_sql, tuple(params)).fetchone()["n"]
     # Compact register summary uses the same school scope and excludes graduated history.
+    overall_total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active')) <> 'graduated' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)", (sid,)).fetchone()["n"]
     active_total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)", (sid,)).fetchone()["n"]
     inactive_total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active')) IN ('inactive','transferred') AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)", (sid,)).fetchone()["n"]
     unassigned_total = cur.execute("SELECT COUNT(*) AS n FROM students s WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active' AND (s.class_id IS NULL OR s.class_id=0) AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=s.school_id AND sg.student_id=s.id)", (sid,)).fetchone()["n"]
@@ -2267,9 +2268,9 @@ function openStudentsPrintPreview(){
 </script>'''
     students_print_script=students_print_script.replace('__SCHOOL_HEADER_JSON__',json.dumps(print_school_header,ensure_ascii=False))
     body=f"""<div class='page students-list-page'>
-<header class='students-page-heading'><div><div class='students-eyebrow'>STUDENT MANAGEMENT / REGISTER</div><h1>Student Register</h1><div class='muted'>Manage student records, enrolment details and class placement.</div></div><a class='students-add-button' href='#add-student-form'><span aria-hidden='true'>＋</span> Add Student</a></header>
+<header class='students-page-heading'><div><div class='students-eyebrow'>STUDENT MANAGEMENT / REGISTER</div><h1>Student Register</h1><div class='muted'>Manage student records, enrolment details and class placement.</div></div><a class='students-add-button' href='#add-student-form' onclick="document.getElementById('add-student-form').open=true"><span aria-hidden='true'>＋</span> Add Student</a></header>
 <section class='students-overview' aria-label='Student register overview'>
-<div class='students-stat-card'><span class='students-stat-icon'>♧</span><div><strong>{int(total)}</strong><span>Total students</span></div></div>
+<div class='students-stat-card'><span class='students-stat-icon'>♧</span><div><strong>{int(overall_total)}</strong><span>Total students</span></div></div>
 <div class='students-stat-card'><span class='students-stat-icon students-stat-active'>✓</span><div><strong>{int(active_total)}</strong><span>Active students</span></div></div>
 <div class='students-stat-card'><span class='students-stat-icon'>⌂</span><div><strong>{int(unassigned_total)}</strong><span>Awaiting class placement</span></div></div>
 </section>
