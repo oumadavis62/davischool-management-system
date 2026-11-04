@@ -8227,20 +8227,26 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         scoped_classes={}
         for scope_row in scope_rows:
             scoped_classes.setdefault(int(scope_row["exam_id"]),set()).add(int(scope_row["class_id"]))
+        # Fetch historical class participation for every exam in one query.
+        # The former per-exam lookup added one database round trip per exam and
+        # made opening/loading Marks Entry slower as examination history grew.
+        marked_classes_by_exam={}
+        try:
+            marked_class_rows=cur.execute(
+                "SELECT DISTINCT exam_id,class_id FROM marks WHERE school_id=? AND class_id IS NOT NULL",
+                (sid,)
+            ).fetchall()
+            for marked_row in marked_class_rows:
+                marked_classes_by_exam.setdefault(int(marked_row["exam_id"]),set()).add(int(marked_row["class_id"]))
+        except Exception as marks_scope_exc:
+            print("DAVISCHOOL MARKS CLASS SCOPE BATCH LOOKUP:",repr(marks_scope_exc),flush=True)
         for exam_row in all_exams:
             exam_key=int(exam_row["id"])
             known_classes=set(scoped_classes.get(exam_key,set()))
             # Include the class recorded on marks as well as saved participation
             # scope. Promotion must not replace the class the learners sat the
             # historical exam in.
-            try:
-                mark_class_rows=cur.execute(
-                    "SELECT DISTINCT class_id FROM marks WHERE school_id=? AND exam_id=? AND class_id IS NOT NULL",
-                    (sid,exam_key)
-                ).fetchall()
-                known_classes.update(int(row["class_id"]) for row in mark_class_rows)
-            except Exception:
-                pass
+            known_classes.update(marked_classes_by_exam.get(exam_key,set()))
             exam_class_scope[exam_key]=known_classes if known_classes else (None if exam_key not in scoped_classes else set())
         participating_ids=exam_class_scope.get(eid) if eid else None
         if role=="teacher":
@@ -8730,7 +8736,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
-            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button>") if students else ""
+            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post' onclick='this.disabled=true;this.innerText=&#39;Saving marks...&#39;'>💾 Save Marks</button>") if students else ""
             # Submit & Lock has been removed from the School Admin Record Marks UI.
             # Keep the underlying finalize route untouched so existing data/state is preserved.
             lock_action = ""
@@ -8768,7 +8774,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<label>Examination<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select></label>"
       "<label>Class<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select></label>"
       "<label>Subject<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select></label></div>"
-      "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit'>Load Students</button></div></section></div></form>"
+      "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit' onclick='this.disabled=true;this.innerText=&#39;Loading students...&#39;'>Load Students</button></div></section></div></form>"
       "<div class='card section marks-entry'>{selection_context}"
       "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
