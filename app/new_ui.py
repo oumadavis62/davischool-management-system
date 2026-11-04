@@ -13946,14 +13946,14 @@ def classes_page(request: Request):
         for x in rows
     )
     total_classes=len(rows)
-    total_streams=len({str(x["stream"] or "").strip().casefold() for x in rows if str(x["stream"] or "").strip()})
+    total_streams=sum(1 for x in rows if str(x["stream"] or "").strip())
     assigned_count=sum(1 for x in rows if int(x["id"]) in assigned_by_class)
     unassigned_count=max(0,total_classes-assigned_count)
     body=f"""<div class='page classes-workspace'>
 <div class='classes-hero'><div><div class='classes-eyebrow'>ACADEMIC SETUP</div><h1>Classes &amp; Streams</h1><p>Organise learning groups, manage streams and assign class teachers.</p></div><button type='button' class='classes-primary' onclick="openClassModal()">＋ Add Class / Stream</button></div>
 <div class='classes-stats'>
-<div class='classes-stat'><span>Total Classes</span><strong>{total_classes}</strong><small>Registered learning groups</small></div>
-<div class='classes-stat'><span>Streams</span><strong>{total_streams}</strong><small>Distinct stream names</small></div>
+<div class='classes-stat'><span>Class Groups</span><strong>{total_classes}</strong><small>Registered class / stream groups</small></div>
+<div class='classes-stat'><span>Streams</span><strong>{total_streams}</strong><small>Groups with a stream assigned</small></div>
 <div class='classes-stat'><span>Teacher Assigned</span><strong>{assigned_count}</strong><small>Classes with a class teacher</small></div>
 <div class='classes-stat'><span>Awaiting Teacher</span><strong>{unassigned_count}</strong><small>Classes needing assignment</small></div>
 </div>
