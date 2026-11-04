@@ -8739,12 +8739,12 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     else:
         if role=="teacher":
             mark_actions = ""
-            draft_action = "<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post' onclick='this.disabled=true;this.innerText=&#39;Saving marks...&#39;'>💾 Save Marks</button>" if students else ""
+            draft_action = "<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button>" if students else ""
             lock_action = ""
         else:
             # School Admin uses the published/main marks workflow. This branch
             # is intentionally isolated from the teacher draft workflow.
-            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post' onclick='this.disabled=true;this.innerText=&#39;Saving marks...&#39;'>💾 Save Marks</button>") if students else ""
+            mark_actions = ("<button class='btn' type='submit' formaction='" + form_action + "' formmethod='post'>💾 Save Marks</button>") if students else ""
             # Submit & Lock has been removed from the School Admin Record Marks UI.
             # Keep the underlying finalize route untouched so existing data/state is preserved.
             lock_action = ""
