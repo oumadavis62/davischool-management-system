@@ -2341,7 +2341,7 @@ def students_page(request: Request):
     rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td>
       <td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td>
       <td>{escape(str(s['register_parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td>
-      <td><button type='button' class='action' onclick="openStudentEdit('/app/students/edit/{s["id"]}{tab_q}{'&' if tab_q else '?'}modal=1')">Edit</button></td></tr>""" for s in students)
+      <td><button type='button' class='action' onclick="openStudentEdit('/app/students/edit/{s['id']}{tab_q}{'&' if tab_q else '?'}modal=1')">Edit</button></td></tr>""" for s in students)
     print_rows="".join(f"""<tr><td>{escape(str(s['admission_no'] or ''))}</td><td><b>{escape(str(s['name'] or ''))}</b></td><td>{escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['class_stream'] or ''))}</td><td>{escape(str(s['gender'] or ''))}</td><td>{escape(str(s['register_parent_name'] or ''))}</td><td>{escape(str(s['parent_phone'] or ''))}</td><td>{escape(str(s['display_status'] or 'Active'))}</td><td></td></tr>""" for s in print_students)
     opts="".join(f"<option value='{c['id']}' {'selected' if class_filter == str(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     selected_unassigned = "selected" if class_filter == "unassigned" else ""
