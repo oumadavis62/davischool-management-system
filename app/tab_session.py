@@ -549,13 +549,19 @@ class DaviSchoolTabSessionMiddleware:
                     # HTML response. This keeps the same tab isolation/history/
                     # keepalive behavior while dramatically reducing response
                     # size and server-side HTML buffering work.
-                    script = b"<script src='/app/tab-session.js' defer></script>"
-                    marker = b"</body>"
-                    if marker in body.lower():
-                        idx = body.lower().rfind(marker)
-                        body = body[:idx] + script + body[idx:]
-                    else:
-                        body += script
+                    # Do not run tab-session bootstrap on the sign-in page.
+                    # Login must first establish the ordinary signed session cookie;
+                    # the first authenticated /app response then upgrades it to the
+                    # tab-scoped cookie. This avoids a client-side tab-ID redirect
+                    # racing the login form submission on mobile browsers.
+                    if scope.get("path") not in ("/", "/login"):
+                        script = b"<script src='/app/tab-session.js' defer></script>"
+                        marker = b"</body>"
+                        if marker in body.lower():
+                            idx = body.lower().rfind(marker)
+                            body = body[:idx] + script + body[idx:]
+                        else:
+                            body += script
                     await send({**message, "body": body, "more_body": False})
                 return
             await send(message)
