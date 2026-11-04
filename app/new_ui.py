@@ -11792,6 +11792,89 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.class-analysis-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}}.class-analysis-table{{width:max-content;min-width:760px}}</style>"""
     return _school_page(request,"Class Analysis",body)
 
+
+@router.get("/app/student-attendance-report", response_class=HTMLResponse)
+def student_attendance_report_page(request: Request, start_date: str = "", end_date: str = "", class_id: str = ""):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "attendance.view"):
+        return HTMLResponse("You do not have permission to view attendance reports.", 403)
+    today = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    start = start_date or today[:8] + "01"
+    end = end_date or today
+    cid = int(class_id) if str(class_id).isdigit() else 0
+    con = _db()
+    cur = con.cursor()
+    classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
+    sql = """SELECT c.name class_name,c.stream,COUNT(DISTINCT s.id) learners,
+                    SUM(CASE WHEN lower(coalesce(a.status,''))='present' THEN 1 ELSE 0 END) present,
+                    SUM(CASE WHEN lower(coalesce(a.status,''))='absent' THEN 1 ELSE 0 END) absent,
+                    SUM(CASE WHEN lower(coalesce(a.status,''))='late' THEN 1 ELSE 0 END) late,
+                    SUM(CASE WHEN lower(coalesce(a.status,''))='excused' THEN 1 ELSE 0 END) excused,
+                    COUNT(a.id) recorded
+             FROM attendance a JOIN students s ON s.id=a.student_id AND s.school_id=a.school_id
+             JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
+             WHERE a.school_id=? AND a.date>=? AND a.date<=?"""
+    params = [sid, start, end]
+    if cid:
+        sql += " AND c.id=?"
+        params.append(cid)
+    sql += " GROUP BY c.id,c.name,c.stream ORDER BY c.name,c.stream"
+    rows = cur.execute(sql, tuple(params)).fetchall()
+    con.close()
+    options = "".join("<option value='%s' %s>%s %s</option>" % (c["id"], "selected" if c["id"] == cid else "", escape(str(c["name"])), escape(str(c["stream"] or ""))) for c in classes)
+    body = f"""<div class='page'><div class='page-heading'><div><h1>Student Attendance Report</h1><div class='muted'>Review attendance totals by class for a selected reporting period.</div></div><button class='btn' type='button' onclick='window.print()'>Print Report</button></div>
+    <div class='card section'><form method='get' class='student-report-filters'><label>From<input class='field' type='date' name='start_date' value='{escape(start)}'></label><label>To<input class='field' type='date' name='end_date' value='{escape(end)}'></label><label>Class<select class='field' name='class_id'><option value=''>All Classes</option>{options}</select></label><button class='btn'>Generate Report</button></form></div>
+    <div class='card section' style='overflow-x:auto'><div class='report-period'>Reporting period: <b>{escape(start)}</b> to <b>{escape(end)}</b></div><table><thead><tr><th>Class</th><th>Stream</th><th>Learners</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th><th>Records</th></tr></thead><tbody>{''.join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (escape(str(x["class_name"])), escape(str(x["stream"] or "—")), x["learners"] or 0, x["present"] or 0, x["absent"] or 0, x["late"] or 0, x["excused"] or 0, x["recorded"] or 0) for x in rows) or "<tr><td colspan='8'>No attendance records were found for this period.</td></tr>"}</tbody></table></div></div>
+    <style>.student-report-filters{{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;align-items:end}}.student-report-filters label{{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}}.field{{width:100%;padding:11px;border:1px solid #dbe7de;border-radius:10px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:10px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}.report-period{{margin-bottom:12px;color:#52665a;font-size:13px}}@media(max-width:760px){{.student-report-filters{{grid-template-columns:1fr 1fr}}}}@media print{{.student-report-filters,.btn{{display:none!important}}}}</style>"""
+    return _school_page(request, "Student Attendance Report", body)
+
+
+@router.get("/app/students/id-cards", response_class=HTMLResponse)
+def student_id_cards_page(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.view"):
+        return HTMLResponse("You do not have permission to view student ID cards.", 403)
+    con = _db()
+    cur = con.cursor()
+    school = cur.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+    rows = cur.execute("""SELECT s.id,s.name,s.admission_no,s.gender,s.assessment_no,c.name class_name,c.stream
+                          FROM students s LEFT JOIN classes c ON c.id=s.class_id
+                          WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active'
+                          AND NOT EXISTS (SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
+                          ORDER BY c.name,c.stream,s.name""", (sid,)).fetchall()
+    con.close()
+    school_name = escape(str(school["name"] or "DaviSchool")) if school else "DaviSchool"
+    logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+    cards = "".join("<article class='student-id-card'><div class='id-brand'>" + ("<img src='" + escape(logo, quote=True) + "' alt='School logo'>" if logo else "<span class='id-mark'>D</span>") + "<b>" + school_name + "</b></div><div class='id-name'>" + escape(str(st["name"] or "")) + "</div><div class='id-meta'>Admission No: <b>" + escape(str(st["admission_no"] or "—")) + "</b></div><div class='id-meta'>Class: " + escape(str(st["class_name"] or "—")) + " " + escape(str(st["stream"] or "")) + "</div><div class='id-meta'>Assessment No: " + escape(str(st["assessment_no"] or "—")) + "</div><div class='id-footer'>STUDENT IDENTIFICATION CARD</div></article>" for st in rows)
+    body = f"""<div class='page'><div class='page-heading'><div><h1>Student ID Cards</h1><div class='muted'>Print identification cards for currently enrolled students. Cards are arranged for convenient sheet printing.</div></div><button class='btn' onclick='window.print()'>Print ID Cards</button></div><div class='id-card-grid'>{cards or "<div class='card section'>No active students are available for ID card printing.</div>"}</div></div>
+    <style>.id-card-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.student-id-card{{border:1.5px solid #176B3A;border-radius:13px;padding:13px 15px;min-height:150px;background:linear-gradient(135deg,#fff,#f0f8f2);break-inside:avoid;box-shadow:0 4px 14px #173d2910}}.id-brand{{display:flex;align-items:center;gap:9px;border-bottom:1px solid #d5e7da;padding-bottom:8px;color:#176B3A;font-size:13px;text-transform:uppercase}}.id-brand img,.id-mark{{width:34px;height:34px;object-fit:contain;border-radius:7px}}.id-mark{{display:grid;place-items:center;background:#176B3A;color:#fff;font-weight:900;font-size:20px}}.id-name{{font-size:16px;font-weight:900;color:#173d29;margin:10px 0 6px}}.id-meta{{font-size:11px;color:#52665a;margin:3px 0}}.id-footer{{margin-top:9px;padding-top:6px;border-top:1px solid #d5e7da;text-align:center;font-size:9px;font-weight:900;letter-spacing:1px;color:#176B3A}}.btn{{padding:11px 16px;border:0;border-radius:10px;background:#176B3A;color:#fff;font-weight:800}}@media(max-width:650px){{.id-card-grid{{grid-template-columns:1fr}}}}@media print{{.page-heading .btn{{display:none}}.id-card-grid{{grid-template-columns:repeat(2,1fr);gap:8mm}}.student-id-card{{box-shadow:none}}}}</style>"""
+    return _school_page(request, "Student ID Cards", body)
+
+
+@router.get("/app/students/clearance", response_class=HTMLResponse)
+def student_clearance_list_page(request: Request):
+    sid = _school_session(request)
+    if not sid:
+        return RedirectResponse("/", 303)
+    if not _require_permission(request, sid, "students.view"):
+        return HTMLResponse("You do not have permission to view the student clearance list.", 403)
+    con = _db()
+    cur = con.cursor()
+    rows = cur.execute("""SELECT s.name,s.admission_no,c.name class_name,c.stream
+                          FROM students s LEFT JOIN classes c ON c.id=s.class_id
+                          WHERE s.school_id=? AND lower(coalesce(s.status,'active'))='active'
+                          AND NOT EXISTS (SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
+                          ORDER BY c.name,c.stream,s.name""", (sid,)).fetchall()
+    con.close()
+    table_rows = "".join("<tr><td>" + escape(str(st["admission_no"] or "")) + "</td><td>" + escape(str(st["name"] or "")) + "</td><td>" + escape(str(st["class_name"] or "—")) + " " + escape(str(st["stream"] or "")) + "</td><td></td><td></td><td></td><td></td><td></td></tr>" for st in rows)
+    body = f"""<div class='page'><div class='page-heading'><div><h1>Student Clearance List</h1><div class='muted'>A print-ready clearance register for recording departmental sign-off. Blank clearance columns are intended for authorised staff to complete and sign.</div></div><button class='btn' onclick='window.print()'>Print Clearance List</button></div><div class='card section' style='overflow-x:auto'><table><thead><tr><th>Admission No.</th><th>Student</th><th>Class / Stream</th><th>Accounts</th><th>Library</th><th>Textbooks</th><th>Sports / Uniform</th><th>Class Teacher</th></tr></thead><tbody>{table_rows or "<tr><td colspan='8'>No active students found.</td></tr>"}</tbody></table></div></div><style>.btn{{padding:11px 16px;border:0;border-radius:10px;background:#176B3A;color:#fff;font-weight:800}}table{{width:100%;border-collapse:collapse}}th,td{{border:1px solid #d7e3da;padding:9px;text-align:left;font-size:12px}}th{{background:#eff7f1;color:#244b34}}@media print{{.page-heading .btn{{display:none}}}}</style>"""
+    return _school_page(request, "Student Clearance List", body)
+
+
 @router.get("/app/students/graduation-records", response_class=HTMLResponse)
 def student_graduation_records_page(
     request: Request, graduation_year: str = "", class_id: str = "",
