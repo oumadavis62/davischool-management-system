@@ -2198,7 +2198,13 @@ def teachers_page(request: Request):
     header = school_header(school, name, "teachers", is_impersonating=is_imp)
     body = staff_manager_html(teachers, school["name"], is_global=False)
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}.input-field{{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;margin:6px 0;font-size:13px;background:white}}.add-btn{{width:100%;background:#0b3d91;color:white;padding:12px;border:none;border-radius:10px;font-weight:700;cursor:pointer}}</style></head><body>{header}{body}</div></div></body></html>")
-def _staff_department_choices(role):\n    teaching_roles={'teacher','classteacher','principal','deputy principal'}\n    if (role or '').strip().lower() in teaching_roles:\n        return ['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination']\n    return ['School Administration','Registry & Admissions','Finance & Accounts','Human Resources','ICT & Technology','Library Services','Guidance & Counselling','Examinations Department','Laboratory Department','Sports & Physical Education','Transport Department','Security Department','Catering & Nutrition','Health & Medical Services','Maintenance & Facilities','Cleaning & Sanitation','Boarding & Accommodation','Procurement & Stores','Support Services','Other']\n\n@app.post("/school/teachers/add")
+def _staff_department_choices(role):
+    teaching_roles={'teacher','classteacher','principal','deputy principal'}
+    if (role or '').strip().lower() in teaching_roles:
+        return ['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination']
+    return ['School Administration','Registry & Admissions','Finance & Accounts','Human Resources','ICT & Technology','Library Services','Guidance & Counselling','Examinations Department','Laboratory Department','Sports & Physical Education','Transport Department','Security Department','Catering & Nutrition','Health & Medical Services','Maintenance & Facilities','Cleaning & Sanitation','Boarding & Accommodation','Procurement & Stores','Support Services','Other']
+
+@app.post("/school/teachers/add")
 def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""), id_no: str = Form(...), gender: str = Form(...), role: str = Form(...), department: str = Form(""), phone: str = Form(...), email: str = Form(""), employment_type: str = Form("Teaching")):
     school=get_school_obj(request)
     if not school or not _role_permission(request,"staff.create"): return RedirectResponse("/portal",303)
@@ -2206,7 +2212,10 @@ def add_teacher(request: Request, name: str = Form(...), tsc_no: str = Form(""),
     if not nm or not ident: con.close(); return HTMLResponse("Staff name and ID number are required.",400)
     if cur.execute("SELECT id FROM teachers WHERE school_id=? AND (id_no=? OR (email<>'' AND lower(email)=lower(?)))",(school["id"],ident,em)).fetchone():
         con.close(); return HTMLResponse("A staff record with that ID or email already exists in this school.",409)
-    department=department.strip()\n    allowed_departments=_staff_department_choices(role)\n    if department and department not in allowed_departments: department=''\n    cur.execute("INSERT INTO teachers (school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,department) VALUES (?,?,?,?,?,?,?,?,?,?)",(school["id"],nm,em,phone.strip(),tsc_no.strip(),gender.strip(),role.strip(),employment_type.strip(),department))
+    department=department.strip()
+    allowed_departments=_staff_department_choices(role)
+    if department and department not in allowed_departments: department=''
+    cur.execute("INSERT INTO teachers (school_id,name,email,phone,tsc_no,gender,id_no,role,employment_type,department) VALUES (?,?,?,?,?,?,?,?,?,?)",(school["id"],nm,em,phone.strip(),tsc_no.strip(),gender.strip(),role.strip(),employment_type.strip(),department))
     con.commit(); con.close(); return RedirectResponse("/school/teachers",303)
 @app.get("/school/teachers/delete/{tid}")
 def del_teacher(tid: int, request: Request):
