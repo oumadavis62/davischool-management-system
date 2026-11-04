@@ -13928,7 +13928,7 @@ def classes_page(request: Request):
     current_ds_tab_q=("?" + "ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else ""
     trs="".join(
         '<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td>'
-        '<td><button type="button" class="btn teacher-btn" onclick="openClassTeacherModal(\'%s\',\'%s\')">%s</button></td>'
+        "<td><button type=\"button\" class=\"btn teacher-btn\" onclick=\"openClassTeacherModal('%s','%s')\">%s</button></td>"
         '<td class="class-actions"><a class="btn edit" href="/app/classes/edit/%s%s">Edit</a> '
         '<form method="post" action="/app/classes/delete/%s%s" style="display:inline" onsubmit="if(!confirm(&quot;Delete this class/stream? This action cannot be undone.&quot;)) return false; this.submit(); return false;">'
         '<button type="submit" formaction="/app/classes/delete/%s%s" formmethod="post" class="btn danger">Delete</button></form></td></tr>' % (
