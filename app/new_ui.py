@@ -544,7 +544,7 @@ def _pdf_school_header(school_row, styles, title, subtitle=""):
         result.append(Paragraph(escape(title), styles["subtitle"]))
     return result
 
-def _shell(title, name, role, body, school_id=None):
+def _shell(title, name, role, body, school_id=None, request=None):
     # Sidebar visibility follows the same permission vocabulary enforced by
     # protected routes. Super Admin remains on platform-level navigation.
     if role == "super_admin":
@@ -593,16 +593,46 @@ def _shell(title, name, role, body, school_id=None):
         teacher_nav.insert(5,("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring"))
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
+        def _nav_sub(url, label):
+            active = request_path == url or (url != "/app/academics" and request_path.startswith(url + "/"))
+            return f"<a href='{url}' class='nav-sub{' active' if active else ''}'>{escape(label)}</a>"
+        staff_group = (
+            "<details class='nav-group' id='staffManagerNav' " + ("open" if request_path.startswith("/app/staff") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/staff", "Staff List")
+            + _nav_sub("/app/staff/attendance", "Attendance Sheet")
+            + _nav_sub("/app/staff/attendance-report", "Attendance Report")
+            + _nav_sub("/app/staff/former", "Former Staff")
+            + "</div></details>"
+        )
+        academic_items = [
+            ("/app/academics/marks", "Marks Entry"),
+            ("/app/academics/marksheets", "Class Marksheets"),
+            ("/app/academics/marks-corrections", "Marks Corrections"),
+            ("/app/academics/submission-tracker", "Examination Submission Tracker"),
+            ("/app/academics/analysis", "Academic Analysis"),
+            ("/app/report-cards", "Report Cards"),
+            ("/app/academics/grading", "Grade & Points"),
+            ("/app/academics/allocations", "Teacher Allocation"),
+            ("/app/exams", "Examinations"),
+            ("/app/subjects", "Subjects"),
+            ("/app/classes", "Classes & Streams"),
+            ("/app/academics/subject-allocation", "Subject Allocation"),
+            ("/app/students/promotion", "Promotion / Transfer"),
+            ("/app/students/graduation-records", "Graduation Records"),
+        ]
+        academic_group = (
+            "<details class='nav-group' id='academicManagerNav' " + ("open" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes")) else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('academics')}</span><b>Academic Manager</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + "".join(_nav_sub(url, label) for url, label in academic_items)
+            + "</div></details>"
+        )
         links = "".join(
-            ("<details class='nav-group' id='staffManagerNav' " + ("open" if request_path.startswith("/app/staff") else "") + ">"
-             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
-             + "<div class='nav-submenu'>"
-             + f"<a href='/app/staff' class='nav-sub{' active' if request_path=='/app/staff' else ''}'>Staff List</a>"
-             + f"<a href='/app/staff/attendance' class='nav-sub{' active' if request_path=='/app/staff/attendance' else ''}'>Attendance Sheet</a>"
-             + f"<a href='/app/staff/attendance-report' class='nav-sub{' active' if request_path=='/app/staff/attendance-report' else ''}'>Attendance Report</a>"
-             + f"<a href='/app/staff/former' class='nav-sub{' active' if request_path=='/app/staff/former' else ''}'>Former Staff</a>"
-             + "</div></details>")
-            if u=="/app/staff" else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
+            staff_group if u == "/app/staff"
+            else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
+            else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             for u,i,l,_ in nav
         )
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
@@ -1284,7 +1314,7 @@ def _teacher_class_authorized(cur, request, school_id, class_id, subject_id=None
 def _school_page(request, title, body):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
-    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid))
+    return HTMLResponse(_shell(title,request.session.get("name","DaviSchool"),request.session.get("role",""),body,sid,request=request))
 
 def _teacher_exam_cohort(cur, school_id, current_class_id, exam_year):
     """Resolve current learners to the class they belonged to in a selected exam year."""
@@ -6579,7 +6609,7 @@ def app_home(request: Request):
 </style>{flip_script}</div>"""
 
     con.close()
-    return HTMLResponse(_shell("DaviSchool",name,role,body))
+    return HTMLResponse(_shell("DaviSchool",name,role,body,request=request))
 
 
 def _grade(mark, out_of=100):
