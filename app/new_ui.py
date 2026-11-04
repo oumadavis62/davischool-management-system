@@ -2399,7 +2399,7 @@ def staff_page(request: Request):
     if not _require_permission(request, sid, "staff.view"):
         return HTMLResponse("You do not have permission to view staff records.", 403)
     con=_db(); cur=con.cursor()
-    staff=cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    staff=cur.execute("SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name",(sid,)).fetchall()
     con.close()
     def val(t,key,default=""):
         try: return str(t[key] if t[key] is not None else default)
