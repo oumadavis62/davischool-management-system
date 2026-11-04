@@ -13947,7 +13947,8 @@ def classes_page(request: Request):
     )
     total_classes=len(rows)
     total_streams=sum(1 for x in rows if str(x["stream"] or "").strip())
-    assigned_count=sum(1 for x in rows if int(x["id"]) in assigned_by_class)
+    valid_teacher_ids={int(t["id"]) for t in teachers}
+    assigned_count=sum(1 for x in rows if assigned_by_class.get(int(x["id"])) in valid_teacher_ids)
     unassigned_count=max(0,total_classes-assigned_count)
     body=f"""<div class='page classes-workspace'>
 <div class='classes-hero'><div><div class='classes-eyebrow'>ACADEMIC SETUP</div><h1>Classes &amp; Streams</h1><p>Organise learning groups, manage streams and assign class teachers.</p></div><button type='button' class='classes-primary' onclick="openClassModal()">＋ Add Class / Stream</button></div>
