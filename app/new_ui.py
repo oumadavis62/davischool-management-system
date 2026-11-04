@@ -4826,6 +4826,13 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 con.close()
                 con = _db()
                 cur = con.cursor()
+            # The rollback above also rolls back a just-created optional
+            # allocation table on PostgreSQL. Re-establish it before fallback.
+            try:
+                _ensure_student_subject_allocations_table(cur)
+            except Exception as allocation_exc:
+                print("DAVISCHOOL MARKSHEET ALLOCATION TABLE RECOVERY FAILED:", repr(allocation_exc), flush=True)
+                mark_rows = []
             try:
                 fallback_rows = cur.execute(
                     "SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
