@@ -8782,7 +8782,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<label>Examination<select name='exam_id' class='field'><option value=''>Select examination</option>"+eopts+"</select></label>"
       "<label>Class<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select></label>"
       "<label>Subject<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select></label></div>"
-      "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit' onclick='this.disabled=true;this.innerText=&#39;Loading students...&#39;'>Load Students</button></div></section></div></form>"
+      "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit'>Load Students</button></div></section></div></form>"
       "<div class='card section marks-entry'>{selection_context}"
       "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
