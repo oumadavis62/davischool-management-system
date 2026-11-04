@@ -719,7 +719,42 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 .ds-action-cell.ds-action-open .action:hover,.ds-action-cell.ds-action-open .action:focus-visible{{background:#0F4D2A!important;color:#fff!important;border-color:#0F4D2A!important}}
 @media(max-width:900px){{.side{{width:72px}}.brand{{font-size:0}}.nav{{justify-content:center;font-size:0}}.nav span{{font-size:17px}}.main{{margin-left:72px}}.grid,.actions{{grid-template-columns:repeat(2,1fr)}}}}
 @media(max-width:600px){{.side{{width:176px!important;max-width:70vw;z-index:1201;box-shadow:8px 0 28px rgba(0,0,0,.18)}}.main{{margin-left:0!important;width:100%;min-width:0}}.sidebar-hidden .side{{transform:translateX(-105%);pointer-events:none}}.sidebar-open:not(.sidebar-hidden)::after{{content:'';position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1200;pointer-events:none}}.top{{z-index:1202;padding:0 14px;position:sticky}}.sidebar-toggle{{position:relative;z-index:1300;pointer-events:auto;touch-action:manipulation}}.page{{width:100%;min-width:0}}.actions > .academic-manager-tile[href="/app/academics/submission-tracker"]{{grid-column:1 / -1;min-height:105px}}.sidebar-brand-logo{{width:50px;height:50px;margin-bottom:12px}}.sidebar-brand-logo svg{{width:50px;height:50px}}.side{{width:176px;padding:14px 8px}}.sidebar-brand{{padding:6px 5px 18px;gap:8px}}.sidebar-login-logo{{width:42px;height:42px;min-width:42px;border-radius:11px}}.sidebar-login-logo .davi-mark{{width:35px;height:35px;font-size:34px}}.sidebar-login-logo .davi-mark:before{{font-size:34px}}.sidebar-brand-title{{font-size:13px}}.brand{{font-size:15px;padding:8px 8px 18px;gap:8px;flex-direction:column;align-items:center;text-align:center}}.brand-logo{{width:34px;height:34px;flex-basis:34px}}.brand-logo .davi-mark{{width:21px;height:21px;border-width:3px;border-left-width:4px}}.brand{{white-space:normal}}.nav{{justify-content:flex-start;font-size:12px;gap:8px;padding:9px 8px;white-space:normal}}.nav span{{font-size:12px}}.nav .modern-icon{{width:19px;height:19px;flex:0 0 19px}}.main{{margin-left:0!important}}.side{{width:176px!important;max-width:70vw!important;flex:0 0 176px}}.page{{padding:16px}}.grid,.actions{{grid-template-columns:1fr 1fr}}.top{{padding:0 16px}}}}
-</style></head><body class='{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
+
+/* Academic Manager page family: shared visual language with Students and Staff Manager. */
+.academic-workspace .page{max-width:1480px;margin:0 auto;padding:24px 26px 40px;color:#183126}
+.academic-workspace .page>h1{font-size:clamp(25px,3vw,32px);line-height:1.15;letter-spacing:-.7px;color:#153d2a;margin:0 0 7px;font-weight:850}
+.academic-workspace .page>h1:before{content:"ACADEMIC MANAGEMENT / WORKSPACE";display:block;font-size:10px;letter-spacing:1.45px;font-weight:800;color:#39845a;margin-bottom:9px}
+.academic-workspace .page>h1+.muted{font-size:13px;line-height:1.6;color:#718477;margin:0 0 22px;max-width:850px}
+.academic-workspace .page .card,.academic-workspace .page .section{background:#fff;border:1px solid #dce9df;border-radius:17px;box-shadow:0 5px 18px rgba(24,75,45,.055);padding:20px;margin:14px 0}
+.academic-workspace .page .card h2,.academic-workspace .page .section h2{color:#19452f;font-size:18px;font-weight:800;margin:0 0 14px}
+.academic-workspace .page h3{color:#24543a;font-size:14px;font-weight:800}
+.academic-workspace .page .muted{color:#718477}
+.academic-workspace .page .field,.academic-workspace .page input:not([type=checkbox]):not([type=radio]):not([type=submit]),.academic-workspace .page select,.academic-workspace .page textarea{min-height:42px;border:1px solid #d4e2d8;border-radius:10px;background:#fbfdfb;color:#193a29;padding:9px 12px;font:inherit;font-size:13px;max-width:100%;box-shadow:none}
+.academic-workspace .page .field:focus,.academic-workspace .page input:focus,.academic-workspace .page select:focus,.academic-workspace .page textarea:focus{outline:3px solid rgba(46,139,87,.13);border-color:#39845a}
+.academic-workspace .page .btn,.academic-workspace .page button:not(.sidebar-toggle){border-radius:10px;font-weight:750;min-height:38px;transition:transform .16s ease,box-shadow .16s ease,background .16s ease}
+.academic-workspace .page .btn:hover,.academic-workspace .page button:not(.sidebar-toggle):hover{transform:translateY(-1px);box-shadow:0 5px 13px rgba(24,75,45,.12)}
+.academic-workspace .page .btn-primary,.academic-workspace .page button[type=submit]:not(.danger){background:#237447;color:#fff;border-color:#237447}
+.academic-workspace .page .btn-danger,.academic-workspace .page .danger{border-radius:9px}
+.academic-workspace .page table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;background:#fff}
+.academic-workspace .page table thead th{background:#edf6ef;color:#28543a;font-weight:800;text-transform:uppercase;letter-spacing:.45px;font-size:10.5px;white-space:nowrap;border-bottom:1px solid #d9e8dd;padding:12px 11px}
+.academic-workspace .page table tbody td{padding:11px;border-bottom:1px solid #edf2ee;color:#314b3b;vertical-align:middle}
+.academic-workspace .page table tbody tr:hover td{background:#f7fbf8}
+.academic-workspace .page .marksheet-scroll,.academic-workspace .page .examination-table-scroll,.academic-workspace .page .table-responsive{width:100%;overflow-x:auto;border:1px solid #e2ece5;border-radius:12px;-webkit-overflow-scrolling:touch}
+.academic-workspace .page .grid{gap:14px}
+.academic-workspace .page .kpi,.academic-workspace .page .stat strong{color:#176b3a}
+.academic-workspace .page form:not([data-native-post]){gap:11px}
+.academic-workspace .page label{color:#385b46;font-size:12px;font-weight:700}
+.academic-workspace .page .btnlink{border-radius:8px;padding:7px 10px;background:#edf6ef;color:#24633e;text-decoration:none;font-weight:750}
+.academic-workspace .page .btnlink:hover{background:#dcefe1}
+@media(max-width:760px){
+ .academic-workspace .page{padding:16px 13px 30px}
+ .academic-workspace .page .card,.academic-workspace .page .section{padding:15px;border-radius:14px;margin:11px 0}
+ .academic-workspace .page>h1{font-size:25px}
+ .academic-workspace .page .grid{grid-template-columns:1fr 1fr}
+ .academic-workspace .page table{min-width:680px}
+}
+@media(max-width:430px){.academic-workspace .page .grid{grid-template-columns:1fr}.academic-workspace .page .field{width:100%}}
+</style></head><body class='{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}{" academic-workspace" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes", "/app/students/promotion")) else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
 <main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 // Shared workspace performance helpers: warm likely navigation targets on intent,
 // and prevent accidental double-submits without changing form payloads or routes.
