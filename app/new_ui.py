@@ -5300,7 +5300,7 @@ function printDocument(){
         "<div class='marksheet-stat'><span>MARK ENTRIES</span><strong>%s</strong><small>Recorded results</small></div>"
         "<div class='marksheet-stat'><span>CLASS MEAN</span><strong>%s</strong><small>Average learner score out of 100%</small></div></div>") % (
         total_students, len(subjects), marksheet_entry_count,
-        ("%.2f" % marksheet_mean_value) if marksheet_mean_value is not None else "—")
+        ("%.2f%%" % marksheet_mean_value) if marksheet_mean_value is not None else "—")
     body = (
         "<div class='page marksheet-workspace'><div class='marksheet-page-heading'><div><h1>Class MarkSheets</h1>"
         "<div class='muted'>A clear, print-ready view of learner performance, subject results and grade distribution.</div></div><div class='marksheet-heading-actions no-print'><button type='button' class='btn marksheet-export-trigger' onclick='openMarksheetPopup(\"marksheet-export-popup\")'>⇩ Export &amp; Print</button></div></div>" +
