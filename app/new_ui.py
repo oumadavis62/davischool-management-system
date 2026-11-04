@@ -598,7 +598,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'>{escape(label)}</a>"
         students_group = (
             "<details class='nav-group' id='studentsManagerNav' "
-            + ("open" if (request_path.startswith("/app/students") and not request_path.startswith("/app/students/promotion")) or request_path.startswith("/app/student-attendance") else "") + ">"
+            + ("open" if (request_path.startswith("/app/students") and not request_path.startswith("/app/students/promotion")) or request_path.startswith("/app/student-attendance") or request_path in ("/app/attendance", "/app/classes") else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/students", "Students List")
