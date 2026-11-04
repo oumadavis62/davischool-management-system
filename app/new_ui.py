@@ -596,7 +596,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
         def _nav_sub(url, label):
             route = url.split("?", 1)[0]
             active = request_path == route or (route != "/app/academics" and request_path.startswith(route + "/"))
-            icons = {"Students List":"students", "Transferred/Inactive List":"users", "Attendance Sheet":"calendar", "Attendance Report":"chart", "ID Cards":"id-card", "Clearance List":"check-circle", "Alumni List":"graduation-cap", "Staff List":"staff", "Former Staff":"users", "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam", "Grade and Points":"grading", "Examination Tracker":"clipboard-check", "Marks Correction":"correction", "Promotion/Transfer":"refresh-cw", "Class MarkSheets":"marks", "Class MarkSheet Analysis":"analysis", "Marks Entry":"marks", "Report Cards":"report", "SBA/CBA":"clipboard-list", "Classes and Streams":"school"}
+            icons = {"Students List":"students", "Transferred/Inactive List":"users", "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"attendance", "Alumni List":"students", "Staff List":"staff", "Former Staff":"users", "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam", "Grade and Points":"grading", "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion/Transfer":"allocation", "Class MarkSheets":"marks", "Class MarkSheet Analysis":"analysis", "Marks Entry":"marks", "Report Cards":"report", "SBA/CBA":"subject", "Classes and Streams":"school"}
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
         students_group = (
@@ -669,7 +669,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/academics/marks", "Marks Entry")
             + "<details class='nav-group nav-nested-group' id='academicSpreadsheet' "
             + ("open" if spreadsheet_active else "") + ">"
-            + "<summary class='nav-sub nav-subgroup-summary'><span class='nav-sub-icon'>" + _modern_icon("spreadsheet") + "</span><b>Spreadsheet</b><span class='nav-chevron'>▾</span></summary>"
+            + "<summary class='nav-sub nav-subgroup-summary'><span class='nav-sub-icon'>" + _modern_icon("marks") + "</span><b>Spreadsheet</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu nav-nested-submenu'>"
             + "".join(_nav_sub(url, label) for url, label in spreadsheet_routes)
             + _academic_dropdown("Exam Analysis", exam_analysis_routes, request_path.startswith("/app/academics/analysis"), "academicExamAnalysis")
