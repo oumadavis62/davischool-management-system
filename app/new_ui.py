@@ -596,6 +596,21 @@ def _shell(title, name, role, body, school_id=None, request=None):
         def _nav_sub(url, label):
             active = request_path == url or (url != "/app/academics" and request_path.startswith(url + "/"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'>{escape(label)}</a>"
+        students_group = (
+            "<details class='nav-group' id='studentsManagerNav' "
+            + ("open" if (request_path.startswith("/app/students") and not request_path.startswith("/app/students/promotion")) or request_path.startswith("/app/student-attendance") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/students", "Students List")
+            + _nav_sub("/app/students?status=inactive", "Transferred/Inactive List")
+            + _nav_sub("/app/classes", "Class List")
+            + _nav_sub("/app/attendance", "Attendance Sheet")
+            + _nav_sub("/app/student-attendance-report", "Attendance Report")
+            + _nav_sub("/app/students/id-cards", "ID Cards")
+            + _nav_sub("/app/students/clearance", "Clearance List")
+            + _nav_sub("/app/students/graduation-records", "Alumni List")
+            + "</div></details>"
+        )
         staff_group = (
             "<details class='nav-group' id='staffManagerNav' " + ("open" if request_path.startswith("/app/staff") else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
@@ -645,8 +660,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + ("open" if request_path.startswith((
                 "/app/academics", "/app/exams", "/app/report-cards",
                 "/app/subjects", "/app/classes", "/app/students/promotion",
-                "/app/students/graduation-records",
-            )) else "") + ">"
+                            )) else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('academics')}</span><b>Academic Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _academic_dropdown("Dean Settings", dean_routes, dean_active, "academicDeanSettings")
@@ -661,11 +675,11 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/report-cards", "Report Cards")
             + _nav_sub("/app/academics/assessments", "SBA/CBA")
             + _nav_sub("/app/classes", "Classes and Streams")
-            + _nav_sub("/app/students/graduation-records", "Graduation Records")
             + "</div></details>"
         )
         links = "".join(
-            staff_group if u == "/app/staff"
+            students_group if u == "/app/students" and role in ("school_admin", "registrar")
+            else staff_group if u == "/app/staff"
             else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
             else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             for u,i,l,_ in nav
