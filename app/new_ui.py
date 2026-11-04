@@ -9730,7 +9730,7 @@ var saved=which==='saved';document.getElementById('mcSavedPanel').hidden=!saved;
 document.getElementById('mcSavedTab').classList.toggle('active',saved);document.getElementById('mcRequestsTab').classList.toggle('active',!saved);
 document.getElementById('mcTableSearch').placeholder=saved?'Search assessments…':'Search teacher requests…';searchCorrectionRows();}}
 function searchCorrectionRows(){{var q=(document.getElementById('mcTableSearch').value||'').toLowerCase();var table=document.getElementById(document.getElementById('mcSavedPanel').hidden?'mcRequestsTable':'mcSavedTable');if(table)table.querySelectorAll('tbody tr').forEach(function(row){{row.hidden=!!q&&!row.innerText.toLowerCase().includes(q);}});}}
-</script>""
+</script>"""
     return _school_page(request,"Marks Corrections",body)
 
 @router.post("/app/academics/marks-corrections/approve")
