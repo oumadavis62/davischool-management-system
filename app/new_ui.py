@@ -2191,7 +2191,7 @@ def students_page(request: Request):
     if gender_filter in ("Male", "Female", "Other"):
         where.append("lower(coalesce(s.gender,''))=lower(?)")
         params.append(gender_filter)
-    if status_filter in ("inactive,transferred", "inactive", "transferred"):
+    if status_filter == "inactive,transferred":
         where.append("lower(coalesce(s.status,'active')) IN ('inactive','transferred')")
     elif status_filter in ("active", "inactive", "transferred"):
         where.append("lower(coalesce(s.status,'active'))=?")
