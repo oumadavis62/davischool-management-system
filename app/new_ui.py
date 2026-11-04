@@ -10720,6 +10720,10 @@ def student_analysis_pdf(request: Request, exam_id: str = "", exam_ids: str = ""
             "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",
             (stid, sid)
         ).fetchone()
+        eligible_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        eligible_student_ids={student_key for exam_key,class_key,subject_key,student_key in eligible_pairs if exam_key in set(selected_exam_ids)}
+        if st and stid not in eligible_student_ids:
+            st=None
         if not st or not selected_exam_ids:
             return HTMLResponse("Student or examination not found.", 404)
         result = _student_result_for_assessments(cur, sid, stid, selected_exam_ids, _load_grading_rules(cur,sid), _load_overall_grading_rules(cur,sid))
@@ -10770,6 +10774,10 @@ def report_card_pdf(request: Request, exam_id: str = "", exam_ids: str = "", stu
             "SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",
             (stid, sid)
         ).fetchone()
+        eligible_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        eligible_student_ids={student_key for exam_key,class_key,subject_key,student_key in eligible_pairs if exam_key in set(selected_exam_ids)}
+        if st and stid not in eligible_student_ids:
+            st=None
         if not st or not selected_exam_ids:
             return HTMLResponse("Student or examination not found.", 404)
         grading_rules = _load_grading_rules(cur, sid)
@@ -11220,11 +11228,16 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     selected_exam_ids=_parse_assessment_ids(",".join(submitted_exam_ids) or exam_ids, exam_id)
     if not selected_exam_ids and exams:
         selected_exam_ids=[int(exams[0]["id"])]
+    eligible_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+    eligible_student_ids={student_key for exam_key,class_key,subject_key,student_key in eligible_pairs if exam_key in set(selected_exam_ids)}
+    students=[student for student in students if int(student["id"]) in eligible_student_ids]
     eid=selected_exam_ids[0] if selected_exam_ids else 0
     # Do not silently select the first student when a class/stream was generated for bulk reports.
     # A class-only selection must stay in bulk mode so the preview contains every student in that class/stream.
     stid=int(student_id) if student_id.isdigit() else (0 if cid else (int(students[0]["id"]) if students else 0))
     st=cur.execute("SELECT s.*,c.name class_name,c.stream FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.id=? AND s.school_id=?",(stid,sid)).fetchone()
+    if st and stid not in eligible_student_ids:
+        st=None
     rows=[];comment=""; class_teacher_comment=""; subject_comments={}; opening_date=""; closing_date=""; report_final=False; position="—"; class_total_students=0; class_teacher_name=""; principal_name=""; grade_comment_rule=None
     if st and eid:
         _ensure_student_subject_allocations_table(cur)
