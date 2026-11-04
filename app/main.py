@@ -770,7 +770,7 @@ def header_html(initials, name, email):
 
 def school_header(school, name, active="dashboard", is_impersonating=False):
     initials = "".join([p[0] for p in name.split()][:2]).upper() if name else "S"
-    academic_pages = ["dean-settings","record-marks","exams","marks","set-marks","subject-allocation","edit-marks","marksheets","marks-status","analysis","spreadsheet","sba"]
+    academic_pages = ["dean-settings","exams","marks","set-marks","subject-allocation","record-marks","edit-marks","marksheets","marks-status","analysis","spreadsheet","sba"]
     comm_pages = ["sms","communication","announcements","bulk-sms"]
     system_pages = ["system-settings","school-profile","system-classes","user-management","roles-permissions","database-backup","system-audit","integrations","billing-payments","my-profile","user-manual"]
     is_academic_active = active in academic_pages or active.startswith("marks") or active.startswith("set-marks")
