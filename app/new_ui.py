@@ -9730,51 +9730,7 @@ var saved=which==='saved';document.getElementById('mcSavedPanel').hidden=!saved;
 document.getElementById('mcSavedTab').classList.toggle('active',saved);document.getElementById('mcRequestsTab').classList.toggle('active',!saved);
 document.getElementById('mcTableSearch').placeholder=saved?'Search assessments…':'Search teacher requests…';searchCorrectionRows();}}
 function searchCorrectionRows(){{var q=(document.getElementById('mcTableSearch').value||'').toLowerCase();var table=document.getElementById(document.getElementById('mcSavedPanel').hidden?'mcRequestsTable':'mcSavedTable');if(table)table.querySelectorAll('tbody tr').forEach(function(row){{row.hidden=!!q&&!row.innerText.toLowerCase().includes(q);}});}}
-</script>"""
-
-<div class='muted'>Select the examination, class, subject, year and term, then click <b>Load</b> to display the saved subject marks for that selection.</div>
-<div class='card section'>
-<h2>Load Saved & Submitted Subject Marks</h2>
-<form method='get' action='/app/academics/marks-corrections' class='marks-filter-form'>
-<div class='filter-grid'>
-<label>Examination<select name='exam_id' class='field'><option value=''>All Examinations</option>{exam_options}</select></label>
-<label>Class<select name='class_id' class='field'><option value=''>All Classes</option>{class_options}</select></label>
-<label>Subject<select name='subject_id' class='field'><option value=''>All Subjects</option>{subject_options}</select></label>
-<label>Year<select name='year' class='field'><option value=''>All Years</option>{year_options}</select></label>
-<label>Term<select name='term' class='field'><option value=''>All Terms</option>{term_options}</select></label>
-</div>
-<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px'>
-<input type='hidden' name='load' value='1'><input type='hidden' name='ds_tab' value='{escape(correction_tab_id)}'><button class='load-btn' type='submit'>Load Assessments</button>
-<a class='clear-btn' href='/app/academics/marks-corrections'>Clear</a>
-</div>
-</form>
-{filter_summary}
-</div>
-<div class='card section'><h2>Saved & Submitted Subject Marks</h2>
-<div style='overflow-x:auto'>
-<table><thead><tr><th>Examination</th><th>Class</th><th>Subject</th><th>Term</th><th>Year</th><th>Entries</th><th>Mean</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{marks_rows or "<tr><td colspan='9'>No saved subject marks found for the selected filters.</td></tr>"}</tbody></table></div></div>
-<div class='card section'><div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'><h2 style='margin:0'>Teacher Correction Requests</h2><form method='post' action='/app/academics/marks-corrections/clear' data-native-post='1' data-no-history-filter='1' style='display:inline' onsubmit='return confirm(&quot;Clear all teacher correction requests for this school? This will not change any marks or saved subject records.&quot;);'><button class='btnlink' type='submit' style='color:#b91c1c;border-color:#fecaca;font-weight:900'>🗑 Clear Requests</button></form></div>
-<div class='muted' style='margin:10px 0'>Requests submitted by teachers remain available here for review.</div>
-<div style='overflow-x:auto'>
-<table><thead><tr><th>Requested</th><th>Teacher</th><th>Exam</th><th>Class</th><th>Subject</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
-<tbody>{request_rows_html or "<tr><td colspan='8'>No correction requests yet.</td></tr>"}</tbody></table></div></div>
-</div>
-<style>
-.marks-filter-form{{margin-top:8px}}
-.filter-grid{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:10px}}
-.filter-grid label{{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:800;color:#334155}}
-.field{{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;font-size:14px}}
-.load-btn,.clear-btn{{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:9px;font-weight:900;text-decoration:none;cursor:pointer}}
-.load-btn{{border:0;background:#176B3A;color:#fff}}
-.clear-btn{{border:1px solid #dbe2ea;background:#fff;color:#172033}}
-.btn,.btnlink,.lock-btn,.unlock-btn{{padding:8px 11px;border:0;border-radius:8px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer;text-decoration:none;white-space:nowrap}}
-.btnlink{{background:#fff;color:#172033;border:1px solid #dbe2ea}}
-.unlock-btn{{background:#b45309}}
-.lock-btn{{background:#176B3A}}.correction-subject-row{{cursor:pointer;transition:background .15s,box-shadow .15s}}.correction-subject-row:hover,.correction-subject-row.selected{{background:#f0fdf4;box-shadow:inset 4px 0 0 #176B3A}}.correction-subject-row .lock-btn,.correction-subject-row .unlock-btn{{display:inline-block}}.correction-subject-row:focus{{outline:2px solid #176B3A;outline-offset:-2px}}
-@media(max-width:900px){{.filter-grid{{grid-template-columns:repeat(2,minmax(150px,1fr))}}}}
-@media(max-width:560px){{.filter-grid{{grid-template-columns:1fr}}}}
-</style>"""
+</script>""
     return _school_page(request,"Marks Corrections",body)
 
 @router.post("/app/academics/marks-corrections/approve")
