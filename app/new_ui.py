@@ -557,7 +557,7 @@ def _shell(title, name, role, body, school_id=None):
         nav = [
             ("/app",_modern_icon("dashboard"),"Overview",None),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
-            ("/app/staff",_modern_icon("staff"),"Staff & Teachers","staff.view"),
+            ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
             ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
             ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
@@ -576,6 +576,7 @@ def _shell(title, name, role, body, school_id=None):
                 nav = [item for item in nav if item[3] is None or _permission_enabled(cur, int(school_id), role, item[3])]
             finally:
                 con.close()
+    request_path=str(getattr(getattr(request,"url",None),"path","") or "")
     # Teachers receive a focused teaching workspace with only teacher-facing destinations.
     teacher_locked = (role == "teacher")
     if teacher_locked:
@@ -592,7 +593,18 @@ def _shell(title, name, role, body, school_id=None):
         teacher_nav.insert(5,("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring"))
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
     else:
-        links = "".join(f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>" for u,i,l,_ in nav)
+        links = "".join(
+            ("<details class='nav-group' id='staffManagerNav' " + ("open" if request_path.startswith("/app/staff") else "") + ">"
+             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
+             + "<div class='nav-submenu'>"
+             + f"<a href='/app/staff' class='nav-sub{' active' if request_path=='/app/staff' else ''}'>Staff List</a>"
+             + f"<a href='/app/staff/attendance' class='nav-sub{' active' if request_path=='/app/staff/attendance' else ''}'>Attendance Sheet</a>"
+             + f"<a href='/app/staff/attendance-report' class='nav-sub{' active' if request_path=='/app/staff/attendance-report' else ''}'>Attendance Report</a>"
+             + f"<a href='/app/staff/former' class='nav-sub{' active' if request_path=='/app/staff/former' else ''}'>Former Staff</a>"
+             + "</div></details>")
+            if u=="/app/staff" else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
+            for u,i,l,_ in nav
+        )
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
         avatar_html = "<div class='avatar-wrap' id='teacherProfileMenu'><button type='button' class='avatar' id='teacherAvatarButton' aria-label='Open account menu' aria-expanded='false' onclick='toggleTeacherProfileMenu(event)'>" + escape(initials) + "</button><div class='logout-tab' id='teacherLogoutTab'><a href='/logout'>Log out</a></div></div>"
@@ -604,7 +616,7 @@ def _shell(title, name, role, body, school_id=None):
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#EAF3E8;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
 .app{{display:flex;min-height:100vh}}.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;padding:11px 12px}}.teacher-portal .nav:hover,.teacher-portal .nav:focus-visible{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a}}.teacher-portal .nav.active{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a;font-weight:900}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
 .sidebar-brand{{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;color:#fff}}.sidebar-login-logo{{width:48px;height:48px;min-width:48px;border-radius:13px;background:#176B3A;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.12)}}.sidebar-login-logo .davi-mark{{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#176B3A;font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;overflow:visible}}.sidebar-login-logo .davi-mark:before{{content:'D';position:absolute;left:50%;top:50%;transform:translate(-50%,-53%) skew(-7deg);font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.08);z-index:1}}.sidebar-login-logo .davi-mark .d-letter{{display:none}}.sidebar-login-logo .davi-mark:after{{content:'';display:none}}.sidebar-brand-title{{font-size:16px;font-weight:900;line-height:1.15;letter-spacing:-.2px;color:#fff;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center}}.brand{{font-size:17px;font-weight:900;color:white;padding:8px 10px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;line-height:1.15}}.brand-logo{{width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.16)}}.brand-logo .davi-mark{{width:24px;height:24px;border-width:4px;border-left-width:5px;border-radius:5px 13px 13px 5px}}.brand-logo .davi-mark:after{{height:6px}}.brand small{{display:none}}
-.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
+.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav-group{{margin:3px 0}}.nav-group>summary{{list-style:none;cursor:pointer;user-select:none}}.nav-group>summary::-webkit-details-marker{{display:none}}.staff-manager-summary{{display:flex;gap:11px;align-items:center;color:#dbeafe;padding:10px 12px;border-radius:10px;font-size:13px;border-left:3px solid transparent}}.staff-manager-summary b{{font-weight:600;flex:1}}.staff-manager-summary:hover,.nav-group[open]>.staff-manager-summary{{background:rgba(46,139,87,.16);color:#fff;border-left-color:var(--gold)}}.nav-chevron{{font-size:12px;transition:transform .15s ease}}.nav-group[open] .nav-chevron{{transform:rotate(180deg)}}.nav-submenu{{margin:2px 0 8px 30px;padding-left:10px;border-left:1px solid rgba(219,234,254,.24);display:grid;gap:2px}}.nav-sub{{display:block;color:#cbd5e1;text-decoration:none;font-size:12px;padding:8px 10px;border-radius:8px}}.nav-sub:hover,.nav-sub.active{{background:rgba(255,255,255,.12);color:#fff}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}.top .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:#176B3A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;line-height:1;border:0;box-shadow:0 2px 7px rgba(23,107,58,.22)}}
 .teacher-portal .avatar-wrap{{position:relative}}.teacher-portal .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;border:0;cursor:pointer;font-family:inherit}}.teacher-portal .avatar-wrap .logout-tab{{position:absolute;top:calc(100% + 8px);right:0;min-width:120px;background:#fff;border:1px solid #d8e3f0;border-radius:10px;box-shadow:0 10px 24px #00000018;padding:5px;display:none;z-index:1100}}.teacher-portal .avatar-wrap.open .logout-tab{{display:block}}.teacher-portal .logout-tab a{{display:block;padding:9px 12px;border-radius:7px;color:#172033;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap}}.teacher-portal .logout-tab a:hover,.teacher-portal .logout-tab a:focus-visible{{background:#176B3A;color:#fff}}
 .top-system-title{{font-size:18px;font-weight:900;color:#176B3A;line-height:1.1;margin-bottom:2px}}.top-welcome{{font-size:15px;color:#172033;line-height:1.15}}.page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
@@ -2393,7 +2405,7 @@ def staff_page(request: Request):
         try: return str(t[key] if t[key] is not None else default)
         except Exception: return default
     rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'email'))}</td><td>{escape(val(t,'phone'))}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{t["id"]}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={t["id"]}'>Teaching</a></td></tr>""" for t in staff)
-    body=f"""<div class='page'><h1>Staff & Teachers</h1><div class='muted'>Staff directory, employment status, teacher profiles and academic responsibilities.</div>
+    body=f"""<div class='page'><h1>Staff List</h1><div class='muted'>Manage staff records, employment status, teacher profiles and academic responsibilities.</div>
 <div class='card section'><h2>Add staff member</h2><form method='post' action='{staff_add_action}' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
 <input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'>
 <select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select>
@@ -2403,7 +2415,107 @@ def staff_page(request: Request):
 <div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><h2>Staff register ({len(staff)})</h2><a class='action' href='/app/academics/allocations'>Teacher Allocation</a></div>
 <div class='staff-table-scroll'><table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div></div>
 <style>.staff-table-scroll{{width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-width:thin}}.staff-table-scroll table{{min-width:900px}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
-    return _school_page(request,"Staff & Teachers",body)
+    return _school_page(request,"Staff List",body)
+
+
+
+def _ensure_staff_attendance_table(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS staff_attendance(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        staff_id INTEGER NOT NULL,
+        attendance_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Present',
+        remarks TEXT DEFAULT '',
+        recorded_at TEXT,
+        UNIQUE(school_id,staff_id,attendance_date))""")
+    try:
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_staff_attendance_school_date ON staff_attendance(school_id,attendance_date)")
+    except Exception:
+        pass
+
+
+@router.get("/app/staff/former", response_class=HTMLResponse)
+def former_staff_page(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.view"):
+        return HTMLResponse("You do not have permission to view staff records.",403)
+    con=_db();cur=con.cursor()
+    rows=cur.execute("""SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,''))='left'
+        ORDER BY name""",(sid,)).fetchall()
+    con.close()
+    body_rows="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b></td><td>{escape(str(x['role'] or ''))}</td><td>{escape(str(x['department'] or ''))}</td><td>{escape(str(x['phone'] or ''))}</td><td>{escape(str(x['email'] or ''))}</td><td><a class='action' href='/app/staff/edit/{int(x['id'])}'>View / Edit</a></td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Former Staff</h1><div class='muted'>Staff members whose employment status is marked as Left School. Their records remain available for reference.</div><div class='grid'><div class='card'><div class='label'>Former staff</div><div class='kpi'>{len(rows)}</div></div></div><div class='card section' style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Role</th><th>Department</th><th>Phone</th><th>Email</th><th>Action</th></tr></thead><tbody>{body_rows or "<tr><td colspan='6'>No former staff records found.</td></tr>"}</tbody></table></div></div>"""
+    return _school_page(request,"Former Staff",body)
+
+
+@router.get("/app/staff/attendance", response_class=HTMLResponse)
+def staff_attendance_sheet(request: Request, attendance_date: str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.view"):
+        return HTMLResponse("You do not have permission to view staff attendance.",403)
+    day=attendance_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",attendance_date or "") else datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
+    staff=cur.execute("""SELECT id,name,role,department FROM teachers
+        WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name""",(sid,)).fetchall()
+    saved=cur.execute("SELECT staff_id,status,remarks FROM staff_attendance WHERE school_id=? AND attendance_date=?",(sid,day)).fetchall()
+    saved_map={int(x["staff_id"]):(str(x["status"] or "Present"),str(x["remarks"] or "")) for x in saved}
+    con.close()
+    rows="".join(f"""<tr><td><b>{escape(str(x['name'] or ''))}</b><div class='muted'>{escape(str(x['role'] or ''))}</div></td><td>{escape(str(x['department'] or ''))}</td><td><select class='field' name='status_{int(x['id'])}'><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Present' else ''}>Present</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Absent' else ''}>Absent</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Late' else ''}>Late</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Excused' else ''}>Excused</option></select></td><td><input class='field' name='remarks_{int(x['id'])}' value='{escape(saved_map.get(int(x['id']),('',''))[1])}' placeholder='Optional note'></td></tr>""" for x in staff)
+    body=f"""<div class='page'><h1>Staff Attendance Sheet</h1><div class='muted'>Record daily attendance for active staff and teachers.</div><div class='card section'><form method='get' style='display:flex;gap:10px;flex-wrap:wrap'><label>Attendance date<input class='field' type='date' name='attendance_date' value='{day}' required></label><button class='btn' style='align-self:end'>Load Date</button></form></div><div class='card section' style='overflow-x:auto'><form method='post' action='/app/staff/attendance/save'><input type='hidden' name='attendance_date' value='{day}'><table><thead><tr><th>Staff Member</th><th>Department</th><th>Status</th><th>Remarks</th></tr></thead><tbody>{rows or "<tr><td colspan='4'>No current staff records available.</td></tr>"}</tbody></table>{'<button class="btn" style="margin-top:14px">Save Attendance</button>' if staff else ''}</form></div></div><style>.field{{padding:10px;border:1px solid #dbe2ea;border-radius:9px;min-width:140px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request,"Staff Attendance Sheet",body)
+
+
+@router.post("/app/staff/attendance/save")
+async def staff_attendance_save(request: Request, attendance_date: str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.edit"):
+        return HTMLResponse("You do not have permission to edit staff attendance.",403)
+    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",attendance_date or ""):
+        return HTMLResponse("Choose a valid attendance date.",400)
+    form=await request.form();con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
+    staff=cur.execute("SELECT id FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left'",(sid,)).fetchall()
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).isoformat(timespec="seconds")
+    for person in staff:
+        staff_id=int(person["id"])
+        status=str(form.get(f"status_{staff_id}") or "Present").strip().title()
+        if status not in ("Present","Absent","Late","Excused"):status="Present"
+        remarks=str(form.get(f"remarks_{staff_id}") or "").strip()[:500]
+        old=cur.execute("SELECT id FROM staff_attendance WHERE school_id=? AND staff_id=? AND attendance_date=?",(sid,staff_id,attendance_date)).fetchone()
+        if old:
+            cur.execute("UPDATE staff_attendance SET status=?,remarks=?,recorded_at=? WHERE id=? AND school_id=?",(status,remarks,now,old["id"],sid))
+        else:
+            cur.execute("INSERT INTO staff_attendance(school_id,staff_id,attendance_date,status,remarks,recorded_at) VALUES(?,?,?,?,?,?)",(sid,staff_id,attendance_date,status,remarks,now))
+    _audit(cur,sid,request,"STAFF_ATTENDANCE_SAVE",f"Saved staff attendance for {attendance_date}")
+    con.commit();con.close()
+    return RedirectResponse(f"/app/staff/attendance?attendance_date={quote(attendance_date,safe='')}",303)
+
+
+@router.get("/app/staff/attendance-report", response_class=HTMLResponse)
+def staff_attendance_report(request: Request, start_date: str="", end_date: str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.view"):
+        return HTMLResponse("You do not have permission to view staff attendance reports.",403)
+    today=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    end=end_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",end_date or "") else today
+    start=start_date if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",start_date or "") else end[:8]+"01"
+    con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
+    rows=cur.execute("""SELECT t.id staff_id,t.name,t.role,t.department,
+        COUNT(a.id) days, SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) present,
+        SUM(CASE WHEN a.status='Absent' THEN 1 ELSE 0 END) absent,
+        SUM(CASE WHEN a.status='Late' THEN 1 ELSE 0 END) late,
+        SUM(CASE WHEN a.status='Excused' THEN 1 ELSE 0 END) excused
+        FROM teachers t LEFT JOIN staff_attendance a ON a.staff_id=t.id AND a.school_id=t.school_id
+          AND a.attendance_date BETWEEN ? AND ?
+        WHERE t.school_id=? GROUP BY t.id,t.name,t.role,t.department ORDER BY t.name""",(start,end,sid)).fetchall()
+    con.close()
+    table_rows="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b></td><td>{escape(str(x['role'] or ''))}</td><td>{int(x['days'] or 0)}</td><td>{int(x['present'] or 0)}</td><td>{int(x['absent'] or 0)}</td><td>{int(x['late'] or 0)}</td><td>{int(x['excused'] or 0)}</td></tr>" for x in rows)
+    body=f"""<div class='page'><h1>Staff Attendance Report</h1><div class='muted'>Attendance summary by staff member for the selected date range.</div><div class='card section'><form method='get' style='display:flex;gap:10px;flex-wrap:wrap'><label>From<input class='field' type='date' name='start_date' value='{start}'></label><label>To<input class='field' type='date' name='end_date' value='{end}'></label><button class='btn' style='align-self:end'>Generate Report</button></form></div><div class='card section' style='overflow-x:auto'><div style='font-weight:800;margin-bottom:12px'>Period: {start} to {end}</div><table><thead><tr><th>Staff Member</th><th>Role</th><th>Recorded Days</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>{table_rows or "<tr><td colspan='7'>No staff attendance records found for this period.</td></tr>"}</tbody></table></div></div><style>.field{{padding:10px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    return _school_page(request,"Staff Attendance Report",body)
 
 # Compatibility endpoint for older FastAPI Cloud pages that submit to /app/staff.
 # Keep the canonical form action at /app/staff/add; both paths use the same save handler.
