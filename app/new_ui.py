@@ -8708,7 +8708,8 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         # Load the existing per-student state in batches, rather than doing
         # several SELECTs for every learner in a class.
         allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
-        if allocation_ids is not None:\n            students=[student for student in students if int(student["id"]) in allocation_ids]
+        if allocation_ids is not None:
+            students=[student for student in students if int(student["id"]) in allocation_ids]
         student_ids=[int(st["id"]) for st in students]
         draft_students=set()
         marks_by_student={}
@@ -8915,7 +8916,8 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                        ))
                    ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,exam_id)).fetchall()
     eligible_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
-    if eligible_ids is not None:\n        students=[student for student in students if int(student["id"]) in eligible_ids]
+    if eligible_ids is not None:
+        students=[student for student in students if int(student["id"]) in eligible_ids]
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
