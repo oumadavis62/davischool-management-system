@@ -286,7 +286,6 @@ def _db():
 def _ensure_student_subject_allocations_table(cur):
     """Create the school/year/class/subject learner-choice register additively."""
     cur.execute("""CREATE TABLE IF NOT EXISTS student_subject_allocations(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         school_id INTEGER NOT NULL,
         academic_year TEXT NOT NULL,
         class_id INTEGER NOT NULL,
