@@ -8270,37 +8270,43 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     # not solely from archived allocations. A current Grade 8
                     # English allocation can therefore open Grade 7 English
                     # marks for the same active learners in a prior-year exam.
-                    current_pairs={(int(a["class_id"]),int(a["subject_id"]))
-                                   for a in allocations if a["class_id"] is not None and a["subject_id"] is not None}
-                    historical_class_subjects=set()
-                    for current_class_id,current_subject_id in current_pairs:
-                        cohort_mark_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
-                            FROM marks m
-                            JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
-                            WHERE m.school_id=? AND m.exam_id=? AND m.class_id IS NOT NULL
-                              AND m.subject_id=?
-                              AND st.class_id=?
-                              AND lower(coalesce(st.status,'active'))='active'
-                              AND NOT EXISTS (
-                                  SELECT 1 FROM student_graduations sg
-                                  WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                              )""",(sid,eid,current_subject_id,current_class_id)).fetchall()
-                        for mark_row in cohort_mark_rows:
-                            old_id=int(mark_row["class_id"])
-                            if old_id in participating_ids:
-                                historical_class_subjects.add((old_id,int(mark_row["subject_id"])))
-                    for historical_class_id,historical_subject_id in historical_class_subjects:
-                        if not any(int(c["id"])==historical_class_id for c in classes):
-                            former_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
-                                                     (sid,historical_class_id)).fetchone()
-                            if former_class:
-                                classes.append(former_class)
-                        if not any(int(a["class_id"])==historical_class_id and int(a["subject_id"])==historical_subject_id for a in allocations):
-                            allocations.append({"class_id":historical_class_id,"subject_id":historical_subject_id})
-                        hist_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
-                                                 (sid,historical_subject_id)).fetchone()
-                        if hist_subject and not any(int(sub["id"])==int(hist_subject["id"]) for sub in subjects):
-                            subjects.append(hist_subject)
+                    # Resolve all historical class/subject pairs for this exam in
+                    # one query instead of one query per current allocation.
+                    cohort_mark_rows=cur.execute("""SELECT DISTINCT m.class_id,m.subject_id
+                        FROM marks m
+                        JOIN students st ON st.school_id=m.school_id AND st.id=m.student_id
+                        JOIN teacher_allocations ta ON ta.school_id=st.school_id
+                          AND ta.teacher_id=? AND ta.class_id=st.class_id
+                          AND ta.subject_id=m.subject_id
+                        WHERE m.school_id=? AND m.exam_id=? AND m.class_id IS NOT NULL
+                          AND lower(coalesce(st.status,'active'))='active'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM student_graduations sg
+                              WHERE sg.school_id=st.school_id AND sg.student_id=st.id
+                          )""",(teacher_id_for_exam_filter,sid,eid)).fetchall()
+                    historical_class_subjects={(int(row["class_id"]),int(row["subject_id"]))
+                                               for row in cohort_mark_rows
+                                               if int(row["class_id"]) in participating_ids}
+                    existing_class_ids={int(c["id"]) for c in classes}
+                    existing_subject_ids={int(sub["id"]) for sub in subjects}
+                    missing_class_ids=sorted({class_key for class_key,_ in historical_class_subjects}-existing_class_ids)
+                    missing_subject_ids=sorted({subject_key for _,subject_key in historical_class_subjects}-existing_subject_ids)
+                    if missing_class_ids:
+                        ph=",".join("?" for _ in missing_class_ids)
+                        classes.extend(cur.execute(
+                            "SELECT * FROM classes WHERE school_id=? AND id IN ("+ph+")",
+                            [sid]+missing_class_ids
+                        ).fetchall())
+                    if missing_subject_ids:
+                        ph=",".join("?" for _ in missing_subject_ids)
+                        subjects.extend(cur.execute(
+                            "SELECT * FROM subjects WHERE school_id=? AND id IN ("+ph+")",
+                            [sid]+missing_subject_ids
+                        ).fetchall())
+                    existing_pairs={(int(a["class_id"]),int(a["subject_id"]))
+                                    for a in allocations if a["class_id"] is not None and a["subject_id"] is not None}
+                    for historical_pair in historical_class_subjects-existing_pairs:
+                        allocations.append({"class_id":historical_pair[0],"subject_id":historical_pair[1]})
                 except Exception as hist_exc:
                     print("DAVISCHOOL TEACHER HISTORICAL CLASS FILTER:",repr(hist_exc),flush=True)
             if participating_ids is not None:
@@ -8343,11 +8349,8 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                       AND ta.subject_id=m.subject_id
                     WHERE m.school_id=? AND m.exam_id IN (""" + _exam_placeholders + """)
                       AND m.class_id IS NOT NULL
-                      AND lower(coalesce(st.status,'active'))='active'
-                      AND NOT EXISTS (
-                          SELECT 1 FROM student_graduations sg
-                          WHERE sg.school_id=st.school_id AND sg.student_id=st.id
-                      )""",[teacher_id,sid]+_exam_keys).fetchall()
+                      AND lower(coalesce(st.status,'active'))='a                _missing_historic_class_ids=set()
+                _missing_historic_subject_ids=set()
                 for _historical_row in _historical_rows:
                     _exam_key=int(_historical_row["exam_id"])
                     _old_class_id=int(_historical_row["class_id"])
@@ -8355,15 +8358,31 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                     _scope=exam_class_scope.get(_exam_key)
                     if _scope is not None and _old_class_id not in _scope:
                         continue
-                    if _old_class_id not in _historic_class_map:
-                        _old_class=cur.execute("SELECT * FROM classes WHERE school_id=? AND id=?",
-                                               (sid,_old_class_id)).fetchone()
-                        if _old_class:
-                            _historic_class_map[_old_class_id]=_old_class
                     _historic_pair_set.add((_old_class_id,_old_subject_id))
+                    if _old_class_id not in _historic_class_map:
+                        _missing_historic_class_ids.add(_old_class_id)
                     if _old_subject_id not in _historic_subject_map:
-                        _old_subject=cur.execute("SELECT * FROM subjects WHERE school_id=? AND id=?",
-                                                 (sid,_old_subject_id)).fetchone()
+                        _missing_historic_subject_ids.add(_old_subject_id)
+                # Fetch any former class/subject records together; avoid a
+                # database round-trip for every historical allocation pair.
+                if _missing_historic_class_ids:
+                    _ids=sorted(_missing_historic_class_ids)
+                    _ph=",".join("?" for _ in _ids)
+                    for _old_class in cur.execute(
+                        "SELECT * FROM classes WHERE school_id=? AND id IN ("+_ph+")",
+                        [sid]+_ids
+                    ).fetchall():
+                        _historic_class_map[int(_old_class["id"])]=_old_class
+                if _missing_historic_subject_ids:
+                    _ids=sorted(_missing_historic_subject_ids)
+                    _ph=",".join("?" for _ in _ids)
+                    for _old_subject in cur.execute(
+                        "SELECT * FROM subjects WHERE school_id=? AND id IN ("+_ph+")",
+                        [sid]+_ids
+                    ).fetchall():
+                        _historic_subject_map[int(_old_subject["id"])]=_old_subject
+                all_classes=list(_historic_class_map.values())
+                subjects=list(_historic_subject_map.values())).fetchone()
                         if _old_subject:
                             _historic_subject_map[_old_subject_id]=_old_subject
                 all_classes=list(_historic_class_map.values())
