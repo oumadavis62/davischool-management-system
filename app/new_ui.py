@@ -305,6 +305,32 @@ def _student_subject_allocation_ids(cur, school_id, academic_year, class_id, sub
         (school_id,str(academic_year or "").strip(),int(class_id),int(subject_id))).fetchall()
     return {int(row["student_id"]) for row in rows}
 
+
+def _student_subject_is_allocated(cur, school_id, exam_id, class_id, subject_id, student_id):
+    """Strictly enforce the learner's saved subject choice for an examination year."""
+    _ensure_student_subject_allocations_table(cur)
+    exam=cur.execute("SELECT year FROM exams WHERE school_id=? AND id=?",(school_id,exam_id)).fetchone()
+    if not exam:
+        return False
+    return bool(cur.execute("""SELECT 1 FROM student_subject_allocations
+        WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=? AND student_id=?""",
+        (school_id,str(exam["year"] or "").strip(),int(class_id),int(subject_id),int(student_id))).fetchone())
+
+
+def _allocated_student_subject_pairs(cur, school_id, exam_ids):
+    """Return the strict eligible (exam, class, subject, learner) keys for reports."""
+    _ensure_student_subject_allocations_table(cur)
+    ids=[int(x) for x in (exam_ids or []) if str(x).isdigit()]
+    if not ids:
+        return set()
+    placeholders=",".join("?" for _ in ids)
+    rows=cur.execute("""SELECT e.id exam_id,a.class_id,a.subject_id,a.student_id
+        FROM student_subject_allocations a JOIN exams e
+          ON e.school_id=a.school_id AND CAST(e.year AS TEXT)=a.academic_year
+        WHERE a.school_id=? AND e.id IN (""" + placeholders + ")",
+        [school_id]+ids).fetchall()
+    return {(int(x["exam_id"]),int(x["class_id"]),int(x["subject_id"]),int(x["student_id"])) for x in rows}
+
 def _ensure_user_account_columns(cur, con=None):
     """Ensure generated-account columns exist once per application process."""
     global _USER_ACCOUNT_COLUMNS_READY
@@ -2506,7 +2532,7 @@ def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form
 
 
 @router.get("/app/academics/subject-allocation", response_class=HTMLResponse)
-def student_subject_allocation_page(request: Request, academic_year: str="", class_name: str="", stream: str="", subject_id: str="", load: str=""):
+def student_subject_allocation_page(request: Request, academic_year: str="", class_name: str="", stream: str="", subject_id: str="", examination_id: str="", term: str="", load: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     role=str(request.session.get("role",""))
@@ -2522,7 +2548,12 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
         subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
         year_rows=cur.execute("SELECT DISTINCT year FROM exams WHERE school_id=? AND year IS NOT NULL AND trim(CAST(year AS TEXT))<>'' ORDER BY year DESC",(sid,)).fetchall()
         years=[str(x["year"]) for x in year_rows]
+        exams=cur.execute("SELECT id,name,year,term FROM exams WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall()
         current_year=str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        selected_exam=next((x for x in exams if str(x["id"])==str(examination_id)),None)
+        if selected_exam:
+            academic_year=str(selected_exam["year"] or academic_year or current_year)
+            term=str(selected_exam["term"] or term or "")
         if not academic_year: academic_year=current_year if current_year in years else (years[0] if years else current_year)
         selected_class=next((x for x in classes if str(x["name"] or "")==str(class_name) and str(x["stream"] or "")==str(stream)),None)
         cid=int(selected_class["id"]) if selected_class else 0
@@ -2550,6 +2581,8 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
     con.close()
     years=sorted(set(years+[current_year]),reverse=True)
     year_opts="".join("<option value='%s' %s>%s</option>"%(escape(y), "selected" if y==academic_year else "",escape(y)) for y in years)
+    exam_opts="<option value=''>Select examination</option>"+"".join("<option value='%s' %s>%s · %s · %s</option>"%(int(x["id"]),"selected" if str(x["id"])==str(examination_id) else "",escape(str(x["name"] or "Examination")),escape(str(x["year"] or "")),escape(str(x["term"] or ""))) for x in exams)
+    term_opts="<option value=''>Select term</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(str(t)),"selected" if str(t)==str(term) else "",escape(str(t))) for t in TERM_OPTIONS)
     subject_opts="<option value=''>Select subject</option>"+"".join("<option value='%s' %s>%s</option>"%(x["id"],"selected" if int(x["id"])==subid else "",escape(str(x["name"] or ""))) for x in subjects)
     class_names=sorted({str(x["name"] or "") for x in classes})
     class_opts="<option value=''>Select class</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(n),"selected" if n==class_name else "",escape(n)) for n in class_names)
@@ -2557,16 +2590,18 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
     student_rows="".join("<label class='subject-learner'><input type='checkbox' name='student_ids' value='%s' %s><span><b>%s</b><small>%s</small></span></label>"%(int(x["id"]),"checked" if int(x["id"]) in allocated else "",escape(str(x["name"] or "")),escape(str(x["admission_no"] or ""))) for x in students)
     roster=""
     if str(load)=="1":
-        roster="<div class='card section'><div class='subject-allocation-roster-head'><div><h2>Students in selected class</h2><p class='muted'>Tick learners who will sit this subject. Unticked learners will not appear in Record Marks.</p></div><div class='subject-allocation-count'>%s of %s allocated</div></div><form method='post' action='/app/academics/subject-allocation'><input type='hidden' name='academic_year' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'><div class='subject-allocation-tools'><label><input type='checkbox' id='selectAllLearners'> Select all learners</label><span class='muted'>%s learners loaded</span></div><div class='subject-learner-list'>%s</div><button class='btn' type='submit'>Save Subject Allocation</button></form></div>"%(len(allocated),len(students),escape(academic_year),cid,subid,escape(class_name),escape(stream),len(students),student_rows or "<div class='muted'>No active learners found for this class and academic-year cohort.</div>")
+        roster="<div class='card section'><div class='subject-allocation-roster-head'><div><h2>Students in selected class</h2><p class='muted'>Tick learners who will sit this subject. Unticked learners will not appear in Record Marks.</p></div><div class='subject-allocation-count'>%s of %s allocated</div></div><form method='post' action='/app/academics/subject-allocation'><input type='hidden' name='academic_year' value='%s'><input type='hidden' name='examination_id' value='%s'><input type='hidden' name='term' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'><div class='subject-allocation-tools'><label><input type='checkbox' id='selectAllLearners'> Select all learners</label><span class='muted'>%s learners loaded</span></div><div class='subject-learner-list'>%s</div><button class='btn' type='submit'>Save Subject Allocation</button></form></div>"%(len(allocated),len(students),escape(academic_year),escape(str(examination_id)),escape(str(term)),cid,subid,escape(class_name),escape(stream),len(students),student_rows or "<div class='muted'>No active learners found for this class and academic-year cohort.</div>")
     body="""<div class='page'><h1>Subject Allocation</h1><div class='muted'>Choose the learners who are registered to sit each subject. Choices are saved separately for every academic year.</div>
 <div class='card section'><form method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
-<label>Academic Year<select name='academic_year' class='field'>%s</select></label>
+<label>Examination<select name='examination_id' id='subjectExamination' class='field' required>%s</select></label>
+<label>Term<select name='term' id='subjectTerm' class='field' required>%s</select></label>
+<label>Academic Year<select name='academic_year' id='subjectAcademicYear' class='field' readonly>%s</select></label>
 <label>Subject<select name='subject_id' class='field' required>%s</select></label>
 <label>Class<select name='class_name' id='subjectClass' class='field' required>%s</select></label>
 <label>Stream<select name='stream' id='subjectStream' class='field'>%s</select></label>
 <button class='btn' type='submit' name='load' value='1'>Load Students</button></form></div>%s
-<style>.subject-allocation-filter{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;align-items:end}.subject-allocation-filter label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}.subject-allocation-filter .btn{min-height:42px}.subject-allocation-roster-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.subject-allocation-roster-head h2{margin:0 0 5px}.subject-allocation-roster-head p{margin:0}.subject-allocation-count{font-size:12px;font-weight:900;color:#176B3A;background:#E8F5E9;border-radius:10px;padding:9px 12px}.subject-allocation-tools{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:13px;font-weight:750}.subject-learner-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:5px 0 16px}.subject-learner{display:flex;align-items:center;gap:10px;border:1px solid #e2ebe3;border-radius:10px;padding:10px;background:#fff;min-width:0}.subject-learner input,.subject-allocation-tools input{width:17px;height:17px;accent-color:#176B3A}.subject-learner span{display:grid;gap:3px;min-width:0}.subject-learner b{font-size:13px}.subject-learner small{font-size:11px;color:#64748b}.subject-learner:has(input:checked){background:#f0fdf4;border-color:#86c99a}@media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}.subject-allocation-roster-head{align-items:flex-start;flex-direction:column}}</style>
-<script>(function(){var cls=document.getElementById('subjectClass'),stream=document.getElementById('subjectStream');if(!cls||!stream)return;var opts=Array.prototype.map.call(stream.options,function(o){return o.cloneNode(true)});function filter(){var wanted=cls.value,previous=stream.value;while(stream.options.length)stream.remove(0);opts.forEach(function(o){if(!o.value||o.getAttribute('data-class')===wanted)stream.add(o.cloneNode(true))});if(Array.prototype.some.call(stream.options,function(o){return o.value===previous}))stream.value=previous;else stream.value=''}cls.addEventListener('change',filter);filter();})();var all=document.getElementById('selectAllLearners');if(all)all.addEventListener('change',function(){document.querySelectorAll('.subject-learner input').forEach(function(x){x.checked=all.checked})});</script></div>"""%(year_opts,subject_opts,class_opts,stream_opts,roster)
+<style>.subject-allocation-filter{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:12px;align-items:end}.subject-allocation-filter label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}.subject-allocation-filter .btn{min-height:42px}.subject-allocation-roster-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.subject-allocation-roster-head h2{margin:0 0 5px}.subject-allocation-roster-head p{margin:0}.subject-allocation-count{font-size:12px;font-weight:900;color:#176B3A;background:#E8F5E9;border-radius:10px;padding:9px 12px}.subject-allocation-tools{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:13px;font-weight:750}.subject-learner-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:5px 0 16px}.subject-learner{display:flex;align-items:center;gap:10px;border:1px solid #e2ebe3;border-radius:10px;padding:10px;background:#fff;min-width:0}.subject-learner input,.subject-allocation-tools input{width:17px;height:17px;accent-color:#176B3A}.subject-learner span{display:grid;gap:3px;min-width:0}.subject-learner b{font-size:13px}.subject-learner small{font-size:11px;color:#64748b}.subject-learner:has(input:checked){background:#f0fdf4;border-color:#86c99a}@media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}.subject-allocation-roster-head{align-items:flex-start;flex-direction:column}}</style>
+<script>(function(){var cls=document.getElementById('subjectClass'),stream=document.getElementById('subjectStream');if(!cls||!stream)return;var opts=Array.prototype.map.call(stream.options,function(o){return o.cloneNode(true)});function filter(){var wanted=cls.value,previous=stream.value;while(stream.options.length)stream.remove(0);opts.forEach(function(o){if(!o.value||o.getAttribute('data-class')===wanted)stream.add(o.cloneNode(true))});if(Array.prototype.some.call(stream.options,function(o){return o.value===previous}))stream.value=previous;else stream.value=''}cls.addEventListener('change',filter);filter();})();var all=document.getElementById('selectAllLearners');if(all)all.addEventListener('change',function(){document.querySelectorAll('.subject-learner input').forEach(function(x){x.checked=all.checked})});</script></div>"""%(exam_opts,term_opts,year_opts,subject_opts,class_opts,stream_opts,roster)
     return _school_page(request,"Subject Allocation",body)
 
 
@@ -2580,19 +2615,22 @@ async def save_student_subject_allocation(request: Request):
         return HTMLResponse("You do not have permission to manage student subject allocations.",403)
     form=await request.form()
     year=str(form.get("academic_year") or "").strip()
+    examination_id=str(form.get("examination_id") or "").strip()
+    term=str(form.get("term") or "").strip()
     try:
         cid=int(form.get("class_id") or 0);subid=int(form.get("subject_id") or 0)
     except Exception:
         return HTMLResponse("Invalid class or subject selection.",400)
-    if not year.isdigit() or not cid or not subid:
-        return HTMLResponse("Select an academic year, class, and subject.",400)
+    if not year.isdigit() or not cid or not subid or not examination_id.isdigit() or not term:
+        return HTMLResponse("Select an examination, term, class, and subject.",400)
     con=_db()
     try:
         cur=con.cursor()
         _ensure_student_subject_allocations_table(cur)
         _ensure_student_promotion_cohort_tables(cur)
+        selected_exam=cur.execute("SELECT year,term FROM exams WHERE school_id=? AND id=?",(sid,int(examination_id))).fetchone()
         valid=cur.execute("SELECT 1 FROM classes WHERE school_id=? AND id=?",(sid,cid)).fetchone() and cur.execute("SELECT 1 FROM subjects WHERE school_id=? AND id=?",(sid,subid)).fetchone()
-        if not valid:
+        if not valid or not selected_exam or str(selected_exam["year"] or "")!=year or str(selected_exam["term"] or "")!=term:
             con.rollback();return HTMLResponse("The selected class or subject does not belong to this school.",403)
         roster=cur.execute("""SELECT s.id FROM students s WHERE s.school_id=? AND (s.class_id=? OR EXISTS(
             SELECT 1 FROM student_promotion_cohort_members cohort_current
@@ -2623,7 +2661,7 @@ async def save_student_subject_allocation(request: Request):
         return HTMLResponse("Subject allocations could not be saved. Please try again.",500)
     finally:
         con.close()
-    return RedirectResponse("/app/academics/subject-allocation?academic_year=%s&subject_id=%s&class_name=%s&stream=%s&load=1&saved=1"%(quote(year,safe=""),subid,quote(str(form.get("class_name") or ""),safe=""),quote(str(form.get("stream") or ""),safe="")),303)
+    return RedirectResponse("/app/academics/subject-allocation?academic_year=%s&examination_id=%s&term=%s&subject_id=%s&class_name=%s&stream=%s&load=1&saved=1"%(quote(year,safe=""),quote(examination_id,safe=""),quote(term,safe=""),subid,quote(str(form.get("class_name") or ""),safe=""),quote(str(form.get("stream") or ""),safe="")),303)
 
 
 @router.get("/app/academics/submission-tracker", response_class=HTMLResponse)
@@ -3020,10 +3058,15 @@ def _student_result_for_assessments(cur, school_id, student_id, exam_ids, gradin
         return {"rows": [], "details": [], "exam_marks": {}, "total": 0.0, "points": 0.0,
                 "count": 0, "average": 0.0, "overall_grade": "—"}
     placeholders = ",".join("?" for _ in ids)
+    _ensure_student_subject_allocations_table(cur)
     rows = cur.execute(
         "SELECT sub.id subject_id,sub.name,m.exam_id,m.marks FROM marks m "
         "JOIN subjects sub ON sub.id=m.subject_id "
+        "JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id "
         "WHERE m.school_id=? AND m.student_id=? AND m.exam_id IN (" + placeholders + ") "
+        "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+        "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+        "AND a.subject_id=m.subject_id AND a.student_id=m.student_id) "
         "ORDER BY sub.name,m.exam_id",
         [school_id, student_id] + ids
     ).fetchall()
@@ -3066,11 +3109,17 @@ def _bulk_student_results_for_assessments(cur, school_id, students, exam_ids, gr
         return {}
     exam_ph = ",".join("?" for _ in ids)
     student_ph = ",".join("?" for _ in student_ids)
+    _ensure_student_subject_allocations_table(cur)
     rows = cur.execute(
         "SELECT sub.id subject_id,sub.name,m.student_id,m.exam_id,m.marks "
         "FROM marks m JOIN subjects sub ON sub.id=m.subject_id "
+        "JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id "
         "WHERE m.school_id=? AND m.student_id IN (" + student_ph + ") "
-        "AND m.exam_id IN (" + exam_ph + ") ORDER BY m.student_id,sub.name,m.exam_id",
+        "AND m.exam_id IN (" + exam_ph + ") "
+        "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+        "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+        "AND a.subject_id=m.subject_id AND a.student_id=m.student_id) "
+        "ORDER BY m.student_id,sub.name,m.exam_id",
         [school_id] + student_ids + ids
     ).fetchall()
     by_student = {}
@@ -3710,7 +3759,13 @@ def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year
         return {}
     sp = ",".join("?" for _ in student_ids)
     ep = ",".join("?" for _ in exam_ids)
-    base_q = "SELECT student_id,subject_id,marks FROM marks WHERE school_id=? AND student_id IN ("+sp+") AND exam_id IN ("+ep+")"
+    _ensure_student_subject_allocations_table(cur)
+    base_q = ("SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
+              "ON e.school_id=m.school_id AND e.id=m.exam_id "
+              "WHERE m.school_id=? AND m.student_id IN ("+sp+") AND m.exam_id IN ("+ep+") "
+              "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+              "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+              "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)")
     base_params = [sid] + list(student_ids) + list(exam_ids)
 
     rows = None
@@ -8176,8 +8231,6 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
         # several SELECTs for every learner in a class.
         allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
         students=[student for student in students if int(student["id"]) in allocation_ids]
-        allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
-        students=[student for student in students if int(student["id"]) in allocation_ids]
         student_ids=[int(st["id"]) for st in students]
         draft_students=set()
         marks_by_student={}
@@ -8383,6 +8436,8 @@ async def marks_save(request: Request, exam_id:int=Form(...), class_id:int=Form(
                           FROM exams current_exam WHERE current_exam.school_id=s.school_id)
                        ))
                    ) ORDER BY s.name""",(sid,class_id,exam_id,class_id,subject_id,class_id,exam_id,exam_id,exam_id,class_id,exam_id,class_id,class_id,exam_id)).fetchall()
+    eligible_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
+    students=[student for student in students if int(student["id"]) in eligible_ids]
     # Prepare the performance-comment table once per save request, not once per
     # student. The schema helper caches completed compatibility checks per worker.
     _ensure_report_card_fields(cur)
@@ -13729,8 +13784,12 @@ def _msa_load_rows(cur, school_id, exam_ids):
         JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
         WHERE m.school_id=? AND m.exam_id IN (""" + placeholders + """)
           AND m.marks IS NOT NULL
+          AND EXISTS (SELECT 1 FROM student_subject_allocations a
+              WHERE a.school_id=m.school_id AND a.academic_year=CAST(e.year AS TEXT)
+                AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id)
         ORDER BY c.name, c.stream, st.name, sub.name, e.id
     """
+    _ensure_student_subject_allocations_table(cur)
     raw_rows = cur.execute(sql, [school_id] + [int(x) for x in exam_ids]).fetchall()
     result = []
     for row in raw_rows:
