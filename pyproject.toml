@@ -22,5 +22,13 @@ dependencies = [
     "cryptography==46.0.4",
 ]
 
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
+exclude = ["static", "templates"]
+
 [tool.fastapi]
 entrypoint = "app.main:app"
