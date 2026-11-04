@@ -1264,6 +1264,15 @@ document.addEventListener('submit',function(event){{
   // Mobile: touchstart fires before the synthesized click/navigation.
   document.addEventListener('touchstart',function(event){{warmManagerLink(event.target);}},{{passive:true,capture:true}});
   document.addEventListener('pointerdown',function(event){{if(event.pointerType==='touch')warmManagerLink(event.target);}},{{passive:true,capture:true}});
+  // Opening a manager menu gives the next tap a head start: warm only its
+  // immediate destinations (nested sections warm their own links when opened).
+  document.addEventListener('toggle',function(event){{
+    var group=event.target;
+    if(!group||group.tagName!=='DETAILS'||!group.classList.contains('nav-group')||!group.open)return;
+    var menu=group.querySelector(':scope > .nav-submenu');
+    if(!menu)return;
+    menu.querySelectorAll(':scope > a.nav-sub').forEach(function(link){{warmManagerLink(link);}});
+  }},true);
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
