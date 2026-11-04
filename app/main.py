@@ -497,7 +497,8 @@ def get_db():
     """
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if database_url:
-        from app.db import connect as pg_connect        return pg_connect(database_url, connect_timeout=10)
+        from app.db import connect as pg_connect
+        return pg_connect(database_url, connect_timeout=10)
 
     if not LOCAL_DEVELOPMENT:
         raise RuntimeError(
@@ -996,7 +997,8 @@ def login(request: Request, email: str = Form(...), password: str = Form(...)):
         # (07..., 2547..., +2547...) without changing the stored username.
         if not u:
             phone_digits = re.sub(r"\D", "", login_id)
-            phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)            if len(phone_key) >= 9:
+            phone_key = ("254" + phone_digits[1:]) if len(phone_digits) == 10 and phone_digits.startswith("0") else (("254" + phone_digits) if len(phone_digits) == 9 else phone_digits)
+            if len(phone_key) >= 9:
                 try:
                     parent_candidates = cur.execute("SELECT * FROM users WHERE lower(trim(COALESCE(role,'')))='parent' ORDER BY id DESC").fetchall()
                     for candidate in parent_candidates:
@@ -1495,7 +1497,8 @@ def verify_school_code(request: Request, pending_id: str = Form(...), auth_code:
         # Schema compatibility is already applied during application startup.
         # Do not use SQLite PRAGMA introspection here: production uses PostgreSQL,
         # where the compatibility layer intentionally translates PRAGMA calls.
-        # The required provisioning columns are therefore guaranteed before this route.        school_code = str(random.randint(100000, 999999))
+        # The required provisioning columns are therefore guaranteed before this route.
+        school_code = str(random.randint(100000, 999999))
         unique_pass = generate_unique_password(str(pending["name"]))
 
         cur.execute(
@@ -1994,7 +1997,8 @@ def school_dashboard(request: Request):
     html = f"""<div style='padding:18px;max-width:1400px;margin:auto'><div style='background:linear-gradient(135deg,#0b3d91 0%, #1e3a8a 60%, #1e40af 100%);border-radius:18px;padding:22px 24px;color:white;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'><div><div style='font-size:22px;font-weight:900'>DaviSchool Management System 🚀</div><div style='font-size:12px;color:#bfdbfe;margin-top:4px'>Set Marks Config: {set_cfg_count} | Students: {sc}</div></div><div style='text-align:right'><div style='font-size:34px;font-weight:900'>{sc}</div><div style='font-size:11px'>Total Students</div></div></div><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px'><a href='/school/students' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🎓 TOTAL STUDENTS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{sc}</div></a><a href='/school/classes' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>🏫 CLASSES</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{cc}</div></a><a href='/school/exams' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>📝 EXAMS</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{ec}</div></a><a href='/school/teachers' class='ds-card'><div style='font-size:11px;color:#64748b;font-weight:700'>👨‍🏫 STAFF</div><div style='font-size:30px;font-weight:900;margin:10px 0'>{tc}</div></a></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:16px'><div style='display:flex;justify-content:space-between'><div><div style='font-weight:800;font-size:14px'>👥 Students by Gender</div></div><div style='display:flex;gap:12px;font-size:11px'><span><span style='width:10px;height:10px;background:#0a84ff;display:inline-block'></span> Boys</span><span><span style='width:10px;height:10px;background:#ff2d92;display:inline-block'></span> Girls</span></div></div><div style='display:flex;gap:24px;overflow-x:auto;margin-top:18px'>{chart_html}</div></div><div style='display:grid;grid-template-columns:1.9fr 0.8fr;gap:14px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden'><div style='padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between'><div style='font-weight:800'>🎓 Recent Students</div><a href='/school/students' style='font-size:11px;color:#3b82f6;text-decoration:none'>View All →</a></div><table style='width:100%;border-collapse:collapse'><thead><tr style='background:#f8fafc;text-align:left;font-size:10px;color:#64748b'><th style='padding:10px 12px'>Name</th><th>Adm No</th><th>Gender</th><th>Class</th></tr></thead><tbody>{stu_rows}</tbody></table></div><div style='background:#0b3d91;border-radius:14px;padding:16px;color:white;height:fit-content'><div style='font-weight:800;font-size:14px'>📊 LIVE</div><div style='background:#1e293b;border-radius:10px;padding:12px;margin-top:10px'><div style='font-size:11px'>👦 {tb} | 👧 {tg}</div><div style='font-size:11px;margin-top:6px;color:#22c55e'>Out Of Config: {set_cfg_count}</div><a href='/school/set-marks' style='display:block;margin-top:10px;background:white;color:#0b3d91;padding:8px;border-radius:8px;text-align:center;text-decoration:none;font-weight:800;font-size:12px'>📄 Set Marks</a></div></div></div></div>"""
     return HTMLResponse(f"<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{{margin:0;font-family:Arial;background:#f8fafc}}</style></head><body>{header}{html}</div></div></body></html>")
 
-@app.get("/school/students", response_class=HTMLResponse)def school_students(request: Request):
+@app.get("/school/students", response_class=HTMLResponse)
+def school_students(request: Request):
     if "email" not in request.session: return RedirectResponse("/")
     school = get_school_obj(request); name = request.session.get("name",""); is_imp = request.session.get("is_impersonating", False)
     con = get_db(); cur = con.cursor()
@@ -2493,7 +2497,8 @@ def sys_billing_add(request: Request, amount: str = Form(...), status: str = For
 # === GLOBAL — EXACT YOUR PART 2 ===
 @app.get("/super/global-control/dashboard", response_class=HTMLResponse)
 def global_dashboard(request: Request):
-    if request.session.get("role")!="super_admin": return RedirectResponse("/")    name = request.session.get("name","Davis Ouma")
+    if request.session.get("role")!="super_admin": return RedirectResponse("/")
+    name = request.session.get("name","Davis Ouma")
     con = get_db(); cur = con.cursor()
     cur.execute("SELECT COUNT(*) c FROM students"); sc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM classes"); cc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM exams"); ec = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM teachers"); tc = cur.fetchone()["c"]; cur.execute("SELECT COUNT(*) c FROM set_marks_config"); setc = cur.fetchone()["c"]
     cur.execute("SELECT s.school_id,COALESCE(sc.name,'School') school_name,COALESCE(c.name,'Unassigned') class_name,LOWER(COALESCE(s.gender,'')) gender,COUNT(*) cnt FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id LEFT JOIN schools sc ON sc.id=s.school_id GROUP BY s.school_id,sc.name,c.name,LOWER(COALESCE(s.gender,'')) ORDER BY sc.name,c.name"); gender_rows = cur.fetchall()
@@ -2992,7 +2997,8 @@ def parent_portal(request: Request):
         paid = float(fee["paid"] or 0)
         balance = expected - paid
         money = lambda value: "{:,.2f}".format(value)
-        safe = lambda value: escape(str(value if value is not None else ""))        learner_name = safe(st["name"])
+        safe = lambda value: escape(str(value if value is not None else ""))
+        learner_name = safe(st["name"])
         class_label = safe(st["class_name"] or "Class not assigned")
         stream_label = safe(st["stream"] or "")
         admission = safe(st["admission_no"])
@@ -3491,7 +3497,8 @@ def school_attendance(request:Request):
     body=f"<div class='card'><h3>🗓️ Attendance</h3><form method='post' action='/school/attendance/record'><select name='student_id' class='input-field'>{opts}</select><input type='date' name='date' required class='input-field'><select name='status' class='input-field'><option>Present</option><option>Absent</option><option>Late</option><option>Excused</option></select><button class='btn'>Record Attendance</button></form><table style='margin-top:16px'><tr><th>Date</th><th>Student</th><th>Status</th></tr>{tr}</table></div>"
     return module_page(request,'🗓️ Attendance','attendance',body)
 @app.post("/school/attendance/record")
-def school_attendance_record(request:Request,student_id:int=Form(...),date:str=Form(...),status:str=Form(...)):    if not _role_permission(request,"attendance.edit"):
+def school_attendance_record(request:Request,student_id:int=Form(...),date:str=Form(...),status:str=Form(...)):
+    if not _role_permission(request,"attendance.edit"):
         return RedirectResponse("/portal",303)
     con=get_db(); con.execute("INSERT INTO attendance(school_id,student_id,date,status) VALUES(?,?,?,?)",(sid(request),student_id,date,status)); con.commit(); con.close(); return RedirectResponse('/school/attendance',303)
 
@@ -3772,21 +3779,7 @@ def school_teacher_edit(teacher_id:int, request:Request):
     current_role=(t['role'] or '').strip()
     if current_role and current_role not in role_choices: role_choices.append(current_role)
     role_options=''.join(f"<option value='{escape(r, quote=True)}' {'selected' if r==current_role else ''}>{escape(r)}</option>" for r in role_choices)
-    body=f"""<div class='card'><h2>✏️ Edit Staff Member</h2><form method='post' action='/school/teachers/{teacher_id}/edit' class='form-grid'><label>Full Name<input name='name' value='{escape(t['name'] or '', quote=True)}' required class='input-field'></label><label>TSC No<input name='tsc_no' value='{escape(t['tsc_no'] or '', quote=True)}' class='input-field'></label><label>ID No<input name='id_no' value='{escape(t['id_no'] or '', quote=True)}' class='input-field'></label><label>Gender<select name='gender' class='input-field'><option {'selected' if t['gender']=='Male' else ''}>Male</option><option {'selected' if t['gender']=='Female' else ''}>Female</option></select></label><label>Role<select name='role' id='editStaffRole' class='input-field' onchange="filterStaffDepartments('editStaffRole','editStaffDepartment')">{role_options}</select></label><label>Department<select name='department' id='editStaffDepartment' class='input-field'><option value=''>Select Department</option></select></label><label>Employment Type<select name='employment_type' class='input-field'><option value='Teaching' {'selected' if (t['employment_type'] or 'Teaching')=='Teaching' else ''}>Teaching</option><option value='Non-Teaching' {'selected' if (t['employment_type'] or '')=='Non-Teaching' else ''}>Non-Teaching</option></select></label><label>Phone<input name='phone' value='{escape(t['phone'] or '', quote=True)}' class='input-field'></label><label>Email<input name='email' type='email' value='{escape(t['email'] or '', quote=True)}' class='input-field'></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div><script>
-function filterStaffDepartments(roleId,deptId,selected){{
- const role=(document.getElementById(roleId)?.value||'').trim().toLowerCase();
- const teaching=['teacher','classteacher','principal','deputy principal'].includes(role);
- const teachingDepartments=['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination'];
- const otherDepartments=['School Administration','Registry & Admissions','Finance & Accounts','Human Resources','ICT & Technology','Library Services','Guidance & Counselling','Examinations Department','Laboratory Department','Sports & Physical Education','Transport Department','Security Department','Catering & Nutrition','Health & Medical Services','Maintenance & Facilities','Cleaning & Sanitation','Boarding & Accommodation','Procurement & Stores','Support Services','Other'];
- const select=document.getElementById(deptId); if(!select)return;
- const previous=selected!==undefined?selected:select.value;
- const options=teaching?teachingDepartments:otherDepartments;
- select.innerHTML='<option value="">Select Department</option>'+options.map(v=>'<option value="'+v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'">'+v+'</option>').join('');
- if(previous&&options.includes(previous))select.value=previous;
- else if(previous&&selected!==undefined){{select.add(new Option(previous,previous));select.value=previous;}}
-}}
-filterStaffDepartments('editStaffRole','editStaffDepartment',{json.dumps(t['department'] or '')});
-</script>"""
+    body=f"""<div class='card'><h2>✏️ Edit Staff Member</h2><form method='post' action='/school/teachers/{teacher_id}/edit' class='form-grid'><label>Full Name<input name='name' value='{escape(t['name'] or '', quote=True)}' required class='input-field'></label><label>TSC No<input name='tsc_no' value='{escape(t['tsc_no'] or '', quote=True)}' class='input-field'></label><label>ID No<input name='id_no' value='{escape(t['id_no'] or '', quote=True)}' class='input-field'></label><label>Gender<select name='gender' class='input-field'><option {'selected' if t['gender']=='Male' else ''}>Male</option><option {'selected' if t['gender']=='Female' else ''}>Female</option></select></label><label>Role<select name='role' id='editStaffRole' class='input-field' onchange="filterStaffDepartments('editStaffRole','editStaffDepartment')">{role_options}</select></label><label>Department<select name='department' id='editStaffDepartment' class='input-field'><option value=''>Select Department</option></select></label><label>Employment Type<select name='employment_type' class='input-field'><option value='Teaching' {'selected' if (t['employment_type'] or 'Teaching')=='Teaching' else ''}>Teaching</option><option value='Non-Teaching' {'selected' if (t['employment_type'] or '')=='Non-Teaching' else ''}>Non-Teaching</option></select></label><label>Phone<input name='phone' value='{escape(t['phone'] or '', quote=True)}' class='input-field'></label><label>Email<input name='email' type='email' value='{escape(t['email'] or '', quote=True)}' class='input-field'></label><button class='btn' style='grid-column:span 2'>💾 Save Changes</button></form></div><script>filterStaffDepartments('editStaffRole','editStaffDepartment',{json.dumps(t['department'] or '')});</script>"""
     return module_page(request,"Edit Staff","staff",body)
 
 @app.post("/school/teachers/{teacher_id}/edit")
@@ -4004,7 +3997,8 @@ def school_attendance_bulk(request: Request, date: str = ""):
 async def school_attendance_bulk_save(request:Request):
     school=_school_admin_guard(request)
     if not school: return RedirectResponse("/",303)
-    form=await request.form(); date=str(form.get("date") or "")    if not date: return RedirectResponse("/school/attendance/bulk",303)
+    form=await request.form(); date=str(form.get("date") or "")
+    if not date: return RedirectResponse("/school/attendance/bulk",303)
     con=get_db(); cur=con.cursor()
     students=cur.execute("SELECT id FROM students WHERE school_id=?",(school["id"],)).fetchall()
     for s in students:
@@ -4504,3 +4498,102 @@ def _read_portal_preview_ticket(ticket: str, portal: str):
     try:
         raw, supplied = str(ticket or "").rsplit(".", 1)
         expected = hmac.new(SECRET_KEY.encode("utf-8"), raw.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(supplied, expected):
+            return None
+        padded = raw + "=" * (-len(raw) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+        if payload.get("portal") != portal or int(payload.get("expires") or 0) < int(datetime.now().timestamp()):
+            return None
+        if not payload.get("admin_email"):
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+@app.get("/super/portal-management/enter/{portal}")
+def enter_super_admin_portal_preview(portal: str, request: Request, ticket: str = ""):
+    allowed = {
+        "school-admin": ("school_admin", "/app"),
+        "registrar": ("registrar", "/app"),
+        "teacher": ("teacher", "/app"),
+        "parent": ("parent", "/portal"),
+        "student": ("student", "/portal"),
+        "accountant": ("accountant", "/school/finance"),
+    }
+    if portal not in allowed:
+        return RedirectResponse("/super/portal-management", 303)
+    handoff = _read_portal_preview_ticket(ticket, portal)
+    if request.session.get("role") != "super_admin" and not handoff:
+        return RedirectResponse("/", 303)
+    if request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
+    try:
+        demo = _ensure_davischool_demo_tenant()
+    except Exception as exc:
+        print("DAVISCHOOL PORTAL DEMO INITIALIZATION FAILED:", repr(exc), flush=True)
+        return HTMLResponse("The isolated demo environment could not be prepared. No school data was changed. Please check the application logs.", 500)
+
+    role, destination = allowed[portal]
+    admin_user_id = (handoff or {}).get("admin_user_id", request.session.get("user_id", 0))
+    admin_email = (handoff or {}).get("admin_email", request.session.get("email", ""))
+    admin_name = (handoff or {}).get("admin_name", request.session.get("name", "Super Administrator"))
+    request.session["_preview_admin_user_id"] = admin_user_id
+    request.session["_preview_admin_email"] = admin_email
+    request.session["_preview_admin_name"] = admin_name
+    request.session["role"] = role
+    request.session["email"] = "preview-" + portal + "@davischool.invalid"
+    request.session["name"] = "Super Admin Preview"
+    request.session["user_id"] = 0
+    request.session["school_id"] = demo["school_id"]
+    request.session["teacher_id"] = demo["teacher_id"] if role == "teacher" else None
+    request.session["student_id"] = demo["student_id"] if role in ("parent", "student") else None
+    request.session["is_impersonating"] = False
+    request.session["is_portal_preview"] = True
+    request.session["preview_portal"] = portal
+    request.session["preview_school_id"] = demo["school_id"]
+    con = get_db()
+    try:
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                    (demo["school_id"], admin_email, "PORTAL_PREVIEW_ENTER",
+                     "Opened isolated " + portal + " portal preview", ts))
+        con.commit()
+    finally:
+        con.close()
+    # Preserve the explicit tab handoff through this redirect. The browser controller
+    # adopts the fresh tab id from ds_tab_shared before normal navigation begins.
+    return RedirectResponse(destination + "?ds_tab_shared=1", 303)
+
+
+@app.get("/super/portal-management/exit")
+def exit_super_admin_portal_preview(request: Request):
+    if request.session.get("role") not in ("school_admin","registrar","teacher","parent","student","accountant") or not request.session.get("is_portal_preview"):
+        return RedirectResponse("/", 303)
+    demo_id = request.session.get("preview_school_id", 0)
+    admin_email = request.session.get("_preview_admin_email", "")
+    con = get_db()
+    try:
+        ts = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("INSERT INTO system_audit (school_id,user_email,action,details,timestamp) VALUES (?,?,?,?,?)",
+                    (demo_id, admin_email, "PORTAL_PREVIEW_EXIT",
+                     "Returned to Global Control Centre from portal preview", ts))
+        con.commit()
+    finally:
+        con.close()
+    request.session["role"] = "super_admin"
+    request.session["school_id"] = 0
+    request.session["user_id"] = request.session.pop("_preview_admin_user_id", 0)
+    request.session["email"] = request.session.pop("_preview_admin_email", "")
+    request.session["name"] = request.session.pop("_preview_admin_name", "Super Administrator")
+    for key in ("teacher_id","student_id","is_impersonating","is_portal_preview","preview_portal","preview_school_id"):
+        request.session.pop(key, None)
+    return RedirectResponse("/super/portal-management", 303)
+
+# Install tab-scoped signed sessions around the fully configured ASGI app.
+# This must wrap the app only after every route and FastAPI middleware has been registered.
+app = DaviSchoolTabSessionMiddleware(
+    app,
+    secret_key=SECRET_KEY,
+    https_only=SESSION_HTTPS_ONLY,
+)
