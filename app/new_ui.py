@@ -2516,7 +2516,22 @@ def student_edit_page(request: Request,student_id:int,modal:int=0):
     if not st:return HTMLResponse("Student not found.",404)
     opts="".join(f"<option value='{c['id']}' {'selected' if st['class_id'] and int(st['class_id'])==int(c['id']) else ''}>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     edit_action=f"/app/students/edit/{student_id}{tab_q}" + (("&" if tab_q else "?") + "modal=1" if modal else "")
-    body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+    if modal:
+        body=f"""<div class='student-add-dialog-head'><div><div class='students-eyebrow'>STUDENT REGISTER / UPDATE RECORD</div><h2 id='student-edit-title'>Edit student details</h2><p>Update the learner's admission and contact information.</p></div><button type='button' class='student-add-close' aria-label='Close' onclick="document.getElementById('edit-student-dialog').close()">×</button></div>
+<form method='post' action='{edit_action}' class='students-add-form'>
+<input name='admission_no' value='{escape(str(st['admission_no'] or ''),quote=True)}' required placeholder='Admission number' class='field'>
+<input name='name' value='{escape(str(st['name'] or ''),quote=True)}' required placeholder='Full name' class='field'>
+<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''),quote=True)}' placeholder='Assessment number' class='field'>
+<select name='class_id' class='field'><option value=''>Class / Stream</option>{opts}</select>
+<select name='gender' class='field'><option value=''>Gender</option><option value='Male' {'selected' if str(st['gender'] or '')=='Male' else ''}>Male</option><option value='Female' {'selected' if str(st['gender'] or '')=='Female' else ''}>Female</option><option value='Other' {'selected' if str(st['gender'] or '')=='Other' else ''}>Other</option></select>
+<input name='parent_name' value='{escape(str(st['parent_name'] or ''),quote=True)}' placeholder='Parent name' class='field'>
+<input name='parent_phone' value='{escape(str(st['parent_phone'] or ''),quote=True)}' placeholder='Parent phone' class='field'>
+<select name='status' class='field'><option value='active' {'selected' if str(st['status'] or 'active')=='active' else ''}>Active</option><option value='inactive' {'selected' if str(st['status'] or '')=='inactive' else ''}>Inactive</option><option value='graduated' {'selected' if str(st['status'] or '')=='graduated' else ''}>Graduated</option><option value='transferred' {'selected' if str(st['status'] or '')=='transferred' else ''}>Transferred</option></select>
+<div class='student-add-dialog-actions'><button type='button' class='student-add-cancel' onclick="document.getElementById('edit-student-dialog').close()">Cancel</button><button class='btn students-primary-button'>Save Changes</button></div></form>
+<form method='post' action='/app/students/delete/{student_id}{tab_q}' onsubmit="return confirm('Delete this student permanently? This cannot be undone.');" class='student-edit-delete'><button type='submit'>Delete Student</button><span>Only delete records created by mistake. Records with academic or financial history are protected.</span></form>
+<style>.student-edit-delete{{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid #edf1ed}}.student-edit-delete button{{border:1px solid #f0d2d2;border-radius:9px;background:#fff4f4;color:#a52a2a;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer}}.student-edit-delete span{{font-size:10px;color:#8b7777;flex:1;min-width:180px}}</style>"""
+    else:
+        body=f"""<div class='page'><h1>Edit Student</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <label>Admission number<input name='admission_no' value='{escape(str(st['admission_no'] or ''))}' required class='field'></label>
 <label>Full name<input name='name' value='{escape(str(st['name'] or ''))}' required class='field'></label>
 <label>Assessment number<input name='assessment_no' value='{escape(str(st['assessment_no'] or ''))}' class='field'></label>
@@ -2950,7 +2965,23 @@ def staff_edit_page(request: Request,teacher_id:int,modal:int=0):
         except Exception:return default
     status=val("status","active")
     edit_action=f"/app/staff/edit/{teacher_id}{tab_q}"+(("&" if tab_q else "?")+"modal=1" if modal else "")
-    body=f"""<div class='page'><h1>Edit Staff / Teacher</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
+    if modal:
+        body=f"""<div class='staff-dialog-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / UPDATE RECORD</div><h2>Edit staff member</h2><p class='muted'>Update this staff member's employment and contact details.</p></div><button type='button' class='staff-dialog-close' aria-label='Close' onclick="document.getElementById('edit-staff-dialog').close()">×</button></div>
+<form method='post' action='{edit_action}' class='staff-filters staff-add-form'>
+<label>Full name<input name='name' value='{escape(val("name"),quote=True)}' required placeholder='Full name' class='field'></label>
+<label>Email address<input name='email' type='email' value='{escape(val("email"),quote=True)}' placeholder='Email address' class='field'></label>
+<label>Phone number<input name='phone' value='{escape(val("phone"),quote=True)}' placeholder='Phone number' class='field'></label>
+<label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"),quote=True)}' placeholder='TSC number' class='field'></label>
+<label>ID number<input name='id_no' value='{escape(val("id_no"),quote=True)}' placeholder='ID number' class='field'></label>
+<label>Designation<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')">{''.join(f"<option value='{escape(role,quote=True)}' {'selected' if val('role','Teacher')==role else ''}>{escape(role)}</option>" for role in ['Teacher','Registrar','Deputy Teacher','Head of Department','Head Teacher','Principal','Bursar','Secretary','Support Staff'])}</select></label>
+<label>Gender<select name='gender' class='field'><option value=''>Select gender</option><option value='Male' {'selected' if val('gender')=='Male' else ''}>Male</option><option value='Female' {'selected' if val('gender')=='Female' else ''}>Female</option><option value='Other' {'selected' if val('gender')=='Other' else ''}>Other</option></select></label>
+<label>Employment type<select name='employment_type' class='field'><option value='Permanent' {'selected' if val('employment_type','Permanent')=='Permanent' else ''}>Permanent</option><option value='Contract' {'selected' if val('employment_type')=='Contract' else ''}>Contract</option><option value='Part-time' {'selected' if val('employment_type')=='Part-time' else ''}>Part-time</option></select></label>
+<label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
+<label>Department<select name='department' id='staffEditDepartment' class='field'><option value=''>Select department</option></select></label>
+<div class='staff-dialog-actions'><button type='button' class='btn btn-light' onclick="document.getElementById('edit-staff-dialog').close()">Cancel</button><button class='btn'>Save Changes</button></div></form>
+<style>.staff-edit-content .staff-add-form{{padding:0 20px 20px}}.staff-edit-content .staff-dialog-actions{{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;margin-top:7px}}</style><script>filterStaffDepartment('staffEditRole','staffEditDepartment',{json.dumps(val("department"))});</script>"""
+    else:
+        body=f"""<div class='page'><h1>Edit Staff / Teacher</h1><div class='card section'><form method='post' action='{edit_action}' style='display:grid;grid-template-columns:repeat(2,1fr);gap:10px'>
 <label>Full name<input name='name' value='{escape(val("name"))}' required class='field'></label><label>Email<input name='email' type='email' value='{escape(val("email"))}' class='field'></label>
 <label>Phone<input name='phone' value='{escape(val("phone"))}' class='field'></label><label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"))}' class='field'></label>
 <label>ID number<input name='id_no' value='{escape(val("id_no"))}' class='field'></label><label>Role<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')"><option>{escape(val("role","Teacher"))}</option><option>Teacher</option><option>Registrar</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select></label>
@@ -2958,20 +2989,19 @@ def staff_edit_page(request: Request,teacher_id:int,modal:int=0):
 <label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
 <label>Department<select name='department' id='staffEditDepartment' class='field'><option value=''>Select department</option></select></label><div><button class='btn'>Save Changes</button> <a class='action' href='/app/staff'>Cancel</a></div></form></div></div>
 <style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;margin-top:5px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style><script>function filterStaffDepartment(roleId,departmentId,selectedValue){{
- const role=(document.getElementById(roleId)?.value||'').trim().toLowerCase();
- const teachingRoles=['teacher','deputy teacher','head of department','head teacher','principal'];
- const teachingDepartments=['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination'];
- const supportDepartments=['School Administration','Registry & Admissions','Finance & Accounts','Human Resources','ICT & Technology','Library Services','Guidance & Counselling','Examinations Department','Laboratory Department','Sports & Physical Education','Transport Department','Security Department','Catering & Nutrition','Health & Medical Services','Maintenance & Facilities','Cleaning & Sanitation','Boarding & Accommodation','Procurement & Stores','Support Services','Other'];
- const select=document.getElementById(departmentId);if(!select)return;
- const previous=selectedValue!==undefined?selectedValue:select.value;
- const options=teachingRoles.includes(role)?teachingDepartments:supportDepartments;
- select.replaceChildren(new Option('Select department',''));
- options.forEach(value=>select.add(new Option(value,value)));
- if(previous&&!options.includes(previous)&&selectedValue!==undefined)select.add(new Option(previous,previous));
- if(previous&&options.includes(previous))select.value=previous;
+  const role=(document.getElementById(roleId)?.value||'').trim().toLowerCase();
+  const teachingRoles=['teacher','deputy teacher','head of department','head teacher','principal'];
+  const teachingDepartments=['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination'];
+  const supportDepartments=['School Administration','Registry & Admissions','Finance & Accounts','Human Resources','ICT & Technology','Library Services','Guidance & Counselling','Examinations Department','Laboratory Department','Sports & Physical Education','Transport Department','Security Department','Catering & Nutrition','Health & Medical Services','Maintenance & Facilities','Cleaning & Sanitation','Boarding & Accommodation','Procurement & Stores','Support Services','Other'];
+  const select=document.getElementById(departmentId);if(!select)return;
+  const previous=selectedValue!==undefined?selectedValue:select.value;
+  const options=teachingRoles.includes(role)?teachingDepartments:supportDepartments;
+  select.replaceChildren(new Option('Select department',''));
+  options.forEach(value=>select.add(new Option(value,value)));
+  if(previous&&!options.includes(previous))select.add(new Option(previous,previous));
+  if(previous)select.value=previous;
 }}
-filterStaffDepartment('staffEditRole','staffEditDepartment',{json.dumps(val("department"))});
-</script>"""
+filterStaffDepartment('staffEditRole','staffEditDepartment',{json.dumps(val("department"))});</script>"""
     return HTMLResponse(body) if modal else _school_page(request,"Edit Staff / Teacher",body)
 
 @router.post("/app/staff/edit/{teacher_id}")
