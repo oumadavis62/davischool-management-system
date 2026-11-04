@@ -17,6 +17,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 import threading
+import time
 from app.tab_session import DaviSchoolTabSessionMiddleware
 import random
 from datetime import datetime, timedelta
@@ -164,19 +165,51 @@ def _repair_recreated_subject_references():
         con.close()
 
 
+def _is_transient_database_startup_error(exc):
+    message = (repr(exc) + " " + str(exc)).lower()
+    transient_markers = (
+        "pooltimeout",
+        "temporary failure in name resolution",
+        "could not translate host name",
+        "name or service not known",
+        "connection timed out",
+        "connection refused",
+        "network is unreachable",
+        "server closed the connection unexpectedly",
+        "connection reset by peer",
+    )
+    return any(marker in message for marker in transient_markers)
+
+
 def _initialize_database_background():
     global DB_INIT_READY, DB_INIT_ERROR
-    try:
-        init_db()
-        init_extended_db()
-        # Subject-reference repair is intentionally not run during every startup.
-        # It is a one-time maintenance task and can scan many academic tables,
-        # causing unnecessary startup/database load on production replicas.
-        DB_INIT_READY = True
-        print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
-    except Exception as exc:
-        DB_INIT_ERROR = repr(exc)
-        print("DAVISCHOOL DATABASE INITIALIZATION FAILED:", DB_INIT_ERROR, flush=True)
+    # Hosting DNS and managed-pooler connections can fail briefly during
+    # replica startup. Retry transient connection failures so a short DNS
+    # outage does not permanently leave this process with DB_INIT_READY=False.
+    retry_delays = (5, 10, 20, 30, 30)
+    for attempt in range(len(retry_delays) + 1):
+        try:
+            init_db()
+            init_extended_db()
+            # Subject-reference repair is intentionally not run during every startup.
+            # It is a one-time maintenance task and can scan many academic tables,
+            # causing unnecessary startup/database load on production replicas.
+            DB_INIT_READY = True
+            DB_INIT_ERROR = None
+            print("DAVISCHOOL DATABASE INITIALIZATION COMPLETE", flush=True)
+            return
+        except Exception as exc:
+            DB_INIT_ERROR = repr(exc)
+            if not _is_transient_database_startup_error(exc) or attempt >= len(retry_delays):
+                print("DAVISCHOOL DATABASE INITIALIZATION FAILED:", DB_INIT_ERROR, flush=True)
+                return
+            delay = retry_delays[attempt]
+            print(
+                "DAVISCHOOL DATABASE INITIALIZATION RETRY %s/%s IN %ss: %s"
+                % (attempt + 1, len(retry_delays), delay, DB_INIT_ERROR),
+                flush=True,
+            )
+            time.sleep(delay)
 
 @app.on_event("startup")
 def _startup_database_initialization():
