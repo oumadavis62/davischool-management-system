@@ -606,27 +606,62 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/staff/former", "Former Staff")
             + "</div></details>"
         )
-        academic_items = [
-            ("/app/academics/marks", "Marks Entry"),
-            ("/app/academics/marksheets", "Class Marksheets"),
-            ("/app/academics/marks-corrections", "Marks Corrections"),
-            ("/app/academics/submission-tracker", "Examination Submission Tracker"),
-            ("/app/academics/analysis", "Academic Analysis"),
-            ("/app/report-cards", "Report Cards"),
-            ("/app/academics/grading", "Grade & Points"),
-            ("/app/academics/allocations", "Teacher Allocation"),
-            ("/app/exams", "Examinations"),
+        def _academic_dropdown(label, items, active=False, group_id=""):
+            is_open = "open" if active else ""
+            submenu = "".join(_nav_sub(url, item_label) for url, item_label in items)
+            return (
+                f"<details class='nav-group nav-nested-group' id='{group_id}' {is_open}>"
+                + f"<summary class='nav-sub nav-subgroup-summary'><b>{escape(label)}</b><span class='nav-chevron'>▾</span></summary>"
+                + f"<div class='nav-submenu nav-nested-submenu'>{submenu}</div></details>"
+            )
+
+        dean_routes = [
             ("/app/subjects", "Subjects"),
-            ("/app/classes", "Classes & Streams"),
-            ("/app/academics/subject-allocation", "Subject Allocation"),
-            ("/app/students/promotion", "Promotion / Transfer"),
-            ("/app/students/graduation-records", "Graduation Records"),
+            ("/app/academics/allocations", "Teacher Allocations"),
+            ("/app/academics/subject-allocation", "Subject Allocations"),
+            ("/app/exams", "Examination"),
+            ("/app/academics/grading", "Grade and Points"),
+            ("/app/academics/submission-tracker", "Examination Tracker"),
+            ("/app/academics/marks-corrections", "Marks Correction"),
+            ("/app/students/promotion", "Promotion/Transfer"),
         ]
+        spreadsheet_routes = [
+            ("/app/academics/marksheets", "Class MarkSheets"),
+        ]
+        exam_analysis_routes = [
+            ("/app/academics/analysis", "Exam Analysis"),
+        ]
+        dean_active = request_path.startswith((
+            "/app/subjects", "/app/academics/allocations",
+            "/app/academics/subject-allocation", "/app/exams",
+            "/app/academics/grading", "/app/academics/submission-tracker",
+            "/app/academics/marks-corrections", "/app/students/promotion",
+        ))
+        spreadsheet_active = request_path.startswith((
+            "/app/academics/marksheets", "/app/academics/analysis",
+        ))
         academic_group = (
-            "<details class='nav-group' id='academicManagerNav' " + ("open" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes")) else "") + ">"
+            "<details class='nav-group' id='academicManagerNav' "
+            + ("open" if request_path.startswith((
+                "/app/academics", "/app/exams", "/app/report-cards",
+                "/app/subjects", "/app/classes", "/app/students/promotion",
+                "/app/students/graduation-records",
+            )) else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('academics')}</span><b>Academic Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
-            + "".join(_nav_sub(url, label) for url, label in academic_items)
+            + _academic_dropdown("Dean Settings", dean_routes, dean_active, "academicDeanSettings")
+            + _nav_sub("/app/academics/marks", "Marks Entry")
+            + "<details class='nav-group nav-nested-group' id='academicSpreadsheet' "
+            + ("open" if spreadsheet_active else "") + ">"
+            + "<summary class='nav-sub nav-subgroup-summary'><b>Spreadsheet</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu nav-nested-submenu'>"
+            + "".join(_nav_sub(url, label) for url, label in spreadsheet_routes)
+            + _academic_dropdown("Exam Analysis", exam_analysis_routes, request_path.startswith("/app/academics/analysis"), "academicExamAnalysis")
+            + "</div></details>"
+            + _nav_sub("/app/report-cards", "Report Cards")
+            + _nav_sub("/app/academics/assessments", "SBA/CBA")
+            + _nav_sub("/app/classes", "Classes and Streams")
+            + _nav_sub("/app/students/graduation-records", "Graduation Records")
             + "</div></details>"
         )
         links = "".join(
@@ -646,7 +681,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#EAF3E8;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
 .app{{display:flex;min-height:100vh}}.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;padding:11px 12px}}.teacher-portal .nav:hover,.teacher-portal .nav:focus-visible{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a}}.teacher-portal .nav.active{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a;font-weight:900}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
 .sidebar-brand{{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;color:#fff}}.sidebar-login-logo{{width:48px;height:48px;min-width:48px;border-radius:13px;background:#176B3A;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.12)}}.sidebar-login-logo .davi-mark{{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#176B3A;font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;overflow:visible}}.sidebar-login-logo .davi-mark:before{{content:'D';position:absolute;left:50%;top:50%;transform:translate(-50%,-53%) skew(-7deg);font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.08);z-index:1}}.sidebar-login-logo .davi-mark .d-letter{{display:none}}.sidebar-login-logo .davi-mark:after{{content:'';display:none}}.sidebar-brand-title{{font-size:16px;font-weight:900;line-height:1.15;letter-spacing:-.2px;color:#fff;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center}}.brand{{font-size:17px;font-weight:900;color:white;padding:8px 10px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;line-height:1.15}}.brand-logo{{width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.16)}}.brand-logo .davi-mark{{width:24px;height:24px;border-width:4px;border-left-width:5px;border-radius:5px 13px 13px 5px}}.brand-logo .davi-mark:after{{height:6px}}.brand small{{display:none}}
-.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav-group{{margin:3px 0}}.nav-group>summary{{list-style:none;cursor:pointer;user-select:none}}.nav-group>summary::-webkit-details-marker{{display:none}}.staff-manager-summary{{display:flex;gap:11px;align-items:center;color:#dbeafe;padding:10px 12px;border-radius:10px;font-size:13px;border-left:3px solid transparent}}.staff-manager-summary b{{font-weight:600;flex:1}}.staff-manager-summary:hover,.nav-group[open]>.staff-manager-summary{{background:rgba(46,139,87,.16);color:#fff;border-left-color:var(--gold)}}.nav-chevron{{font-size:12px;transition:transform .15s ease}}.nav-group[open] .nav-chevron{{transform:rotate(180deg)}}.nav-submenu{{margin:2px 0 8px 30px;padding-left:10px;border-left:1px solid rgba(219,234,254,.24);display:grid;gap:2px}}.nav-sub{{display:block;color:#cbd5e1;text-decoration:none;font-size:12px;padding:8px 10px;border-radius:8px}}.nav-sub:hover,.nav-sub.active{{background:rgba(255,255,255,.12);color:#fff}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
+.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav-group{{margin:3px 0}}.nav-group>summary{{list-style:none;cursor:pointer;user-select:none}}.nav-group>summary::-webkit-details-marker{{display:none}}.staff-manager-summary{{display:flex;gap:11px;align-items:center;color:#dbeafe;padding:10px 12px;border-radius:10px;font-size:13px;border-left:3px solid transparent}}.staff-manager-summary b{{font-weight:600;flex:1}}.staff-manager-summary:hover,.nav-group[open]>.staff-manager-summary{{background:rgba(46,139,87,.16);color:#fff;border-left-color:var(--gold)}}.nav-chevron{{font-size:12px;transition:transform .15s ease}}.nav-group[open] .nav-chevron{{transform:rotate(180deg)}}.nav-submenu{{margin:2px 0 8px 30px;padding-left:10px;border-left:1px solid rgba(219,234,254,.24);display:grid;gap:2px}}.nav-nested-group{{margin:1px 0}}.nav-subgroup-summary{{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:8px 10px;color:#dbeafe}}.nav-subgroup-summary::-webkit-details-marker{{display:none}}.nav-subgroup-summary:hover,.nav-nested-group[open]>.nav-subgroup-summary{{color:#fff;background:rgba(46,139,87,.14);border-radius:8px}}.nav-nested-submenu{{margin-left:12px;padding-left:9px}}.nav-sub{{display:block;color:#cbd5e1;text-decoration:none;font-size:12px;padding:8px 10px;border-radius:8px}}.nav-sub:hover,.nav-sub.active{{background:rgba(255,255,255,.12);color:#fff}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}.top .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:#176B3A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;line-height:1;border:0;box-shadow:0 2px 7px rgba(23,107,58,.22)}}
 .teacher-portal .avatar-wrap{{position:relative}}.teacher-portal .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;border:0;cursor:pointer;font-family:inherit}}.teacher-portal .avatar-wrap .logout-tab{{position:absolute;top:calc(100% + 8px);right:0;min-width:120px;background:#fff;border:1px solid #d8e3f0;border-radius:10px;box-shadow:0 10px 24px #00000018;padding:5px;display:none;z-index:1100}}.teacher-portal .avatar-wrap.open .logout-tab{{display:block}}.teacher-portal .logout-tab a{{display:block;padding:9px 12px;border-radius:7px;color:#172033;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap}}.teacher-portal .logout-tab a:hover,.teacher-portal .logout-tab a:focus-visible{{background:#176B3A;color:#fff}}
 .top-system-title{{font-size:18px;font-weight:900;color:#176B3A;line-height:1.1;margin-bottom:2px}}.top-welcome{{font-size:15px;color:#172033;line-height:1.15}}.page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
