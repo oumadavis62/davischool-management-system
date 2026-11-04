@@ -329,7 +329,21 @@ def _allocated_student_subject_pairs(cur, school_id, exam_ids):
           ON e.school_id=a.school_id AND CAST(e.year AS TEXT)=a.academic_year
         WHERE a.school_id=? AND e.id IN (""" + placeholders + ")",
         [school_id]+ids).fetchall()
-    return {(int(x["exam_id"]),int(x["class_id"]),int(x["subject_id"]),int(x["student_id"])) for x in rows}
+    result={(int(x["exam_id"]),int(x["class_id"]),int(x["subject_id"]),int(x["student_id"])) for x in rows}
+    # Legacy exams may have saved marks from before optional-subject allocation
+    # was introduced. Keep those records eligible when that exam has no saved
+    # allocation register, rather than hiding them from reports.
+    allocated_exam_ids={int(x["exam_id"]) for x in rows}
+    legacy_exam_ids=[exam_id for exam_id in ids if exam_id not in allocated_exam_ids]
+    if legacy_exam_ids:
+        legacy_ph=",".join("?" for _ in legacy_exam_ids)
+        legacy_rows=cur.execute(
+            "SELECT DISTINCT exam_id,class_id,subject_id,student_id FROM marks "
+            "WHERE school_id=? AND exam_id IN ("+legacy_ph+")",
+            [school_id]+legacy_exam_ids
+        ).fetchall()
+        result.update((int(x["exam_id"]),int(x["class_id"]),int(x["subject_id"]),int(x["student_id"])) for x in legacy_rows)
+    return result
 
 def _ensure_user_account_columns(cur, con=None):
     """Ensure generated-account columns exist once per application process."""
@@ -4166,9 +4180,10 @@ def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year
     base_q = ("SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
               "ON e.school_id=m.school_id AND e.id=m.exam_id "
               "WHERE m.school_id=? AND m.student_id IN ("+sp+") AND m.exam_id IN ("+ep+") "
-              "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
-              "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
-              "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)")
+              "AND (NOT EXISTS (SELECT 1 FROM student_subject_allocations legacy WHERE legacy.school_id=m.school_id "
+              "AND legacy.academic_year=CAST(e.year AS TEXT)) OR EXISTS (SELECT 1 FROM student_subject_allocations a "
+              "WHERE a.school_id=m.school_id AND a.academic_year=CAST(e.year AS TEXT) "
+              "AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id)))")
     base_params = [sid] + list(student_ids) + list(exam_ids)
 
     rows = None
