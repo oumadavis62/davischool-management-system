@@ -4777,9 +4777,11 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
         mark_query = ("SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
                       "ON e.school_id=m.school_id AND e.id=m.exam_id "
                       "WHERE m.school_id=? AND m.exam_id=? AND m.student_id IN (" + student_marks_placeholders + ") "
-                      "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+                      "AND (NOT EXISTS (SELECT 1 FROM student_subject_allocations legacy "
+                      "WHERE legacy.school_id=m.school_id AND legacy.academic_year=CAST(e.year AS TEXT)) "
+                      "OR EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
                       "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
-                      "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)")
+                      "AND a.subject_id=m.subject_id AND a.student_id=m.student_id))")
         mark_params = [sid, eid] + student_ids_for_marks
         if term:
             mark_query += " AND term=?"
@@ -4808,9 +4810,11 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                 fallback_rows = cur.execute(
                     "SELECT m.student_id,m.subject_id,m.marks FROM marks m JOIN exams e "
                     "ON e.school_id=m.school_id AND e.id=m.exam_id WHERE m.school_id=? AND m.exam_id=? "
-                    "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+                    "AND (NOT EXISTS (SELECT 1 FROM student_subject_allocations legacy "
+                    "WHERE legacy.school_id=m.school_id AND legacy.academic_year=CAST(e.year AS TEXT)) "
+                    "OR EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
                     "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
-                    "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)",
+                    "AND a.subject_id=m.subject_id AND a.student_id=m.student_id))",
                     (sid, eid)
                 ).fetchall()
                 allowed_students = {int(st["id"]) for st in students}
