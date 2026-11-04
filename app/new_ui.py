@@ -2191,7 +2191,7 @@ def students_page(request: Request):
     if gender_filter in ("Male", "Female", "Other"):
         where.append("lower(coalesce(s.gender,''))=lower(?)")
         params.append(gender_filter)
-    if status_filter == "inactive,transferred":
+    if status_filter in ("inactive,transferred", "inactive", "transferred"):
         where.append("lower(coalesce(s.status,'active')) IN ('inactive','transferred')")
     elif status_filter in ("active", "inactive", "transferred"):
         where.append("lower(coalesce(s.status,'active'))=?")
@@ -2278,7 +2278,7 @@ function openStudentsPrintPreview(){
 <div class='students-stat-card'><span class='students-stat-icon'>↗</span><div><strong>{int(transferred_only)}</strong><span>Transferred students</span></div></div>
 </section>
 <section class='card section students-register-card'><div class='students-register-heading'><div><div class='students-eyebrow'>HISTORICAL STUDENT RECORDS</div><h2>Student Records <span>{int(total)} matching</span></h2><p>These records are retained for reference and historical reporting.</p></div><div class='student-register-actions'><button class='btn students-print-button' type='button' onclick='openStudentsPrintPreview()'>Print List</button></div></div>
-<div class='archived-status-tabs'><a class='active' href='/app/students?status=inactive%2Ctransferred{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>All <b>{int(inactive_total)}</b></a><a href='/app/students?status=inactive{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>Inactive <b>{int(inactive_only)}</b></a><a href='/app/students?status=transferred{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>Transferred <b>{int(transferred_only)}</b></a></div>
+<div class='archived-status-tabs'><a class='{'active' if status_filter == 'inactive,transferred' else ''}' href='/app/students?status=inactive%2Ctransferred{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>All <b>{int(inactive_total)}</b></a><a class='{'active' if status_filter == 'inactive' else ''}' href='/app/students?status=inactive{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>Inactive <b>{int(inactive_only)}</b></a><a class='{'active' if status_filter == 'transferred' else ''}' href='/app/students?status=transferred{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>Transferred <b>{int(transferred_only)}</b></a></div>
 <form method='get' action='/app/students' class='student-filters'>
 <label class='students-search-wrap'><span aria-hidden='true'>⌕</span><input type='search' name='q' value='{escape(search, quote=True)}' placeholder='Search name, admission, assessment or parent name' class='field'></label>
 <select name='class_id' class='field'><option value=''>All classes</option>{opts}<option value='unassigned' {selected_unassigned}>Unassigned</option></select>
@@ -2286,7 +2286,7 @@ function openStudentsPrintPreview(){
 <select name='status' class='field'>{status_opts}</select>
 <input type='hidden' name='ds_tab' value='{escape(tab_id, quote=True)}'><button class='btn students-primary-button' type='submit'>Apply filters</button><a class='students-reset-link' href='/app/students?status=inactive%2Ctransferred{('&ds_tab='+quote(tab_id,safe='')) if tab_id else ''}'>Reset</a></form>
 {pager}
-<div id='students-print-source' style='display:none'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent name</th><th>Parent phone</th><th>Status</th></tr></thead><tbody>{print_rows or '<tr><td colspan=7>No students match these filters.</td></tr>'}</tbody></table></div>
+<div id='students-print-source' style='display:none'><table><thead><tr><th>Admission</th><th>Name</th><th>Class</th><th>Gender</th><th>Parent name</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead><tbody>{print_rows or '<tr><td colspan=8>No students match these filters.</td></tr>'}</tbody></table></div>
 <div class='students-register-scroll'><table><thead><tr><th>Admission</th><th>Student name</th><th>Class / Stream</th><th>Gender</th><th>Parent / Guardian</th><th>Parent phone</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=8>No inactive or transferred students match these filters.</td></tr>'}</tbody></table></div>{pager}</section>
 {students_print_script}
 <style>
