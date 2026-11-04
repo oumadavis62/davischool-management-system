@@ -2509,38 +2509,60 @@ def student_history(request: Request,student_id:int):
     body=f"""<div class='page'><h1>Student History</h1><div class='card section'><h2>{escape(str(st['name']))}</h2><div class='muted'>Admission: {escape(str(st['admission_no'] or ''))}</div><p class='muted'>For class cohort promotions, Promotion Year is the selected cohort year and Academic Year Transition shows the move from that year to the next. The school's active academic year is not changed by an individual class promotion.</p><div style='overflow-x:auto'><table><thead><tr><th>Date</th><th>From Class</th><th>To Class</th><th>Promotion Year</th><th>Academic Year Transition</th><th>Changed By</th><th>Reason</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No class transfer history recorded yet.</td></tr>'}</tbody></table></div></div></div>"""
     return _school_page(request,"Student History",body)
 
+def _staff_manager_styles():
+    return """<style>
+.staff-manager-page{max-width:1500px;margin:0 auto;color:#244631}.staff-manager-page .page-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}
+.staff-manager-page h1{margin:3px 0 5px;color:#174b2b;font-size:27px;font-weight:850;letter-spacing:-.5px}.staff-manager-page h2{margin:0 0 14px;color:#244d35;font-size:15px;font-weight:850}
+.staff-manager-page .muted{font-size:13px;color:#718176}.staff-manager-page .card,.staff-manager-page .section{background:#fff;border:1px solid #e3eee6;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 5px 20px #173d2908}
+.staff-manager-page .staff-filters{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;align-items:end}.staff-manager-page label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}
+.staff-manager-page .field{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #dce9df;border-radius:10px;background:#fbfefc;color:#244631;min-width:0}
+.staff-manager-page .btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 16px;border:0;border-radius:10px;background:#176b3a;color:#fff;font-weight:800;cursor:pointer;text-decoration:none}.staff-manager-page .btn:hover{background:#0e542d;box-shadow:0 5px 14px #176b3a25}.staff-manager-page .btn-light{background:#edf6ef;color:#24613a}
+.staff-manager-page table{border-collapse:collapse;width:100%;min-width:720px}.staff-manager-page th{background:#f1f7f2;color:#496451;font-size:11px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.staff-manager-page th,.staff-manager-page td{padding:12px;border-bottom:1px solid #edf2ee;text-align:left;font-size:12px;vertical-align:middle}.staff-manager-page tbody tr:hover{background:#f7fbf8}
+.staff-manager-page .staff-table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.staff-manager-page .status{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eaf5ed;color:#24613a;font-size:11px;font-weight:800}
+.staff-manager-page .staff-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.staff-manager-page .staff-kpi{border:1px solid #e3eee6;border-radius:14px;padding:15px;background:linear-gradient(145deg,#fff,#f5faf6)}
+.staff-manager-page .staff-kpi span{display:block;color:#718176;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}.staff-manager-page .staff-kpi strong{display:block;color:#174b2b;font-size:25px;font-weight:900;margin-top:5px}
+.staff-manager-page .staff-eyebrow{font-size:10px;font-weight:900;letter-spacing:1px;color:#528063;margin-bottom:5px}.staff-manager-page .staff-count{color:#718176;font-size:12px;font-weight:700}.staff-manager-page .action{display:inline-flex;padding:6px 9px;border-radius:8px;background:#edf6ef;color:#176b3a;text-decoration:none;font-weight:800;font-size:11px}.staff-manager-page .empty-state{padding:28px!important;text-align:center;color:#718176}
+@media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
+@media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
+</style>"""
+
 @router.get("/app/staff", response_class=HTMLResponse)
-def staff_page(request: Request):
+def staff_page(request: Request, staff: str="", department: str="", role: str="", employment_type: str="", status: str=""):
     sid=_school_session(request)
-    if not sid: return RedirectResponse("/")
-    # Preserve the isolated browser-tab session on form POSTs. Some mobile
-    # browsers omit Referer on form submissions, and the tab-session middleware
-    # then cannot select the authenticated tab cookie unless ds_tab is in the
-    # form action URL itself.
-    staff_tab_id = str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", staff_tab_id):
-        staff_tab_id = ""
-    staff_add_action = "/app/staff/add" + (("?ds_tab=" + quote(staff_tab_id, safe="")) if staff_tab_id else "")
-    if not _require_permission(request, sid, "staff.view"):
-        return HTMLResponse("You do not have permission to view staff records.", 403)
-    con=_db(); cur=con.cursor()
-    staff=cur.execute("SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name",(sid,)).fetchall()
-    con.close()
-    def val(t,key,default=""):
-        try: return str(t[key] if t[key] is not None else default)
-        except Exception: return default
-    rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'email'))}</td><td>{escape(val(t,'phone'))}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{t["id"]}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={t["id"]}'>Teaching</a></td></tr>""" for t in staff)
-    body=f"""<div class='page'><h1>Staff List</h1><div class='muted'>Manage staff records, employment status, teacher profiles and academic responsibilities.</div>
-<div class='card section'><h2>Add staff member</h2><form method='post' action='{staff_add_action}' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px'>
-<input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email' class='field'><input name='phone' placeholder='Phone' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'>
-<select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select>
-<select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select>
-<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select>
-<input name='department' placeholder='Department / responsibility' class='field'><button class='btn'>Save Staff</button></form></div>
-<div class='card section'><div style='display:flex;justify-content:space-between;align-items:center'><h2>Staff register ({len(staff)})</h2><a class='action' href='/app/academics/allocations'>Teacher Allocation</a></div>
-<div class='staff-table-scroll'><table><thead><tr><th>Name / TSC</th><th>Role</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows or '<tr><td colspan=7>No staff yet.</td></tr>'}</tbody></table></div></div></div>
-<style>.staff-table-scroll{{width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-width:thin}}.staff-table-scroll table{{min-width:900px}}.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}.status{{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}}</style>"""
+    if not sid:return RedirectResponse("/")
+    staff_tab_id=str(request.query_params.get("ds_tab") or request.scope.get("davischool_tab_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,64}",staff_tab_id):staff_tab_id=""
+    staff_add_action="/app/staff/add"+(("?ds_tab="+quote(staff_tab_id,safe="")) if staff_tab_id else "")
+    if not _require_permission(request,sid,"staff.view"):return HTMLResponse("You do not have permission to view staff records.",403)
+    q=str(staff or "").strip();dept=str(department or "").strip();desig=str(role or "").strip();emp=str(employment_type or "").strip();state=str(status or "").strip().lower()
+    con=_db();cur=con.cursor()
+    departments=cur.execute("SELECT DISTINCT department FROM teachers WHERE school_id=? AND coalesce(department,'')<>'' ORDER BY department",(sid,)).fetchall()
+    sql="SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left'";params=[sid]
+    if q:
+        sql+=" AND (lower(coalesce(name,'')) LIKE ? OR lower(coalesce(tsc_no,'')) LIKE ? OR lower(coalesce(email,'')) LIKE ? OR lower(coalesce(phone,'')) LIKE ?)"
+        term="%"+q.casefold()+"%";params.extend([term]*4)
+    if dept:sql+=" AND department=?";params.append(dept)
+    if desig:sql+=" AND role=?";params.append(desig)
+    if emp:sql+=" AND employment_type=?";params.append(emp)
+    if state:sql+=" AND lower(coalesce(status,'active'))=?";params.append(state)
+    sql+=" ORDER BY name";staff_rows=cur.execute(sql,params).fetchall();con.close()
+    def val(t,k,d=""):
+        try:return str(t[k] if t[k] is not None else d)
+        except Exception:return d
+    rows="".join(f"<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'department') or '—')}</td><td>{escape(val(t,'email') or '—')}</td><td>{escape(val(t,'phone') or '—')}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{int(t['id'])}'>Edit</a> <a class='action' href='/app/academics/allocations?teacher_id={int(t['id'])}'>Teaching</a></td></tr>" for t in staff_rows)
+    dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
+    roles=["Teacher","Deputy Teacher","Head of Department","Head Teacher","Principal","Bursar","Secretary","Support Staff"]
+    role_opts="<option value=''>All designations</option>"+"".join(f"<option {'selected' if x==desig else ''}>{x}</option>" for x in roles)
+    emp_opts="<option value=''>All employment types</option>"+"".join(f"<option {'selected' if x==emp else ''}>{x}</option>" for x in ["Permanent","Contract","Part-time"])
+    state_opts="".join(f"<option value='{v}' {'selected' if state==v else ''}>{label}</option>" for v,label in [("","All statuses"),("active","Active"),("inactive","Inactive"),("on_leave","On Leave")])
+    body=f"""<div class='page students-list-page staff-manager-page'><div class='page-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / DIRECTORY</div><h1>Staff List</h1><div class='muted'>A clear, organised directory for your teachers and support team.</div></div><a class='btn no-print' href='#add-staff'>+ Add Staff Member</a></div>
+<section class='card no-print' id='add-staff'><h2>Add a staff member</h2><form method='post' action='{staff_add_action}' class='staff-filters' style='grid-template-columns:repeat(3,minmax(0,1fr))'><input name='name' required placeholder='Full name' class='field'><input name='email' type='email' placeholder='Email address' class='field'><input name='phone' placeholder='Phone number' class='field'><input name='tsc_no' placeholder='TSC number' class='field'><input name='id_no' placeholder='ID number' class='field'><select name='role' class='field'><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select><select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select><select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select><input name='department' placeholder='Department / responsibility' class='field'><button class='btn'>Save Staff Member</button></form></section>
+<section class='card no-print'><h2>Find staff</h2><form method='get' class='staff-filters'><label>Search staff<input class='field' name='staff' value='{escape(q,quote=True)}' placeholder='Name, TSC, email or phone'></label><label>Department<select class='field' name='department'>{dept_opts}</select></label><label>Designation<select class='field' name='role'>{role_opts}</select></label><label>Employment type<select class='field' name='employment_type'>{emp_opts}</select></label><label>Status<select class='field' name='status'>{state_opts}</select></label><button class='btn'>Apply Filters</button><a class='btn btn-light' href='/app/staff'>Clear</a></form></section>
+<section class='card'><div class='page-heading'><h2>Staff register</h2><span class='staff-count'>{len(staff_rows)} matching staff member(s)</span></div><div class='staff-table-scroll'><table><thead><tr><th>Name / TSC</th><th>Designation</th><th>Department</th><th>Email</th><th>Phone</th><th>Employment</th><th>Status</th><th>Actions</th></tr></thead><tbody>{rows or "<tr><td colspan='8' class='empty-state'>No staff members match these filters.</td></tr>"}</tbody></table></div></section></div>{_staff_manager_styles()}"""
     return _school_page(request,"Staff List",body)
+
 
 
 
@@ -2561,36 +2583,59 @@ def _ensure_staff_attendance_table(cur):
 
 
 @router.get("/app/staff/former", response_class=HTMLResponse)
-def former_staff_page(request: Request):
+def former_staff_page(request: Request, staff: str="", department: str="", role: str="", gender: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request,sid,"staff.view"):
-        return HTMLResponse("You do not have permission to view staff records.",403)
+    if not _require_permission(request,sid,"staff.view"):return HTMLResponse("You do not have permission to view staff records.",403)
+    q=str(staff or "").strip();dept=str(department or "").strip();desig=str(role or "").strip();sex=str(gender or "").strip().lower()
     con=_db();cur=con.cursor()
-    rows=cur.execute("""SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,''))='left'
-        ORDER BY name""",(sid,)).fetchall()
-    con.close()
-    body_rows="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b></td><td>{escape(str(x['role'] or ''))}</td><td>{escape(str(x['department'] or ''))}</td><td>{escape(str(x['phone'] or ''))}</td><td>{escape(str(x['email'] or ''))}</td><td><a class='action' href='/app/staff/edit/{int(x['id'])}'>View / Edit</a></td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Former Staff</h1><div class='muted'>Staff members whose employment status is marked as Left School. Their records remain available for reference.</div><div class='grid'><div class='card'><div class='label'>Former staff</div><div class='kpi'>{len(rows)}</div></div></div><div class='card section' style='overflow-x:auto'><table><thead><tr><th>Name</th><th>Role</th><th>Department</th><th>Phone</th><th>Email</th><th>Action</th></tr></thead><tbody>{body_rows or "<tr><td colspan='6'>No former staff records found.</td></tr>"}</tbody></table></div></div>"""
+    departments=cur.execute("SELECT DISTINCT department FROM teachers WHERE school_id=? AND lower(coalesce(status,''))='left' AND coalesce(department,'')<>'' ORDER BY department",(sid,)).fetchall()
+    sql="SELECT * FROM teachers WHERE school_id=? AND lower(coalesce(status,''))='left'";params=[sid]
+    if q:
+        sql+=" AND (lower(coalesce(name,'')) LIKE ? OR lower(coalesce(tsc_no,'')) LIKE ? OR lower(coalesce(phone,'')) LIKE ? OR lower(coalesce(email,'')) LIKE ?)"
+        term="%"+q.casefold()+"%";params.extend([term]*4)
+    if dept:sql+=" AND department=?";params.append(dept)
+    if desig:sql+=" AND role=?";params.append(desig)
+    if sex in ("male","female"):sql+=" AND lower(coalesce(gender,''))=?";params.append(sex)
+    sql+=" ORDER BY name";rows=cur.execute(sql,params).fetchall();con.close()
+    table_rows="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b><div class='muted'>{escape(str(x['tsc_no'] or ''))}</div></td><td>{escape(str(x['role'] or ''))}</td><td>{escape(str(x['department'] or '—'))}</td><td>{escape(str(x['gender'] or '—'))}</td><td>{escape(str(x['phone'] or '—'))}</td><td>{escape(str(x['email'] or '—'))}</td><td><a class='action' href='/app/staff/edit/{int(x['id'])}'>View / Edit</a></td></tr>" for x in rows)
+    dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
+    roles=["Teacher","Deputy Teacher","Head of Department","Head Teacher","Principal","Bursar","Secretary","Support Staff"]
+    role_opts="<option value=''>All designations</option>"+"".join(f"<option {'selected' if x==desig else ''}>{x}</option>" for x in roles)
+    gender_opts="".join(f"<option value='{v}' {'selected' if sex==v else ''}>{label}</option>" for v,label in [("","All genders"),("male","Male"),("female","Female")])
+    body=f"""<div class='page students-list-page staff-manager-page'><div class='page-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / EMPLOYMENT HISTORY</div><h1>Former Staff</h1><div class='muted'>A searchable archive of staff whose records are marked as Left School.</div></div><button class='btn no-print' onclick='window.print()'>Print Register</button></div><div class='staff-kpis'><div class='staff-kpi'><span>Former staff</span><strong>{len(rows)}</strong></div></div>
+<section class='card no-print'><h2>Find former staff</h2><form method='get' class='staff-filters'><label>Search staff<input class='field' name='staff' value='{escape(q,quote=True)}' placeholder='Name, TSC, email or phone'></label><label>Department<select class='field' name='department'>{dept_opts}</select></label><label>Former designation<select class='field' name='role'>{role_opts}</select></label><label>Gender<select class='field' name='gender'>{gender_opts}</select></label><button class='btn'>Apply Filters</button><a class='btn btn-light' href='/app/staff/former'>Clear</a></form></section>
+<section class='card'><div class='page-heading'><h2>Former staff register</h2><span class='staff-count'>{len(rows)} record(s)</span></div><div class='staff-table-scroll'><table><thead><tr><th>Name / TSC</th><th>Last designation</th><th>Department</th><th>Gender</th><th>Phone</th><th>Email</th><th>Action</th></tr></thead><tbody>{table_rows or "<tr><td colspan='7' class='empty-state'>No former staff records match these filters.</td></tr>"}</tbody></table></div></section></div>{_staff_manager_styles()}"""
     return _school_page(request,"Former Staff",body)
 
 
+
+
 @router.get("/app/staff/attendance", response_class=HTMLResponse)
-def staff_attendance_sheet(request: Request, attendance_date: str=""):
+def staff_attendance_sheet(request: Request, attendance_date: str="", department: str="", staff_id: str="", attendance_status: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request,sid,"staff.view"):
-        return HTMLResponse("You do not have permission to view staff attendance.",403)
+    if not _require_permission(request,sid,"staff.view"):return HTMLResponse("You do not have permission to view staff attendance.",403)
     day=attendance_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",attendance_date or "") else datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    dept=str(department or "").strip();person=int(staff_id) if str(staff_id).isdigit() else 0;state=str(attendance_status or "").strip().title()
     con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
-    staff=cur.execute("""SELECT id,name,role,department FROM teachers
-        WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name""",(sid,)).fetchall()
+    staff=cur.execute("SELECT id,name,role,department FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' ORDER BY name",(sid,)).fetchall()
     saved=cur.execute("SELECT staff_id,status,remarks FROM staff_attendance WHERE school_id=? AND attendance_date=?",(sid,day)).fetchall()
-    saved_map={int(x["staff_id"]):(str(x["status"] or "Present"),str(x["remarks"] or "")) for x in saved}
-    con.close()
-    rows="".join(f"""<tr><td><b>{escape(str(x['name'] or ''))}</b><div class='muted'>{escape(str(x['role'] or ''))}</div></td><td>{escape(str(x['department'] or ''))}</td><td><select class='field' name='status_{int(x['id'])}'><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Present' else ''}>Present</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Absent' else ''}>Absent</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Late' else ''}>Late</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Excused' else ''}>Excused</option></select></td><td><input class='field' name='remarks_{int(x['id'])}' value='{escape(saved_map.get(int(x['id']),('',''))[1])}' placeholder='Optional note'></td></tr>""" for x in staff)
-    body=f"""<div class='page'><h1>Staff Attendance Sheet</h1><div class='muted'>Record daily attendance for active staff and teachers.</div><div class='card section'><form method='get' style='display:flex;gap:10px;flex-wrap:wrap'><label>Attendance date<input class='field' type='date' name='attendance_date' value='{day}' required></label><button class='btn' style='align-self:end'>Load Date</button></form></div><div class='card section' style='overflow-x:auto'><form method='post' action='/app/staff/attendance/save'><input type='hidden' name='attendance_date' value='{day}'><table><thead><tr><th>Staff Member</th><th>Department</th><th>Status</th><th>Remarks</th></tr></thead><tbody>{rows or "<tr><td colspan='4'>No current staff records available.</td></tr>"}</tbody></table>{'<button class="btn" style="margin-top:14px">Save Attendance</button>' if staff else ''}</form></div></div><style>.field{{padding:10px;border:1px solid #dbe2ea;border-radius:9px;min-width:140px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    saved_map={int(x['staff_id']):(str(x['status'] or 'Present'),str(x['remarks'] or '')) for x in saved}
+    departments=cur.execute("SELECT DISTINCT department FROM teachers WHERE school_id=? AND lower(coalesce(status,'active'))<>'left' AND coalesce(department,'')<>'' ORDER BY department",(sid,)).fetchall();con.close()
+    rows="".join(f"<tr class='staff-attendance-row' data-department='{escape(str(x['department'] or ''),quote=True).lower()}' data-staff='{int(x['id'])}' data-status='{escape(saved_map.get(int(x['id']),('Present',''))[0]).lower()}'><td><b>{escape(str(x['name'] or ''))}</b><div class='muted'>{escape(str(x['role'] or ''))}</div></td><td>{escape(str(x['department'] or '—'))}</td><td><select class='field attendance-status' name='status_{int(x['id'])}'><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Present' else ''}>Present</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Absent' else ''}>Absent</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Late' else ''}>Late</option><option {'selected' if saved_map.get(int(x['id']),('Present',''))[0]=='Excused' else ''}>Excused</option></select></td><td><input class='field' name='remarks_{int(x['id'])}' value='{escape(saved_map.get(int(x['id']),('',''))[1],quote=True)}' placeholder='Optional note'></td></tr>" for x in staff)
+    dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
+    staff_opts="<option value='0'>All staff</option>"+"".join(f"<option value='{int(x['id'])}' {'selected' if int(x['id'])==person else ''}>{escape(str(x['name'] or ''))}</option>" for x in staff)
+    status_opts="".join(f"<option value='{v}' {'selected' if state==v else ''}>{label}</option>" for v,label in [("","All statuses"),("Present","Present"),("Absent","Absent"),("Late","Late"),("Excused","Excused")])
+    marked=sum(1 for x in staff if int(x['id']) in saved_map);present=sum(1 for x in staff if int(x['id']) in saved_map and saved_map[int(x['id'])][0]=='Present')
+    body=f"""<div class='page students-list-page staff-manager-page'><div class='page-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / DAILY RECORDS</div><h1>Staff Attendance Sheet</h1><div class='muted'>Record and review daily attendance for your staff and teachers.</div></div><span class='staff-count'>{day}</span></div>
+<div class='staff-kpis'><div class='staff-kpi'><span>Staff on register</span><strong>{len(staff)}</strong></div><div class='staff-kpi'><span>Attendance saved</span><strong>{marked}</strong></div><div class='staff-kpi'><span>Present</span><strong>{present}</strong></div><div class='staff-kpi'><span>Awaiting record</span><strong>{max(0,len(staff)-marked)}</strong></div></div>
+<section class='card no-print'><h2>Attendance filters</h2><form method='get' class='staff-filters'><label>Attendance date<input class='field' type='date' name='attendance_date' value='{day}' required></label><label>Department<select class='field' name='department'>{dept_opts}</select></label><label>Staff member<select class='field' name='staff_id'>{staff_opts}</select></label><label>Current status<select class='field' name='attendance_status'>{status_opts}</select></label><button class='btn'>Load Attendance</button><a class='btn btn-light' href='/app/staff/attendance'>Today</a></form></section>
+<section class='card'><div class='page-heading'><h2>Daily attendance register</h2><span class='staff-count'>Save records for the selected date</span></div><form method='post' action='/app/staff/attendance/save'><input type='hidden' name='attendance_date' value='{day}'><div class='staff-table-scroll'><table><thead><tr><th>Staff member</th><th>Department</th><th>Attendance status</th><th>Remarks</th></tr></thead><tbody>{rows or "<tr><td colspan='4' class='empty-state'>No current staff records available.</td></tr>"}</tbody></table></div>{'<button class="btn no-print" style="margin-top:16px">Save Attendance</button>' if staff else ''}</form></section></div>
+<script>(function(){{const dept={json.dumps(dept.lower())},person={person},status={json.dumps(state.lower())};document.querySelectorAll('.staff-attendance-row').forEach(row=>{{const select=row.querySelector('.attendance-status');const current=(select&&select.value||row.dataset.status||'').toLowerCase();row.hidden=!!((dept&&row.dataset.department!==dept)||(person&&Number(row.dataset.staff)!==person)||(status&&current!==status));}});}})();</script>{_staff_manager_styles()}"""
     return _school_page(request,"Staff Attendance Sheet",body)
+
+
 
 
 @router.post("/app/staff/attendance/save")
@@ -2620,27 +2665,43 @@ async def staff_attendance_save(request: Request, attendance_date: str=Form(...)
 
 
 @router.get("/app/staff/attendance-report", response_class=HTMLResponse)
-def staff_attendance_report(request: Request, start_date: str="", end_date: str=""):
+def staff_attendance_report(request: Request, start_date: str="", end_date: str="", department: str="", staff_id: str="", attendance_status: str=""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request,sid,"staff.view"):
-        return HTMLResponse("You do not have permission to view staff attendance reports.",403)
+    if not _require_permission(request,sid,"staff.view"):return HTMLResponse("You do not have permission to view staff attendance reports.",403)
     today=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
     end=end_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",end_date or "") else today
     start=start_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}",start_date or "") else end[:8]+"01"
+    dept=str(department or "").strip();person=int(staff_id) if str(staff_id).isdigit() else 0;state=str(attendance_status or "").strip().title()
     con=_db();cur=con.cursor();_ensure_staff_attendance_table(cur)
-    rows=cur.execute("""SELECT t.id staff_id,t.name,t.role,t.department,
-        COUNT(a.id) days, SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) present,
-        SUM(CASE WHEN a.status='Absent' THEN 1 ELSE 0 END) absent,
-        SUM(CASE WHEN a.status='Late' THEN 1 ELSE 0 END) late,
-        SUM(CASE WHEN a.status='Excused' THEN 1 ELSE 0 END) excused
-        FROM teachers t LEFT JOIN staff_attendance a ON a.staff_id=t.id AND a.school_id=t.school_id
-          AND a.attendance_date BETWEEN ? AND ?
-        WHERE t.school_id=? GROUP BY t.id,t.name,t.role,t.department ORDER BY t.name""",(start,end,sid)).fetchall()
-    con.close()
-    table_rows="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b></td><td>{escape(str(x['role'] or ''))}</td><td>{int(x['days'] or 0)}</td><td>{int(x['present'] or 0)}</td><td>{int(x['absent'] or 0)}</td><td>{int(x['late'] or 0)}</td><td>{int(x['excused'] or 0)}</td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Staff Attendance Report</h1><div class='muted'>Attendance summary by staff member for the selected date range.</div><div class='card section'><form method='get' style='display:flex;gap:10px;flex-wrap:wrap'><label>From<input class='field' type='date' name='start_date' value='{start}'></label><label>To<input class='field' type='date' name='end_date' value='{end}'></label><button class='btn' style='align-self:end'>Generate Report</button></form></div><div class='card section' style='overflow-x:auto'><div style='font-weight:800;margin-bottom:12px'>Period: {start} to {end}</div><table><thead><tr><th>Staff Member</th><th>Role</th><th>Recorded Days</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>{table_rows or "<tr><td colspan='7'>No staff attendance records found for this period.</td></tr>"}</tbody></table></div></div><style>.field{{padding:10px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#176B3A;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    departments=cur.execute("SELECT DISTINCT department FROM teachers WHERE school_id=? AND coalesce(department,'')<>'' ORDER BY department",(sid,)).fetchall()
+    people=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    sql="""SELECT t.id staff_id,t.name,t.role,t.department,COUNT(a.id) days,
+      SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) present,
+      SUM(CASE WHEN a.status='Absent' THEN 1 ELSE 0 END) absent,
+      SUM(CASE WHEN a.status='Late' THEN 1 ELSE 0 END) late,
+      SUM(CASE WHEN a.status='Excused' THEN 1 ELSE 0 END) excused
+      FROM teachers t LEFT JOIN staff_attendance a ON a.staff_id=t.id AND a.school_id=t.school_id AND a.attendance_date BETWEEN ? AND ?"""
+    params=[start,end]
+    if state in ("Present","Absent","Late","Excused"):sql+=" AND a.status=?";params.append(state)
+    sql+=" WHERE t.school_id=?";params.append(sid)
+    if dept:sql+=" AND t.department=?";params.append(dept)
+    if person:sql+=" AND t.id=?";params.append(person)
+    sql+=" GROUP BY t.id,t.name,t.role,t.department ORDER BY t.name"
+    rows=cur.execute(sql,params).fetchall();con.close()
+    cells="".join(f"<tr><td><b>{escape(str(x['name'] or ''))}</b><div class='muted'>{escape(str(x['department'] or '—'))}</div></td><td>{escape(str(x['role'] or ''))}</td><td>{int(x['days'] or 0)}</td><td>{int(x['present'] or 0)}</td><td>{int(x['absent'] or 0)}</td><td>{int(x['late'] or 0)}</td><td>{int(x['excused'] or 0)}</td></tr>" for x in rows)
+    totals={k:sum(int(x[k] or 0) for x in rows) for k in ("days","present","absent","late","excused")}
+    dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
+    people_opts="<option value='0'>All staff</option>"+"".join(f"<option value='{int(x['id'])}' {'selected' if int(x['id'])==person else ''}>{escape(str(x['name'] or ''))}</option>" for x in people)
+    status_opts="".join(f"<option value='{v}' {'selected' if state==v else ''}>{label}</option>" for v,label in [("","All statuses"),("Present","Present"),("Absent","Absent"),("Late","Late"),("Excused","Excused")])
+    body=f"""<div class='page students-list-page staff-manager-page'><div class='page-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / ATTENDANCE INSIGHTS</div><h1>Staff Attendance Report</h1><div class='muted'>Review attendance patterns and recorded days across a selected period.</div></div><button class='btn no-print' onclick='window.print()'>Print Report</button></div>
+<section class='card no-print'><h2>Report filters</h2><form method='get' class='staff-filters'><label>From date<input class='field' type='date' name='start_date' value='{start}'></label><label>To date<input class='field' type='date' name='end_date' value='{end}'></label><label>Department<select class='field' name='department'>{dept_opts}</select></label><label>Staff member<select class='field' name='staff_id'>{people_opts}</select></label><label>Attendance status<select class='field' name='attendance_status'>{status_opts}</select></label><button class='btn'>Generate Report</button><a class='btn btn-light' href='/app/staff/attendance-report'>Clear</a></form></section>
+<div class='staff-count' style='margin:8px 2px 12px'>Reporting period: <b>{start}</b> to <b>{end}</b></div><div class='staff-kpis'><div class='staff-kpi'><span>Staff shown</span><strong>{len(rows)}</strong></div><div class='staff-kpi'><span>Attendance records</span><strong>{totals['days']}</strong></div><div class='staff-kpi'><span>Present</span><strong>{totals['present']}</strong></div><div class='staff-kpi'><span>Absent</span><strong>{totals['absent']}</strong></div></div>
+<section class='card'><div class='page-heading'><h2>Attendance breakdown</h2><span class='staff-count'>{len(rows)} staff member(s)</span></div><div class='staff-table-scroll'><table><thead><tr><th>Staff member</th><th>Designation</th><th>Recorded days</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr></thead><tbody>{cells or "<tr><td colspan='7' class='empty-state'>No staff attendance records found for this period and filter selection.</td></tr>"}</tbody></table></div><div class='staff-count' style='margin-top:12px'>Totals — {totals['present']} present · {totals['absent']} absent · {totals['late']} late · {totals['excused']} excused</div></section></div>{_staff_manager_styles()}"""
     return _school_page(request,"Staff Attendance Report",body)
+
+
+
 
 # Compatibility endpoint for older FastAPI Cloud pages that submit to /app/staff.
 # Keep the canonical form action at /app/staff/add; both paths use the same save handler.
