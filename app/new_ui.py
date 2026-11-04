@@ -2684,7 +2684,7 @@ def staff_page(request: Request, staff: str="", department: str="", role: str=""
     def val(t,k,d=""):
         try:return str(t[k] if t[k] is not None else d)
         except Exception:return d
-    rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'department') or '—')}</td><td>{escape(val(t,'email') or '—')}</td><td>{escape(val(t,'phone') or '—')}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{int(t['id'])}?'+{json.dumps(('ds_tab='+quote(staff_tab_id,safe='')) if staff_tab_id else '')} onclick="if(typeof openStaffEdit==='function'){openStaffEdit(this.href+(this.href.includes('?')?'&':'?')+'modal=1');return false;}">Edit</a></td></tr>""" for t in staff_rows)
+    rows="".join(f"""<tr><td><b>{escape(val(t,'name'))}</b><div class='muted'>{escape(val(t,'tsc_no'))}</div></td><td>{escape(val(t,'role'))}</td><td>{escape(val(t,'department') or '—')}</td><td>{escape(val(t,'email') or '—')}</td><td>{escape(val(t,'phone') or '—')}</td><td>{escape(val(t,'employment_type'))}</td><td><span class='status'>{escape(val(t,'status','active').replace('_',' ').title())}</span></td><td><a class='action' href='/app/staff/edit/{int(t['id'])}?'+{json.dumps(('ds_tab='+quote(staff_tab_id,safe='')) if staff_tab_id else '')} onclick="if(typeof openStaffEdit==='function'){{openStaffEdit(this.href+(this.href.includes('?')?'&':'?')+'modal=1');return false;}}">Edit</a></td></tr>""" for t in staff_rows)
     gender_counts={"Male":0,"Female":0}
     role_counts={}
     for person in staff_rows:
