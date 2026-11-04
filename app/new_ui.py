@@ -10845,6 +10845,10 @@ def report_cards_class_pdf(request: Request, exam_id: str = "", exam_ids: str = 
         grading_rules = _load_grading_rules(cur,sid)
         overall_rules = _load_overall_grading_rules(cur,sid)
         exams = cur.execute("SELECT * FROM exams WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+        allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+        allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                            if exam_key in set(selected_exam_ids) and class_key==cid}
+        students=[student for student in students if int(student["id"]) in allocated_students]
         bulk_results = _bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,grading_rules,overall_rules)
         report_dates = _get_report_card_dates(cur,sid,selected_exam_ids[0])
         opening_text = escape(_format_report_card_date(report_dates["opening_date"]))
@@ -11300,7 +11304,11 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     result["details"]=sorted(result.get("details",[]),key=lambda x:(_report_card_subject_position(x[0]["name"]),str(x[0]["name"] or "").casefold()))
     class_mean=0.0
     if st and selected_exam_ids:
-        q="SELECT student_id,marks FROM marks WHERE school_id=? AND exam_id IN (%s) AND student_id IN (SELECT id FROM students WHERE school_id=? AND class_id=?) AND marks IS NOT NULL" % ",".join("?" for _ in selected_exam_ids)
+        _ensure_student_subject_allocations_table(cur)
+        q=("SELECT m.student_id,m.marks FROM marks m JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id "
+           "WHERE m.school_id=? AND m.exam_id IN (%s) AND m.student_id IN (SELECT id FROM students WHERE school_id=? AND class_id=?) "
+           "AND m.marks IS NOT NULL AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+           "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id)") % ",".join("?" for _ in selected_exam_ids)
         cm_rows=cur.execute(q,[sid]+selected_exam_ids+[sid,int(st["class_id"] or 0)]).fetchall()
         by_student={}
         for mr in cm_rows: by_student.setdefault(int(mr["student_id"]),[]).append(float(mr["marks"] or 0))
@@ -11312,7 +11320,12 @@ def report_cards(request: Request, exam_id:str="", exam_ids:str="", student_id:s
     performance_points=[]
     if st and selected_exam_ids:
         ph=",".join("?" for _ in selected_exam_ids)
-        perf_rows=cur.execute("SELECT exam_id,marks FROM marks WHERE school_id=? AND student_id=? AND exam_id IN ("+ph+") AND marks IS NOT NULL",[sid,stid]+selected_exam_ids).fetchall()
+        _ensure_student_subject_allocations_table(cur)
+        perf_rows=cur.execute("SELECT m.exam_id,m.marks FROM marks m JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id "
+                              "WHERE m.school_id=? AND m.student_id=? AND m.exam_id IN ("+ph+") AND m.marks IS NOT NULL "
+                              "AND EXISTS (SELECT 1 FROM student_subject_allocations a WHERE a.school_id=m.school_id "
+                              "AND a.academic_year=CAST(e.year AS TEXT) AND a.class_id=m.class_id "
+                              "AND a.subject_id=m.subject_id AND a.student_id=m.student_id)",[sid,stid]+selected_exam_ids).fetchall()
         perf_by_exam={}
         for pr in perf_rows:
             try: perf_by_exam.setdefault(int(pr["exam_id"]),[]).append(float(pr["marks"]))
@@ -11531,14 +11544,22 @@ def class_analysis_page(request: Request, exam_id: str = "", exam_ids: str = "",
         cid=int(class_id) if class_id.isdigit() else 0
         stats=[]; ranking=[]
         if selected_exam_ids and cid:
+            _ensure_student_subject_allocations_table(cur)
             placeholders=",".join("?" for _ in selected_exam_ids)
             stats=cur.execute("""SELECT sub.id subject_id,sub.name subject,COUNT(m.id) entries,COALESCE(AVG(m.marks),0) average,
                 COALESCE(MAX(m.marks),0) highest,COALESCE(MIN(m.marks),0) lowest
                 FROM subjects sub LEFT JOIN marks m ON m.subject_id=sub.id AND m.exam_id IN (PLACEHOLDERS) AND m.school_id=? AND m.class_id=?
+                  AND EXISTS (SELECT 1 FROM student_subject_allocations a JOIN exams ex ON ex.id=m.exam_id AND ex.school_id=m.school_id
+                    WHERE a.school_id=m.school_id AND a.academic_year=CAST(ex.year AS TEXT)
+                      AND a.class_id=m.class_id AND a.subject_id=m.subject_id AND a.student_id=m.student_id)
                 LEFT JOIN students st ON st.id=m.student_id AND st.school_id=m.school_id
                 WHERE sub.school_id=? AND ((st.class_id=? AND lower(coalesce(st.status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=st.school_id AND sg.student_id=st.id)) OR m.class_id=?) GROUP BY sub.id,sub.name ORDER BY sub.name""".replace("PLACEHOLDERS",placeholders),
                 list(selected_exam_ids)+[sid,cid,sid,cid,cid]).fetchall()
             students=cur.execute("SELECT * FROM students WHERE school_id=? AND ((class_id=? AND lower(coalesce(status,'active'))='active' AND NOT EXISTS (SELECT 1 FROM student_graduations sg WHERE sg.school_id=students.school_id AND sg.student_id=students.id)) OR EXISTS (SELECT 1 FROM marks historical WHERE historical.school_id=students.school_id AND historical.student_id=students.id AND historical.exam_id IN ("+placeholders+") AND historical.class_id=?)) ORDER BY name",[sid,cid]+selected_exam_ids+[cid]).fetchall()
+            allocation_pairs=_allocated_student_subject_pairs(cur,sid,selected_exam_ids)
+            allocated_students={student_id for exam_key,class_key,subject_key,student_id in allocation_pairs
+                                if exam_key in set(selected_exam_ids) and class_key==cid}
+            students=[student for student in students if int(student["id"]) in allocated_students]
             class_grading_rules=_load_grading_rules(cur,sid)
             class_overall_rules=_load_overall_grading_rules(cur,sid)
             bulk_results=_bulk_student_results_for_assessments(cur,sid,students,selected_exam_ids,class_grading_rules,class_overall_rules)
