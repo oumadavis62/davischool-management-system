@@ -3502,7 +3502,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
                     for mark_row in mark_rows:
                         if mark_row["subject_id"] is not None and mark_row["student_id"] is not None:
                             marked_by_subject.setdefault(int(mark_row["subject_id"]),set()).add(int(mark_row["student_id"]))
-                    entered_by_subject={subject_key:len(student_set) for subject_key,student_set in marked_by_subject.items()}
+                    entered_by_subject={subject_key:len(student_set & roster_ids) for subject_key,student_set in marked_by_subject.items()}
                     started_subjects=[x for x in expected_subject_ids if entered_by_subject.get(x,0)>0]
                     submitted_subjects=[x for x in expected_subject_ids if active_count>0 and entered_by_subject.get(x,0)>=active_count]
                     expected_count=len(expected_subject_ids)
