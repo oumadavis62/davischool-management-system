@@ -8730,7 +8730,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
     _selected_class=next((item for item in all_classes if int(item["id"])==cid),None)
     _selected_subject=next((item for item in subjects if int(item["id"])==subid),None)
     _destination_year=str((_selected_exam["year"] if _selected_exam else year_filter) or year_filter or "Not selected")
-    _destination_term=str((_selected_exam["term"] if _selected_exam else "") or "Not specified")
+    _destination_term=str((dict(_selected_exam).get("term", "") if _selected_exam else "") or "Not specified")
     _destination_exam=str((_selected_exam["name"] if _selected_exam else "") or "Not selected")
     _destination_class=str((_selected_class["name"] if _selected_class else "") or "Not selected")
     _destination_stream=str((_selected_class["stream"] if _selected_class else "") or "")
