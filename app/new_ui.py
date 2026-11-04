@@ -10408,7 +10408,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    rows=cur.execute("""SELECT a.id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name
+    rows=cur.execute("""SELECT a.id,a.teacher_id,a.class_id,a.subject_id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name
                         FROM teacher_allocations a JOIN teachers t ON t.id=a.teacher_id
                         JOIN classes c ON c.id=a.class_id JOIN subjects s ON s.id=a.subject_id
                         WHERE a.school_id=? ORDER BY t.name,c.name,s.name""",(sid,)).fetchall()
@@ -10450,6 +10450,10 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
     allocation_max = len(classes) * len(subjects)
     allocation_current = len(rows)
     allocation_remaining = max(0, allocation_max - allocation_current)
+    allocation_covered_pairs = {(int(row["class_id"]),int(row["subject_id"])) for row in rows if row["class_id"] is not None and row["subject_id"] is not None}
+    allocation_missing_pairs = max(0,allocation_max-len(allocation_covered_pairs))
+    allocation_assigned_teacher_ids = {int(row["teacher_id"]) for row in rows if row["teacher_id"] is not None}
+    allocation_unassigned_teachers = max(0,len(teachers)-len(allocation_assigned_teacher_ids))
     limit_notice = ""
     if request.query_params.get("allocation_limit") == "1":
         limit_notice = (
@@ -10482,8 +10486,8 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
             for allocation in teacher_rows
         )
         allocation_group_html.append(
-            "<section class='allocation-teacher-group'><div class='allocation-teacher-heading'><div><h3>%s</h3><span>%s allocation%s</span></div><span class='allocation-count'>%s</span></div><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table allocation-detail-table'><thead><tr><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>%s</tbody></table></div></section>" % (
-                escape(teacher_name), len(teacher_rows), "" if len(teacher_rows) == 1 else "s",
+            "<section class='allocation-teacher-group' data-search='%s'><div class='allocation-teacher-heading'><div><h3>%s</h3><span>%s allocation%s</span></div><span class='allocation-count'>%s</span></div><div class='marksheet-scroll teacher-allocation-scroll' tabindex='0'><table class='teacher-allocation-table allocation-detail-table'><thead><tr><th>Class / Stream</th><th>Subject</th><th>Action</th></tr></thead><tbody>%s</tbody></table></div></section>" % (
+                escape(teacher_name.casefold()), escape(teacher_name), len(teacher_rows), "" if len(teacher_rows) == 1 else "s",
                 len(teacher_rows), assignment_rows
             )
         )
@@ -10572,20 +10576,25 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
 <div class='card section'><div style='display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px'>
 <div class='allocation-cap'><span>Maximum Allocations</span><b>{allocation_max}</b></div>
 <div class='allocation-cap'><span>Current Allocations</span><b>{allocation_current}</b></div>
-<div class='allocation-cap'><span>Remaining</span><b>{allocation_remaining}</b></div>
+<div class='allocation-cap'><span>Remaining slots</span><b>{allocation_remaining}</b></div>
+<div class='allocation-cap'><span>Uncovered class / subject pairs</span><b>{allocation_missing_pairs}</b></div>
+<div class='allocation-cap'><span>Teachers without allocations</span><b>{allocation_unassigned_teachers}</b></div>
 
 </div>
-<div class='teacher-allocation-filter-scroll' tabindex='0'><form method='post' action='/app/academics/allocations/add{current_ds_tab_q}' class='teacher-allocation-filter-form'>
-<select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select>
-<select name='class_id' class='field' required><option value=''>Select Class / Stream</option>{cops}</select>
-<select name='subject_id' class='field' required><option value=''>Select Subject</option>{sops}</select>
-<button class='btn' type='submit' formaction='/app/academics/allocations/add{current_ds_tab_q}' formmethod='post'>Save Allocation</button></form></div></div>
-<div class='card section'><h2>Current Allocations ({len(rows)})</h2><div class='allocation-teacher-groups'>{grouped_allocations_html or "<div class='muted allocation-empty'>No allocations yet.</div>"}</div></div>
+<div class='allocation-launch-row'><div><b>Build your teaching allocation matrix</b><div class='muted'>Choose one teacher and one or more classes and subjects. Every selected class/subject combination will be assigned in one save.</div></div><button class='btn allocation-open-modal' type='button' id='openAllocationModal'>+ New Allocation</button></div>
+<div class='allocation-modal' id='allocationModal' aria-hidden='true'><div class='allocation-modal-panel' role='dialog' aria-modal='true' aria-labelledby='allocationModalTitle'><div class='allocation-modal-head'><div><h3 id='allocationModalTitle'>Create Teacher Allocations</h3><p>Select a teacher, classes and subjects</p></div><button type='button' class='allocation-modal-close' id='closeAllocationModal' aria-label='Close'>×</button></div><form method='post' action='/app/academics/allocations/bulk-add{current_ds_tab_q}' class='allocation-bulk-form'>
+<input type='hidden' name='ds_tab' value='{escape(str(request.query_params.get("ds_tab") or ""))}'>
+<label>Teacher<select name='teacher_id' class='field' required><option value=''>Select Teacher</option>{tops}</select></label>
+<label>Class / Stream <small>Select one or more</small><select name='class_ids' class='field allocation-multi-select' multiple required>{cops}</select></label>
+<label>Subjects <small>Select one or more</small><select name='subject_ids' class='field allocation-multi-select' multiple required>{sops}</select></label>
+<p class='allocation-bulk-hint'>DaviSchool will create each selected class-and-subject combination for this teacher. Existing identical allocations will be skipped.</p>
+<div class='allocation-modal-actions'><button class='btn' type='submit'>Save Allocations</button><button class='btn edit' type='button' id='cancelAllocationModal'>Cancel</button></div></form></div></div></div>
+<div class='card section'><div class='allocation-list-heading'><div><h2>Current Allocations ({len(rows)})</h2><p class='muted'>Search by teacher, class, stream or subject.</p></div><input id='allocationSearch' type='search' placeholder='Search current allocations...'></div><div class='allocation-teacher-groups'>{grouped_allocations_html or "<div class='muted allocation-empty'>No allocations yet.</div>"}</div></div>
 <div class='card section'><h2>Historical Teacher Allocations</h2><div class='muted'>Past assignments are retained when a class is promoted or graduates. Filter by year and class to identify who taught each subject.</div>
 <div class='teacher-allocation-filter-scroll' tabindex='0'><form method='get' action='/app/academics/allocations' class='teacher-allocation-filter-form teacher-allocation-history-filter-form' style='margin:12px 0'>
 <input type='hidden' name='history_apply' value='1'><select name='history_year' class='field'>{history_year_options}</select><select name='history_class_id' class='field'>{history_class_options}</select>{("<input type='hidden' name='ds_tab' value='"+escape(request.query_params.get("ds_tab",""))+"'>" if request.query_params.get("ds_tab") else "")}<button class='btn' type='submit'>Apply Filter</button><a class='btn edit' href='/app/academics/allocations{current_ds_tab_q}'>Clear</a></form></div>
 {history_table_html}</div>
-<style>.allocation-limit-notice{{margin-top:14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.45}}.allocation-cap{{min-width:150px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px}}.allocation-cap span{{display:block;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800}}.allocation-cap b{{display:block;font-size:20px;margin-top:3px}}.allocation-formula{{font-size:12px;color:#64748b;margin-left:auto}}.teacher-allocations-page{{height:auto!important;min-height:calc(100vh - 68px);overflow:visible!important;contain:none!important}}.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;max-height:none;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:10px}}.teacher-allocation-scroll::-webkit-scrollbar{{width:10px;height:10px}}.teacher-allocation-scroll::-webkit-scrollbar-thumb{{border-radius:8px;background:#9ca3af}}.teacher-allocation-filter-scroll::-webkit-scrollbar{{height:10px}}.teacher-allocation-table{{width:max-content;min-width:900px}}.allocation-teacher-groups{{display:grid;gap:14px;margin-top:12px}}.allocation-teacher-group{{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff}}.allocation-teacher-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0}}.allocation-teacher-heading h3{{margin:0;font-size:16px;font-weight:800;color:#172033}}.allocation-teacher-heading span{{display:block;margin-top:3px;font-size:12px;color:#64748b}}.allocation-teacher-heading .allocation-count{{display:flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 8px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:13px;font-weight:800;margin:0}}.allocation-detail-table{{width:100%;min-width:520px}}.allocation-detail-table th,.allocation-detail-table td{{padding:10px 12px;text-align:left;border-bottom:1px solid #edf2f7}}.allocation-detail-table tbody tr:last-child td{{border-bottom:0}}.allocation-detail-table .allocation-actions{{white-space:nowrap}}.allocation-empty{{padding:18px}}.teacher-allocation-filter-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-history-filter-form{{grid-template-columns:220px 260px auto auto}}.teacher-allocation-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}@media(max-width:700px){{.allocation-formula{{width:100%;margin-left:0}}}}</style></div>"""
+<style>.allocation-limit-notice{{margin-top:14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.45}}.allocation-cap{{min-width:150px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:9px 12px}}.allocation-cap span{{display:block;font-size:10px;color:#64748b;text-transform:uppercase;font-weight:800}}.allocation-cap b{{display:block;font-size:20px;margin-top:3px}}.allocation-formula{{font-size:12px;color:#64748b;margin-left:auto}}.allocation-launch-row{{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:13px 0 2px}}.allocation-launch-row .muted{{font-size:12px;margin-top:4px;max-width:650px}}.allocation-modal{{display:none;position:fixed;inset:0;z-index:10050;padding:16px;background:rgba(20,48,31,.62);backdrop-filter:blur(4px);align-items:center;justify-content:center}}.allocation-modal.is-open{{display:flex}}.allocation-modal-panel{{width:min(100%,650px);max-height:92vh;overflow:auto;border:1px solid #d9e8dc;border-radius:18px;background:#f7fbf7;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.28)}}.allocation-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid #e0eae2}}.allocation-modal-head h3{{margin:0;color:#24583a;font-size:19px}}.allocation-modal-head p{{margin:4px 0 0;color:#718176;font-size:12px}}.allocation-modal-close{{width:36px;height:36px;border:0;border-radius:50%;background:#e8f2e9;color:#24583a;font-size:24px;cursor:pointer}}.allocation-bulk-form{{display:grid;gap:12px}}.allocation-bulk-form label{{display:grid;gap:6px;color:#365844;font-size:12px;font-weight:800}}.allocation-bulk-form label small{{font-size:10px;color:#718176;font-weight:600}}.allocation-multi-select{{width:100%;min-height:116px;padding:8px}}.allocation-bulk-hint{{margin:0;padding:11px;border:1px solid #dce9df;border-radius:10px;background:#edf6ee;color:#4e6c56;font-size:11px;line-height:1.5}}.allocation-modal-actions{{display:flex;gap:9px;flex-wrap:wrap}}.allocation-modal-actions .btn{{background:linear-gradient(135deg,#3d7959,#214b37)}}.allocation-list-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.allocation-list-heading h2{{margin:0}}.allocation-list-heading p{{margin:4px 0 0}}.allocation-list-heading input{{width:min(100%,330px);padding:10px 12px;border:1px solid #d5e4d8;border-radius:10px;background:#fbfdfb}}.teacher-allocations-page{{height:auto!important;min-height:calc(100vh - 68px);overflow:visible!important;contain:none!important}}.teacher-allocation-scroll{{display:block;width:100%;min-width:0;max-width:100%;max-height:none;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior-x:contain;padding-bottom:10px}}.teacher-allocation-scroll::-webkit-scrollbar{{width:10px;height:10px}}.teacher-allocation-scroll::-webkit-scrollbar-thumb{{border-radius:8px;background:#9ca3af}}.teacher-allocation-filter-scroll::-webkit-scrollbar{{height:10px}}.teacher-allocation-table{{width:max-content;min-width:900px}}.allocation-teacher-groups{{display:grid;gap:14px;margin-top:12px}}.allocation-teacher-group{{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff}}.allocation-teacher-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0}}.allocation-teacher-heading h3{{margin:0;font-size:16px;font-weight:800;color:#172033}}.allocation-teacher-heading span{{display:block;margin-top:3px;font-size:12px;color:#64748b}}.allocation-teacher-heading .allocation-count{{display:flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 8px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:13px;font-weight:800;margin:0}}.allocation-detail-table{{width:100%;min-width:520px}}.allocation-detail-table th,.allocation-detail-table td{{padding:10px 12px;text-align:left;border-bottom:1px solid #edf2f7}}.allocation-detail-table tbody tr:last-child td{{border-bottom:0}}.allocation-detail-table .allocation-actions{{white-space:nowrap}}.allocation-empty{{padding:18px}}.teacher-allocation-filter-scroll{{display:block;width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain;padding-bottom:8px}}.teacher-allocation-filter-form{{display:grid;grid-template-columns:260px 260px 260px auto;gap:10px;width:max-content;min-width:100%}}.teacher-allocation-history-filter-form{{grid-template-columns:220px 260px auto auto}}.teacher-allocation-filter-form .field{{min-width:0}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}.danger{{background:#b91c1c}}.edit{{background:#176B3A;margin-right:5px;padding:9px 12px}}@media(max-width:700px){{.allocation-formula{{width:100%;margin-left:0}}.allocation-launch-row{{align-items:stretch;flex-direction:column}}.allocation-launch-row .btn{{width:100%}}.allocation-list-heading{{align-items:stretch;flex-direction:column}}.allocation-list-heading input{{width:100%;box-sizing:border-box}}}}</style><script>(function(){{var modal=document.getElementById('allocationModal'),open=document.getElementById('openAllocationModal'),close=document.getElementById('closeAllocationModal'),cancel=document.getElementById('cancelAllocationModal'),search=document.getElementById('allocationSearch');if(modal&&open){{function show(){{modal.classList.add('is-open');modal.setAttribute('aria-hidden','false');}}function hide(){{modal.classList.remove('is-open');modal.setAttribute('aria-hidden','true');}}open.addEventListener('click',show);if(close)close.addEventListener('click',hide);if(cancel)cancel.addEventListener('click',hide);modal.addEventListener('click',function(e){{if(e.target===modal)hide();}});document.addEventListener('keydown',function(e){{if(e.key==='Escape')hide();}});}}if(search)search.addEventListener('input',function(){{var q=this.value.trim().toLowerCase();document.querySelectorAll('.allocation-teacher-group').forEach(function(group){{group.hidden=!!q&&!(group.textContent||'').toLowerCase().includes(q);}});}});}})();</script></div>"""
     # Allocation data is frequently updated. Explicitly prevent browser/proxy caches
     # from serving an older table after a successful save.
     page_response = _school_page(request,"Teacher Allocations",body)
@@ -10680,6 +10689,83 @@ def teacher_allocations_add(request: Request,teacher_id:int=Form(...),class_id:i
     redirect_response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     redirect_response.headers["Pragma"] = "no-cache"
     return redirect_response
+
+@router.post("/app/academics/allocations/bulk-add")
+async def teacher_allocations_bulk_add(request: Request):
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"staff.edit"):
+        return HTMLResponse("You do not have permission to manage teacher allocations.",403)
+    form=await request.form()
+    teacher_raw=str(form.get("teacher_id") or "").strip()
+    class_ids=sorted({int(x) for x in form.getlist("class_ids") if str(x).isdigit()})
+    subject_ids=sorted({int(x) for x in form.getlist("subject_ids") if str(x).isdigit()})
+    if not teacher_raw.isdigit() or not class_ids or not subject_ids:
+        return HTMLResponse("Select a teacher, at least one class and at least one subject.",400)
+    teacher_id=int(teacher_raw)
+    con=_db()
+    created=[]
+    try:
+        cur=con.cursor()
+        _ensure_teacher_allocations_table(cur)
+        if not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone():
+            return HTMLResponse("Invalid teacher selection.",400)
+        class_ph=",".join("?" for _ in class_ids)
+        subject_ph=",".join("?" for _ in subject_ids)
+        valid_classes={int(x["id"]) for x in cur.execute(
+            "SELECT id FROM classes WHERE school_id=? AND id IN ("+class_ph+")",[sid]+class_ids
+        ).fetchall()}
+        valid_subjects={int(x["id"]) for x in cur.execute(
+            "SELECT id FROM subjects WHERE school_id=? AND id IN ("+subject_ph+")",[sid]+subject_ids
+        ).fetchall()}
+        if valid_classes!=set(class_ids) or valid_subjects!=set(subject_ids):
+            return HTMLResponse("One or more selected classes or subjects do not belong to this school.",400)
+        existing_rows=cur.execute(
+            "SELECT class_id,subject_id FROM teacher_allocations WHERE school_id=? AND teacher_id=? AND class_id IN ("+class_ph+") AND subject_id IN ("+subject_ph+")",
+            [sid,teacher_id]+class_ids+subject_ids
+        ).fetchall()
+        existing={(int(x["class_id"]),int(x["subject_id"])) for x in existing_rows}
+        new_pairs=[(class_id,subject_id) for class_id in class_ids for subject_id in subject_ids
+                   if (class_id,subject_id) not in existing]
+        allocation_max=int(cur.execute("SELECT COUNT(*) AS n FROM classes WHERE school_id=?",(sid,)).fetchone()["n"] or 0)*int(cur.execute("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+        allocation_current=int(cur.execute("SELECT COUNT(*) AS n FROM teacher_allocations WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+        if allocation_current+len(new_pairs)>allocation_max:
+            tab=str(form.get("ds_tab") or "").strip()
+            suffix="&ds_tab="+quote(tab,safe="") if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tab) else ""
+            return RedirectResponse("/app/academics/allocations?allocation_limit=1"+suffix,303)
+        if new_pairs:
+            cur.executemany(
+                "INSERT INTO teacher_allocations(school_id,teacher_id,class_id,subject_id) VALUES(?,?,?,?)",
+                [(sid,teacher_id,class_id,subject_id) for class_id,subject_id in new_pairs]
+            )
+            con.commit()
+            created=list(new_pairs)
+        tab=str(form.get("ds_tab") or "").strip()
+        if created:
+            try:
+                _audit(cur,sid,request,"TEACHER_ALLOCATION_BULK",
+                       "Created %s teacher allocation(s) for teacher %s"%(len(created),teacher_id))
+                con.commit()
+            except Exception as audit_exc:
+                print("DAVISCHOOL BULK TEACHER ALLOCATION AUDIT WARNING: %r"%(audit_exc,),flush=True)
+    except Exception as exc:
+        try:con.rollback()
+        except Exception:pass
+        print("DAVISCHOOL BULK TEACHER ALLOCATION SAVE ERROR:",repr(exc),flush=True)
+        return HTMLResponse("Teacher allocations could not be saved. Please try again.",500)
+    finally:
+        con.close()
+    tab=str(form.get("ds_tab") or "").strip()
+    params=["refresh="+datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S%f"),
+            "created="+str(len(created))]
+    if re.fullmatch(r"[A-Za-z0-9_-]{16,64}",tab):
+        params.append("ds_tab="+quote(tab,safe=""))
+    response=RedirectResponse("/app/academics/allocations?"+ "&".join(params),303)
+    response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"]="no-cache"
+    return response
+
 
 @router.get("/app/academics/allocations/edit/{allocation_id}", response_class=HTMLResponse)
 def teacher_allocations_edit_page(request: Request, allocation_id:int):
