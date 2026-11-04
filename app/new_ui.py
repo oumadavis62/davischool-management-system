@@ -4195,16 +4195,31 @@ def _aggregate_marks_for_students(cur, sid, student_ids, exam_ids, term="", year
         q = base_q
         params = list(base_params)
         if term:
-            q += " AND term=?"; params.append(term)
+            q += " AND e.term=?"; params.append(term)
         if year:
-            q += " AND year=?"; params.append(year)
+            q += " AND e.year=?"; params.append(year)
         rows = cur.execute(q, params).fetchall()
     except Exception as exc:
         print("DAVISCHOOL MARKSHEET AGGREGATE FILTER FALLBACK:", repr(exc), flush=True)
+        # PostgreSQL marks the whole transaction failed after a SQL error.
+        # Roll back before attempting compatibility reads, then recreate the
+        # optional allocation table because its CREATE may have been rolled back.
         try:
+            cur.connection.rollback()
+        except Exception:
+            try:
+                cur.execute("ROLLBACK")
+            except Exception:
+                pass
+        try:
+            _ensure_student_subject_allocations_table(cur)
             rows = cur.execute(base_q, base_params).fetchall()
         except Exception as fallback_exc:
             print("DAVISCHOOL MARKSHEET AGGREGATE QUERY FAILED:", repr(fallback_exc), flush=True)
+            try:
+                cur.connection.rollback()
+            except Exception:
+                pass
             return {}
 
     buckets = {}
@@ -4789,10 +4804,10 @@ def class_marksheets(request: Request, exam_id: str = "", exam_ids: str = "", cl
                       "AND a.subject_id=m.subject_id AND a.student_id=m.student_id))")
         mark_params = [sid, eid] + student_ids_for_marks
         if term:
-            mark_query += " AND term=?"
+            mark_query += " AND e.term=?"
             mark_params.append(term)
         if year:
-            mark_query += " AND year=?"
+            mark_query += " AND e.year=?"
             mark_params.append(year)
         try:
             mark_rows = cur.execute(mark_query, mark_params).fetchall()
