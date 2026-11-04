@@ -1235,6 +1235,35 @@ document.addEventListener('submit',function(event){{
       .catch(function(){{window.location.href=url.toString();}});
   }}catch(e){{}}
 }},true);
+}})();</script><script>(function(){{
+  // Predictively warm manager submenu pages before the user opens them.
+  // Only the destination being approached is prefetched, keeping database
+  // traffic bounded instead of loading every manager page at once.
+  var warmed=new Set();
+  var maxWarm=10;
+  function warmManagerLink(target){{
+    var link=target&&target.closest?target.closest('a.nav-sub'):null;
+    if(!link||link.hasAttribute('download')||link.target==='_blank')return;
+    var raw=link.getAttribute('href')||'';
+    if(!raw||raw.charAt(0)==='#')return;
+    try{{
+      var url=new URL(raw,window.location.href);
+      if(url.origin!==window.location.origin||url.pathname===window.location.pathname&&url.search===window.location.search)return;
+      var key=url.toString();
+      if(warmed.has(key)||warmed.size>=maxWarm)return;
+      warmed.add(key);
+      var hint=document.createElement('link');
+      hint.rel='prefetch';hint.as='document';hint.href=key;
+      hint.setAttribute('fetchpriority','low');
+      document.head.appendChild(hint);
+    }}catch(e){{}}
+  }}
+  // Desktop: hovering/focusing starts the request before the click.
+  document.addEventListener('pointerover',function(event){{warmManagerLink(event.target);}},{{passive:true,capture:true}});
+  document.addEventListener('focusin',function(event){{warmManagerLink(event.target);}},true);
+  // Mobile: touchstart fires before the synthesized click/navigation.
+  document.addEventListener('touchstart',function(event){{warmManagerLink(event.target);}},{{passive:true,capture:true}});
+  document.addEventListener('pointerdown',function(event){{if(event.pointerType==='touch')warmManagerLink(event.target);}},{{passive:true,capture:true}});
 }})();</script></main></div></body></html>"""
 @router.get("/app/session-keepalive")
 def session_keepalive(request: Request):
