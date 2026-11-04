@@ -602,7 +602,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/students", "Students List")
-            + _nav_sub("/app/students?status=inactive", "Transferred/Inactive List")
+            + _nav_sub("/app/students?status=inactive%2Ctransferred", "Transferred/Inactive List")
             + _nav_sub("/app/classes", "Class List")
             + _nav_sub("/app/attendance", "Attendance Sheet")
             + _nav_sub("/app/student-attendance-report", "Attendance Report")
@@ -2185,7 +2185,9 @@ def students_page(request: Request):
     if gender_filter in ("Male", "Female", "Other"):
         where.append("lower(coalesce(s.gender,''))=lower(?)")
         params.append(gender_filter)
-    if status_filter in ("active", "inactive", "transferred"):
+    if status_filter == "inactive,transferred":
+        where.append("lower(coalesce(s.status,'active')) IN ('inactive','transferred')")
+    elif status_filter in ("active", "inactive", "transferred"):
         where.append("lower(coalesce(s.status,'active'))=?")
         params.append(status_filter)
     where_sql = " AND ".join(where)
@@ -2272,7 +2274,7 @@ function openStudentsPrintPreview(){
 <tbody>{rows or '<tr><td colspan=8>No students match these filters.</td></tr>'}</tbody></table></div>{pager}</div>
 {students_print_script}
 <style>.student-register-actions{{display:flex;align-items:center;gap:10px;flex-wrap:wrap}}.students-register-scroll{{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;padding-bottom:8px}}.students-register-scroll table{{width:max-content;min-width:100%;white-space:nowrap;table-layout:auto;border-collapse:collapse}}.students-register-scroll th,.students-register-scroll td{{vertical-align:middle;text-align:left}}.students-register-scroll th{{white-space:nowrap}}.field{{box-sizing:border-box;width:100%;min-width:0;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}.student-filters{{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr auto auto;gap:9px;align-items:center;margin:12px 0}}.register-heading,.students-pager{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}}.students-pager{{font-size:13px;color:#64748b;margin:12px 0}}@media(max-width:760px){{.student-filters{{grid-template-columns:1fr 1fr}}.student-filters input[type=search]{{grid-column:1/-1}}}}@media print{{body *{{visibility:hidden!important}}.students-register-scroll,.students-register-scroll *{{visibility:visible!important}}.students-register-scroll{{position:absolute!important;left:0;top:0;width:100%;max-width:100%;overflow:visible;padding:0}}.students-register-scroll table{{width:100%;min-width:0;white-space:normal;border-collapse:collapse}}.students-register-scroll th,.students-register-scroll td{{border:1px solid #555;padding:6px;color:#000;background:#fff}}.students-register-scroll th:last-child,.students-register-scroll td:last-child{{display:none}}.students-register-scroll thead{{display:table-header-group}}.students-register-scroll tr{{break-inside:avoid}}.students-register-scroll:before{{content:'DaviSchool — Filtered Student Register';display:block;font-size:16pt;font-weight:bold;margin-bottom:12px}}}}</style></div>"""
-    return _school_page(request,"Students",body)
+    return _school_page(request,"Students List",body)
 
 @router.post("/app/students/add")
 def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form(""), guardian_name:str=Form("")):
