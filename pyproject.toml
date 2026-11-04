@@ -1,2 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "davischool-management-system"
+version = "1.0.0"
+description = "DaviSchool Management System"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "fastapi[standard]==0.128.2",
+    "uvicorn[standard]==0.48.0",
+    "sqlalchemy==2.0.50",
+    "jinja2==3.1.6",
+    "reportlab==4.4.4",
+    "openpyxl==3.1.5",
+    "gunicorn==23.0.0",
+    "python-multipart==0.0.20",
+    "itsdangerous==2.2.0",
+    "psycopg[pool,binary]==3.3.6",
+    "psycopg-pool==3.3.3",
+    "cryptography==46.0.4",
+]
+
 [tool.fastapi]
 entrypoint = "app.main:app"
