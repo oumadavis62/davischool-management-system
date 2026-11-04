@@ -299,7 +299,7 @@ class CompatConnection:
         self._row_factory = value
 
     def cursor(self):
-        return self._conn.cursor()
+        return CompatCursor(self._conn.cursor())
 
     def execute(self, sql, params=None):
         return CompatCursor(self._conn.cursor()).execute(sql, params)
