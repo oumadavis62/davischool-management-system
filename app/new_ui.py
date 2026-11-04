@@ -5245,7 +5245,7 @@ function printDocument(){
         "</tbody></table></div><div class='subject-metric-picker marksheet-overall-picker'><div class='subject-picker-title'>Display under OVERALL</div><div class='subject-metric-grid'>" +
         "".join("<label class='metric-label'><input type='checkbox' class='overall-choice' value='%s' %s> %s</label>" % (m, "checked" if m in overall_metric_list else "", {"mks":"MKS","pts":"PTS","avg":"AVG %","grade":"GRD","pos":"POS"}[m]) for m in ("mks","pts","avg","grade","pos")) +
         "</div></div></div><div class='marksheet-modal-footer'><button type='button' class='btnlink' onclick='closeMarksheetPopup(\"marksheet-display-popup\")'>Cancel</button><button type='submit' class='btn' onclick='applyMarksheetDisplaySettings()'>Apply Display Settings</button></div></section></div>" +
-        "</form><div class='marksheet-action-links'><a class='btnlink' href='/app/academics/blank-marksheet?ds_tab=" + quote(marksheet_tab_id, safe='') + "'>🖨 Blank MarkSheet</a><a class='btnlink' href='/app/academics/overall-grading?ds_tab=" + quote(marksheet_tab_id, safe='') + "'>Set Overall Grade</a></div></div>" +
+        "</form></div>" +
         "<div id='marksheet-all-rows' style='display:none'><table><tbody>" + all_rows_html + "</tbody></table></div>" +
         "<div class='card section marksheet-card'>" + doc_brand +
         "<div class='marksheet-title'>STUDENT MARKSHEET</div>"
