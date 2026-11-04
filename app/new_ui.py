@@ -8719,7 +8719,7 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
             # Once the School Admin finalizes these marks, the teacher side is
             # strictly read-only. Correction workflow is intentionally disabled
             # here and can be restored as a separate feature later.
-            mark_actions = "<div class='muted' style='font-weight:800'>🔒 Marks are FINALIZED and LOCKED. No editing is available on the Teacher side.</div>"
+            mark_actions = ""
         else:
             mark_actions = ""
     else:
@@ -8769,12 +8769,10 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
       "<label>Class<select name='class_id' class='field'><option value=''>Select class</option>"+copts+"</select></label>"
       "<label>Subject<select name='subject_id' class='field'><option value=''>Select subject</option>"+sopts+"</select></label></div>"
       "<input type='hidden' name='ds_tab' value='" + escape(tab_id) + "'><div class='marks-entry-filter-footer'><button type='button' class='btnlink' onclick='closeMarksEntryFilters()'>Cancel</button><button class='btn marks-entry-filter-apply' type='submit'>Load Students</button></div></section></div></form>"
-      "<div class='card section marks-entry'><div style='margin-bottom:10px;padding:10px;background:{bg};border-radius:9px;font-weight:800'>{status}</div>{selection_context}"
+      "<div class='card section marks-entry'>{selection_context}"
       "<form id='marksEntryForm' method='post' action='{action}' data-save-action='{action}'>"
       "<input type='hidden' name='exam_id' value='{eid}'><input type='hidden' name='class_id' value='{cid}'><input type='hidden' name='subject_id' value='{subid}'>"
       "<div class='marks-table-scroll'><table class='marks-table'><colgroup><col class='col-admission'><col class='col-student'><col class='col-mark'><col class='col-grade'><col class='col-points'><col class='col-comment'></colgroup><thead><tr><th>Admission</th><th>Student</th><th>Mark / {out_of}</th><th>Grade</th><th>Points</th><th>Performance Comment</th></tr></thead><tbody>{rows}</tbody></table></div>{form_actions}</form><div style='margin-top:10px'>{outside_actions}</div></div></div>".format(
-          bg=("#fee2e2" if locked else "#f0fdf4"),
-          status=("🔒 Marks are FINALIZED and locked." if locked else "🟢 Marks are open for editing."),
           selection_context=selection_context,
           action=form_action,eid=eid,cid=cid,subid=subid,out_of=out_of,
           rows=rows or "<tr><td colspan='7'>Select an examination, class and subject, then load students.</td></tr>",
