@@ -2530,7 +2530,10 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
         students=[]; allocated=set()
         if str(load)=="1" and cid and subid:
             students=cur.execute("""SELECT s.id,s.admission_no,s.name
-                FROM students s WHERE s.school_id=? AND s.class_id=?
+                FROM students s WHERE s.school_id=? AND (s.class_id=? OR EXISTS(
+                  SELECT 1 FROM student_promotion_cohort_members cohort_current
+                  WHERE cohort_current.school_id=s.school_id AND cohort_current.cycle_year=CAST(? AS INTEGER)
+                    AND cohort_current.class_id=? AND cohort_current.student_id=s.id))
                   AND lower(coalesce(s.status,'active'))='active'
                   AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
                   AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
@@ -2538,7 +2541,7 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
                     OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
                        WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
                          AND mem.class_id=? AND mem.student_id=s.id))
-                ORDER BY s.name""",(sid,cid,academic_year,cid,academic_year,cid)).fetchall()
+                ORDER BY s.name""",(sid,cid,academic_year,cid,academic_year,cid,academic_year,cid)).fetchall()
             allocated=_student_subject_allocation_ids(cur,sid,academic_year,cid,subid)
     except Exception as exc:
         con.close()
@@ -2591,14 +2594,17 @@ async def save_student_subject_allocation(request: Request):
         valid=cur.execute("SELECT 1 FROM classes WHERE school_id=? AND id=?",(sid,cid)).fetchone() and cur.execute("SELECT 1 FROM subjects WHERE school_id=? AND id=?",(sid,subid)).fetchone()
         if not valid:
             con.rollback();return HTMLResponse("The selected class or subject does not belong to this school.",403)
-        roster=cur.execute("""SELECT s.id FROM students s WHERE s.school_id=? AND s.class_id=?
+        roster=cur.execute("""SELECT s.id FROM students s WHERE s.school_id=? AND (s.class_id=? OR EXISTS(
+            SELECT 1 FROM student_promotion_cohort_members cohort_current
+            WHERE cohort_current.school_id=s.school_id AND cohort_current.cycle_year=CAST(? AS INTEGER)
+              AND cohort_current.class_id=? AND cohort_current.student_id=s.id))
             AND lower(coalesce(s.status,'active'))='active'
             AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
             AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
                  WHERE snap.school_id=s.school_id AND snap.cycle_year=CAST(? AS INTEGER) AND snap.class_id=?)
               OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
                  WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
-                   AND mem.class_id=? AND mem.student_id=s.id))""",(sid,cid,year,cid,year,cid)).fetchall()
+                   AND mem.class_id=? AND mem.student_id=s.id))""",(sid,cid,year,cid,year,cid,year,cid)).fetchall()
         eligible={int(x["id"]) for x in roster}
         requested={int(x) for x in form.getlist("student_ids") if str(x).isdigit()}
         if not requested.issubset(eligible):
