@@ -628,7 +628,28 @@ def _shell(title, name, role, body, school_id=None, request=None):
         )
         def _academic_dropdown(label, items, active=False, group_id=""):
             is_open = "open" if active else ""
-            submenu = "".join(_nav_sub(url, item_label) for url, item_label in items)
+            submenu_items = []
+            for url, item_label in items:
+                if label == "Dean Settings" and item_label == "Grade and Points":
+                    grade_points_active = request_path.startswith((
+                        "/app/academics/grading", "/app/academics/overall-grading"
+                    ))
+                    grade_points_links = (
+                        _nav_sub("/app/academics/grading", "Subject Grading and Points")
+                        + _nav_sub("/app/academics/overall-grading", "Overall Grading and Points")
+                    )
+                    submenu_items.append(
+                        "<details class='nav-group nav-nested-group nav-grade-points-group' "
+                        + ("open" if grade_points_active else "")
+                        + "><summary class='nav-sub nav-subgroup-summary' "
+                        + "onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'>"
+                        + f"<span class='nav-sub-icon'>{_modern_icon('grading')}</span><b>Grade and Points</b>"
+                        + "<span class='nav-chevron'>▾</span></summary>"
+                        + f"<div class='nav-submenu nav-nested-submenu'>{grade_points_links}</div></details>"
+                    )
+                else:
+                    submenu_items.append(_nav_sub(url, item_label))
+            submenu = "".join(submenu_items)
             return (
                 f"<details class='nav-group nav-nested-group' id='{group_id}' {is_open}>"
                 + f"<summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>{_modern_icon('settings' if label == 'Dean Settings' else 'analysis')}</span><b>{escape(label)}</b><span class='nav-chevron'>▾</span></summary>"
