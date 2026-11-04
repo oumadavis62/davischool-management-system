@@ -282,6 +282,29 @@ def _db():
     from app.main import get_db
     return get_db()
 
+
+def _ensure_student_subject_allocations_table(cur):
+    """Create the school/year/class/subject learner-choice register additively."""
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_subject_allocations(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        academic_year TEXT NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        allocated_at TEXT NOT NULL,
+        UNIQUE(school_id,academic_year,class_id,subject_id,student_id)
+    )""")
+    cur.execute("""CREATE INDEX IF NOT EXISTS idx_student_subject_allocations_lookup
+        ON student_subject_allocations(school_id,academic_year,class_id,subject_id,student_id)""")
+
+def _student_subject_allocation_ids(cur, school_id, academic_year, class_id, subject_id):
+    _ensure_student_subject_allocations_table(cur)
+    rows=cur.execute("""SELECT student_id FROM student_subject_allocations
+        WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?""",
+        (school_id,str(academic_year or "").strip(),int(class_id),int(subject_id))).fetchall()
+    return {int(row["student_id"]) for row in rows}
+
 def _ensure_user_account_columns(cur, con=None):
     """Ensure generated-account columns exist once per application process."""
     global _USER_ACCOUNT_COLUMNS_READY
@@ -509,7 +532,7 @@ def _shell(title, name, role, body, school_id=None):
             ("/app",_modern_icon("dashboard"),"Overview",None),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff & Teachers","staff.view"),
-            ("/app/academics",_modern_icon("academics"),"Academics","marks.view"),
+            ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
             ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
             ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
             ("/app/finance",_modern_icon("finance"),"Fees & Finance","fees.view"),
@@ -2481,6 +2504,122 @@ def staff_edit(request: Request,teacher_id:int,name:str=Form(...),email:str=Form
     _audit(cur,sid,request,"STAFF_UPDATE",f"Updated staff member {name.strip()} ({teacher_id})")
     con.commit();con.close();return RedirectResponse("/app/staff",303)
 
+
+@router.get("/app/academics/subject-allocation", response_class=HTMLResponse)
+def student_subject_allocation_page(request: Request, academic_year: str="", class_name: str="", stream: str="", subject_id: str="", load: str=""):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    role=str(request.session.get("role",""))
+    if role not in ("school_admin","registrar"):
+        return HTMLResponse("Subject Allocation is available to School Admin and Registrar only.",403)
+    if not _require_permission(request,sid,"marks.edit"):
+        return HTMLResponse("You do not have permission to manage student subject allocations.",403)
+    con=_db();cur=con.cursor()
+    try:
+        _ensure_student_subject_allocations_table(cur)
+        _ensure_student_promotion_cohort_tables(cur)
+        classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        year_rows=cur.execute("SELECT DISTINCT year FROM exams WHERE school_id=? AND year IS NOT NULL AND trim(CAST(year AS TEXT))<>'' ORDER BY year DESC",(sid,)).fetchall()
+        years=[str(x["year"]) for x in year_rows]
+        current_year=str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        if not academic_year: academic_year=current_year if current_year in years else (years[0] if years else current_year)
+        selected_class=next((x for x in classes if str(x["name"] or "")==str(class_name) and str(x["stream"] or "")==str(stream)),None)
+        cid=int(selected_class["id"]) if selected_class else 0
+        subid=int(subject_id) if str(subject_id).isdigit() else 0
+        students=[]; allocated=set()
+        if str(load)=="1" and cid and subid:
+            students=cur.execute("""SELECT s.id,s.admission_no,s.name
+                FROM students s WHERE s.school_id=? AND s.class_id=?
+                  AND lower(coalesce(s.status,'active'))='active'
+                  AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
+                  AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
+                       WHERE snap.school_id=s.school_id AND snap.cycle_year=CAST(? AS INTEGER) AND snap.class_id=?)
+                    OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
+                       WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
+                         AND mem.class_id=? AND mem.student_id=s.id))
+                ORDER BY s.name""",(sid,cid,academic_year,cid,academic_year,cid)).fetchall()
+            allocated=_student_subject_allocation_ids(cur,sid,academic_year,cid,subid)
+    except Exception as exc:
+        con.close()
+        print("DAVISCHOOL STUDENT SUBJECT ALLOCATION LOAD ERROR:",repr(exc),flush=True)
+        return HTMLResponse("Subject Allocation could not be loaded. Please check the application logs.",500)
+    con.close()
+    years=sorted(set(years+[current_year]),reverse=True)
+    year_opts="".join("<option value='%s' %s>%s</option>"%(escape(y), "selected" if y==academic_year else "",escape(y)) for y in years)
+    subject_opts="<option value=''>Select subject</option>"+"".join("<option value='%s' %s>%s</option>"%(x["id"],"selected" if int(x["id"])==subid else "",escape(str(x["name"] or ""))) for x in subjects)
+    class_names=sorted({str(x["name"] or "") for x in classes})
+    class_opts="<option value=''>Select class</option>"+"".join("<option value='%s' %s>%s</option>"%(escape(n),"selected" if n==class_name else "",escape(n)) for n in class_names)
+    stream_opts="<option value=''>Select stream</option>"+"".join("<option value='%s' data-class='%s' %s>%s</option>"%(escape(str(x["stream"] or "")),escape(str(x["name"] or "")),"selected" if str(x["stream"] or "")==stream else "",escape(str(x["stream"] or "No Stream"))) for x in classes)
+    student_rows="".join("<label class='subject-learner'><input type='checkbox' name='student_ids' value='%s' %s><span><b>%s</b><small>%s</small></span></label>"%(int(x["id"]),"checked" if int(x["id"]) in allocated else "",escape(str(x["name"] or "")),escape(str(x["admission_no"] or ""))) for x in students)
+    roster=""
+    if str(load)=="1":
+        roster="<div class='card section'><div class='subject-allocation-roster-head'><div><h2>Students in selected class</h2><p class='muted'>Tick learners who will sit this subject. Unticked learners will not appear in Record Marks.</p></div><div class='subject-allocation-count'>%s of %s allocated</div></div><form method='post' action='/app/academics/subject-allocation'><input type='hidden' name='academic_year' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'><div class='subject-allocation-tools'><label><input type='checkbox' id='selectAllLearners'> Select all learners</label><span class='muted'>%s learners loaded</span></div><div class='subject-learner-list'>%s</div><button class='btn' type='submit'>Save Subject Allocation</button></form></div>"%(len(allocated),len(students),escape(academic_year),cid,subid,escape(class_name),escape(stream),len(students),student_rows or "<div class='muted'>No active learners found for this class and academic-year cohort.</div>")
+    body="""<div class='page'><h1>Subject Allocation</h1><div class='muted'>Choose the learners who are registered to sit each subject. Choices are saved separately for every academic year.</div>
+<div class='card section'><form method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
+<label>Academic Year<select name='academic_year' class='field'>%s</select></label>
+<label>Subject<select name='subject_id' class='field' required>%s</select></label>
+<label>Class<select name='class_name' id='subjectClass' class='field' required>%s</select></label>
+<label>Stream<select name='stream' id='subjectStream' class='field'>%s</select></label>
+<button class='btn' type='submit' name='load' value='1'>Load Students</button></form></div>%s
+<style>.subject-allocation-filter{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;align-items:end}.subject-allocation-filter label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}.subject-allocation-filter .btn{min-height:42px}.subject-allocation-roster-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.subject-allocation-roster-head h2{margin:0 0 5px}.subject-allocation-roster-head p{margin:0}.subject-allocation-count{font-size:12px;font-weight:900;color:#176B3A;background:#E8F5E9;border-radius:10px;padding:9px 12px}.subject-allocation-tools{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:13px;font-weight:750}.subject-learner-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:5px 0 16px}.subject-learner{display:flex;align-items:center;gap:10px;border:1px solid #e2ebe3;border-radius:10px;padding:10px;background:#fff;min-width:0}.subject-learner input,.subject-allocation-tools input{width:17px;height:17px;accent-color:#176B3A}.subject-learner span{display:grid;gap:3px;min-width:0}.subject-learner b{font-size:13px}.subject-learner small{font-size:11px;color:#64748b}.subject-learner:has(input:checked){background:#f0fdf4;border-color:#86c99a}@media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}.subject-allocation-roster-head{align-items:flex-start;flex-direction:column}}</style>
+<script>(function(){var cls=document.getElementById('subjectClass'),stream=document.getElementById('subjectStream');if(!cls||!stream)return;var opts=Array.prototype.map.call(stream.options,function(o){return o.cloneNode(true)});function filter(){var wanted=cls.value,previous=stream.value;while(stream.options.length)stream.remove(0);opts.forEach(function(o){if(!o.value||o.getAttribute('data-class')===wanted)stream.add(o.cloneNode(true))});if(Array.prototype.some.call(stream.options,function(o){return o.value===previous}))stream.value=previous;else stream.value=''}cls.addEventListener('change',filter);filter();})();var all=document.getElementById('selectAllLearners');if(all)all.addEventListener('change',function(){document.querySelectorAll('.subject-learner input').forEach(function(x){x.checked=all.checked})});</script></div>"""%(year_opts,subject_opts,class_opts,stream_opts,roster)
+    return _school_page(request,"Subject Allocation",body)
+
+
+@router.post("/app/academics/subject-allocation")
+async def save_student_subject_allocation(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if str(request.session.get("role","")) not in ("school_admin","registrar"):
+        return HTMLResponse("Subject Allocation is available to School Admin and Registrar only.",403)
+    if not _require_permission(request,sid,"marks.edit"):
+        return HTMLResponse("You do not have permission to manage student subject allocations.",403)
+    form=await request.form()
+    year=str(form.get("academic_year") or "").strip()
+    try:
+        cid=int(form.get("class_id") or 0);subid=int(form.get("subject_id") or 0)
+    except Exception:
+        return HTMLResponse("Invalid class or subject selection.",400)
+    if not year.isdigit() or not cid or not subid:
+        return HTMLResponse("Select an academic year, class, and subject.",400)
+    con=_db()
+    try:
+        cur=con.cursor()
+        _ensure_student_subject_allocations_table(cur)
+        _ensure_student_promotion_cohort_tables(cur)
+        valid=cur.execute("SELECT 1 FROM classes WHERE school_id=? AND id=?",(sid,cid)).fetchone() and cur.execute("SELECT 1 FROM subjects WHERE school_id=? AND id=?",(sid,subid)).fetchone()
+        if not valid:
+            con.rollback();return HTMLResponse("The selected class or subject does not belong to this school.",403)
+        roster=cur.execute("""SELECT s.id FROM students s WHERE s.school_id=? AND s.class_id=?
+            AND lower(coalesce(s.status,'active'))='active'
+            AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
+            AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
+                 WHERE snap.school_id=s.school_id AND snap.cycle_year=CAST(? AS INTEGER) AND snap.class_id=?)
+              OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
+                 WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
+                   AND mem.class_id=? AND mem.student_id=s.id))""",(sid,cid,year,cid,year,cid)).fetchall()
+        eligible={int(x["id"]) for x in roster}
+        requested={int(x) for x in form.getlist("student_ids") if str(x).isdigit()}
+        if not requested.issubset(eligible):
+            con.rollback();return HTMLResponse("One or more selected learners do not belong to this academic-year class cohort.",403)
+        cur.execute("DELETE FROM student_subject_allocations WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?",(sid,year,cid,subid))
+        now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        if requested:
+            cur.executemany("""INSERT INTO student_subject_allocations
+                (school_id,academic_year,class_id,subject_id,student_id,allocated_at)
+                VALUES(?,?,?,?,?,?)""",[(sid,year,cid,subid,x,now) for x in sorted(requested)])
+        con.commit()
+    except Exception as exc:
+        try:con.rollback()
+        except Exception:pass
+        print("DAVISCHOOL STUDENT SUBJECT ALLOCATION SAVE ERROR:",repr(exc),flush=True)
+        return HTMLResponse("Subject allocations could not be saved. Please try again.",500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/academics/subject-allocation?academic_year=%s&subject_id=%s&class_name=%s&stream=%s&load=1&saved=1"%(quote(year,safe=""),subid,quote(str(form.get("class_name") or ""),safe=""),quote(str(form.get("stream") or ""),safe="")),303)
+
+
 @router.get("/app/academics/submission-tracker", response_class=HTMLResponse)
 @router.get("/app/academics", response_class=HTMLResponse)
 def academics_page(request: Request, exam_id: str = "", class_id: str = "", subject_id: str = "", term: str = "", year: str = ""):
@@ -2548,7 +2687,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         sopts="".join("<option value='%s' %s>%s</option>"%(s["id"],"selected" if int(s["id"])==subid else "",escape(str(s["name"]))) for s in subjects)
     topts="".join("<option %s>%s</option>"%("selected" if x==term else "",x) for x in TERM_OPTIONS)
     yopts="".join("<option value='%s' %s>%s</option>"%(y,"selected" if y==year else "",y) for y in YEAR_OPTIONS)
-    actions=[("/app/academics/marks",_modern_icon("marks"),"Marks Entry","Enter and update learner marks"),("/app/academics/marksheets",_modern_icon("report"),"Class Marksheets","View class marks"),("/app/academics/analysis",_modern_icon("analysis"),"Academic Analysis","View overall academic analysis"),("/app/academics/grading",_modern_icon("grading"),"Grade & Points","Set subject grading rules"),("/app/academics/allocations",_modern_icon("allocation"),"Teacher Allocation","Assign teachers"),("/app/exams",_modern_icon("exam"),"Examinations","Manage examinations"),("/app/report-cards",_modern_icon("report"),"Report Cards","Generate reports"),("/app/subjects",_modern_icon("subject"),"Subjects","Manage subjects"),("/app/classes",_modern_icon("school"),"Classes & Streams","Manage classes")] 
+    actions=[("/app/academics/subject-allocation",_modern_icon("allocation"),"Subject Allocation","Choose which learners sit each subject by academic year"),("/app/academics/marks",_modern_icon("marks"),"Marks Entry","Enter and update learner marks"),("/app/academics/marksheets",_modern_icon("report"),"Class Marksheets","View class marks"),("/app/academics/analysis",_modern_icon("analysis"),"Academic Analysis","View overall academic analysis"),("/app/academics/grading",_modern_icon("grading"),"Grade & Points","Set subject grading rules"),("/app/academics/allocations",_modern_icon("allocation"),"Teacher Allocation","Assign teachers"),("/app/exams",_modern_icon("exam"),"Examinations","Manage examinations"),("/app/report-cards",_modern_icon("report"),"Report Cards","Generate reports"),("/app/subjects",_modern_icon("subject"),"Subjects","Manage subjects"),("/app/classes",_modern_icon("school"),"Classes & Streams","Manage classes")] 
     if role in ("school_admin","registrar"):
         actions.append(("/app/academics/marks-corrections",_modern_icon("correction"),"Marks Corrections","Review teacher correction requests"))
         actions.append(("/app/students/promotion",_modern_icon("students"),"Promotion / Transfer","Promote learners and manage class transfers"))
@@ -2565,6 +2704,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
         ("marks-assessments","Marks & Assessments",["Marks Entry","Class Marksheets","Marks Corrections","Examination Submission Tracker"]),
         ("analysis-reports","Analysis & Reports",["Academic Analysis","Report Cards"]),
         ("academic-setup","Academic Setup",["Grade & Points","Teacher Allocation","Examinations","Subjects","Classes & Streams"]),
+        ("learner-subjects","Learner Subject Choices",["Subject Allocation"]),
         ("learner-progression","Learner Progression",["Promotion / Transfer","Graduation Records"]),
     ]
     action_by_title={x[2]:x for x in actions}
@@ -2579,7 +2719,7 @@ def academics_page(request: Request, exam_id: str = "", class_id: str = "", subj
     if tracker_page:
         body="<div class='page'><h1>Examination Submission Tracker</h1><div class='muted'>Track subject submissions for each examination, including historical class/stream allocations.</div>"
     else:
-        body="<div class='page'><h1>Academic Management</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams))
+        body="<div class='page'><h1>Academic Manager</h1><div class='muted'>Select options below to work with marks, assessments, analysis and reports.</div><div class='grid'><div class='card'><div class='label'>Subjects</div><div class='kpi'>%d</div></div><div class='card'><div class='label'>Exams</div><div class='kpi'>%d</div></div></div>"%(len(subjects),len(exams))
         body+="<div class='section academic-manager-section'>"+action_html+"</div>"
     # Admin-only tracker page: keep its existing filters, table, and status calculations.
     if role in ("school_admin","registrar") and tracker_page:
@@ -7738,6 +7878,11 @@ def marks_page(request: Request, exam_id: str="", class_id: str="", subject_id: 
                 pass
             students=cur.execute("""SELECT id,admission_no,name,'' AS marks
               FROM students WHERE school_id=? AND class_id=? AND lower(coalesce(status,'active'))='active' ORDER BY name""",(sid,cid)).fetchall()
+        if eid and cid and subid:
+            selected_exam_year=cur.execute("SELECT year FROM exams WHERE school_id=? AND id=?",(sid,eid)).fetchone()
+            allocation_year=str(selected_exam_year["year"] or "") if selected_exam_year else ""
+            allowed_student_ids=_student_subject_allocation_ids(cur,sid,allocation_year,cid,subid)
+            students=[student for student in students if int(student["id"]) in allowed_student_ids]
         try:
             cfg=cur.execute("SELECT out_of FROM set_marks_config WHERE school_id=? AND exam_id=? AND subject_id=? ORDER BY id DESC LIMIT 1",(sid,eid,subid)).fetchone()
             out_of=float(cfg["out_of"] or 100) if cfg and cfg["out_of"] else 100.0
@@ -8023,6 +8168,10 @@ async def marks_save_draft(request: Request, exam_id:int=Form(...), class_id:int
             grading_rules={}
         # Load the existing per-student state in batches, rather than doing
         # several SELECTs for every learner in a class.
+        allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
+        students=[student for student in students if int(student["id"]) in allocation_ids]
+        allocation_ids=_student_subject_allocation_ids(cur,sid,exam["year"],class_id,subject_id)
+        students=[student for student in students if int(student["id"]) in allocation_ids]
         student_ids=[int(st["id"]) for st in students]
         draft_students=set()
         marks_by_student={}
