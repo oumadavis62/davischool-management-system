@@ -822,6 +822,13 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
     if(link)warm(link);
   }});
+  // Touch users do not reliably generate pointerover before navigating.
+  // Start warming the exact destination as soon as a sidebar/dashboard link
+  // receives its first pointer press, before the browser performs navigation.
+  document.addEventListener('pointerdown',function(event){{
+    var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(link)warm(link);
+  }},{{passive:true}});
   // Give immediate feedback for every in-app link, including Academic Manager
   // tiles, sidebar navigation, dashboard cards and ordinary page links.
   document.addEventListener('click',function(event){{
