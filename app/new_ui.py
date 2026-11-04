@@ -629,7 +629,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             ("/app/academics/marksheets", "Class MarkSheets"),
         ]
         exam_analysis_routes = [
-            ("/app/academics/analysis", "Exam Analysis"),
+            ("/app/academics/analysis", "Class MarkSheet Analysis"),
         ]
         dean_active = request_path.startswith((
             "/app/subjects", "/app/academics/allocations",
