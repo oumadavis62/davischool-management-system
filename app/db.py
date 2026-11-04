@@ -255,17 +255,39 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
 
 class CompatConnection:
     def __init__(self, database_url: str, **kwargs):
+        # Initialize every attribute used by cleanup before acquiring a pool or
+        # connection. Python may call __del__ on an object whose __init__ failed.
+        object.__setattr__(self, "_pool", None)
+        object.__setattr__(self, "_conn", None)
+        object.__setattr__(self, "_row_factory", None)
+        object.__setattr__(self, "_returned", True)
+
         connect_timeout = int(kwargs.pop("connect_timeout", 10))
-        self._pool = _get_pool(database_url, connect_timeout=connect_timeout)
-        self._conn = self._pool.getconn(timeout=connect_timeout)
+        pool = _get_pool(database_url, connect_timeout=connect_timeout)
+        object.__setattr__(self, "_pool", pool)
+
+        conn = pool.getconn(timeout=connect_timeout)
+        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_returned", False)
         try:
-            _verify_database_persistence(self._conn, database_url)
-        except Exception:
-            self._pool.putconn(self._conn)
-            self._conn = None
+            _verify_database_persistence(conn, database_url)
+        except BaseException:
+            # Mark returned before cleanup so a partially initialized object's
+            # finalizer cannot attempt to return this connection a second time.
+            object.__setattr__(self, "_returned", True)
+            object.__setattr__(self, "_conn", None)
+            try:
+                pool.putconn(conn)
+            except Exception as cleanup_exc:
+                try:
+                    print(
+                        "DAVISCHOOL_DB_INIT_CONNECTION_RETURN_WARNING:",
+                        type(cleanup_exc).__name__,
+                        flush=True,
+                    )
+                except Exception:
+                    pass
             raise
-        self._row_factory = None
-        self._returned = False
 
     @property
     def row_factory(self):
@@ -277,7 +299,7 @@ class CompatConnection:
         self._row_factory = value
 
     def cursor(self):
-        return CompatCursor(self._conn.cursor())
+        return self._conn.cursor()
 
     def execute(self, sql, params=None):
         return CompatCursor(self._conn.cursor()).execute(sql, params)
@@ -289,30 +311,55 @@ class CompatConnection:
         return self._conn.rollback()
 
     def close(self):
-        if self._returned:
-            return None
-        self._returned = True
+        # Read internal attributes without invoking __getattr__; this method
+        # must also be safe when called during interpreter shutdown.
         try:
-            if not self._conn.closed:
-                self._conn.rollback()
+            returned = object.__getattribute__(self, "_returned")
+        except AttributeError:
+            return None
+        if returned:
+            return None
+
+        object.__setattr__(self, "_returned", True)
+        try:
+            conn = object.__getattribute__(self, "_conn")
+            pool = object.__getattribute__(self, "_pool")
+        except AttributeError:
+            return None
+        if conn is None or pool is None:
+            return None
+
+        try:
+            if not conn.closed:
+                conn.rollback()
         finally:
-            self._pool.putconn(self._conn)
+            # psycopg_pool discards broken connections rather than putting
+            # them back into circulation.
+            pool.putconn(conn)
         return None
 
     def __del__(self):
-        # Fallback for legacy routes that forget to call close(). A checked-out
-        # connection must be returned to psycopg_pool, not left checked out
-        # until the pool times out subsequent requests (including login).
+        # Finalizers can run for objects whose __init__ failed. Never use
+        # getattr(self, ...) here: missing attributes would recurse through
+        # __getattr__ and can cause RecursionError during DNS/connect failures.
         try:
-            if getattr(self, "_returned", True):
+            try:
+                returned = object.__getattribute__(self, "_returned")
+                conn = object.__getattribute__(self, "_conn")
+                pool = object.__getattribute__(self, "_pool")
+            except AttributeError:
                 return
-            if getattr(self, "_conn", None) is None or getattr(self, "_pool", None) is None:
+            if returned or conn is None or pool is None:
                 return
             self.close()
         except Exception as exc:
             # Finalizers must never raise, especially during interpreter shutdown.
             try:
-                print("DAVISCHOOL_DB_CONNECTION_FINALIZER_WARNING:", repr(exc), flush=True)
+                print(
+                    "DAVISCHOOL_DB_CONNECTION_FINALIZER_WARNING:",
+                    type(exc).__name__,
+                    flush=True,
+                )
             except Exception:
                 pass
 
@@ -330,7 +377,15 @@ class CompatConnection:
         return False
 
     def __getattr__(self, name):
-        return getattr(self._conn, name)
+        # object.__getattribute__ bypasses this method and therefore cannot
+        # recurse when _conn has not yet been assigned during failed startup.
+        try:
+            conn = object.__getattribute__(self, "_conn")
+        except AttributeError:
+            raise AttributeError(name) from None
+        if conn is None:
+            raise AttributeError(name)
+        return getattr(conn, name)
 
 def close_pools() -> None:
     """Close process-local PostgreSQL pools before interpreter finalization."""
