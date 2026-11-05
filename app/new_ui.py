@@ -4144,7 +4144,8 @@ def overall_grading(request: Request):
         "</form></td></tr>"
         % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in structured_rules
     )
-    rule_rows=x_rule_row+structured_rule_rows
+    # Render configured grades first and the system-managed X grade last.
+    rule_rows=structured_rule_rows+x_rule_row
     configured_count=len(structured_rules)
 
     body=(
