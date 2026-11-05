@@ -7793,59 +7793,74 @@ def grading_setup(request: Request, subject_id: str = ""):
 
     sopts = "".join(
         "<option value='%s' %s>%s</option>" % (
-            s["id"],
-            "selected" if int(s["id"]) == subid else "",
-            escape(str(s["name"]))
+            s["id"], "selected" if int(s["id"]) == subid else "", escape(str(s["name"]))
         ) for s in subjects
     )
-    rule_rows = "".join(
-        "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td><td>%.1f</td><td>%s</td>"
-        "<td style='white-space:nowrap'><a class='btnlink' href='/app/academics/grading/edit/%s?subject_id=%s'>✏️ Edit</a> "
-        "<form method='post' action='/app/academics/grading/delete/%s?subject_id=%s' data-native-post='1' style='display:inline'><button class='btnlink' type='submit' onclick='return confirm(\"Delete this subject grading rule?\")'>Delete</button></form></td></tr>"
-        % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
-           float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], subid, r["id"], subid)
-        for r in rules
-    )
     target_subject_options = "".join(
-        "<label style='display:flex;align-items:center;gap:8px;padding:7px'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'> %s</label>"
+        "<label class='grading-subject-option'><input class='grading-target' type='checkbox' name='target_subject_ids' value='%s'><span>%s</span></label>"
         % (s["id"], escape(str(s["name"])))
         for s in subjects if int(s["id"]) != subid
     )
+    rule_rows = "".join(
+        "<tr><td><span class='grading-range'>%.1f–%.1f</span></td><td><span class='grading-grade'>%s</span></td><td><b>%.1f</b></td><td>%s</td><td><div class='grading-row-actions'><button type='button' class='grading-edit-btn' onclick=\"document.getElementById('gradingEdit%s').showModal()\">Edit</button><button type='button' class='grading-delete-btn' onclick=\"openGradingDelete(%s,%s)\">Delete</button></div></td></tr>"
+        % (float(r["min_mark"]), float(r["max_mark"]), escape(str(r["grade"])),
+           float(r["points"] or 0), escape(str(r["performance_comment"] or "")), r["id"], r["id"], json.dumps(str(r["grade"])))
+        for r in rules
+    )
+    edit_modals = "".join(
+        "<dialog id='gradingEdit%s' class='grading-dialog'><form method='post' action='/app/academics/grading/edit/%s?subject_id=%s%s' data-native-post='1'><div class='grading-dialog-head'><div><span>UPDATE GRADE BAND</span><h2>Edit grading rule</h2><p>Adjust the mark range, grade, points and performance comment.</p></div><button type='button' class='grading-close' onclick=\"document.getElementById('gradingEdit%s').close()\">×</button></div><div class='grading-form-grid'><label>Minimum mark<input class='grading-field' name='min_mark' type='number' min='0' max='100' step='0.01' required value='%s'></label><label>Maximum mark<input class='grading-field' name='max_mark' type='number' min='0' max='100' step='0.01' required value='%s'></label><label>Grade<input class='grading-field' name='grade' required value='%s'></label><label>Points<input class='grading-field' name='points' type='number' min='0' step='0.01' required value='%s'></label><label class='grading-wide'>Performance comment<textarea class='grading-field' name='performance_comment' rows='3' required>%s</textarea></label></div><input type='hidden' name='subject_id' value='%s'><div class='grading-dialog-actions'><button type='button' class='grading-cancel' onclick=\"document.getElementById('gradingEdit%s').close()\">Cancel</button><button type='submit' class='grading-save'>Save changes</button></div></form></dialog>"
+        % (r["id"], r["id"], subid, current_ds_tab_q.replace("?", "&") if current_ds_tab_q else "", r["id"],
+           escape(str(r["min_mark"]), quote=True), escape(str(r["max_mark"]), quote=True),
+           escape(str(r["grade"] or ""), quote=True), escape(str(r["points"] or 0), quote=True),
+           escape(str(r["performance_comment"] or "")), subid, r["id"])
+        for r in rules
+    )
+    subject_name = next((str(x["name"]) for x in subjects if int(x["id"]) == subid), "")
+    has_subject = bool(subid and subject_name)
+    subject_label = escape(subject_name) if has_subject else "No subject selected"
+    add_modal = (
+        "<dialog id='gradingAddModal' class='grading-dialog'><form method='post' action='/app/academics/grading/add%s' data-native-post='1'><div class='grading-dialog-head'><div><span>NEW GRADE BAND</span><h2>Add grading rule</h2><p>Define the mark interval and the points awarded.</p></div><button type='button' class='grading-close' onclick=\"document.getElementById('gradingAddModal').close()\">×</button></div><div class='grading-form-grid'><label>Minimum mark<input class='grading-field' name='min_mark' type='number' min='0' max='100' step='0.01' required placeholder='e.g. 80'></label><label>Maximum mark<input class='grading-field' name='max_mark' type='number' min='0' max='100' step='0.01' required placeholder='e.g. 100'></label><label>Grade<input class='grading-field' name='grade' required placeholder='e.g. A'></label><label>Points<input class='grading-field' name='points' type='number' min='0' step='0.01' required placeholder='e.g. 12'></label><label class='grading-wide'>Performance comment<textarea class='grading-field' name='performance_comment' rows='3' required placeholder='Describe the expected performance for this grade'></textarea></label></div><input type='hidden' name='subject_id' value='%s'><div class='grading-dialog-actions'><button type='button' class='grading-cancel' onclick=\"document.getElementById('gradingAddModal').close()\">Cancel</button><button type='submit' class='grading-save'>Save grade &amp; points</button></div></form></dialog>"
+        % (current_ds_tab_q, subid)
+    ) if has_subject else ""
+    copy_modal = (
+        "<dialog id='gradingCopyModal' class='grading-dialog grading-copy-dialog'><form method='post' action='/app/academics/grading/copy%s' data-native-post='1'><div class='grading-dialog-head'><div><span>REUSE GRADING SCALE</span><h2>Copy to other subjects</h2><p>Apply this subject's complete grading scale to selected subjects.</p></div><button type='button' class='grading-close' onclick=\"document.getElementById('gradingCopyModal').close()\">×</button></div><input type='hidden' name='source_subject_id' value='%s'><div class='grading-copy-toolbar'><span>Choose destination subjects</span><button type='button' onclick='toggleGradingTargets(true)'>Select all</button><button type='button' onclick='toggleGradingTargets(false)'>Clear</button></div><div class='grading-subject-picker'>%s</div><label class='grading-option'><input type='checkbox' name='overwrite' value='1'> Replace existing grading scales on selected subjects</label><div class='grading-dialog-actions'><button type='button' class='grading-cancel' onclick=\"document.getElementById('gradingCopyModal').close()\">Cancel</button><button type='submit' class='grading-save'>Copy grading scale</button></div></form></dialog>"
+        % (current_ds_tab_q, subid, target_subject_options or "<p class='grading-empty-note'>There are no other subjects to copy to.</p>")
+    ) if has_subject else ""
     body = (
-        "<div class='page'><h1>Subject Grading & Points</h1>"
-        "<div class='muted'>Set the grade band and points for each subject. "
-        "These rules are applied automatically when marks are entered and when class marksheets are generated.</div>"
-        "<div class='card section'><form method='get' action='/app/academics/grading" + current_ds_tab_q + "' style='display:grid;grid-template-columns:1fr auto;gap:10px'>"
-        + (current_ds_tab and "<input type='hidden' name='ds_tab' value='" + escape(current_ds_tab) + "'>" or "") +
-        "<select name='subject_id' class='field' required><option value=''>Select subject</option>"
-        + sopts +
-        "</select><button class='btn'>Load Subject</button></form></div>"
-        "<div class='card section'><h2>Add grading rule</h2>"
-        "<form method='post' action='/app/academics/grading/add' onsubmit='this.submit(); return false;' "
-        "style='display:grid;grid-template-columns:repeat(5,1fr);gap:10px'>"
-        "<input type='hidden' name='subject_id' value='" + str(subid) + "'>"
-        "<input name='min_mark' required type='number' min='0' max='100' step='0.01' placeholder='Minimum mark' class='field'>"
-        "<input name='max_mark' required type='number' min='0' max='100' step='0.01' placeholder='Maximum mark' class='field'>"
-        "<input name='grade' required placeholder='Grade e.g. A' class='field'>"
-        "<input name='points' required type='number' min='0' step='0.01' placeholder='Points' class='field'>"
-        "<div style='grid-column:1/-1'><textarea name='performance_comment' required rows='2' placeholder='Performance comment for this grade band' class='field'></textarea></div>"
-        "<button type='submit' formaction='/app/academics/grading/add' formmethod='post' class='btn'>Save Grade & Points</button></form></div>"
-        "<div class='card section'><h2>Copy this grading scale to other subjects</h2>"
-        "<div class='muted' style='margin-bottom:12px'>Copy all configured grade ranges, points and performance comments from the selected subject to one or more other subjects.</div>"
-        "<form method='post' action='/app/academics/grading/copy" + current_ds_tab_q + "' data-native-post='1' onsubmit='return confirm(\"Copy this grading scale to the selected subjects? Existing scales will be preserved unless Replace is checked.\")'>"
-        "<input type='hidden' name='source_subject_id' value='" + str(subid) + "'>"
-        "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:260px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:9px'>"
-        + target_subject_options +
-        "</div>"
-        "<label style='display:block;margin:12px 0;font-weight:700'><input type='checkbox' id='select-all-grading' onclick='document.querySelectorAll(\".grading-target\").forEach(function(x){x.checked=this.checked},this)'> Select all other subjects</label>"
-        "<label style='display:block;margin:12px 0'><input type='checkbox' name='overwrite' value='1'> Replace existing grading scales on selected subjects</label>"
-        "<button class='btn' type='submit'>📋 Copy Grading Scale</button></form></div>"
-        "<div class='card section'><h2>Configured rules</h2>"
-        "<div style='width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x;border:1px solid #e5e7eb;border-radius:9px'>"
-        "<table style='min-width:760px;width:100%;border-collapse:collapse'><thead><tr><th>Minimum</th><th>Maximum</th><th>Grade</th><th>Points</th><th>Performance Comment</th><th>Action</th></tr></thead>"
-        "<tbody>" + (rule_rows or "<tr><td colspan='6'>No custom grading rules configured for this subject.</td></tr>") + "</tbody></table></div></div>"
-        "<div class='card section'><b>Default fallback:</b> if a subject has no custom rule for a mark, DaviSchool uses the standard A–E scale and default points until you configure that subject.</div>"
-        "</div><style>.field{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}.btn,.btnlink{padding:10px 14px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}.btnlink{background:#fff;color:#172033}</style>"
+        "<div class='page subject-grading-page'>"
+        "<header class='grading-hero'><div><span class='grading-eyebrow'>ACADEMIC CONFIGURATION</span><h1>Subject Grading &amp; Points</h1><p>Manage grade bands, points and performance descriptions for each subject.</p></div><div class='grading-hero-mark'>A+</div></header>"
+        "<section class='grading-subject-panel'><div><span class='grading-section-kicker'>SUBJECT SELECTION</span><h2>Choose a subject</h2><p>Load a subject to view and manage its grading scale.</p></div><form method='get' action='/app/academics/grading' class='grading-subject-form'>"
+        + (("<input type='hidden' name='ds_tab' value='%s'>" % escape(current_ds_tab, quote=True)) if current_ds_tab else "")
+        + "<select name='subject_id' class='grading-field' required><option value=''>Select subject</option>" + sopts + "</select><button class='grading-primary' type='submit'>Load subject</button></form></section>"
+        + ("<section class='grading-workspace'><div class='grading-workspace-head'><div><span class='grading-section-kicker'>CURRENT GRADING SCALE</span><h2>%s</h2><p>Each mark is matched against the configured range below.</p></div><div class='grading-head-actions'><button type='button' class='grading-secondary' onclick=\"document.getElementById('gradingCopyModal').showModal()\">Copy scale</button><button type='button' class='grading-primary' onclick=\"document.getElementById('gradingAddModal').showModal()\">＋ Add grade band</button></div></div>"
+          % subject_label if has_subject else "<section class='grading-empty-state'><div class='grading-empty-icon'>A+</div><h2>Select a subject to begin</h2><p>Choose a subject above to review its grading scale, add grade bands or copy a scale to other subjects.</p></section>")
+        + (("<div class='grading-summary-strip'><div><span>GRADE BANDS</span><strong>%s</strong></div><div><span>POINTS RANGE</span><strong>%s</strong></div><div><span>SUBJECT</span><strong>%s</strong></div></div>"
+            % (len(rules), ("%.1f – %.1f" % (min([float(r["points"] or 0) for r in rules]), max([float(r["points"] or 0) for r in rules]))) if rules else "—", subject_label))
+           + "<div class='grading-table-heading'><div><h3>Configured grade bands</h3><p>Edit or remove a band without leaving this page.</p></div><span>%s records</span></div>"
+             % len(rules)
+           + "<div class='grading-table-scroll'><table class='grading-table'><thead><tr><th>Mark range</th><th>Grade</th><th>Points</th><th>Performance comment</th><th>Actions</th></tr></thead><tbody>%s</tbody></table></div>"
+             % (rule_rows or "<tr><td colspan='5' class='grading-no-rules'>No grading bands configured yet. Use <b>Add grade band</b> to create the first one.</td></tr>")
+           + "</section>" if has_subject else "")
+        + ("<section class='grading-fallback'><span class='grading-info-icon'>i</span><div><b>Default grading fallback</b><p>Subjects without custom grading rules continue to use DaviSchool's standard A–E grading scale and default points.</p></div></section>")
+        + add_modal + edit_modals + copy_modal
+        + "<dialog id='gradingDeleteModal' class='grading-dialog grading-delete-dialog'><form method='post' id='gradingDeleteForm'><div class='grading-dialog-head'><div><span>CONFIRM CHANGE</span><h2>Delete grade band?</h2><p id='gradingDeleteMessage'>This grading rule will be removed.</p></div><button type='button' class='grading-close' onclick=\"document.getElementById('gradingDeleteModal').close()\">×</button></div><div class='grading-dialog-actions'><button type='button' class='grading-cancel' onclick=\"document.getElementById('gradingDeleteModal').close()\">Keep rule</button><button type='submit' class='grading-delete-confirm'>Delete grade band</button></div></form></dialog>"
+        + """<style>
+.subject-grading-page{max-width:1180px;margin:0 auto;padding:8px 2px 34px;color:#294b35}
+.grading-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 28px;border:1px solid #cfe2d2;border-radius:20px;background:linear-gradient(120deg,#edf6ed 0%,#dceede 52%,#c7e2cc 100%);box-shadow:0 8px 24px rgba(38,91,54,.07)}
+.grading-eyebrow,.grading-section-kicker{font-size:10px;font-weight:900;letter-spacing:1.3px;color:#5d8664}.grading-hero h1{font-size:26px;margin:6px 0;color:#214b30}.grading-hero p{margin:0;color:#617a66;font-size:13px}.grading-hero-mark{width:62px;height:62px;display:grid;place-items:center;border-radius:18px;background:linear-gradient(145deg,#fff,#d7ead9);color:#347448;font-size:23px;font-weight:900;box-shadow:0 6px 18px #2c70401c}
+.grading-subject-panel{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);align-items:center;gap:22px;margin:15px 0;padding:18px 20px;background:#fff;border:1px solid #dfebdf;border-radius:16px;box-shadow:0 4px 16px #254c3010}.grading-subject-panel h2{font-size:16px;color:#315a3b;margin:5px 0}.grading-subject-panel p{font-size:11px;color:#829185;margin:0}.grading-subject-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px}.grading-field{width:100%;min-width:0;padding:11px 12px;border:1px solid #dce8dd;border-radius:10px;background:#fbfdfb;color:#294b35;font:inherit;font-size:12px;outline:none}.grading-field:focus{border-color:#78a982;box-shadow:0 0 0 3px #5b98631c}
+.grading-primary,.grading-secondary,.grading-edit-btn,.grading-delete-btn,.grading-cancel,.grading-save,.grading-delete-confirm{border:0;border-radius:9px;padding:10px 14px;font-size:11px;font-weight:850;cursor:pointer;white-space:nowrap}.grading-primary,.grading-save{background:linear-gradient(135deg,#397b4b,#205c36);color:#fff;box-shadow:0 4px 10px #205c3620}.grading-secondary{background:#eaf3ea;color:#386b43;border:1px solid #d8e8d9}
+.grading-workspace{background:#fff;border:1px solid #dfebdf;border-radius:17px;padding:19px;box-shadow:0 5px 18px #254c300a}.grading-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:15px}.grading-workspace-head h2{font-size:19px;color:#2b5737;margin:5px 0}.grading-workspace-head p{font-size:11px;color:#829185;margin:0}.grading-head-actions{display:flex;align-items:center;gap:8px}.grading-summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:17px 0}.grading-summary-strip>div{padding:12px 14px;border:1px solid #e2ede3;border-radius:11px;background:linear-gradient(145deg,#f8fbf8,#edf5ee);display:flex;flex-direction:column;gap:5px}.grading-summary-strip span{font-size:9px;letter-spacing:.8px;color:#829585;font-weight:900}.grading-summary-strip strong{font-size:17px;color:#346343}
+.grading-table-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:17px 0 10px}.grading-table-heading h3{font-size:14px;color:#345d3e;margin:0}.grading-table-heading p{font-size:10px;color:#89978b;margin:4px 0 0}.grading-table-heading>span{font-size:10px;color:#5b8061;background:#edf5ed;border-radius:8px;padding:6px 9px}.grading-table-scroll{width:100%;max-height:54vh;overflow:auto;border:1px solid #e2ebe2;border-radius:11px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}.grading-table{width:100%;min-width:720px;border-collapse:separate;border-spacing:0;background:#fff}.grading-table th{position:sticky;top:0;z-index:2;background:#edf5ed;color:#56725a;font-size:9px;letter-spacing:.6px;text-transform:uppercase}.grading-table th,.grading-table td{padding:11px 12px;border-bottom:1px solid #edf2ed;text-align:left;font-size:11px;vertical-align:middle}.grading-table td{color:#536b57}.grading-range{font-weight:850;color:#315b3a;white-space:nowrap}.grading-grade{display:inline-flex;min-width:34px;justify-content:center;padding:5px 8px;border-radius:7px;background:#e7f2e8;color:#2d693d;font-weight:900}.grading-row-actions{display:flex;align-items:center;gap:6px}.grading-edit-btn{background:#e8f2e9;color:#2d693d;padding:7px 10px}.grading-delete-btn{background:#fff0ee;color:#a94a41;padding:7px 10px}.grading-no-rules{text-align:center!important;padding:28px!important;color:#829185!important}
+.grading-empty-state{padding:30px 18px;text-align:center;background:#fff;border:1px dashed #cddfce;border-radius:16px}.grading-empty-state h2{font-size:17px;color:#355f3f;margin:9px 0 5px}.grading-empty-state p{font-size:11px;color:#829185;margin:0 auto;max-width:460px;line-height:1.6}.grading-empty-icon{margin:auto;width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#e6f2e7,#cfe5d2);color:#397448;font-weight:900;font-size:20px}.grading-fallback{display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:14px 16px;border:1px solid #dce9dc;border-radius:13px;background:linear-gradient(120deg,#f6faf6,#edf5ed)}.grading-info-icon{width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;border-radius:50%;background:#dceede;color:#3b7047;font-weight:900}.grading-fallback b{font-size:11px;color:#3a6543}.grading-fallback p{font-size:10px;color:#7b8c7d;margin:4px 0 0}
+.grading-dialog{border:1px solid #d2e4d4;border-radius:18px;padding:0;width:min(620px,calc(100% - 26px));max-width:620px;max-height:88vh;overflow:auto;background:linear-gradient(155deg,#fff 0%,#f5faf5 60%,#eaf4eb 100%);color:#294b35;box-shadow:0 24px 70px #183b2450}.grading-dialog::backdrop{background:#10271980;backdrop-filter:blur(3px)}.grading-dialog form{padding:20px}.grading-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding-bottom:14px;border-bottom:1px solid #e2ece3;margin-bottom:16px}.grading-dialog-head h2{font-size:18px;color:#2d5838;margin:5px 0}.grading-dialog-head p{font-size:11px;color:#819083;margin:0}.grading-close{width:30px;height:30px;border:0;border-radius:9px;background:#e8f2e9;color:#3c6b45;font-size:20px;cursor:pointer;flex:0 0 auto}.grading-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.grading-form-grid label{display:flex;flex-direction:column;gap:6px;font-size:10px;font-weight:850;color:#55715a}.grading-wide{grid-column:1/-1}.grading-dialog-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid #e2ece3}.grading-cancel{background:#edf3ed;color:#5d725f}.grading-copy-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}.grading-copy-toolbar span{flex:1;font-size:11px;font-weight:850;color:#456a4b}.grading-copy-toolbar button{border:1px solid #dce8dd;background:#f0f6f0;color:#4b7452;border-radius:7px;padding:6px 9px;font-size:10px;font-weight:800;cursor:pointer}.grading-subject-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:250px;overflow:auto;padding:9px;border:1px solid #e1ebe2;border-radius:10px;background:#f8fbf8}.grading-subject-option{display:flex;align-items:center;gap:8px;padding:9px;background:#fff;border:1px solid #e5eee6;border-radius:8px;font-size:11px;color:#45664b}.grading-subject-option input{accent-color:#34764a}.grading-option{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:11px;color:#526e57}.grading-delete-dialog{max-width:450px}.grading-delete-confirm{background:#b94b43;color:#fff}.grading-empty-note{grid-column:1/-1;font-size:11px;color:#829185;text-align:center}
+@media(max-width:760px){.grading-subject-panel{grid-template-columns:1fr;gap:12px}.grading-workspace-head{align-items:flex-start;flex-direction:column}.grading-head-actions{width:100%}.grading-head-actions button{flex:1}.grading-hero{padding:19px}.grading-hero h1{font-size:22px}}
+@media(max-width:520px){.grading-summary-strip{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.grading-summary-strip>div{padding:9px 7px}.grading-summary-strip strong{font-size:14px}.grading-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.grading-dialog form{padding:15px}.grading-subject-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.grading-table-scroll{max-height:58vh}}
+</style>
+<script>
+function openGradingDelete(id,grade){document.getElementById('gradingDeleteMessage').textContent='Delete grade '+grade+'? This action cannot be undone.';document.getElementById('gradingDeleteForm').action='/app/academics/grading/delete/'+id+'?subject_id='+encodeURIComponent('%s');document.getElementById('gradingDeleteModal').showModal();}
+function toggleGradingTargets(value){document.querySelectorAll('.grading-target').forEach(function(el){el.checked=value;});}
+</script></div>""" % (subid)
     )
     return _school_page(request, "Subject Grading & Points", body)
 
