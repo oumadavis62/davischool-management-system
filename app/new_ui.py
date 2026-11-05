@@ -3097,14 +3097,14 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
     body="""<div class='page subject-allocation-page'>
 <header class='subject-allocation-hero'><div><span class='subject-kicker'>ACADEMIC MANAGEMENT</span><h1>Subject Allocation</h1><p>Manage the learners registered to sit each subject, by examination and academic year.</p></div><div class='subject-hero-icon' aria-hidden='true'>◎</div></header>
 <section class='subject-allocation-workspace'><div class='subject-allocation-section-head'><div><h2>Allocation Setup</h2><p>Select the examination, subject and class to manage learner registration.</p></div><span class='subject-step'>STEP 1 · SET FILTERS</span></div>
-<form method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
+<form id='subjectAllocationFilter' method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
 <label>Examination<select name='examination_id' id='subjectExamination' class='field' required>%s</select></label>
 <label>Term<select name='term' id='subjectTerm' class='field' required>%s</select></label>
 <label>Academic Year<select name='academic_year' id='subjectAcademicYear' class='field' readonly>%s</select></label>
 <label>Subject<select name='subject_id' class='field' required>%s</select></label>
 <label>Class<select name='class_name' id='subjectClass' class='field' required>%s</select></label>
 <label>Stream<select name='stream' id='subjectStream' class='field'>%s</select></label>
-<div class='subject-allocation-filter-actions'><button class='subject-load-btn' type='submit' name='load' value='1'>Load Learners <span aria-hidden='true'>→</span></button></div>
+<div class='subject-allocation-filter-actions'><button class='subject-load-btn' type='button' onclick="var f=document.getElementById('subjectAllocationFilter');if(f&&f.reportValidity()){var q=new URLSearchParams(new FormData(f));q.set('load','1');window.location.assign(f.action+'?'+q.toString())}">Load Learners <span aria-hidden='true'>→</span></button></div>
 </form></section>
 %s
 <style>
