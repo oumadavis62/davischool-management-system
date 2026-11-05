@@ -15840,7 +15840,6 @@ def class_marksheet_analysis(
  .msa-compact-content{padding:9px}
  .msa-kpis>div{padding:10px}
  .msa-kpis small{font-size:10px}
-}
  .msa-toolbar{align-items:flex-start;flex-direction:column}
  .msa-open-filter{width:100%}
  .msa-filter-dialog .msa-filters{grid-template-columns:1fr;padding:14px}
