@@ -7020,8 +7020,24 @@ def app_home(request: Request):
             except Exception: exam_rows=[]
             calendar_html="".join(f"<div class='calendar-row'><span class='calendar-date'>{escape(str(r['event_date'] or '—')[:10])}</span><div><b>{escape(str(r['name'] or 'Examination'))}</b><small>Academic assessment</small></div></div>" for r in exam_rows) or "<div class='dashboard-empty'>Academic assessments will appear here.</div>"
             dashboard_graduated_count=0
-            try: dashboard_graduated_count=int(cur.execute("SELECT COUNT(DISTINCT student_id) c FROM student_graduations WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
-            except Exception: pass
+            try:
+                # The graduation register is lazily created by the promotion workflow.
+                # Ensure it exists before querying, then include both durable graduation
+                # records and legacy learners already marked graduated in Students.
+                _ensure_student_promotion_cohort_tables(cur)
+                graduated_row=cur.execute(
+                    """SELECT COUNT(*) c FROM (
+                           SELECT student_id FROM student_graduations WHERE school_id=?
+                           UNION
+                           SELECT id AS student_id FROM students
+                           WHERE school_id=? AND lower(trim(coalesce(status,''))) IN ('graduated','graduate')
+                       ) graduated_learners""",
+                    (school_id,school_id)
+                ).fetchone()
+                dashboard_graduated_count=int(graduated_row["c"] or 0)
+            except Exception as exc:
+                print("DAVISCHOOL DASHBOARD GRADUATED COUNT WARNING:",repr(exc),flush=True)
+                dashboard_graduated_count=0
             latest_exam_mean=None
             try:
                 mean_row=cur.execute("""SELECT AVG(m.marks*100.0/COALESCE((SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1),100)) mean_pct
@@ -7041,10 +7057,10 @@ def app_home(request: Request):
 </header>
 <div class='admin-dashboard-showcase'>
   <div class='dashboard-kpi-grid'>
-    <div class='dashboard-kpi kpi-sage'><span>STUDENTS</span><strong>{s:,}</strong><small>Active learners</small></div>
-    <div class='dashboard-kpi kpi-mint'><span>TEACHERS</span><strong>{t:,}</strong><small>Staff and teachers</small></div>
-    <div class='dashboard-kpi kpi-stone'><span>CLASSES</span><strong>{c:,}</strong><small>Registered classes</small></div>
-    <div class='dashboard-kpi kpi-rose'><span>GRADUATED</span><strong>{dashboard_graduated_count:,}</strong><small>Graduated learners</small></div>
+    <div class='dashboard-kpi kpi-sage'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>♙</span><span>STUDENTS</span></div><strong>{s:,}</strong><small>Active learners</small></div>
+    <div class='dashboard-kpi kpi-mint'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>♧</span><span>TEACHERS</span></div><strong>{t:,}</strong><small>Staff and teachers</small></div>
+    <div class='dashboard-kpi kpi-stone'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>▦</span><span>CLASSES</span></div><strong>{c:,}</strong><small>Registered classes</small></div>
+    <div class='dashboard-kpi kpi-rose'><div class='dashboard-kpi-label'><span class='dashboard-kpi-icon' aria-hidden='true'>🎓</span><span>GRADUATED</span></div><strong>{dashboard_graduated_count:,}</strong><small>Graduated learners</small></div>
   </div>
   <div class='dashboard-showcase-grid'>
     <div class='dashboard-showcase-main'>
@@ -7162,7 +7178,7 @@ def app_home(request: Request):
 @media(prefers-reduced-motion:reduce){{.admin-registrar-overview *{{scroll-behavior:auto!important;transition:none!important}}}}
 
 .admin-overview-sections{{grid-template-columns:minmax(0,1fr)}}\n.admin-dashboard-showcase{{margin:18px 0 20px;padding:18px;background:linear-gradient(135deg,#eaf1eb,#f2f5f0 55%,#e7eee8);border:1px solid #dce7de;border-radius:20px;box-shadow:0 8px 24px #294b3510}}
-.dashboard-kpi-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}}.dashboard-kpi{{min-width:0;border-radius:15px;padding:15px 16px;display:flex;flex-direction:column;gap:5px;border:1px solid #ffffffb8;box-shadow:0 3px 10px #1e3b2b08}}.dashboard-kpi span{{font-size:9px;letter-spacing:1px;font-weight:900;color:#627367}}.dashboard-kpi strong{{font-size:clamp(21px,2.5vw,29px);line-height:1.05;color:#172d21;font-weight:900}}.dashboard-kpi small{{font-size:10px;color:#718075;font-weight:650}}
+.dashboard-kpi-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}}.dashboard-kpi{{min-width:0;border-radius:15px;padding:15px 16px;display:flex;flex-direction:column;gap:5px;border:1px solid #ffffffb8;box-shadow:0 3px 10px #1e3b2b08}}.dashboard-kpi-label{{display:flex;align-items:center;gap:8px}}.dashboard-kpi-label>span:last-child{{font-size:9px;letter-spacing:1px;font-weight:900;color:#627367}}.dashboard-kpi-icon{{width:29px;height:29px;flex:0 0 29px;display:grid;place-items:center;border-radius:9px;background:#ffffffa8;color:#285d3e;font-size:18px;line-height:1}}.dashboard-kpi strong{{font-size:clamp(21px,2.5vw,29px);line-height:1.05;color:#172d21;font-weight:900}}.dashboard-kpi small{{font-size:10px;color:#718075;font-weight:650}}
 .kpi-sage{{background:#dce8dd}}.kpi-mint{{background:#e1e9df}}.kpi-stone{{background:#e7e4df}}.kpi-rose{{background:#e9e2e4}}
 .dashboard-showcase-grid{{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:14px;align-items:stretch}}.dashboard-showcase-main,.dashboard-showcase-side{{display:grid;gap:14px;min-width:0;align-content:start}}.dashboard-widget{{min-width:0;background:#fff;border:1px solid #e2eae3;border-radius:15px;padding:15px;box-shadow:0 3px 12px #1b392508;overflow:hidden}}
 .dashboard-widget h2{{font-size:14px;line-height:1.2;margin:0;color:#20382a;font-weight:850}}.dashboard-widget-heading{{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}}.dashboard-widget-heading p{{font-size:10px;color:#819087;margin:4px 0 0}}.dashboard-widget-tag{{font-size:10px;font-weight:850;color:#286b49;background:#e9f3eb;border-radius:20px;padding:6px 9px;white-space:nowrap}}.dashboard-widget-mark{{font-size:20px;color:#3c7958}}
