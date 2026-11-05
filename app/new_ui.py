@@ -7010,6 +7010,13 @@ def app_home(request: Request):
             dashboard_assessment_count=0
             try: dashboard_assessment_count=int(cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
             except Exception: pass
+            latest_exam_mean=None
+            try:
+                mean_row=cur.execute("""SELECT AVG(m.marks*100.0/COALESCE((SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1),100)) mean_pct
+                    FROM marks m WHERE m.school_id=? AND m.exam_id=(SELECT id FROM exams WHERE school_id=? ORDER BY id DESC LIMIT 1) AND m.marks IS NOT NULL""",(school_id,school_id)).fetchone()
+                if mean_row and mean_row["mean_pct"] is not None: latest_exam_mean=float(mean_row["mean_pct"])
+            except Exception: latest_exam_mean=None
+            latest_exam_mean_label=f"{latest_exam_mean:.1f}%" if latest_exam_mean is not None else "—"
 
             body=f"""<div class='page overview-home admin-registrar-overview'>
 <header class='overview-hero'>
@@ -7046,7 +7053,7 @@ def app_home(request: Request):
       <div class='dashboard-showcase-main'>
         <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
         <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
-        <div class='dashboard-bottom-pair'><section class='dashboard-widget mini-widget'><h2>Students</h2>{gender_donut}</section><section class='dashboard-widget mini-widget performance-mini'><h2>Academic Performance</h2><div class='performance-ring'><strong>{dashboard_assessment_count}</strong><span>exams recorded</span></div><small>Assessments on record</small></section></div>
+        <div class='dashboard-bottom-pair'><section class='dashboard-widget mini-widget'><h2>Students</h2>{gender_donut}</section><section class='dashboard-widget mini-widget performance-mini'><h2>Academic Performance</h2><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>latest exam mean</span></div><small>Latest examination performance</small></section></div>
       </div>
       <div class='dashboard-showcase-side'>
         <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
