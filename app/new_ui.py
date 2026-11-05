@@ -6100,6 +6100,8 @@ def portals_page(request: Request):
 
 def _overview_health_panel(title, overall, summary, items, attention="No items currently require attention."):
     status_class = "health-good" if str(overall).lower() in ("healthy","ready","operational") else "health-status-attention"
+    healthy_count = sum(1 for _, ok, _ in items if ok)
+    attention_count = max(0, len(items) - healthy_count)
     item_html = "".join(
         f"<div class='health-check'><span class='health-dot {('health-dot-good' if ok else 'health-dot-attention')}'></span><div><b>{escape(str(label))}</b><small>{escape(str(detail))}</small></div></div>"
         for label, ok, detail in items
@@ -6107,8 +6109,12 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
     return f"""<div class='overview-health-wrap'>
 <div class='overview-health-card' tabindex='0' role='button' aria-expanded='false' onclick='toggleOverviewHealth(this)' onkeydown='if(event.key==="Enter"||event.key===" "){{event.preventDefault();toggleOverviewHealth(this)}}'>
   <div class='health-compact'>
-    <div><div class='health-kicker'>DaviSchool Health Status</div><div class='health-title'>{escape(title)}</div><div class='health-summary'>{escape(summary)}</div></div>
-    <div class='health-status-pill {status_class}'><span class='health-dot {'health-dot-good' if status_class=='health-good' else 'health-dot-attention'}'></span>{escape(overall)}</div>
+    <div class='health-compact-copy'><div class='health-kicker'>DAVISCHOOL · SYSTEM HEALTH</div><div class='health-title'>{escape(title)}</div><div class='health-summary'>{escape(summary)}</div></div>
+    <div class='health-compact-meta'>
+      <div class='health-status-pill {status_class}'><span class='health-dot {'health-dot-good' if status_class=='health-good' else 'health-dot-attention'}'></span>{escape(overall)}</div>
+      <div class='health-counts'><span><b>{healthy_count}</b> Checks passed</span><span><b>{attention_count}</b> Need attention</span></div>
+      <span class='health-open-hint'>View system checks <span aria-hidden='true'>↗</span></span>
+    </div>
   </div>
   <div class='health-expanded'>
     <div class='health-expanded-head'><div><div class='health-kicker'>DaviSchool Health Status</div><h2>{escape(title)}</h2><div class='health-summary'>{escape(summary)}</div></div><button type='button' class='health-close' onclick='event.stopPropagation();toggleOverviewHealth(this.closest(".overview-health-card"))'>Close</button></div>
@@ -6119,17 +6125,22 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 </div>
 </div>
 <style>
-.overview-health-wrap{{width:100%;grid-column:1 / -1;margin-top:18px}}
-.overview-health-card{{width:100%;box-sizing:border-box;background:#fff;border:1px solid #e2ebe3;border-radius:18px;box-shadow:0 4px 16px #00000008;cursor:pointer;outline:none;transition:background .2s ease,color .2s ease,box-shadow .2s ease,border-color .2s ease}}
-.overview-health-card:hover{{background:#176B3A;color:#fff;border-color:#176B3A;box-shadow:0 8px 24px #176B3A33}}
-.overview-health-card:hover .health-kicker,.overview-health-card:hover .health-title,.overview-health-card:hover .health-summary{{color:#fff}}
-.health-compact{{min-height:92px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px}}
-.health-kicker{{font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#176B3A}}
-.health-title{{font-size:20px;font-weight:900;color:#0f172a;margin-top:3px}}
-.health-summary{{font-size:12px;color:#64748b;margin-top:4px}}
-.health-status-pill{{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;font-size:12px;font-weight:900;white-space:nowrap}}
-.health-good{{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}}
-.health-status-attention{{background:#fffbeb;color:#92400e;border:1px solid #fde68a}}
+.overview-health-wrap{{width:100%;grid-column:1 / -1;margin-top:14px}}
+.overview-health-card{{width:100%;box-sizing:border-box;background:linear-gradient(115deg,#f5faf4 0%,#e9f2e8 52%,#f8faf6 100%);border:1px solid #d8e6d8;border-radius:17px;box-shadow:0 5px 18px #294b350b;cursor:pointer;outline:none;overflow:hidden;transition:box-shadow .2s ease,border-color .2s ease,transform .2s ease}}
+.overview-health-card:hover,.overview-health-card:focus-visible{{border-color:#9fbea3;box-shadow:0 9px 24px #294b3518;transform:translateY(-1px)}}
+.health-compact{{min-height:104px;padding:17px 21px;display:flex;align-items:center;justify-content:space-between;gap:18px}}
+.health-compact-copy{{min-width:0}}
+.health-compact-meta{{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}}
+.health-kicker{{font-size:9px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase;color:#52785b}}
+.health-title{{font-size:19px;font-weight:900;color:#214b32;margin-top:3px;letter-spacing:-.25px}}
+.health-summary{{font-size:12px;color:#627565;margin-top:4px}}
+.health-status-pill{{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;font-size:11px;font-weight:900;white-space:nowrap}}
+.health-good{{background:#e4f3e6;color:#21613a;border:1px solid #c5e2c9}}
+.health-status-attention{{background:#fff4dc;color:#8a5a12;border:1px solid #f0dcae}}
+.health-counts{{display:flex;gap:13px;flex-wrap:wrap;justify-content:flex-end;color:#5b705f;font-size:10px}}
+.health-counts b{{color:#244e32;font-size:12px;margin-right:3px}}
+.health-open-hint{{font-size:10px;font-weight:850;color:#356746;letter-spacing:.1px}}
+.overview-health-card:hover .health-open-hint,.overview-health-card:focus-visible .health-open-hint{{text-decoration:underline}}
 .health-dot{{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 9px}}
 .health-dot-good{{background:#16a34a}}
 .health-dot-attention{{background:#f59e0b}}
@@ -6147,7 +6158,8 @@ def _overview_health_panel(title, overall, summary, items, attention="No items c
 .health-attention{{margin-top:14px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}}
 .health-attention span{{color:#64748b}}
 .health-checked{{margin-top:14px;font-size:10px;color:#94a3b8}}
-@media(max-width:700px){{.health-compact{{align-items:flex-start;flex-direction:column}}.health-status-pill{{align-self:flex-start}}.health-grid{{grid-template-columns:1fr}}.overview-health-card.expanded{{inset:0;border-radius:0}}.health-expanded{{padding:18px}}}}
+@media(max-width:700px){{.health-compact{{align-items:flex-start;flex-direction:row;padding:14px;gap:10px;min-height:0}}.health-compact-meta{{align-items:flex-end;gap:6px}}.health-counts{{gap:7px;flex-direction:column;align-items:flex-end}}.health-open-hint{{font-size:9px}}.health-title{{font-size:16px}}.health-summary{{font-size:11px}}.health-grid{{grid-template-columns:1fr}}.overview-health-card.expanded{{inset:0;border-radius:0}}.health-expanded{{padding:18px}}}}
+@media(max-width:430px){{.health-compact{{flex-direction:column}}.health-compact-meta{{width:100%;align-items:flex-start}}.health-counts{{flex-direction:row;justify-content:flex-start}}}}
 </style>
 <script>
 function toggleOverviewHealth(card){{
