@@ -349,6 +349,14 @@ def _allocated_student_subject_pairs(cur, school_id, exam_ids):
     # was introduced. Keep those records eligible when that exam has no saved
     # allocation register, rather than hiding them from reports.
     allocated_exam_ids={int(x["exam_id"]) for x in rows}
+    # An intentionally empty subject register is still authoritative; do not
+    # revive historical marks through the legacy-report fallback for that exam.
+    configured_rows=cur.execute("""SELECT DISTINCT e.id exam_id
+        FROM student_subject_allocation_registers r JOIN exams e
+          ON e.school_id=r.school_id AND CAST(e.year AS TEXT)=r.academic_year
+        WHERE r.school_id=? AND e.id IN (""" + placeholders + ")",
+        [school_id]+ids).fetchall()
+    allocated_exam_ids.update(int(x["exam_id"]) for x in configured_rows)
     legacy_exam_ids=[exam_id for exam_id in ids if exam_id not in allocated_exam_ids]
     if legacy_exam_ids:
         legacy_ph=",".join("?" for _ in legacy_exam_ids)
