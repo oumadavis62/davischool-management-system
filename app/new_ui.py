@@ -296,16 +296,27 @@ def _ensure_student_subject_allocations_table(cur):
     )""")
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_student_subject_allocations_lookup
         ON student_subject_allocations(school_id,academic_year,class_id,subject_id,student_id)""")
+    # A separate register marker records that choices were explicitly saved,
+    # including an intentional zero-learner selection.
+    cur.execute("""CREATE TABLE IF NOT EXISTS student_subject_allocation_registers(
+        school_id INTEGER NOT NULL,
+        academic_year TEXT NOT NULL,
+        class_id INTEGER NOT NULL,
+        subject_id INTEGER NOT NULL,
+        configured_at TEXT NOT NULL,
+        UNIQUE(school_id,academic_year,class_id,subject_id)
+    )""")
 
 def _student_subject_allocation_ids(cur, school_id, academic_year, class_id, subject_id):
     _ensure_student_subject_allocations_table(cur)
+    key=(school_id,str(academic_year or "").strip(),int(class_id),int(subject_id))
     rows=cur.execute("""SELECT student_id FROM student_subject_allocations
-        WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?""",
-        (school_id,str(academic_year or "").strip(),int(class_id),int(subject_id))).fetchall()
-    # A missing/empty register means this class/subject predates optional
-    # learner allocation. Return None so callers preserve the cohort already
-    # selected by the exam/class filters instead of hiding every learner.
-    if not rows:
+        WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?""",key).fetchall()
+    configured=bool(rows) or bool(cur.execute("""SELECT 1 FROM student_subject_allocation_registers
+        WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?""",key).fetchone())
+    # None means never configured (legacy cohort behaviour); an empty set means
+    # explicitly configured with no learners, and is therefore authoritative.
+    if not configured:
         return None
     return {int(row["student_id"]) for row in rows}
 
@@ -3208,6 +3219,12 @@ async def save_student_subject_allocation(request: Request):
             con.rollback();return HTMLResponse("One or more selected learners do not belong to this academic-year class cohort.",403)
         cur.execute("DELETE FROM student_subject_allocations WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?",(sid,year,cid,subid))
         now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""INSERT INTO student_subject_allocation_registers
+            (school_id,academic_year,class_id,subject_id,configured_at)
+            SELECT ?,?,?,?,? WHERE NOT EXISTS (
+                SELECT 1 FROM student_subject_allocation_registers
+                WHERE school_id=? AND academic_year=? AND class_id=? AND subject_id=?
+            )""",(sid,year,cid,subid,now,sid,year,cid,subid))
         if requested:
             cur.executemany("""INSERT INTO student_subject_allocations
                 (school_id,academic_year,class_id,subject_id,student_id,allocated_at)
