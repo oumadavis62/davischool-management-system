@@ -15684,15 +15684,27 @@ def class_marksheet_analysis(
             view = "summary"
         # Present every existing analysis view together on one page instead of
         # requiring users to navigate between newly-added section buttons.
+        # Keep the key metrics visible, then place every detailed analysis in a
+        # compact accordion. This preserves all report data while avoiding a
+        # very long page on mobile and desktop.
+        def _msa_compact_section(title, html, opened=False):
+            html = re.sub(r"^<h2>.*?</h2>", "", html, count=1, flags=re.S)
+            open_attr = " open" if opened else ""
+            return (
+                "<details class='msa-compact-section'%s>"
+                "<summary><span>%s</span><small>View details</small></summary>"
+                "<div class='msa-compact-content'>%s</div></details>"
+            ) % (open_attr, escape(title), html)
+
         analysis_sections = (
             summary_cards
-            + "<h2>Subject Performance Analysis</h2>" + subject_table
-            + content_by_view["students"]
-            + content_by_view["streams"]
-            + content_by_view["rankings"]
-            + content_by_view["insights"]
-            + content_by_view["grades"]
-            + content_by_view["top"]
+            + _msa_compact_section("Subject Performance", subject_table, True)
+            + _msa_compact_section("Individual Student Performance", content_by_view["students"])
+            + _msa_compact_section("Stream Comparison", content_by_view["streams"])
+            + _msa_compact_section("School-wide Class Rankings", content_by_view["rankings"])
+            + _msa_compact_section("Performance Insights", content_by_view["insights"])
+            + _msa_compact_section("Grade Distributions", content_by_view["grades"])
+            + _msa_compact_section("Top Five Students per Subject", content_by_view["top"])
         )
         export_query = "&".join(
             "%s=%s" % (k, quote(str(v), safe=""))
@@ -15805,8 +15817,30 @@ def class_marksheet_analysis(
 .msa-filter-dialog .msa-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:18px 20px}
 .msa-filter-dialog .msa-filters label:first-child{grid-column:1/-1}
 .msa-filter-dialog .msa-filters .msa-button{grid-column:1/-1;justify-self:end;min-width:145px}
-.msa-results{margin-top:16px}
+.msa-results{margin-top:12px;padding:14px}
+.msa-kpis{gap:8px;margin:8px 0 12px}
+.msa-kpis>div{padding:11px 12px}
+.msa-kpis strong{margin-top:4px;font-size:clamp(18px,2vw,22px)}
+.msa-compact-section{margin:8px 0;border:1px solid #dfe9df;border-radius:11px;background:#fff;overflow:hidden}
+.msa-compact-section>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;list-style:none;cursor:pointer;background:linear-gradient(120deg,#f2f7f1,#e8f1e7);color:#174b2b;font-weight:800;font-size:14px}
+.msa-compact-section>summary::-webkit-details-marker{display:none}
+.msa-compact-section>summary:after{content:'+';display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:8px;background:#dcebdc;color:#176b3a;font-size:19px;line-height:1}
+.msa-compact-section[open]>summary:after{content:'−'}
+.msa-compact-section>summary small{margin-left:auto;color:#718176;font-size:10px;font-weight:700;white-space:nowrap}
+.msa-compact-section[open]>summary{border-bottom:1px solid #e4ede4}
+.msa-compact-content{padding:12px 14px}
+.msa-compact-content>h2:first-child{margin-top:0}
+.msa-compact-content .msa-table-wrap{margin:8px 0 12px}
+.msa-compact-content .msa-insight-summary{margin:8px 0 12px;gap:8px}
+.msa-compact-content .msa-insight-panel{padding:12px}
+.msa-compact-content .msa-student-head{margin:9px 0;padding:12px}
 @media(max-width:560px){
+ .msa-results{padding:10px}
+ .msa-compact-section>summary{padding:12px;font-size:13px}
+ .msa-compact-content{padding:9px}
+ .msa-kpis>div{padding:10px}
+ .msa-kpis small{font-size:10px}
+}
  .msa-toolbar{align-items:flex-start;flex-direction:column}
  .msa-open-filter{width:100%}
  .msa-filter-dialog .msa-filters{grid-template-columns:1fr;padding:14px}
