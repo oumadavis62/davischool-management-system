@@ -3073,7 +3073,7 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
                   -- Current class membership is authoritative for the selected year.
                   -- Also include learners preserved in that year's promotion cohort.
 
-                ORDER BY s.name""",(sid,cid,academic_year,cid,academic_year,cid,academic_year,cid)).fetchall()
+                ORDER BY s.name""",(sid,cid,academic_year,cid)).fetchall()
             allocated=_student_subject_allocation_ids(cur,sid,academic_year,cid,subid)
     except Exception as exc:
         con.close()
@@ -3201,7 +3201,7 @@ async def save_student_subject_allocation(request: Request):
             AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
             -- Current class membership is authoritative for the selected year;
             -- the OR above also preserves the historical promotion cohort.
-""",(sid,cid,year,cid,year,cid,year,cid)).fetchall()
+""",(sid,cid,year,cid)).fetchall()
         eligible={int(x["id"]) for x in roster}
         requested={int(x) for x in form.getlist("student_ids") if str(x).isdigit()}
         if not requested.issubset(eligible):
