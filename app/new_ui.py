@@ -13182,7 +13182,7 @@ function printGraduationRegister(){
   <article class='alumni-stat-card'><span class='alumni-stat-icon'>✓</span><div><small>Record status</small><strong>Archived</strong><span>Academic history preserved</span></div></article>
 </section>
 <section class='alumni-register-panel'>
-  <div class='alumni-panel-heading'><div><span class='alumni-section-kicker'>DIRECTORY</span><h2>Graduation register</h2><p>{filter_summary or "Apply filters to load alumni records by year, final class or learner."}</p></div>
+  <div class='alumni-panel-heading'><div><span class='alumni-section-kicker'>DIRECTORY</span><h2>Graduation register</h2><div class='alumni-filter-summary'>{filter_summary or "Apply filters to load alumni records by year, final class or learner."}</div></div>
   <button type='button' class='alumni-filter-link' onclick="document.getElementById('alumniFilterModal').showModal()"> <span>☷</span> Refine results</button></div>
   {table_html}
 </section>
@@ -13202,21 +13202,21 @@ function printGraduationRegister(){
 <div><small>Class teacher</small><strong id='alumniDetailTeacher'>—</strong></div><div><small>Graduated on</small><strong id='alumniDetailDate'>—</strong></div>
 </div><div class='alumni-modal-actions'><button type='button' class='alumni-primary-btn' onclick="document.getElementById('alumniDetailsModal').close()">Close profile</button></div></dialog>
 <script>
-(function(){
+(function(){{
  const details=document.getElementById('alumniDetailsModal');
- document.querySelectorAll('.alumni-view-btn').forEach(function(btn){
-  btn.addEventListener('click',function(){
+ document.querySelectorAll('.alumni-view-btn').forEach(function(btn){{
+  btn.addEventListener('click',function(){{
    const d=btn.dataset;
-   const fields={Name:'name',Admission:'admission',Year:'year',Class:'class',Level:'level',Gender:'gender',Parent:'parent',Phone:'phone',Teacher:'teacher',Date:'date'};
-   Object.keys(fields).forEach(function(key){const el=document.getElementById('alumniDetail'+key);if(el)el.textContent=d[fields[key]]||'Not recorded';});
+   const fields={{Name:'name',Admission:'admission',Year:'year',Class:'class',Level:'level',Gender:'gender',Parent:'parent',Phone:'phone',Teacher:'teacher',Date:'date'}};
+   Object.keys(fields).forEach(function(key){{const el=document.getElementById('alumniDetail'+key);if(el)el.textContent=d[fields[key]]||'Not recorded';}});
    document.getElementById('alumniDetailAdmission').textContent='Admission No. '+(d.admission||'—');
    details.showModal();
-  });
- });
- [document.getElementById('alumniFilterModal'),details].forEach(function(dialog){
-  if(dialog)dialog.addEventListener('click',function(event){if(event.target===dialog)dialog.close();});
- });
-})();
+  }});
+ }});
+ [document.getElementById('alumniFilterModal'),details].forEach(function(dialog){{
+  if(dialog)dialog.addEventListener('click',function(event){{if(event.target===dialog)dialog.close();}});
+ }});
+}})();
 </script>
 {("<div id='graduation-print-source' style='display:none'>" + graduation_print_header + graduation_print_table + "</div>" + graduation_print_script) if loaded == "1" else ""}
 </div>
