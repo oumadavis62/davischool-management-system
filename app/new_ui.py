@@ -15688,7 +15688,7 @@ def class_marksheet_analysis(
         # compact accordion. This preserves all report data while avoiding a
         # very long page on mobile and desktop.
         def _msa_compact_section(title, html, opened=False):
-            html = re.sub(r"^<h2>.*?</h2>", "", html, count=1, flags=re.S)
+            html = re.sub(r"<h2>.*?</h2>", "", html, count=1, flags=re.S)
             open_attr = " open" if opened else ""
             return (
                 "<details class='msa-compact-section'%s>"
