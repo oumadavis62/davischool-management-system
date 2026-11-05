@@ -7007,8 +7007,8 @@ def app_home(request: Request):
                 exam_rows=cur.execute(exam_sql,(school_id,)).fetchall()
             except Exception: exam_rows=[]
             calendar_html="".join(f"<div class='calendar-row'><span class='calendar-date'>{escape(str(r['event_date'] or '—')[:10])}</span><div><b>{escape(str(r['name'] or 'Examination'))}</b><small>Academic assessment</small></div></div>" for r in exam_rows) or "<div class='dashboard-empty'>Academic assessments will appear here.</div>"
-            dashboard_assessment_count=0
-            try: dashboard_assessment_count=int(cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
+            dashboard_graduated_count=0
+            try: dashboard_graduated_count=int(cur.execute("SELECT COUNT(DISTINCT student_id) c FROM student_graduations WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
             except Exception: pass
             latest_exam_mean=None
             try:
@@ -7032,7 +7032,7 @@ def app_home(request: Request):
     <div class='dashboard-kpi kpi-sage'><span>STUDENTS</span><strong>{s:,}</strong><small>Active learners</small></div>
     <div class='dashboard-kpi kpi-mint'><span>TEACHERS</span><strong>{t:,}</strong><small>Staff and teachers</small></div>
     <div class='dashboard-kpi kpi-stone'><span>CLASSES</span><strong>{c:,}</strong><small>Registered classes</small></div>
-    <div class='dashboard-kpi kpi-rose'><span>ASSESSMENTS</span><strong>{dashboard_assessment_count:,}</strong><small>Examinations recorded</small></div>
+    <div class='dashboard-kpi kpi-rose'><span>GRADUATED</span><strong>{dashboard_graduated_count:,}</strong><small>Graduated learners</small></div>
   </div>
   <div class='dashboard-showcase-grid'>
     <div class='dashboard-showcase-main'>
