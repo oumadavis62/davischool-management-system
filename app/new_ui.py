@@ -6980,6 +6980,37 @@ def app_home(request: Request):
             admin_health_summary="School systems are responding normally." if not health_attention else f"{len(health_attention)} system area{'s' if len(health_attention)!=1 else ''} need attention."
             admin_health=_overview_health_panel("School System",admin_health_overall,admin_health_summary,health_checks," ".join(health_attention) if health_attention else "No items currently require attention.")
 
+            # Reference-inspired overview data; all values come from existing records.
+            attendance_days=[]
+            try:
+                attendance_days=cur.execute("""SELECT date,SUM(CASE WHEN lower(coalesce(status,'present'))='present' THEN 1 ELSE 0 END) present_count,COUNT(*) total_count FROM attendance WHERE school_id=? AND date IS NOT NULL AND trim(date)<>'' GROUP BY date ORDER BY date DESC LIMIT 5""",(school_id,)).fetchall()
+            except Exception: attendance_days=[]
+            attendance_max=max([int(r["total_count"] or 0) for r in attendance_days] or [1])
+            attendance_bars="".join(f"<div class='pulse-bar-col'><b>{int(r['present_count'] or 0)}</b><div class='pulse-bar-track'><i style='height:{int(r['present_count'] or 0)/attendance_max*100:.1f}%'></i></div><span>{escape(str(r['date'] or '')[-5:])}</span></div>" for r in reversed(attendance_days)) or "<div class='dashboard-empty'>Attendance records will appear here.</div>"
+            attendance_total=sum(int(r["total_count"] or 0) for r in attendance_days); attendance_present=sum(int(r["present_count"] or 0) for r in attendance_days)
+            attendance_rate=round(attendance_present/attendance_total*100) if attendance_total else 0
+            finance_months=[]
+            try:
+                finance_months=cur.execute("""SELECT substr(date,1,7) month_key,COALESCE(SUM(amount),0) amount_total FROM fee_payments WHERE school_id=? AND date IS NOT NULL AND trim(date)<>'' GROUP BY substr(date,1,7) ORDER BY month_key DESC LIMIT 6""",(school_id,)).fetchall()
+            except Exception: finance_months=[]
+            finance_max=max([float(r["amount_total"] or 0) for r in finance_months] or [1])
+            finance_bars="".join(f"<div class='finance-bar-col'><b>{float(r['amount_total'] or 0):,.0f}</b><div class='finance-bar-track'><i style='height:{float(r['amount_total'] or 0)/finance_max*100:.1f}%'></i></div><span>{escape(str(r['month_key'] or '')[-2:])}</span></div>" for r in reversed(finance_months)) or "<div class='dashboard-empty'>No fee payment history is available.</div>"
+            dashboard_notices=[]
+            try: dashboard_notices=cur.execute("SELECT title,message,created_at FROM announcements WHERE school_id=? ORDER BY id DESC LIMIT 5",(school_id,)).fetchall()
+            except Exception: dashboard_notices=[]
+            dashboard_notice_html="".join(f"<div class='notice-row'><span class='notice-dot'></span><div><b>{escape(str(r['title'] or 'School notice'))}</b><small>{escape(str(r['message'] or '')[:105])}</small></div><time>{escape(str(r['created_at'] or '')[:10])}</time></div>" for r in dashboard_notices) or "<div class='dashboard-empty'>School notices will appear here when published.</div>"
+            exam_rows=[]
+            try:
+                exam_cols={str(r[1]).lower() for r in cur.execute("PRAGMA table_info(exams)").fetchall()}
+                exam_date_col=next((x for x in ("exam_date","start_date","date","scheduled_date") if x in exam_cols),None)
+                exam_sql=f"SELECT name,{exam_date_col} AS event_date FROM exams WHERE school_id=? ORDER BY {exam_date_col} DESC LIMIT 4" if exam_date_col else "SELECT name,'' AS event_date FROM exams WHERE school_id=? ORDER BY id DESC LIMIT 4"
+                exam_rows=cur.execute(exam_sql,(school_id,)).fetchall()
+            except Exception: exam_rows=[]
+            calendar_html="".join(f"<div class='calendar-row'><span class='calendar-date'>{escape(str(r['event_date'] or '—')[:10])}</span><div><b>{escape(str(r['name'] or 'Examination'))}</b><small>Academic assessment</small></div></div>" for r in exam_rows) or "<div class='dashboard-empty'>Academic assessments will appear here.</div>"
+            dashboard_assessment_count=0
+            try: dashboard_assessment_count=int(cur.execute("SELECT COUNT(*) c FROM exams WHERE school_id=?",(school_id,)).fetchone()["c"] or 0)
+            except Exception: pass
+
             body=f"""<div class='page overview-home admin-registrar-overview'>
 <header class='overview-hero'>
   <div class='overview-hero-copy'>
@@ -7004,22 +7035,24 @@ def app_home(request: Request):
   </section>
 </div>
 <div class='admin-overview-sections'>
-  <section class='admin-overview-panel admin-overview-action-panel'>
-    <div class='admin-overview-section-heading'><div><h2>Daily Operations</h2><p>School functions and day-to-day records.</p></div><span class='admin-overview-section-kicker'>OPERATIONS</span></div>
-    <div class='admin-overview-action-grid'><div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Students</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Attendance</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span>Finance</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V7M16 16v-8"/></svg></span>Analysis</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h2M12 14h2M8 18h2M12 18h2"/></svg></span>Accounting</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>Users</div></div>
-  </section>
-  <section class='admin-overview-panel admin-overview-action-panel'>
-    <div class='admin-overview-section-heading'><div><h2>Administration</h2><p>Institution settings and oversight.</p></div><span class='admin-overview-section-kicker'>MANAGEMENT</span></div>
-    <div class='admin-overview-action-grid'><div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V20h-2.55v-.09a1.7 1.7 0 0 0-1.03-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.55-1.03H6v-2.55h.85A1.7 1.7 0 0 0 8.4 10a1.7 1.7 0 0 0-.34-1.88L8 8.06l1.8-1.8.06.06A1.7 1.7 0 0 0 11.74 6 1.7 1.7 0 0 0 12.77 4.45V4h2.55v.45A1.7 1.7 0 0 0 16.35 6a1.7 1.7 0 0 0 1.88.32l.06-.06 1.8 1.8-.06.06A1.7 1.7 0 0 0 19.7 10c.15.62.7 1.03 1.33 1.03H22v2.55h-.97A1.7 1.7 0 0 0 19.4 15Z"/></svg></span>School Settings</div>
-
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>Roles</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>Audit Trail</div>
-<div class='action'><span><svg class="modern-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>Portals</div></div>
+  <section class='admin-dashboard-showcase'>
+    <div class='dashboard-kpi-grid'>
+      <div class='dashboard-kpi kpi-sage'><span>STUDENTS</span><strong>{s:,}</strong><small>Active learners</small></div>
+      <div class='dashboard-kpi kpi-mint'><span>TEACHERS</span><strong>{t:,}</strong><small>Staff and teachers</small></div>
+      <div class='dashboard-kpi kpi-stone'><span>CLASSES</span><strong>{c:,}</strong><small>Registered classes</small></div>
+      <div class='dashboard-kpi kpi-rose'><span>ASSESSMENTS</span><strong>{dashboard_assessment_count:,}</strong><small>Examinations recorded</small></div>
+    </div>
+    <div class='dashboard-showcase-grid'>
+      <div class='dashboard-showcase-main'>
+        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
+        <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
+        <div class='dashboard-bottom-pair'><section class='dashboard-widget mini-widget'><h2>Students</h2>{gender_donut}</section><section class='dashboard-widget mini-widget performance-mini'><h2>Academic Performance</h2><div class='performance-ring'><strong>{dashboard_assessment_count}</strong><span>exams recorded</span></div><small>Assessments on record</small></section></div>
+      </div>
+      <div class='dashboard-showcase-side'>
+        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
+        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
+      </div>
+    </div>
   </section>
 </div>
 <section class='admin-overview-health admin-overview-panel'>{admin_health}</section>
@@ -7110,6 +7143,19 @@ def app_home(request: Request):
 @media(max-width:760px){{.admin-overview-sections{{grid-template-columns:1fr}}.admin-registrar-overview .overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr))}}.admin-registrar-overview .overview-charts>.classes-overview-card{{grid-column:1/-1;min-height:190px}}.admin-overview-action-grid{{grid-template-columns:repeat(3,minmax(0,1fr))}}}}
 @media(max-width:520px){{.admin-registrar-overview .overview-hero{{margin-bottom:12px;padding:16px 17px;border-radius:14px}}.admin-registrar-overview .overview-hero-mark{{width:40px;height:40px;flex-basis:40px}}.admin-overview-top,.admin-overview-sections{{gap:10px}}.admin-overview-panel{{padding:13px}}.admin-registrar-overview .overview-charts{{gap:7px}}.admin-registrar-overview .overview-charts>.card{{min-height:190px;padding:10px 6px}}.admin-registrar-overview .gender-donut{{width:82px;height:82px;min-width:82px}}.admin-registrar-overview .gender-donut-hole strong{{font-size:17px}}.admin-registrar-overview .donut-legend{{gap:7px}}.admin-registrar-overview .donut-legend-item{{gap:3px;font-size:8px}}.admin-overview-action-grid{{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}}.admin-overview-action-grid .action{{min-height:67px;padding:10px}}.admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}}}
 @media(prefers-reduced-motion:reduce){{.admin-registrar-overview *{{scroll-behavior:auto!important;transition:none!important}}}}
+
+.admin-dashboard-showcase{{margin:18px 0 20px;padding:18px;background:linear-gradient(135deg,#eaf1eb,#f2f5f0 55%,#e7eee8);border:1px solid #dce7de;border-radius:20px;box-shadow:0 8px 24px #294b3510}}
+.dashboard-kpi-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}}.dashboard-kpi{{min-width:0;border-radius:15px;padding:15px 16px;display:flex;flex-direction:column;gap:5px;border:1px solid #ffffffb8;box-shadow:0 3px 10px #1e3b2b08}}.dashboard-kpi span{{font-size:9px;letter-spacing:1px;font-weight:900;color:#627367}}.dashboard-kpi strong{{font-size:clamp(21px,2.5vw,29px);line-height:1.05;color:#172d21;font-weight:900}}.dashboard-kpi small{{font-size:10px;color:#718075;font-weight:650}}
+.kpi-sage{{background:#dce8dd}}.kpi-mint{{background:#e1e9df}}.kpi-stone{{background:#e7e4df}}.kpi-rose{{background:#e9e2e4}}
+.dashboard-showcase-grid{{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:14px;align-items:stretch}}.dashboard-showcase-main,.dashboard-showcase-side{{display:grid;gap:14px;min-width:0;align-content:start}}.dashboard-widget{{min-width:0;background:#fff;border:1px solid #e2eae3;border-radius:15px;padding:15px;box-shadow:0 3px 12px #1b392508;overflow:hidden}}
+.dashboard-widget h2{{font-size:14px;line-height:1.2;margin:0;color:#20382a;font-weight:850}}.dashboard-widget-heading{{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}}.dashboard-widget-heading p{{font-size:10px;color:#819087;margin:4px 0 0}}.dashboard-widget-tag{{font-size:10px;font-weight:850;color:#286b49;background:#e9f3eb;border-radius:20px;padding:6px 9px;white-space:nowrap}}.dashboard-widget-mark{{font-size:20px;color:#3c7958}}
+.dashboard-legend{{display:flex;gap:14px;font-size:9px;color:#738177;margin:6px 0 8px}}.dashboard-legend span{{display:flex;align-items:center;gap:5px}}.dashboard-legend i{{width:7px;height:7px;border-radius:50%;background:#315c42}}.dashboard-legend span+span i{{background:#dce8dd}}
+.pulse-chart,.finance-chart{{height:145px;display:flex;align-items:flex-end;justify-content:space-around;gap:12px;padding:10px 4px 0;min-width:0}}.pulse-bar-col,.finance-bar-col{{flex:1;min-width:0;max-width:68px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px}}.pulse-bar-col>b,.finance-bar-col>b{{font-size:9px;color:#627267;white-space:nowrap}}.pulse-bar-track,.finance-bar-track{{width:min(100%,32px);height:102px;border-radius:6px 6px 2px 2px;background:#e1e9e2;display:flex;align-items:flex-end;overflow:hidden}}.pulse-bar-track i{{width:100%;display:block;background:#315b42;border-radius:5px 5px 0 0}}.pulse-bar-col>span,.finance-bar-col>span{{font-size:9px;color:#7c8b80}}
+.finance-widget{{background:#31533d;border-color:#31533d;color:#fff}}.finance-widget h2,.finance-widget .dashboard-widget-heading p{{color:#fff}}.finance-widget .dashboard-widget-tag{{background:#466b52;color:#e9f4eb}}.finance-bar-track{{background:#55715d}}.finance-bar-track i{{width:100%;display:block;background:#d8e8d9;border-radius:5px 5px 0 0}}.finance-bar-col>b,.finance-bar-col>span{{color:#e4eee5}}
+.dashboard-bottom-pair{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.mini-widget{{min-height:150px}}.mini-widget>.gender-donut-layout{{margin-top:8px}}.mini-widget .gender-donut{{width:78px;height:78px;min-width:78px}}.performance-mini{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}}.performance-ring{{width:92px;height:92px;border-radius:50%;border:9px solid #dce9df;border-top-color:#315b42;border-right-color:#6ba99a;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:8px auto}}.performance-ring strong{{font-size:20px;color:#244632}}.performance-ring span{{font-size:8px;color:#7a897e}}.performance-mini>small{{font-size:9px;color:#7a897e}}
+.calendar-list,.notice-list{{display:grid;gap:8px}}.calendar-row{{display:flex;align-items:center;gap:10px;background:#eef3ed;border-left:3px solid #7ca66f;border-radius:7px;padding:11px 10px;min-width:0}}.calendar-date{{font-size:10px;font-weight:900;color:#294b35;min-width:74px}}.calendar-row div,.notice-row div{{min-width:0;display:flex;flex-direction:column;gap:3px}}.calendar-row b,.notice-row b{{font-size:10px;color:#304638;overflow-wrap:anywhere}}.calendar-row small,.notice-row small{{font-size:9px;color:#7c8b80;line-height:1.35;overflow-wrap:anywhere}}.notice-row{{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:start;gap:9px;padding:9px 2px;border-bottom:1px solid #edf1ed}}.notice-dot{{width:7px;height:7px;border-radius:50%;background:#57936b;margin-top:4px}}.notice-row time{{font-size:8px;color:#89958c;white-space:nowrap}}.dashboard-empty{{font-size:10px;color:#89958c;padding:22px 8px;text-align:center;width:100%}}
+@media(max-width:850px){{.dashboard-kpi-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.dashboard-showcase-grid{{grid-template-columns:1fr}}}}
+@media(max-width:560px){{.admin-dashboard-showcase{{padding:10px;margin:12px 0;border-radius:15px}}.dashboard-kpi-grid{{gap:8px;margin-bottom:10px}}.dashboard-kpi{{padding:11px;border-radius:12px}}.dashboard-showcase-grid,.dashboard-showcase-main,.dashboard-showcase-side{{gap:10px}}.dashboard-widget{{padding:12px;border-radius:12px}}.pulse-chart,.finance-chart{{height:128px;gap:7px}}.pulse-bar-track,.finance-bar-track{{height:88px;width:min(100%,26px)}}.dashboard-bottom-pair{{gap:9px}}.mini-widget{{min-height:135px}}.calendar-date{{min-width:65px;font-size:9px}}}
 </style></div>"""
 
     con.close()
