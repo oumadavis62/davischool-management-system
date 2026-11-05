@@ -13223,55 +13223,55 @@ function printGraduationRegister(){
 <style>
 .students-list-page{{max-width:1500px;margin:0 auto;color:#244631}}.students-list-page .page-heading,.students-list-page .students-page-heading{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}}.students-list-page h1{{margin:3px 0 5px;color:#174b2b;font-size:27px;font-weight:850;letter-spacing:-.5px}}.students-list-page .muted{{font-size:13px;color:#718176}}.students-list-page .card,.students-list-page .section{{background:#fff;border:1px solid #e3eee6;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 5px 20px #173d2908}}.students-list-page table{{border-collapse:collapse;width:100%;min-width:680px}}.students-list-page th{{background:#f1f7f2;color:#496451;font-size:11px;text-transform:uppercase;letter-spacing:.4px}}.students-list-page th,.students-list-page td{{padding:12px;border-bottom:1px solid #edf2ee;text-align:left;font-size:12px}}.students-list-page tbody tr:hover{{background:#f7fbf8}}.students-list-page .field{{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #dce9df;border-radius:10px;background:#fbfefc}}.students-list-page .btn{{padding:11px 16px;border:0;border-radius:10px;background:#176b3a;color:#fff;font-weight:800;cursor:pointer}}.students-list-page .page-heading h1{{color:#174b2b}}@media(max-width:700px){{.students-list-page .page-heading{{align-items:flex-start;flex-direction:column}}}}@media print{{.students-list-page .no-print{{display:none!important}}}}.alumni-page .card{{background:#fff;border:1px solid #e3eee6;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 5px 20px #173d2908}}.graduation-filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:end}}
 .graduation-filters label{{display:block;font-weight:700;font-size:13px}}
-.alumni-page{{--alumni-green:#176b3a;--alumni-ink:#244631;--alumni-soft:#f2f8f2;max-width:1500px!important;color:var(--alumni-ink)!important}}
-.alumni-hero{{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 28px;border:1px solid #dcebdd;border-radius:22px;background:linear-gradient(120deg,#e6f2e6 0%,#f4f8ed 52%,#e4f0e6 100%);box-shadow:0 10px 28px #214b3010}}
-.alumni-hero .students-eyebrow,.alumni-section-kicker{{font-size:10px;font-weight:900;letter-spacing:1.25px;color:#62806a}}
-.alumni-hero .students-eyebrow span{{padding:0 5px;color:#9bb39e}}
-.alumni-hero h1{{margin:8px 0 7px;font-size:30px;line-height:1.15;color:#174b2b;font-weight:900;letter-spacing:-.7px}}
-.alumni-hero p{{margin:0;color:#63796a;font-size:13px;max-width:650px;line-height:1.6}}
-.alumni-hero-actions{{display:flex;gap:9px;align-items:center;flex-wrap:wrap}}
-.alumni-primary-btn,.alumni-secondary-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:11px;padding:12px 16px;font-size:12px;font-weight:850;cursor:pointer;text-decoration:none}}
-.alumni-primary-btn{{background:linear-gradient(135deg,#1d7541,#12572f);color:#fff;box-shadow:0 5px 14px #176b3a26}}
-.alumni-primary-btn:hover{{background:linear-gradient(135deg,#12572f,#0d4827);transform:translateY(-1px)}}
-.alumni-secondary-btn{{background:#fff;color:#24613b;border:1px solid #cfe0d1}}
-.alumni-stat-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:16px 0}}
-.alumni-stat-card{{display:flex;align-items:center;gap:13px;min-width:0;padding:17px;border:1px solid #e0ebe1;border-radius:16px;background:#fff;box-shadow:0 5px 18px #1c472a08}}
-.alumni-stat-icon{{display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:#eaf4eb;color:#287044;font-size:20px;font-weight:900}}
-.alumni-stat-card small,.alumni-detail-grid small{{display:block;color:#75877a;font-size:10px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}}
-.alumni-stat-card strong{{display:block;margin:3px 0;color:#204d30;font-size:21px;line-height:1.2;font-weight:900}}
-.alumni-stat-card span:last-child{{display:block;color:#839287;font-size:10px}}
-.alumni-register-panel{{padding:19px;border:1px solid #e1ebe2;border-radius:18px;background:#fff;box-shadow:0 7px 24px #214b3009}}
-.alumni-panel-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}}
-.alumni-panel-heading h2,.alumni-modal h2{{margin:4px 0;color:#204d30;font-size:19px;font-weight:900}}
-.alumni-panel-heading p,.alumni-modal-head p{{margin:4px 0 0;color:#7b8b7f;font-size:11px}}
-.alumni-filter-link{{border:1px solid #dce9de;background:#f5faf5;color:#28613c;border-radius:10px;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer;white-space:nowrap}}
-.alumni-register-panel .graduation-register-class-table{{margin:12px 0 18px;border:1px solid #e6eee7;border-radius:13px;overflow-x:auto;-webkit-overflow-scrolling:touch}}
-.alumni-register-panel .graduation-register-class-table table{{width:100%;min-width:900px;border-collapse:separate;border-spacing:0}}
-.alumni-register-panel .register-class-teacher-heading th{{padding:12px 14px;background:linear-gradient(90deg,#e7f2e7,#f4f8f1);color:#285c39;font-size:11px;text-transform:none;letter-spacing:0}}
-.alumni-register-panel th{{padding:11px 12px;background:#f5f8f4;color:#607566;font-size:9px;text-transform:uppercase;letter-spacing:.55px;white-space:nowrap;border-bottom:1px solid #e7eee7}}
-.alumni-register-panel td{{padding:11px 12px;border-bottom:1px solid #edf2ed;color:#425b49;font-size:11px;white-space:nowrap}}
-.alumni-register-panel tbody tr:hover{{background:#f7fbf7}}
-.alumni-year-pill{{display:inline-flex;padding:4px 8px;border-radius:20px;background:#eaf4eb;color:#27613b;font-size:10px;font-weight:850}}
-.alumni-learner-cell{{display:flex;align-items:center;gap:8px;color:#294d34}}
-.alumni-avatar{{display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;border-radius:9px;background:#e5f0e6;color:#27613b;font-size:11px;font-weight:900}}
-.alumni-view-btn{{border:1px solid #cfe1d2;border-radius:8px;padding:7px 10px;background:#f4faf4;color:#23623a;font-size:10px;font-weight:850;cursor:pointer}}
-.alumni-view-btn:hover{{background:#e6f3e8}}
-.alumni-modal{{width:min(620px,calc(100% - 28px));max-width:620px;padding:0;border:1px solid #dce9dd;border-radius:19px;background:#fff;color:#244631;box-shadow:0 24px 80px #0d2d1c40}}
-.alumni-modal::backdrop{{background:#10291bb0;backdrop-filter:blur(3px)}}
-.alumni-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:20px 22px;background:linear-gradient(120deg,#e8f3e8,#f7faf3);border-bottom:1px solid #e2ede3}}
-.alumni-modal-close{{width:33px;height:33px;border:0;border-radius:10px;background:#fff;color:#46634d;font-size:22px;line-height:1;cursor:pointer}}
-.alumni-filter-form{{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:20px 22px}}
-.alumni-filter-form label{{display:grid;gap:6px;color:#49634f;font-size:11px;font-weight:850}}
-.alumni-filter-form .field{{margin:0;border:1px solid #dce8dd;border-radius:10px;padding:11px;background:#fbfefb;color:#284b34;font-size:12px}}
-.alumni-search-field{{grid-column:1/-1}}
-.alumni-modal-actions{{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:14px 22px 20px;grid-column:1/-1}}
-.alumni-clear-link{{color:#6a806f;font-size:11px;font-weight:800;text-decoration:none;margin-right:auto}}
-.alumni-detail-grid{{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:8px 22px 4px}}
-.alumni-detail-grid>div{{padding:12px 8px;border-bottom:1px solid #edf2ed;min-width:0}}
-.alumni-detail-grid strong{{display:block;margin-top:5px;color:#294d34;font-size:12px;overflow-wrap:anywhere}}
-@media(max-width:850px){{.alumni-stat-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
-@media(max-width:600px){{.alumni-hero{{align-items:flex-start;flex-direction:column;padding:19px;border-radius:17px}}.alumni-hero h1{{font-size:25px}}.alumni-hero-actions{{width:100%}}.alumni-hero-actions button{{flex:1}}.alumni-stat-grid{{gap:8px}}.alumni-stat-card{{padding:12px;gap:9px}}.alumni-stat-icon{{width:34px;height:34px;flex-basis:34px;font-size:16px}}.alumni-stat-card strong{{font-size:18px}}.alumni-register-panel{{padding:12px;border-radius:14px}}.alumni-panel-heading{{align-items:flex-start;flex-direction:column}}.alumni-filter-link{{width:100%}}.alumni-filter-form,.alumni-detail-grid{{grid-template-columns:1fr}}.alumni-search-field{{grid-column:auto}}.alumni-modal-head{{padding:17px}}.alumni-filter-form{{padding:16px}}.alumni-modal-actions{{padding:12px 16px 17px}}}
-@media(prefers-reduced-motion:no-preference){{.alumni-stat-card,.alumni-register-panel{{transition:transform .18s ease,box-shadow .18s ease}}.alumni-stat-card:hover{{transform:translateY(-2px);box-shadow:0 10px 25px #214b3015}}}}
+.alumni-page{--alumni-green:#176b3a;--alumni-ink:#244631;--alumni-soft:#f2f8f2;max-width:1500px!important;color:var(--alumni-ink)!important}
+.alumni-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 28px;border:1px solid #dcebdd;border-radius:22px;background:linear-gradient(120deg,#e6f2e6 0%,#f4f8ed 52%,#e4f0e6 100%);box-shadow:0 10px 28px #214b3010}
+.alumni-hero .students-eyebrow,.alumni-section-kicker{font-size:10px;font-weight:900;letter-spacing:1.25px;color:#62806a}
+.alumni-hero .students-eyebrow span{padding:0 5px;color:#9bb39e}
+.alumni-hero h1{margin:8px 0 7px;font-size:30px;line-height:1.15;color:#174b2b;font-weight:900;letter-spacing:-.7px}
+.alumni-hero p{margin:0;color:#63796a;font-size:13px;max-width:650px;line-height:1.6}
+.alumni-hero-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.alumni-primary-btn,.alumni-secondary-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:11px;padding:12px 16px;font-size:12px;font-weight:850;cursor:pointer;text-decoration:none}
+.alumni-primary-btn{background:linear-gradient(135deg,#1d7541,#12572f);color:#fff;box-shadow:0 5px 14px #176b3a26}
+.alumni-primary-btn:hover{background:linear-gradient(135deg,#12572f,#0d4827);transform:translateY(-1px)}
+.alumni-secondary-btn{background:#fff;color:#24613b;border:1px solid #cfe0d1}
+.alumni-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:16px 0}
+.alumni-stat-card{display:flex;align-items:center;gap:13px;min-width:0;padding:17px;border:1px solid #e0ebe1;border-radius:16px;background:#fff;box-shadow:0 5px 18px #1c472a08}
+.alumni-stat-icon{display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:#eaf4eb;color:#287044;font-size:20px;font-weight:900}
+.alumni-stat-card small,.alumni-detail-grid small{display:block;color:#75877a;font-size:10px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}
+.alumni-stat-card strong{display:block;margin:3px 0;color:#204d30;font-size:21px;line-height:1.2;font-weight:900}
+.alumni-stat-card span:last-child{display:block;color:#839287;font-size:10px}
+.alumni-register-panel{padding:19px;border:1px solid #e1ebe2;border-radius:18px;background:#fff;box-shadow:0 7px 24px #214b3009}
+.alumni-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.alumni-panel-heading h2,.alumni-modal h2{margin:4px 0;color:#204d30;font-size:19px;font-weight:900}
+.alumni-panel-heading p,.alumni-modal-head p{margin:4px 0 0;color:#7b8b7f;font-size:11px}
+.alumni-filter-link{border:1px solid #dce9de;background:#f5faf5;color:#28613c;border-radius:10px;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer;white-space:nowrap}
+.alumni-register-panel .graduation-register-class-table{margin:12px 0 18px;border:1px solid #e6eee7;border-radius:13px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.alumni-register-panel .graduation-register-class-table table{width:100%;min-width:900px;border-collapse:separate;border-spacing:0}
+.alumni-register-panel .register-class-teacher-heading th{padding:12px 14px;background:linear-gradient(90deg,#e7f2e7,#f4f8f1);color:#285c39;font-size:11px;text-transform:none;letter-spacing:0}
+.alumni-register-panel th{padding:11px 12px;background:#f5f8f4;color:#607566;font-size:9px;text-transform:uppercase;letter-spacing:.55px;white-space:nowrap;border-bottom:1px solid #e7eee7}
+.alumni-register-panel td{padding:11px 12px;border-bottom:1px solid #edf2ed;color:#425b49;font-size:11px;white-space:nowrap}
+.alumni-register-panel tbody tr:hover{background:#f7fbf7}
+.alumni-year-pill{display:inline-flex;padding:4px 8px;border-radius:20px;background:#eaf4eb;color:#27613b;font-size:10px;font-weight:850}
+.alumni-learner-cell{display:flex;align-items:center;gap:8px;color:#294d34}
+.alumni-avatar{display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;border-radius:9px;background:#e5f0e6;color:#27613b;font-size:11px;font-weight:900}
+.alumni-view-btn{border:1px solid #cfe1d2;border-radius:8px;padding:7px 10px;background:#f4faf4;color:#23623a;font-size:10px;font-weight:850;cursor:pointer}
+.alumni-view-btn:hover{background:#e6f3e8}
+.alumni-modal{width:min(620px,calc(100% - 28px));max-width:620px;padding:0;border:1px solid #dce9dd;border-radius:19px;background:#fff;color:#244631;box-shadow:0 24px 80px #0d2d1c40}
+.alumni-modal::backdrop{background:#10291bb0;backdrop-filter:blur(3px)}
+.alumni-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:20px 22px;background:linear-gradient(120deg,#e8f3e8,#f7faf3);border-bottom:1px solid #e2ede3}
+.alumni-modal-close{width:33px;height:33px;border:0;border-radius:10px;background:#fff;color:#46634d;font-size:22px;line-height:1;cursor:pointer}
+.alumni-filter-form{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:20px 22px}
+.alumni-filter-form label{display:grid;gap:6px;color:#49634f;font-size:11px;font-weight:850}
+.alumni-filter-form .field{margin:0;border:1px solid #dce8dd;border-radius:10px;padding:11px;background:#fbfefb;color:#284b34;font-size:12px}
+.alumni-search-field{grid-column:1/-1}
+.alumni-modal-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:14px 22px 20px;grid-column:1/-1}
+.alumni-clear-link{color:#6a806f;font-size:11px;font-weight:800;text-decoration:none;margin-right:auto}
+.alumni-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:8px 22px 4px}
+.alumni-detail-grid>div{padding:12px 8px;border-bottom:1px solid #edf2ed;min-width:0}
+.alumni-detail-grid strong{display:block;margin-top:5px;color:#294d34;font-size:12px;overflow-wrap:anywhere}
+@media(max-width:850px){.alumni-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.alumni-hero{align-items:flex-start;flex-direction:column;padding:19px;border-radius:17px}.alumni-hero h1{font-size:25px}.alumni-hero-actions{width:100%}.alumni-hero-actions button{flex:1}.alumni-stat-grid{gap:8px}.alumni-stat-card{padding:12px;gap:9px}.alumni-stat-icon{width:34px;height:34px;flex-basis:34px;font-size:16px}.alumni-stat-card strong{font-size:18px}.alumni-register-panel{padding:12px;border-radius:14px}.alumni-panel-heading{align-items:flex-start;flex-direction:column}.alumni-filter-link{width:100%}.alumni-filter-form,.alumni-detail-grid{grid-template-columns:1fr}.alumni-search-field{grid-column:auto}.alumni-modal-head{padding:17px}.alumni-filter-form{padding:16px}.alumni-modal-actions{padding:12px 16px 17px}}
+@media(prefers-reduced-motion:no-preference){.alumni-stat-card,.alumni-register-panel{transition:transform .18s ease,box-shadow .18s ease}.alumni-stat-card:hover{transform:translateY(-2px);box-shadow:0 10px 25px #214b3015}}
 
 .field{{width:100%;box-sizing:border-box;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:#fff;margin-top:5px}}
 .filter-actions{{display:flex;gap:10px;align-items:center;flex-wrap:wrap}}
