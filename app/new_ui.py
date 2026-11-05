@@ -7060,48 +7060,48 @@ def app_home(request: Request):
 .class-size-bar-label{{font-size:9px;color:#334155;font-weight:700;text-align:center;white-space:nowrap;max-width:38px;min-height:22px;line-height:11px;overflow:visible;text-overflow:clip;overflow-wrap:normal}}\n@media(max-width:600px){{.class-size-bar-label{{white-space:normal;overflow-wrap:anywhere}}}}
 .class-size-empty{{height:125px;display:flex;align-items:center;justify-content:center;width:100%;font-size:12px;color:#64748b;font-weight:700}}.overview-recent-row{{display:grid;grid-template-columns:minmax(0,1fr);margin:18px 0}}.recent-activity-card{{min-width:0;background:#fff;border:1px solid #e2ebe3;box-shadow:0 2px 8px #00000005}}.recent-activity-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}}.recent-activity-head h2{{font-size:16px;margin:0 0 4px}}.recent-view-all{{color:#176B3A;font-size:12px;font-weight:900;text-decoration:none;white-space:nowrap}}.recent-view-all:hover{{text-decoration:underline}}.recent-activity-list{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px}}.recent-activity-item{{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid #eef2f7;min-width:0}}.recent-activity-icon{{width:34px;height:34px;min-width:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:#e8f6ee;color:#176B3A}}.recent-staff{{background:#f1eaff;color:#7c3aed}}.recent-marks{{background:#e7f0ff;color:#2563eb}}.recent-exam{{background:#e8f6ee;color:#15803d}}.recent-activity-copy{{min-width:0;display:flex;flex-direction:column;gap:3px}}.recent-activity-copy b{{font-size:12px;color:#172033}}.recent-activity-copy span{{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.recent-activity-empty{{padding:18px 4px;color:#64748b;font-size:12px}}@media(max-width:700px){{.top-system-title{{font-size:15px}}.top-welcome{{font-size:13px}}.recent-activity-list{{grid-template-columns:1fr}}.recent-activity-head{{align-items:flex-start}}}}
 
-.admin-registrar-overview{max-width:1500px;margin:0 auto;padding-bottom:20px}
-.admin-registrar-overview .overview-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 18px;padding:22px 26px;border:1px solid #d4e4d2;border-radius:18px;background:linear-gradient(118deg,#e5efe2 0%,#d5e6d2 48%,#f3f8f1 100%);box-shadow:0 5px 18px #244d3210}
-.admin-registrar-overview .overview-hero-eyebrow{margin-bottom:5px;color:#55745b;font-size:9px;font-weight:900;letter-spacing:1.35px}
-.admin-registrar-overview .overview-hero h1{margin:0;color:#174b2b;font-size:clamp(22px,2.5vw,29px);font-weight:900;letter-spacing:-.55px;line-height:1.15}
-.admin-registrar-overview .overview-hero p{margin:6px 0 0;color:#5e7662;font-size:12px}
-.admin-registrar-overview .overview-hero-mark{display:grid;place-items:center;width:48px;height:48px;flex:0 0 48px;border:1px solid #c4d9c1;border-radius:14px;background:linear-gradient(145deg,#fff,#eaf3e7);color:#28613b;font-size:24px;font-weight:950;box-shadow:0 3px 9px #244d3210}
-.admin-overview-top{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.85fr);gap:14px;align-items:stretch}
-.admin-overview-panel{min-width:0;padding:17px;border:1px solid #dfe9de;border-radius:15px;background:linear-gradient(145deg,#fff 0%,#fbfdf9 100%);box-shadow:0 3px 13px #173d2509}
-.admin-overview-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
-.admin-overview-section-heading h2{margin:0;color:#244d32;font-size:16px;font-weight:850}
-.admin-overview-section-heading p{margin:4px 0 0;color:#748477;font-size:11px}
-.admin-overview-section-kicker{flex:0 0 auto;padding:5px 8px;border:1px solid #dce9d9;border-radius:99px;background:#eff6ed;color:#58765d;font-size:8px;font-weight:900;letter-spacing:.8px}
-.admin-registrar-overview .overview-charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:none;margin:0;align-items:stretch}
-.admin-registrar-overview .overview-charts>.card{display:flex;min-width:0;min-height:214px;flex-direction:column;align-items:center;justify-content:center;margin:0;padding:12px 9px;border:1px solid #e5ede3;border-radius:12px;background:linear-gradient(160deg,#fff 0%,#f8fbf6 100%);box-shadow:none}
-.admin-registrar-overview .overview-charts .label{margin-bottom:7px;color:#42664a;font-size:11px;font-weight:850}
-.admin-registrar-overview .overview-charts .class-size-bars{min-height:128px;height:128px}
-.admin-registrar-overview .overview-charts .class-size-bar-column{height:118px}
-.admin-overview-recent{display:flex;flex-direction:column}
-.admin-overview-recent .recent-activity-head{align-items:flex-start;margin-bottom:10px}
-.admin-overview-recent .recent-activity-head h2{color:#244d32;font-size:16px}
-.admin-overview-recent .recent-activity-list{grid-template-columns:1fr;gap:2px}
-.admin-overview-recent .recent-activity-item{padding:9px 1px;border-bottom-color:#edf2eb}
-.admin-overview-recent .recent-activity-icon{background:#e8f1e5;color:#28613b}
-.admin-overview-recent .recent-staff{background:#edf1e8;color:#5b704d}
-.admin-overview-recent .recent-marks{background:#e8f0e9;color:#376b4a}
-.admin-overview-recent .recent-exam{background:#e3efe2;color:#28613b}
-.admin-overview-recent .recent-activity-copy b{color:#2a4e34}
-.admin-overview-recent .recent-activity-copy span{color:#78877a}
-.admin-overview-sections{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.9fr);gap:14px;margin-top:14px}
-.admin-overview-action-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
-.admin-overview-action-grid .action{display:flex;min-width:0;min-height:74px;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;margin:0;padding:12px;border:1px solid #e2ebe0;border-radius:11px;background:linear-gradient(145deg,#f7faf5 0%,#edf5ea 100%);color:#31583a;font-size:11px;font-weight:800;line-height:1.2;box-shadow:inset 0 1px 0 #fff;pointer-events:none!important;cursor:default!important;user-select:none}
-.admin-overview-action-grid .action>span{display:flex;align-items:center;justify-content:center;width:29px;height:29px;border-radius:9px;background:linear-gradient(145deg,#e2eedf,#d5e6d2);color:#28613b}
-.admin-overview-action-grid .action .modern-icon{width:18px;height:18px}
-.admin-overview-action-grid .action:hover,.admin-overview-action-grid .action:focus,.admin-overview-action-grid .action:focus-visible{background:linear-gradient(145deg,#f7faf5 0%,#edf5ea 100%)!important;border-color:#e2ebe0!important;color:#31583a!important;box-shadow:inset 0 1px 0 #fff!important;transform:none!important;outline:none!important}
-.admin-overview-health{margin-top:14px}
-.admin-overview-health>.overview-health-panel,.admin-overview-health .overview-health-panel{margin:0;border-color:#dfe9de;border-radius:14px;box-shadow:none}
-.admin-registrar-overview .overview-school-heading{display:none}
-@media(max-width:1050px){.admin-overview-top{grid-template-columns:minmax(0,1fr)}.admin-overview-recent .recent-activity-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:760px){.admin-overview-sections{grid-template-columns:1fr}.admin-registrar-overview .overview-charts{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-registrar-overview .overview-charts>.classes-overview-card{grid-column:1/-1;min-height:190px}.admin-overview-action-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:520px){.admin-registrar-overview .overview-hero{margin-bottom:12px;padding:16px 17px;border-radius:14px}.admin-registrar-overview .overview-hero-mark{width:40px;height:40px;flex-basis:40px}.admin-overview-top,.admin-overview-sections{gap:10px}.admin-overview-panel{padding:13px}.admin-registrar-overview .overview-charts{gap:7px}.admin-registrar-overview .overview-charts>.card{min-height:190px;padding:10px 6px}.admin-registrar-overview .gender-donut{width:82px;height:82px;min-width:82px}.admin-registrar-overview .gender-donut-hole strong{font-size:17px}.admin-registrar-overview .donut-legend{gap:7px}.admin-registrar-overview .donut-legend-item{gap:3px;font-size:8px}.admin-overview-action-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.admin-overview-action-grid .action{min-height:67px;padding:10px}.admin-overview-recent .recent-activity-list{grid-template-columns:1fr}}
-@media(prefers-reduced-motion:reduce){.admin-registrar-overview *{scroll-behavior:auto!important;transition:none!important}}
-"
+.admin-registrar-overview{{max-width:1500px;margin:0 auto;padding-bottom:20px}}
+.admin-registrar-overview .overview-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 18px;padding:22px 26px;border:1px solid #d4e4d2;border-radius:18px;background:linear-gradient(118deg,#e5efe2 0%,#d5e6d2 48%,#f3f8f1 100%);box-shadow:0 5px 18px #244d3210}}
+.admin-registrar-overview .overview-hero-eyebrow{{margin-bottom:5px;color:#55745b;font-size:9px;font-weight:900;letter-spacing:1.35px}}
+.admin-registrar-overview .overview-hero h1{{margin:0;color:#174b2b;font-size:clamp(22px,2.5vw,29px);font-weight:900;letter-spacing:-.55px;line-height:1.15}}
+.admin-registrar-overview .overview-hero p{{margin:6px 0 0;color:#5e7662;font-size:12px}}
+.admin-registrar-overview .overview-hero-mark{{display:grid;place-items:center;width:48px;height:48px;flex:0 0 48px;border:1px solid #c4d9c1;border-radius:14px;background:linear-gradient(145deg,#fff,#eaf3e7);color:#28613b;font-size:24px;font-weight:950;box-shadow:0 3px 9px #244d3210}}
+.admin-overview-top{{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.85fr);gap:14px;align-items:stretch}}
+.admin-overview-panel{{min-width:0;padding:17px;border:1px solid #dfe9de;border-radius:15px;background:linear-gradient(145deg,#fff 0%,#fbfdf9 100%);box-shadow:0 3px 13px #173d2509}}
+.admin-overview-section-heading{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}}
+.admin-overview-section-heading h2{{margin:0;color:#244d32;font-size:16px;font-weight:850}}
+.admin-overview-section-heading p{{margin:4px 0 0;color:#748477;font-size:11px}}
+.admin-overview-section-kicker{{flex:0 0 auto;padding:5px 8px;border:1px solid #dce9d9;border-radius:99px;background:#eff6ed;color:#58765d;font-size:8px;font-weight:900;letter-spacing:.8px}}
+.admin-registrar-overview .overview-charts{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;max-width:none;margin:0;align-items:stretch}}
+.admin-registrar-overview .overview-charts>.card{{display:flex;min-width:0;min-height:214px;flex-direction:column;align-items:center;justify-content:center;margin:0;padding:12px 9px;border:1px solid #e5ede3;border-radius:12px;background:linear-gradient(160deg,#fff 0%,#f8fbf6 100%);box-shadow:none}}
+.admin-registrar-overview .overview-charts .label{{margin-bottom:7px;color:#42664a;font-size:11px;font-weight:850}}
+.admin-registrar-overview .overview-charts .class-size-bars{{min-height:128px;height:128px}}
+.admin-registrar-overview .overview-charts .class-size-bar-column{{height:118px}}
+.admin-overview-recent{{display:flex;flex-direction:column}}
+.admin-overview-recent .recent-activity-head{{align-items:flex-start;margin-bottom:10px}}
+.admin-overview-recent .recent-activity-head h2{{color:#244d32;font-size:16px}}
+.admin-overview-recent .recent-activity-list{{grid-template-columns:1fr;gap:2px}}
+.admin-overview-recent .recent-activity-item{{padding:9px 1px;border-bottom-color:#edf2eb}}
+.admin-overview-recent .recent-activity-icon{{background:#e8f1e5;color:#28613b}}
+.admin-overview-recent .recent-staff{{background:#edf1e8;color:#5b704d}}
+.admin-overview-recent .recent-marks{{background:#e8f0e9;color:#376b4a}}
+.admin-overview-recent .recent-exam{{background:#e3efe2;color:#28613b}}
+.admin-overview-recent .recent-activity-copy b{{color:#2a4e34}}
+.admin-overview-recent .recent-activity-copy span{{color:#78877a}}
+.admin-overview-sections{{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.9fr);gap:14px;margin-top:14px}}
+.admin-overview-action-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}}
+.admin-overview-action-grid .action{{display:flex;min-width:0;min-height:74px;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;margin:0;padding:12px;border:1px solid #e2ebe0;border-radius:11px;background:linear-gradient(145deg,#f7faf5 0%,#edf5ea 100%);color:#31583a;font-size:11px;font-weight:800;line-height:1.2;box-shadow:inset 0 1px 0 #fff;pointer-events:none!important;cursor:default!important;user-select:none}}
+.admin-overview-action-grid .action>span{{display:flex;align-items:center;justify-content:center;width:29px;height:29px;border-radius:9px;background:linear-gradient(145deg,#e2eedf,#d5e6d2);color:#28613b}}
+.admin-overview-action-grid .action .modern-icon{{width:18px;height:18px}}
+.admin-overview-action-grid .action:hover,.admin-overview-action-grid .action:focus,.admin-overview-action-grid .action:focus-visible{{background:linear-gradient(145deg,#f7faf5 0%,#edf5ea 100%)!important;border-color:#e2ebe0!important;color:#31583a!important;box-shadow:inset 0 1px 0 #fff!important;transform:none!important;outline:none!important}}
+.admin-overview-health{{margin-top:14px}}
+.admin-overview-health>.overview-health-panel,.admin-overview-health .overview-health-panel{{margin:0;border-color:#dfe9de;border-radius:14px;box-shadow:none}}
+.admin-registrar-overview .overview-school-heading{{display:none}}
+@media(max-width:1050px){{.admin-overview-top{{grid-template-columns:minmax(0,1fr)}}.admin-overview-recent .recent-activity-list{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
+@media(max-width:760px){{.admin-overview-sections{{grid-template-columns:1fr}}.admin-registrar-overview .overview-charts{{grid-template-columns:repeat(2,minmax(0,1fr))}}.admin-registrar-overview .overview-charts>.classes-overview-card{{grid-column:1/-1;min-height:190px}}.admin-overview-action-grid{{grid-template-columns:repeat(3,minmax(0,1fr))}}}}
+@media(max-width:520px){{.admin-registrar-overview .overview-hero{{margin-bottom:12px;padding:16px 17px;border-radius:14px}}.admin-registrar-overview .overview-hero-mark{{width:40px;height:40px;flex-basis:40px}}.admin-overview-top,.admin-overview-sections{{gap:10px}}.admin-overview-panel{{padding:13px}}.admin-registrar-overview .overview-charts{{gap:7px}}.admin-registrar-overview .overview-charts>.card{{min-height:190px;padding:10px 6px}}.admin-registrar-overview .gender-donut{{width:82px;height:82px;min-width:82px}}.admin-registrar-overview .gender-donut-hole strong{{font-size:17px}}.admin-registrar-overview .donut-legend{{gap:7px}}.admin-registrar-overview .donut-legend-item{{gap:3px;font-size:8px}}.admin-overview-action-grid{{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}}.admin-overview-action-grid .action{{min-height:67px;padding:10px}}.admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}}}
+@media(prefers-reduced-motion:reduce){{.admin-registrar-overview *{{scroll-behavior:auto!important;transition:none!important}}}}
+</style></div>"""
 
     con.close()
     return HTMLResponse(_shell("DaviSchool",name,role,body,request=request))
