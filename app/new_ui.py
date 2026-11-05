@@ -4108,7 +4108,7 @@ def overall_grading(request: Request):
         rules=[]
     con.close()
 
-    # Keep the built-in X row at the very bottom of the comments section.
+    # Keep X at the bottom of the comment editor; preserve the existing rules and save endpoints.
     grade_rows=[]
     comment_rules=[r for r in rules if str(r["grade"] or "").strip().upper()!="X"] + [r for r in rules if str(r["grade"] or "").strip().upper()=="X"]
     for r in comment_rules:
@@ -4119,72 +4119,117 @@ def overall_grading(request: Request):
         principal=escape(str(r["principal_comment"] or ""))
         grade_rows.append(
             "<tr>"
-            "<td><b>%s</b>%s</td>"
-            "<td><input form='overall-comments-%s' name='class_teacher_comment' value='%s' class='field' placeholder='Class teacher comment'></td>"
-            "<td><input form='overall-comments-%s' name='principal_comment' value='%s' class='field' placeholder='Principal comment'></td>"
-            "<td class='action-cell'>"
-            "<form id='overall-comments-%s' method='post' action='/app/report-cards/overall-grade-comments' data-native-post>"
-            "<input type='hidden' name='rule_id' value='%s'>"
-            "<button class='btn' type='submit'>Save Comments</button>"
-            "</form>"
-            "</td>"
-            "</tr>" % (grade,"",rid,teacher,rid,principal,rid,rid)
+            "<td><span class='og-grade-pill'>%s</span></td>"
+            "<td class='og-comment-preview'>%s</td>"
+            "<td class='og-comment-preview'>%s</td>"
+            "<td class='action-cell'><button class='og-btn og-btn-soft' type='button' "
+            "onclick='ogEditComments(this)' data-rule-id='%s' data-grade='%s' "
+            "data-teacher='%s' data-principal='%s'>Edit comments</button></td>"
+            "</tr>" % (grade,teacher or "<span class='og-empty'>Not set</span>",
+                       principal or "<span class='og-empty'>Not set</span>",
+                       rid,grade,teacher,principal)
         )
 
     x_rules=[r for r in rules if str(r["grade"] or "").strip().upper()=="X"]
     structured_rules=[r for r in rules if r["min_total"] is not None and r["max_total"] is not None and str(r["grade"] or "").strip().upper()!="X"]
     x_rule_row=(
-        "<tr><td>0.0</td><td>0.0</td><td><b>X</b></td>"
-        "<td class='action-cell'><button class='btn' type='button' disabled "
-        "style='opacity:.55;cursor:not-allowed;background:#64748b'>System generated</button></td></tr>"
+        "<tr><td>0.0</td><td>0.0</td><td><span class='og-grade-pill'>X</span></td>"
+        "<td class='action-cell'><span class='og-system-tag'>System generated</span></td></tr>"
         if x_rules else ""
     )
     structured_rule_rows="".join(
-        "<tr><td>%.1f</td><td>%.1f</td><td><b>%s</b></td>"
+        "<tr><td>%.1f</td><td>%.1f</td><td><span class='og-grade-pill'>%s</span></td>"
         "<td class='action-cell'><form method='post' action='/app/academics/overall-grading/delete/%s' style='display:inline' data-native-post>"
-        "<button class='btn danger-btn' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
+        "<button class='og-btn og-btn-danger' type='submit' onclick='return confirm(\"Delete this overall grading rule?\")'>Delete</button>"
         "</form></td></tr>"
         % (float(r["min_total"]),float(r["max_total"]),escape(str(r["grade"])),r["id"]) for r in structured_rules
     )
     rule_rows=x_rule_row+structured_rule_rows
+    configured_count=len(structured_rules)
 
     body=(
-      "<div class='page'><h1>Overall Grade & Position Settings</h1>"
-      "<div class='muted'>Set the average-percentage bands your school uses for the final overall grade. The overall grade is based on the learner's average percentage across entered subjects. Position is calculated automatically from total marks within the selected class and stream.</div>"
-      "<div class='card section'><h2>Add overall grade band</h2>"
-      "<form method='post' action='/app/academics/overall-grading/add' class='overall-add-form' data-native-post>"
-      "<input name='min_total' type='number' min='0' max='100' step='0.01' required placeholder='Minimum average %' class='field'>"
-      "<input name='max_total' type='number' min='0' max='100' step='0.01' required placeholder='Maximum average %' class='field'>"
-      "<input name='grade' required placeholder='Overall grade e.g. A' class='field'>"
-      "<button class='btn' type='submit'>Save</button></form></div>"
-      "<div class='card section'><h2>Report Card Comments by Overall Grade</h2>"
-      "<div class='muted'>X is built in for every school and is automatically used when a learner's overall average is 0%. Add your school's structured overall grades below; X remains available for its report-card comments.</div>"
-      "<div class='table-scroll'><table class='overall-comments-table'><thead><tr>"
-      "<th>Grade</th><th>Class Teacher Comment</th><th>Principal Comment</th><th>Action</th>"
-      "</tr></thead><tbody>"
-      + ("".join(grade_rows) if grade_rows else "<tr><td colspan='4'>No overall grading bands configured yet.</td></tr>")
-      + "</tbody></table></div></div>"
-      "<div class='card section'><div class='table-scroll'><table><thead><tr>"
-      "<th>Minimum Average %</th><th>Maximum Average %</th><th>Overall Grade</th><th>Action</th>"
-      "</tr></thead><tbody>"
-      + (rule_rows or "<tr><td colspan='4'>No overall grading bands configured.</td></tr>")
-      + "</tbody></table></div></div>"
-      "<div class='card section'><b>Overall grade:</b> Based on average percentage. <b>Position:</b> ranked automatically by total marks, highest total first; equal totals receive the same position.</div>"
+      "<div class='page og-page'>"
+      "<div class='og-hero'><div><div class='og-eyebrow'>ACADEMIC CONFIGURATION</div>"
+      "<h1>Overall Grading</h1>"
+      "<p>Configure the average-percentage bands used for final overall grades, and manage the comments printed on report cards.</p></div>"
+      "<div class='og-hero-mark'>OG</div></div>"
+      "<div class='og-summary'>"
+      "<div class='og-summary-card'><span class='og-summary-label'>Configured grade bands</span><strong>%s</strong><small>School-defined ranges</small></div>"
+      "<div class='og-summary-card'><span class='og-summary-label'>Built-in result</span><strong>X</strong><small>System-managed · cannot be deleted</small></div>"
+      "<div class='og-summary-card'><span class='og-summary-label'>Position ranking</span><strong>Automatic</strong><small>Based on total marks</small></div>"
+      "</div>"
+      "<div class='og-toolbar'><div><h2>Grade bands</h2><p>Maintain the percentage ranges used to award each overall grade.</p></div>"
+      "<button class='og-btn og-btn-primary' type='button' onclick='ogOpenBandModal()'>＋ Add grade band</button></div>"
+      "<section class='og-panel'><div class='og-panel-heading'><div><h3>Configured overall grades</h3><p>Ranges are applied to each learner's average percentage.</p></div>"
+      "<span class='og-count'>%s bands</span></div>"
+      "<div class='og-table-wrap'><table class='og-table'><thead><tr><th>Minimum average %%</th><th>Maximum average %%</th><th>Overall grade</th><th>Action</th></tr></thead>"
+      "<tbody>%s</tbody></table></div></section>"
+      "<section class='og-panel'><div class='og-panel-heading'><div><h3>Report-card comments</h3><p>Set the class teacher and principal comments associated with each overall grade.</p></div>"
+      "<span class='og-count'>%s grades</span></div>"
+      "<div class='og-table-wrap'><table class='og-table og-comments-table'><thead><tr><th>Grade</th><th>Class teacher comment</th><th>Principal comment</th><th>Action</th></tr></thead>"
+      "<tbody>%s</tbody></table></div></section>"
+      "<div class='og-note'><span class='og-note-icon'>i</span><div><strong>How overall grading works</strong><p>Overall grade is based on the learner's average percentage across entered subjects. Class and stream position is calculated automatically from total marks, with equal totals receiving the same position.</p></div></div>"
+      "</div>"
+      "<div class='og-modal-backdrop' id='ogBandModal' aria-hidden='true'><div class='og-modal' role='dialog' aria-modal='true' aria-labelledby='ogBandTitle'>"
+      "<div class='og-modal-head'><div><span class='og-modal-kicker'>GRADE CONFIGURATION</span><h2 id='ogBandTitle'>Add overall grade band</h2><p>Enter the percentage range and the grade to award.</p></div>"
+      "<button type='button' class='og-close' onclick='ogCloseModal(\"ogBandModal\")' aria-label='Close'>×</button></div>"
+      "<form method='post' action='/app/academics/overall-grading/add' class='og-modal-form' data-native-post>"
+      "<label>Minimum average percentage<input name='min_total' type='number' min='0' max='100' step='0.01' required placeholder='e.g. 80'></label>"
+      "<label>Maximum average percentage<input name='max_total' type='number' min='0' max='100' step='0.01' required placeholder='e.g. 100'></label>"
+      "<label class='og-full'>Overall grade<input name='grade' required maxlength='12' placeholder='e.g. A'></label>"
+      "<div class='og-modal-actions'><button type='button' class='og-btn og-btn-soft' onclick='ogCloseModal(\"ogBandModal\")'>Cancel</button><button class='og-btn og-btn-primary' type='submit'>Save grade band</button></div>"
+      "</form></div></div>"
+      "<div class='og-modal-backdrop' id='ogCommentsModal' aria-hidden='true'><div class='og-modal' role='dialog' aria-modal='true' aria-labelledby='ogCommentsTitle'>"
+      "<div class='og-modal-head'><div><span class='og-modal-kicker'>REPORT-CARD SETTINGS</span><h2 id='ogCommentsTitle'>Edit grade comments</h2><p>These comments appear on report cards for learners awarded this grade.</p></div>"
+      "<button type='button' class='og-close' onclick='ogCloseModal(\"ogCommentsModal\")' aria-label='Close'>×</button></div>"
+      "<form method='post' action='/app/report-cards/overall-grade-comments' class='og-modal-form' data-native-post>"
+      "<input type='hidden' name='rule_id' id='ogCommentRuleId'>"
+      "<div class='og-grade-context'>Overall grade <strong id='ogCommentGrade'>—</strong></div>"
+      "<label>Class teacher comment<textarea name='class_teacher_comment' id='ogTeacherComment' rows='3' placeholder='Enter the class teacher comment'></textarea></label>"
+      "<label>Principal comment<textarea name='principal_comment' id='ogPrincipalComment' rows='3' placeholder='Enter the principal comment'></textarea></label>"
+      "<div class='og-modal-actions'><button type='button' class='og-btn og-btn-soft' onclick='ogCloseModal(\"ogCommentsModal\")'>Cancel</button><button class='og-btn og-btn-primary' type='submit'>Save comments</button></div>"
+      "</form></div></div>"
       "<style>"
-      ".overall-add-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:center}"
-      ".field{width:100%%;padding:11px;border:1px solid #dbe2ea;border-radius:9px;box-sizing:border-box}"
-      ".overall-comments-table{width:100%%;table-layout:fixed;border-collapse:collapse}"
-      ".overall-comments-table th,.overall-comments-table td{vertical-align:middle;text-align:left;padding:9px 7px;box-sizing:border-box}"
-      ".overall-comments-table th:nth-child(1){width:10%%}.overall-comments-table th:nth-child(2){width:35%%}.overall-comments-table th:nth-child(3){width:35%%}.overall-comments-table th:nth-child(4){width:20%%}"
-      ".action-cell{text-align:center!important;vertical-align:middle!important;white-space:nowrap}"
-      ".action-cell form{margin:0;display:inline}"
-      ".btn{padding:8px 11px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:800;cursor:pointer;margin:0}"
-      ".danger-btn{background:#b42318}"
-      ".table-scroll{width:100%%;overflow-x:auto}"
-      "@media(max-width:700px){.overall-add-form{grid-template-columns:1fr}.overall-comments-table{min-width:760px}}"
-      "</style></div>"
+      ".og-page{max-width:1240px;margin:0 auto;padding-bottom:28px;color:#243b32}"
+      ".og-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:25px 28px;border-radius:20px;background:linear-gradient(120deg,#e7f1e9 0%%,#d5e7d9 48%%,#c2dac9 100%%);border:1px solid #c6dccb;box-shadow:0 8px 24px rgba(43,83,57,.08);margin-bottom:18px}"
+      ".og-eyebrow,.og-modal-kicker{font-size:10px;letter-spacing:1.5px;font-weight:900;color:#52765d}"
+      ".og-hero h1{margin:6px 0 7px;font-size:clamp(23px,3vw,30px);color:#244b35}"
+      ".og-hero p{margin:0;max-width:720px;color:#557061;line-height:1.55;font-size:13px}"
+      ".og-hero-mark{width:58px;height:58px;flex:0 0 58px;border-radius:17px;display:grid;place-items:center;background:linear-gradient(145deg,#477b59,#28563b);color:white;font-weight:900;font-size:19px;box-shadow:0 7px 16px rgba(35,81,51,.2)}"
+      ".og-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:22px}"
+      ".og-summary-card{background:#fff;border:1px solid #e1ebe3;border-radius:14px;padding:15px 17px;box-shadow:0 3px 12px rgba(32,65,43,.04);display:flex;flex-direction:column;gap:4px}"
+      ".og-summary-label{font-size:11px;font-weight:800;color:#718579}.og-summary-card strong{font-size:21px;color:#2e6040}.og-summary-card small{font-size:11px;color:#89978e}"
+      ".og-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:8px 2px 12px}.og-toolbar h2{font-size:18px;color:#294c36;margin:0 0 3px}.og-toolbar p,.og-panel-heading p{margin:0;color:#7a8c80;font-size:12px}"
+      ".og-panel{background:#fff;border:1px solid #e1eae2;border-radius:16px;margin-bottom:16px;overflow:hidden;box-shadow:0 4px 16px rgba(32,65,43,.045)}"
+      ".og-panel-heading{padding:16px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #edf2ed;background:linear-gradient(100deg,#f5f9f5,#fff)}"
+      ".og-panel-heading h3{margin:0 0 4px;font-size:14px;color:#31533c}.og-count{font-size:10px;font-weight:800;color:#52765d;background:#eaf3eb;border:1px solid #d7e7da;border-radius:20px;padding:6px 10px;white-space:nowrap}"
+      ".og-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.og-table{width:100%;min-width:560px;border-collapse:collapse;text-align:left}"
+      ".og-table th{background:#edf5ee;color:#4c6c55;font-size:10px;text-transform:uppercase;letter-spacing:.45px;font-weight:900;padding:12px 14px;white-space:nowrap}"
+      ".og-table td{padding:12px 14px;border-top:1px solid #edf2ed;color:#465b4c;font-size:12px;vertical-align:middle}.og-table tbody tr:hover{background:#f8fbf8}"
+      ".og-table th:last-child,.og-table td:last-child{text-align:center;white-space:nowrap}.og-grade-pill{display:inline-flex;min-width:29px;justify-content:center;padding:5px 9px;border-radius:8px;background:#e5f1e7;color:#2e6540;font-weight:900;border:1px solid #d1e5d5}"
+      ".og-comment-preview{max-width:280px;overflow-wrap:anywhere;color:#627469!important}.og-empty{color:#a0aaa3;font-style:italic}.og-system-tag{font-size:10px;font-weight:800;color:#77877c;background:#f0f3f0;border-radius:7px;padding:6px 9px}"
+      ".og-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;cursor:pointer;transition:transform .15s,box-shadow .15s,background .15s;text-decoration:none}"
+      ".og-btn:hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(34,75,46,.13)}.og-btn-primary{background:linear-gradient(135deg,#568365,#326346);color:#fff}.og-btn-soft{background:#edf5ee;color:#42664b;border:1px solid #d9e8dc}.og-btn-danger{background:#fff0ed;color:#a33d31;border:1px solid #f1d3ce}"
+      ".og-note{display:flex;gap:12px;align-items:flex-start;padding:15px 17px;background:linear-gradient(110deg,#eff6ef,#f8fbf8);border:1px solid #dceadd;border-radius:13px;margin-top:4px}.og-note-icon{width:22px;height:22px;flex:0 0 22px;border-radius:50%;display:grid;place-items:center;background:#dcebdd;color:#3c7049;font-weight:900}.og-note strong{font-size:12px;color:#3d6046}.og-note p{font-size:11px;line-height:1.55;color:#6c7f71;margin:4px 0 0}"
+      ".og-modal-backdrop{display:none;position:fixed;inset:0;z-index:10050;background:rgba(20,38,27,.48);backdrop-filter:blur(3px);padding:16px;align-items:center;justify-content:center;overflow-y:auto}.og-modal-backdrop.is-open{display:flex}"
+      ".og-modal{width:min(100%%,520px);max-height:calc(100dvh - 32px);overflow-y:auto;background:#fff;border:1px solid #d8e6da;border-radius:18px;box-shadow:0 22px 65px rgba(16,42,25,.25);animation:ogModalIn .18s ease-out}"
+      "@keyframes ogModalIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}"
+      ".og-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:20px 22px;background:linear-gradient(120deg,#e8f2e9,#d5e7d8);border-bottom:1px solid #dce9de}.og-modal-head h2{margin:5px 0 4px;color:#2d5539;font-size:18px}.og-modal-head p{margin:0;color:#687f6e;font-size:11px;line-height:1.5}.og-close{border:0;background:rgba(255,255,255,.75);color:#41674a;width:31px;height:31px;border-radius:9px;font-size:22px;line-height:1;cursor:pointer}"
+      ".og-modal-form{display:grid;grid-template-columns:1fr 1fr;gap:13px;padding:21px 22px 22px}.og-modal-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:800;color:#536b59}.og-modal-form input,.og-modal-form textarea{width:100%%;box-sizing:border-box;border:1px solid #dce7dd;border-radius:9px;background:#fbfdfb;padding:11px 12px;font:inherit;font-size:12px;color:#304b37;outline:none}.og-modal-form input:focus,.og-modal-form textarea:focus{border-color:#79a785;box-shadow:0 0 0 3px rgba(102,157,116,.13)}.og-modal-form textarea{resize:vertical;min-height:78px;line-height:1.5}.og-full{grid-column:1/-1}.og-modal-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:9px;padding-top:5px}.og-grade-context{grid-column:1/-1;background:#f0f6f0;border:1px solid #dfebdf;border-radius:9px;padding:10px 12px;font-size:11px;color:#6c7e70}.og-grade-context strong{color:#326244;margin-left:5px}"
+      "@media(max-width:700px){.og-page{padding-left:0;padding-right:0}.og-hero{padding:19px 17px;border-radius:15px}.og-summary{grid-template-columns:1fr 1fr}.og-summary-card:last-child{grid-column:1/-1}.og-toolbar{align-items:flex-start}.og-toolbar .og-btn{white-space:nowrap;padding:9px 10px}.og-panel{border-radius:13px}.og-panel-heading{padding:14px}.og-table{min-width:610px}.og-modal-backdrop{padding:10px;align-items:flex-end}.og-modal{max-height:calc(100dvh - 20px);border-radius:18px 18px 12px 12px}.og-modal-form{grid-template-columns:1fr;padding:17px}.og-modal-form>*{grid-column:1/-1}.og-modal-head{padding:17px}}"
+      "</style>"
+      "<script>"
+      "function ogOpenModal(id){var el=document.getElementById(id);if(!el)return;el.classList.add('is-open');el.setAttribute('aria-hidden','false');document.body.classList.add('og-modal-active');}"
+      "function ogCloseModal(id){var el=document.getElementById(id);if(!el)return;el.classList.remove('is-open');el.setAttribute('aria-hidden','true');if(!document.querySelector('.og-modal-backdrop.is-open'))document.body.classList.remove('og-modal-active');}"
+      "function ogOpenBandModal(){ogOpenModal('ogBandModal');}"
+      "function ogEditComments(btn){document.getElementById('ogCommentRuleId').value=btn.dataset.ruleId||'';document.getElementById('ogCommentGrade').textContent=btn.dataset.grade||'';document.getElementById('ogTeacherComment').value=btn.dataset.teacher||'';document.getElementById('ogPrincipalComment').value=btn.dataset.principal||'';ogOpenModal('ogCommentsModal');}"
+      "document.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('og-modal-backdrop'))ogCloseModal(e.target.id);});"
+      "document.addEventListener('keydown',function(e){if(e.key==='Escape'){document.querySelectorAll('.og-modal-backdrop.is-open').forEach(function(m){ogCloseModal(m.id);});}});"
+      "</script>"
+      % (configured_count,configured_count,rule_rows or "<tr><td colspan='4' class='og-empty'>No overall grading bands configured.</td></tr>",
+         len(comment_rules),("".join(grade_rows) if grade_rows else "<tr><td colspan='4' class='og-empty'>No overall grading bands configured yet.</td></tr>"))
     )
-    return _school_page(request,"Overall Grade & Position Settings",body)
+    return _school_page(request,"Overall Grading",body)
 
 @router.post("/app/academics/overall-grading/add")
 async def overall_grading_add(request: Request):
