@@ -15471,11 +15471,6 @@ def class_marksheet_analysis(
         school_postal = escape(str(school["postal_address"] or "")) if school and "postal_address" in school.keys() else ""
         school_code = escape(str(school["postal_code"] or "")) if school and "postal_code" in school.keys() else ""
         school_logo = str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
-        report_brand = "<div class='msa-brand'>" + (
-            "<img src='%s' alt='School logo'>" % escape(school_logo) if school_logo else ""
-        ) + "<div><h2>%s</h2><p>%s %s</p><p>%s · %s</p></div></div>" % (
-            school_name, school_postal, school_code, school_email, school_phone
-        )
         filter_query = "&".join(
             "%s=%s" % (key, quote(str(value), safe=""))
             for key, value in [
@@ -15487,16 +15482,6 @@ def class_marksheet_analysis(
         embedded_in_academic_analysis = request.url.path == "/app/academics/analysis"
         base = "/app/academics/analysis" if embedded_in_academic_analysis else "/app/academics/marksheet-analysis"
         page_heading = "Academic Analysis" if embedded_in_academic_analysis else "Class MarkSheet Analysis"
-        nav = "".join(
-            "<a class='msa-nav %s' href='%s?view=%s%s'>%s</a>" % (
-                "active" if view == key else "", base, key, ("&" + filter_query) if filter_query else "", label
-            ) for key, label in [
-                ("summary", "Summary"), ("subjects", "Subject Analysis"), ("students", "Student Analysis"),
-                ("streams", "Stream Comparison"), ("rankings", "School-wide Rankings"),
-                ("insights", "Performance Insights"), ("grades", "Grade Distributions"),
-                ("top", "Top Students"),
-            ]
-        )
         form = (
             "<form id='msa-filter-form' class='msa-filters' method='get' action='%s' data-allow-repeat-submit='true'>"
             "<label>Examinations<details class='msa-exam-picker'><summary>%s</summary><div class='msa-exam-options'>%s</div></details></label>"
@@ -15504,8 +15489,8 @@ def class_marksheet_analysis(
             "<label>Term<select name='term'>%s</select></label>"
             "<label>Class<select name='class_name'><option value=''>All classes</option>%s</select></label>"
             "<label>Stream<select name='stream'><option value=''>All streams</option>%s</select></label>"
-            "<input type='hidden' name='view' value='%s'><button class='msa-button' type='submit' name='apply_filters' value='1'>Apply filters</button></form>"
-        ) % (base, exam_picker_label, exam_options, year_options, term_options, class_options, stream_options, escape(view))
+            "<input type='hidden' name='view' value='summary'><button class='msa-button' type='submit' name='apply_filters' value='1'>Apply filters</button></form>"
+        ) % (base, exam_picker_label, exam_options, year_options, term_options, class_options, stream_options)
         # Summary cards use only learners with at least one recorded subject mark.
         eligible = list(view_data["summaries"].values())
         overall_mean = sum(x["average"] for x in eligible) / len(eligible) if eligible else 0.0
@@ -15697,6 +15682,18 @@ def class_marksheet_analysis(
         }
         if view not in content_by_view:
             view = "summary"
+        # Present every existing analysis view together on one page instead of
+        # requiring users to navigate between newly-added section buttons.
+        analysis_sections = (
+            summary_cards
+            + "<h2>Subject Performance Analysis</h2>" + subject_table
+            + content_by_view["students"]
+            + content_by_view["streams"]
+            + content_by_view["rankings"]
+            + content_by_view["insights"]
+            + content_by_view["grades"]
+            + content_by_view["top"]
+        )
         export_query = "&".join(
             "%s=%s" % (k, quote(str(v), safe=""))
             for k, v in [
@@ -15718,10 +15715,10 @@ def class_marksheet_analysis(
         body = (
             "<div class='page msa-page'><header class='msa-page-head'><div class='msa-eyebrow'>ACADEMIC PERFORMANCE</div><h1>" + escape(page_heading) + "</h1>"
             "<p class='muted'>Explore class results, subject strengths, student performance and actionable improvement priorities.</p></header>"
-            + "<section class='msa-school-card'>" + report_brand + "</section>"
-            + "<section class='msa-filter-panel'><div class='msa-panel-heading'><h2>Report filters</h2><p>Choose the examinations and group you want to analyse.</p></div>" + form + "</section>"
-            + "<nav class='msa-nav' aria-label='Exam analysis sections'>" + nav + "</nav>"
-            + "<section class='msa-results'>" + content_by_view[view] + "</section>"
+            + "<div class='msa-toolbar'><div><h2>Analysis filters</h2><p>Choose the examination, year, term, class and stream to update this report.</p></div><button type='button' class='msa-open-filter' onclick=\"document.getElementById('msa-filter-dialog').showModal()\">Open Filters</button></div>"
+            + "<dialog id='msa-filter-dialog' class='msa-filter-dialog' aria-labelledby='msa-filter-title'><div class='msa-dialog-head'><div><h2 id='msa-filter-title'>Report Filters</h2><p>Adjust the selection, then apply to refresh the analysis.</p></div><button type='button' class='msa-dialog-close' aria-label='Close filters' onclick=\"document.getElementById('msa-filter-dialog').close()\">×</button></div>"
+            + form + "</dialog>"
+            + "<section class='msa-results'>" + analysis_sections + "</section>"
             + "<section class='msa-export-panel'><div><h2>Export &amp; Print</h2><p>Download or print the current selection.</p></div>" + export_links + "</section>"
             + external_analysis_tile
             + "</div>"
@@ -15793,6 +15790,29 @@ def class_marksheet_analysis(
   .msa-page .msa-nav a,.msa-page .msa-export a,.msa-page .msa-export button,.msa-page .msa-button,.msa-page .msa-student-select button{transition:none}
   .msa-page .msa-nav a:hover,.msa-page .msa-export a:hover,.msa-page .msa-export button:hover,.msa-page .msa-button:hover,.msa-page .msa-student-select button:hover{transform:none}
 }
+/* Filters open in a true modal dialog; no analysis section tabs are shown. */
+.msa-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0;padding:15px 18px;border:1px solid #dfe9df;border-radius:13px;background:linear-gradient(135deg,#f0f6ef,#e3eee2)}
+.msa-toolbar h2{margin:0;color:#174b2b;font-size:16px}
+.msa-toolbar p{margin:4px 0 0;color:#718176;font-size:12px}
+.msa-open-filter{min-height:42px;padding:10px 18px;border:1px solid #176b3a;border-radius:10px;background:linear-gradient(135deg,#176b3a,#39875a);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 4px 10px rgba(23,107,58,.15)}
+.msa-open-filter:hover{background:#10552e;transform:translateY(-1px)}
+.msa-filter-dialog{width:min(760px,calc(100% - 28px));max-width:760px;max-height:min(88vh,760px);padding:0;border:1px solid #d5e4d5;border-radius:17px;background:#fbfdfb;color:#244631;box-shadow:0 24px 70px rgba(15,45,25,.28)}
+.msa-filter-dialog::backdrop{background:rgba(20,39,27,.48);backdrop-filter:blur(3px)}
+.msa-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid #e2ebe1;background:linear-gradient(135deg,#edf5ec,#dcebdc)}
+.msa-dialog-head h2{margin:0;color:#174b2b;font-size:18px}
+.msa-dialog-head p{margin:4px 0 0;color:#718176;font-size:12px}
+.msa-dialog-close{width:34px;height:34px;border:1px solid #cbdccb;border-radius:9px;background:#fff;color:#315c40;font-size:23px;line-height:1;cursor:pointer}
+.msa-filter-dialog .msa-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:18px 20px}
+.msa-filter-dialog .msa-filters label:first-child{grid-column:1/-1}
+.msa-filter-dialog .msa-filters .msa-button{grid-column:1/-1;justify-self:end;min-width:145px}
+.msa-results{margin-top:16px}
+@media(max-width:560px){
+ .msa-toolbar{align-items:flex-start;flex-direction:column}
+ .msa-open-filter{width:100%}
+ .msa-filter-dialog .msa-filters{grid-template-columns:1fr;padding:14px}
+ .msa-filter-dialog .msa-filters label:first-child{grid-column:auto}
+ .msa-filter-dialog .msa-filters .msa-button{width:100%;justify-self:stretch}
+}
 /* Match the clean, sage-green register styling used on Students List. */
 .msa-page{max-width:1500px;padding-bottom:30px;color:#244631}
 .msa-page-head{padding:20px 22px;margin:0 0 16px;border:1px solid #e0eae0;border-radius:14px;background:linear-gradient(135deg,#edf5ec 0%,#dcebdc 52%,#f6faf4 100%);color:#174b2b;box-shadow:0 2px 9px rgba(23,61,37,.07)}
@@ -15801,7 +15821,6 @@ def class_marksheet_analysis(
 .msa-page-head .muted{color:#718176;font-size:13px}
 .msa-eyebrow{color:#718778;letter-spacing:1.15px}
 .msa-school-card,.msa-filter-panel,.msa-export-panel,.msa-results{border-color:#e0eae0;border-radius:13px;box-shadow:0 2px 9px rgba(23,61,37,.06)}
-.msa-school-card{padding:13px 16px;margin:0 0 14px}
 .msa-filter-panel{padding:16px;background:#f8fbf7}
 .msa-panel-heading h2,.msa-export-panel h2{color:#174b2b;font-size:15px}
 .msa-panel-heading p,.msa-export-panel p{color:#718176}
