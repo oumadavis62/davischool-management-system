@@ -3093,19 +3093,79 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
     student_rows="".join("<label class='subject-learner'><input type='checkbox' name='student_ids' value='%s' %s><span><b>%s</b><small>%s</small></span></label>"%(int(x["id"]),"checked" if int(x["id"]) in allocated else "",escape(str(x["name"] or "")),escape(str(x["admission_no"] or ""))) for x in students)
     roster=""
     if str(load)=="1":
-        roster="<div class='card section'><div class='subject-allocation-roster-head'><div><h2>Students in selected class</h2><p class='muted'>Tick learners who will sit this subject. Unticked learners will not appear in Record Marks.</p></div><div class='subject-allocation-count'>%s of %s allocated</div></div><form method='post' action='/app/academics/subject-allocation'><input type='hidden' name='academic_year' value='%s'><input type='hidden' name='examination_id' value='%s'><input type='hidden' name='term' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'><div class='subject-allocation-tools'><label><input type='checkbox' id='selectAllLearners'> Select all learners</label><span class='muted'>%s learners loaded</span></div><div class='subject-learner-list'>%s</div><button class='btn' type='submit'>Save Subject Allocation</button></form></div>"%(len(allocated),len(students),escape(academic_year),escape(str(examination_id)),escape(str(term)),cid,subid,escape(class_name),escape(stream),len(students),student_rows or "<div class='muted'>No active learners found for this class and academic-year cohort.</div>")
-    body="""<div class='page'><h1>Subject Allocation</h1><div class='muted'>Choose the learners who are registered to sit each subject. Choices are saved separately for every academic year.</div>
-<div class='card section'><form method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
+        roster="<div class='subject-modal-backdrop' id='subjectLearnersModal' onclick='if(event.target===this)closeSubjectLearners()'><section class='subject-learners-modal' role='dialog' aria-modal='true' aria-labelledby='subjectLearnersTitle'><header class='subject-learners-modal-head'><div><span class='subject-kicker'>LEARNER REGISTRATION</span><h2 id='subjectLearnersTitle'>Allocate learners to subject</h2><p>Choose which learners are registered to sit this subject.</p></div><button type='button' class='subject-modal-close' aria-label='Close' onclick='closeSubjectLearners()'>×</button></header><div class='subject-learners-context'><span><small>SUBJECT</small><b>%s</b></span><span><small>CLASS & STREAM</small><b>%s · %s</b></span><span><small>ACADEMIC YEAR</small><b>%s</b></span><span><small>ALLOCATED</small><b>%s / %s</b></span></div><form method='post' action='/app/academics/subject-allocation'><input type='hidden' name='academic_year' value='%s'><input type='hidden' name='examination_id' value='%s'><input type='hidden' name='term' value='%s'><input type='hidden' name='class_id' value='%s'><input type='hidden' name='subject_id' value='%s'><input type='hidden' name='class_name' value='%s'><input type='hidden' name='stream' value='%s'><div class='subject-learners-toolbar'><label><input type='checkbox' id='selectAllLearners'> Select all learners</label><span>%s active learners loaded</span></div><div class='subject-learner-list'>%s</div><footer class='subject-learners-modal-actions'><button type='button' class='subject-modal-cancel' onclick='closeSubjectLearners()'>Cancel</button><button class='subject-modal-save' type='submit'>Save Allocation</button></footer></form></section></div>"%(escape(str(next((x["name"] for x in subjects if int(x["id"])==subid),"Selected subject"))),escape(class_name),escape(stream or "No Stream"),escape(academic_year),len(allocated),len(students),escape(academic_year),escape(str(examination_id)),escape(str(term)),cid,subid,escape(class_name),escape(stream),len(students),student_rows or "<div class='subject-allocation-empty'>No active learners found for this class and academic-year cohort.</div>")
+    body="""<div class='page subject-allocation-page'>
+<header class='subject-allocation-hero'><div><span class='subject-kicker'>ACADEMIC MANAGEMENT</span><h1>Subject Allocation</h1><p>Manage the learners registered to sit each subject, by examination and academic year.</p></div><div class='subject-hero-icon' aria-hidden='true'>◎</div></header>
+<section class='subject-allocation-workspace'><div class='subject-allocation-section-head'><div><h2>Allocation Setup</h2><p>Select the examination, subject and class to manage learner registration.</p></div><span class='subject-step'>STEP 1 · SET FILTERS</span></div>
+<form method='get' action='/app/academics/subject-allocation' class='subject-allocation-filter'>
 <label>Examination<select name='examination_id' id='subjectExamination' class='field' required>%s</select></label>
 <label>Term<select name='term' id='subjectTerm' class='field' required>%s</select></label>
 <label>Academic Year<select name='academic_year' id='subjectAcademicYear' class='field' readonly>%s</select></label>
 <label>Subject<select name='subject_id' class='field' required>%s</select></label>
 <label>Class<select name='class_name' id='subjectClass' class='field' required>%s</select></label>
 <label>Stream<select name='stream' id='subjectStream' class='field'>%s</select></label>
-<button class='btn' type='submit' name='load' value='1'>Load Students</button></form></div>%s
-<style>.subject-allocation-filter{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:12px;align-items:end}.subject-allocation-filter label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}.subject-allocation-filter .btn{min-height:42px}.subject-allocation-roster-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.subject-allocation-roster-head h2{margin:0 0 5px}.subject-allocation-roster-head p{margin:0}.subject-allocation-count{font-size:12px;font-weight:900;color:#176B3A;background:#E8F5E9;border-radius:10px;padding:9px 12px}.subject-allocation-tools{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:13px;font-weight:750}.subject-learner-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:5px 0 16px}.subject-learner{display:flex;align-items:center;gap:10px;border:1px solid #e2ebe3;border-radius:10px;padding:10px;background:#fff;min-width:0}.subject-learner input,.subject-allocation-tools input{width:17px;height:17px;accent-color:#176B3A}.subject-learner span{display:grid;gap:3px;min-width:0}.subject-learner b{font-size:13px}.subject-learner small{font-size:11px;color:#64748b}.subject-learner:has(input:checked){background:#f0fdf4;border-color:#86c99a}@media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}.subject-allocation-roster-head{align-items:flex-start;flex-direction:column}}</style>
-<script>(function(){var cls=document.getElementById('subjectClass'),stream=document.getElementById('subjectStream');if(!cls||!stream)return;var opts=Array.prototype.map.call(stream.options,function(o){return o.cloneNode(true)});function filter(){var wanted=cls.value,previous=stream.value;while(stream.options.length)stream.remove(0);opts.forEach(function(o){if(!o.value||o.getAttribute('data-class')===wanted)stream.add(o.cloneNode(true))});if(Array.prototype.some.call(stream.options,function(o){return o.value===previous}))stream.value=previous;else stream.value=''}cls.addEventListener('change',filter);filter();})();var all=document.getElementById('selectAllLearners');if(all)all.addEventListener('change',function(){document.querySelectorAll('.subject-learner input').forEach(function(x){x.checked=all.checked})});</script></div>"""%(exam_opts,term_opts,year_opts,subject_opts,class_opts,stream_opts,roster)
+<div class='subject-allocation-filter-actions'><button class='subject-load-btn' type='submit' name='load' value='1'>Load Learners <span aria-hidden='true'>→</span></button></div>
+</form></section>
+%s
+<style>
+.subject-allocation-page{max-width:1120px;padding:16px 0 30px;color:#294532}
+.subject-allocation-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;margin-bottom:18px;border:1px solid #d3e3d6;border-radius:18px;background:linear-gradient(120deg,#dceadf 0%,#eff5ef 54%,#d6e7da 100%);box-shadow:0 8px 24px #244b3210}
+.subject-kicker{display:block;color:#66816d;font-size:9px;font-weight:900;letter-spacing:1.5px}
+.subject-allocation-hero h1{margin:5px 0;color:#23432e;font-size:25px;line-height:1.2}
+.subject-allocation-hero p{margin:0;color:#718276;font-size:12px}
+.subject-hero-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#ffffffa8;color:#356448;font-size:29px}
+.subject-allocation-workspace{padding:20px;border:1px solid #dfe9e1;border-radius:16px;background:linear-gradient(145deg,#fff,#f8fbf8);box-shadow:0 5px 18px #244b3210}
+.subject-allocation-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:17px}
+.subject-allocation-section-head h2{margin:0 0 4px;color:#294632;font-size:16px}
+.subject-allocation-section-head p{margin:0;color:#758479;font-size:11px}
+.subject-step{padding:7px 10px;border-radius:8px;background:#eaf3eb;color:#55745e;font-size:9px;font-weight:900;letter-spacing:.6px;white-space:nowrap}
+.subject-allocation-filter{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:end}
+.subject-allocation-filter label{display:grid;gap:6px;color:#526b59;font-size:11px;font-weight:800}
+.subject-allocation-filter select{width:100%;min-width:0;box-sizing:border-box;min-height:42px;padding:10px 11px;border:1px solid #d7e3d9;border-radius:9px;background:#fff;color:#304b38;font:inherit;font-size:12px;outline:none}
+.subject-allocation-filter select:focus{border-color:#78a584;box-shadow:0 0 0 3px #e2efe4}
+.subject-allocation-filter-actions{display:flex;justify-content:flex-end;grid-column:1/-1;padding-top:3px}
+.subject-load-btn,.subject-modal-save{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:42px;padding:0 19px;border:0;border-radius:9px;background:#285b3c;color:#fff;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 4px 12px #285b3c22}
+.subject-load-btn:hover,.subject-modal-save:hover{background:#1f4d32}
+.subject-modal-backdrop{position:fixed;inset:0;z-index:10020;display:flex;align-items:center;justify-content:center;padding:16px;background:#17291dcc;backdrop-filter:blur(5px)}
+.subject-learners-modal{width:min(100%,760px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #d4e3d7;border-radius:18px;background:linear-gradient(145deg,#fff,#f6faf6);box-shadow:0 24px 80px #10251955;animation:subjectLearnersIn .18s ease-out}
+.subject-learners-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:19px 21px 15px;background:linear-gradient(120deg,#dceadf,#edf4ee);border-bottom:1px solid #dce8de}
+.subject-learners-modal-head h2{margin:5px 0 4px;color:#23432e;font-size:18px}
+.subject-learners-modal-head p{margin:0;color:#718276;font-size:11px}
+.subject-modal-close{width:32px;height:32px;flex:0 0 32px;border:0;border-radius:9px;background:#ffffffb8;color:#315b40;font-size:23px;line-height:1;cursor:pointer}
+.subject-learners-context{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:13px 20px;border-bottom:1px solid #e6eee7;background:#fbfdfb}
+.subject-learners-context span{display:grid;gap:4px;min-width:0}
+.subject-learners-context small{color:#849187;font-size:8px;font-weight:900;letter-spacing:.7px}
+.subject-learners-context b{overflow:hidden;color:#355540;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.subject-learners-modal form{display:flex;min-height:0;flex:1;flex-direction:column}
+.subject-learners-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 20px;color:#738277;font-size:10px}
+.subject-learners-toolbar label{display:flex;align-items:center;gap:8px;color:#46634f;font-size:11px;font-weight:850}
+.subject-learners-toolbar input,.subject-learner input{width:17px;height:17px;accent-color:#28613e}
+.subject-learner-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 20px 14px;overflow:auto;overscroll-behavior:contain}
+.subject-learner{display:flex;align-items:center;gap:10px;min-width:0;padding:10px 11px;border:1px solid #e2ebe3;border-radius:10px;background:#fff}
+.subject-learner span{display:grid;gap:3px;min-width:0}
+.subject-learner b{overflow:hidden;color:#344b3a;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.subject-learner small{color:#7a897e;font-size:9px}
+.subject-learner:has(input:checked){border-color:#a8cdb0;background:#f0f7f1}
+.subject-allocation-empty{grid-column:1/-1;padding:28px;text-align:center;color:#78877c;font-size:12px}
+.subject-learners-modal-actions{display:flex;justify-content:center;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid #e3ece4;background:#fbfdfb}
+.subject-modal-cancel{min-height:40px;padding:0 18px;border:1px solid #dce7de;border-radius:9px;background:#edf2ee;color:#52665a;font-size:11px;font-weight:800;cursor:pointer}
+@keyframes subjectLearnersIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-allocation-workspace{padding:15px}.subject-learners-context{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}}
+@media(max-width:480px){.subject-allocation-hero{padding:17px}.subject-allocation-hero h1{font-size:21px}.subject-hero-icon{width:40px;height:40px}.subject-allocation-filter{grid-template-columns:1fr}.subject-allocation-section-head{align-items:flex-start;flex-direction:column}.subject-allocation-filter-actions{grid-column:1}.subject-load-btn{width:100%}.subject-modal-backdrop{padding:8px}.subject-learners-modal{max-height:94vh}.subject-learners-modal-head{padding:16px}.subject-learners-toolbar{padding:11px 15px}.subject-learner-list{padding:0 15px 12px}.subject-learners-modal-actions{padding:12px 15px}}
+</style>
+<script>
+(function(){
+ var cls=document.getElementById('subjectClass'),stream=document.getElementById('subjectStream');
+ if(cls&&stream){var opts=Array.prototype.map.call(stream.options,function(o){return o.cloneNode(true)});
+ function filter(){var wanted=cls.value,previous=stream.value;while(stream.options.length)stream.remove(0);opts.forEach(function(o){if(!o.value||o.getAttribute('data-class')===wanted)stream.add(o.cloneNode(true))});if(Array.prototype.some.call(stream.options,function(o){return o.value===previous}))stream.value=previous;else stream.value=''}
+ cls.addEventListener('change',filter);filter();}
+ var all=document.getElementById('selectAllLearners');
+ if(all)all.addEventListener('change',function(){document.querySelectorAll('.subject-learner input').forEach(function(x){x.checked=all.checked})});
+})();
+function closeSubjectLearners(){var modal=document.getElementById('subjectLearnersModal');if(modal)modal.remove()}
+</script></div>"""%(exam_opts,term_opts,year_opts,subject_opts,class_opts,stream_opts,roster)
     return _school_page(request,"Subject Allocation",body)
+
 
 
 @router.post("/app/academics/subject-allocation")
