@@ -14543,7 +14543,7 @@ function closeSubjectModal(){{
   document.body.style.overflow='';
 }}
 document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeSubjectModal();}});
-</script>\\""" 
+</script>""" 
     return _school_page(request,"Subjects",body)
 
 @router.post("/app/subjects/add")
