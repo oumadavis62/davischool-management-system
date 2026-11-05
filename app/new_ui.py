@@ -7858,9 +7858,9 @@ def grading_setup(request: Request, subject_id: str = ""):
 @media(max-width:520px){.grading-summary-strip{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.grading-summary-strip>div{padding:9px 7px}.grading-summary-strip strong{font-size:14px}.grading-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.grading-dialog form{padding:15px}.grading-subject-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.grading-table-scroll{max-height:58vh}}
 </style>
 <script>
-function openGradingDelete(id,grade){document.getElementById('gradingDeleteMessage').textContent='Delete grade '+grade+'? This action cannot be undone.';document.getElementById('gradingDeleteForm').action='/app/academics/grading/delete/'+id+'?subject_id='+encodeURIComponent('%s');document.getElementById('gradingDeleteModal').showModal();}
+function openGradingDelete(id,grade){document.getElementById('gradingDeleteMessage').textContent='Delete grade '+grade+'? This action cannot be undone.';document.getElementById('gradingDeleteForm').action='/app/academics/grading/delete/'+id+'?subject_id='+encodeURIComponent('__SUBJECT_ID__');document.getElementById('gradingDeleteModal').showModal();}
 function toggleGradingTargets(value){document.querySelectorAll('.grading-target').forEach(function(el){el.checked=value;});}
-</script></div>""" % (subid)
+</script></div>""".replace("__SUBJECT_ID__", str(subid))
     )
     return _school_page(request, "Subject Grading & Points", body)
 
