@@ -3109,7 +3109,7 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
 %s
 <style>
 .subject-allocation-page{max-width:1120px;padding:16px 0 30px;color:#294532}
-.subject-allocation-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;margin-bottom:18px;border:1px solid #d3e3d6;border-radius:18px;background:linear-gradient(120deg,#dceadf 0%,#eff5ef 54%,#d6e7da 100%);box-shadow:0 8px 24px #244b3210}
+.subject-allocation-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;margin-bottom:18px;border:1px solid #d3e3d6;border-radius:18px;background:linear-gradient(120deg,#dceadf 0%%,#eff5ef 54%%,#d6e7da 100%%);box-shadow:0 8px 24px #244b3210}
 .subject-kicker{display:block;color:#66816d;font-size:9px;font-weight:900;letter-spacing:1.5px}
 .subject-allocation-hero h1{margin:5px 0;color:#23432e;font-size:25px;line-height:1.2}
 .subject-allocation-hero p{margin:0;color:#718276;font-size:12px}
@@ -3121,13 +3121,13 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
 .subject-step{padding:7px 10px;border-radius:8px;background:#eaf3eb;color:#55745e;font-size:9px;font-weight:900;letter-spacing:.6px;white-space:nowrap}
 .subject-allocation-filter{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:end}
 .subject-allocation-filter label{display:grid;gap:6px;color:#526b59;font-size:11px;font-weight:800}
-.subject-allocation-filter select{width:100%;min-width:0;box-sizing:border-box;min-height:42px;padding:10px 11px;border:1px solid #d7e3d9;border-radius:9px;background:#fff;color:#304b38;font:inherit;font-size:12px;outline:none}
+.subject-allocation-filter select{width:100%%;min-width:0;box-sizing:border-box;min-height:42px;padding:10px 11px;border:1px solid #d7e3d9;border-radius:9px;background:#fff;color:#304b38;font:inherit;font-size:12px;outline:none}
 .subject-allocation-filter select:focus{border-color:#78a584;box-shadow:0 0 0 3px #e2efe4}
 .subject-allocation-filter-actions{display:flex;justify-content:flex-end;grid-column:1/-1;padding-top:3px}
 .subject-load-btn,.subject-modal-save{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:42px;padding:0 19px;border:0;border-radius:9px;background:#285b3c;color:#fff;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 4px 12px #285b3c22}
 .subject-load-btn:hover,.subject-modal-save:hover{background:#1f4d32}
 .subject-modal-backdrop{position:fixed;inset:0;z-index:10020;display:flex;align-items:center;justify-content:center;padding:16px;background:#17291dcc;backdrop-filter:blur(5px)}
-.subject-learners-modal{width:min(100%,760px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #d4e3d7;border-radius:18px;background:linear-gradient(145deg,#fff,#f6faf6);box-shadow:0 24px 80px #10251955;animation:subjectLearnersIn .18s ease-out}
+.subject-learners-modal{width:min(100%%,760px);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid #d4e3d7;border-radius:18px;background:linear-gradient(145deg,#fff,#f6faf6);box-shadow:0 24px 80px #10251955;animation:subjectLearnersIn .18s ease-out}
 .subject-learners-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:19px 21px 15px;background:linear-gradient(120deg,#dceadf,#edf4ee);border-bottom:1px solid #dce8de}
 .subject-learners-modal-head h2{margin:5px 0 4px;color:#23432e;font-size:18px}
 .subject-learners-modal-head p{margin:0;color:#718276;font-size:11px}
@@ -3151,7 +3151,7 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
 .subject-modal-cancel{min-height:40px;padding:0 18px;border:1px solid #dce7de;border-radius:9px;background:#edf2ee;color:#52665a;font-size:11px;font-weight:800;cursor:pointer}
 @keyframes subjectLearnersIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:760px){.subject-allocation-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-allocation-workspace{padding:15px}.subject-learners-context{grid-template-columns:repeat(2,minmax(0,1fr))}.subject-learner-list{grid-template-columns:1fr}}
-@media(max-width:480px){.subject-allocation-hero{padding:17px}.subject-allocation-hero h1{font-size:21px}.subject-hero-icon{width:40px;height:40px}.subject-allocation-filter{grid-template-columns:1fr}.subject-allocation-section-head{align-items:flex-start;flex-direction:column}.subject-allocation-filter-actions{grid-column:1}.subject-load-btn{width:100%}.subject-modal-backdrop{padding:8px}.subject-learners-modal{max-height:94vh}.subject-learners-modal-head{padding:16px}.subject-learners-toolbar{padding:11px 15px}.subject-learner-list{padding:0 15px 12px}.subject-learners-modal-actions{padding:12px 15px}}
+@media(max-width:480px){.subject-allocation-hero{padding:17px}.subject-allocation-hero h1{font-size:21px}.subject-hero-icon{width:40px;height:40px}.subject-allocation-filter{grid-template-columns:1fr}.subject-allocation-section-head{align-items:flex-start;flex-direction:column}.subject-allocation-filter-actions{grid-column:1}.subject-load-btn{width:100%%}.subject-modal-backdrop{padding:8px}.subject-learners-modal{max-height:94vh}.subject-learners-modal-head{padding:16px}.subject-learners-toolbar{padding:11px 15px}.subject-learner-list{padding:0 15px 12px}.subject-learners-modal-actions{padding:12px 15px}}
 </style>
 <script>
 (function(){
