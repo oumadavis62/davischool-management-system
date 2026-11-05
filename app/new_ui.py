@@ -7027,41 +7027,39 @@ def app_home(request: Request):
   </div>
   <div class='overview-hero-mark' aria-hidden='true'>D</div>
 </header>
+<div class='admin-dashboard-showcase'>
+  <div class='dashboard-kpi-grid'>
+    <div class='dashboard-kpi kpi-sage'><span>STUDENTS</span><strong>{s:,}</strong><small>Active learners</small></div>
+    <div class='dashboard-kpi kpi-mint'><span>TEACHERS</span><strong>{t:,}</strong><small>Staff and teachers</small></div>
+    <div class='dashboard-kpi kpi-stone'><span>CLASSES</span><strong>{c:,}</strong><small>Registered classes</small></div>
+    <div class='dashboard-kpi kpi-rose'><span>ASSESSMENTS</span><strong>{dashboard_assessment_count:,}</strong><small>Examinations recorded</small></div>
+  </div>
+  <div class='dashboard-showcase-grid'>
+    <div class='dashboard-showcase-main'>
+      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
+      <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
+      <section class='dashboard-widget performance-mini'><div class='dashboard-widget-heading'><div><h2>Academic Performance</h2><p>Latest examination performance</p></div><span class='dashboard-widget-tag'>LATEST EXAM</span></div><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>school mean</span></div><small>Based on recorded marks in the latest examination</small></section>
+    </div>
+    <div class='dashboard-showcase-side'>
+      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
+      <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
+    </div>
+  </div>
+</div>
 <div class='admin-overview-top'>
   <section class='admin-overview-panel admin-overview-charts-panel'>
-    <div class='admin-overview-section-heading'><div><h2>School Overview</h2><p>Current student, staff and class information.</p></div><span class='admin-overview-section-kicker'>AT A GLANCE</span></div>
+    <div class='admin-overview-section-heading'><div><h2>School Overview</h2><p>Student gender, staff gender and class distribution.</p></div><span class='admin-overview-section-kicker'>SCHOOL PROFILE</span></div>
     <div class='grid overview-charts'>
       <div class='card gender-chart-card'><div class='label'>Student Gender</div>{gender_donut}</div>
       <div class='card gender-chart-card'><div class='label'>Staff Gender</div>{staff_gender_donut}</div>
       <div class='card class-size-chart-card classes-overview-card'><div class='label'>Classes Overview</div><div class='gender-chart-total'>{c} classes</div><div class='class-size-bars'>{class_size_bars or "<div class='class-size-empty'>No classes yet</div>"}</div></div>
     </div>
   </section>
-  <section class='card recent-activity-card admin-overview-panel admin-overview-recent'>
-    <div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div><a href='/app/audit' class='recent-view-all'>View All</a></div>
-    <div class='recent-activity-list'>{recent_activity_html}</div>
-  </section>
 </div>
-<div class='admin-overview-sections'>
-  <section class='admin-dashboard-showcase'>
-    <div class='dashboard-kpi-grid'>
-      <div class='dashboard-kpi kpi-sage'><span>STUDENTS</span><strong>{s:,}</strong><small>Active learners</small></div>
-      <div class='dashboard-kpi kpi-mint'><span>TEACHERS</span><strong>{t:,}</strong><small>Staff and teachers</small></div>
-      <div class='dashboard-kpi kpi-stone'><span>CLASSES</span><strong>{c:,}</strong><small>Registered classes</small></div>
-      <div class='dashboard-kpi kpi-rose'><span>ASSESSMENTS</span><strong>{dashboard_assessment_count:,}</strong><small>Examinations recorded</small></div>
-    </div>
-    <div class='dashboard-showcase-grid'>
-      <div class='dashboard-showcase-main'>
-        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Attendance</h2><p>Recent recorded attendance</p></div><span class='dashboard-widget-tag'>{attendance_rate}% present</span></div><div class='dashboard-legend'><span><i></i> Present</span><span><i></i> Recorded learners</span></div><div class='pulse-chart'>{attendance_bars}</div></section>
-        <section class='dashboard-widget finance-widget'><div class='dashboard-widget-heading'><div><h2>Fee Collections</h2><p>Recorded payments by month</p></div><span class='dashboard-widget-tag'>KES</span></div><div class='finance-chart'>{finance_bars}</div></section>
-        <div class='dashboard-bottom-pair'><section class='dashboard-widget mini-widget'><h2>Students</h2>{gender_donut}</section><section class='dashboard-widget mini-widget performance-mini'><h2>Academic Performance</h2><div class='performance-ring'><strong>{latest_exam_mean_label}</strong><span>latest exam mean</span></div><small>Latest examination performance</small></section></div>
-      </div>
-      <div class='dashboard-showcase-side'>
-        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Academic Calendar</h2><p>Examinations on record</p></div><span class='dashboard-widget-mark'>▦</span></div><div class='calendar-list'>{calendar_html}</div></section>
-        <section class='dashboard-widget'><div class='dashboard-widget-heading'><div><h2>Notice Board</h2><p>Latest school announcements</p></div><span class='dashboard-widget-mark'>◎</span></div><div class='notice-list'>{dashboard_notice_html}</div></section>
-      </div>
-    </div>
-  </section>
-</div>
+<section class='card recent-activity-card admin-overview-panel admin-overview-recent'>
+  <div class='recent-activity-head'><div><h2>Recent Activities</h2><div class='muted'>Latest updates from this school workspace.</div></div><a href='/app/audit' class='recent-view-all'>View All</a></div>
+  <div class='recent-activity-list'>{recent_activity_html}</div>
+</section>
 <section class='admin-overview-health admin-overview-panel'>{admin_health}</section>
 </div>
 <style>
@@ -7163,6 +7161,43 @@ def app_home(request: Request):
 .calendar-list,.notice-list{{display:grid;gap:8px}}.calendar-row{{display:flex;align-items:center;gap:10px;background:#eef3ed;border-left:3px solid #7ca66f;border-radius:7px;padding:11px 10px;min-width:0}}.calendar-date{{font-size:10px;font-weight:900;color:#294b35;min-width:74px}}.calendar-row div,.notice-row div{{min-width:0;display:flex;flex-direction:column;gap:3px}}.calendar-row b,.notice-row b{{font-size:10px;color:#304638;overflow-wrap:anywhere}}.calendar-row small,.notice-row small{{font-size:9px;color:#7c8b80;line-height:1.35;overflow-wrap:anywhere}}.notice-row{{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:start;gap:9px;padding:9px 2px;border-bottom:1px solid #edf1ed}}.notice-dot{{width:7px;height:7px;border-radius:50%;background:#57936b;margin-top:4px}}.notice-row time{{font-size:8px;color:#89958c;white-space:nowrap}}.dashboard-empty{{font-size:10px;color:#89958c;padding:22px 8px;text-align:center;width:100%}}
 @media(max-width:850px){{.dashboard-kpi-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.dashboard-showcase-grid{{grid-template-columns:1fr}}}}
 @media(max-width:560px){{.admin-dashboard-showcase{{padding:10px;margin:12px 0;border-radius:15px}}.dashboard-kpi-grid{{gap:8px;margin-bottom:10px}}.dashboard-kpi{{padding:11px;border-radius:12px}}.dashboard-showcase-grid,.dashboard-showcase-main,.dashboard-showcase-side{{gap:10px}}.dashboard-widget{{padding:12px;border-radius:12px}}.pulse-chart,.finance-chart{{height:128px;gap:7px}}.pulse-bar-track,.finance-bar-track{{height:88px;width:min(100%,26px)}}.dashboard-bottom-pair{{gap:9px}}.mini-widget{{min-height:135px}}.calendar-date{{min-width:65px;font-size:9px}}}}
+
+/* Overview layout refinement: ordered, full-width sections with a consistent sage palette. */
+.admin-registrar-overview .admin-dashboard-showcase{{
+  margin:0 0 14px;padding:18px;
+  background:linear-gradient(135deg,#e8f0e6 0%,#f5f8f2 48%,#e3ede2 100%);
+  border:1px solid #d6e4d4;border-radius:19px;
+  box-shadow:0 7px 22px #294b350d
+}}
+.admin-registrar-overview .dashboard-kpi{{transition:transform .18s ease,box-shadow .18s ease}}
+.admin-registrar-overview .dashboard-kpi:hover{{transform:translateY(-2px);box-shadow:0 7px 16px #294b3514}}
+.admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:minmax(0,1.08fr) minmax(280px,.92fr);gap:14px}}
+.admin-registrar-overview .dashboard-showcase-main,.admin-registrar-overview .dashboard-showcase-side{{gap:14px}}
+.admin-registrar-overview .dashboard-widget{{border-color:#dfe9dd;border-radius:14px;box-shadow:0 3px 12px #294b3509}}
+.admin-registrar-overview .dashboard-widget-heading h2{{font-size:14px;letter-spacing:-.1px}}
+.admin-registrar-overview .dashboard-bottom-pair{{grid-template-columns:minmax(0,1fr)}}
+.admin-registrar-overview .performance-mini{{min-height:156px;padding:16px}}
+.admin-registrar-overview .performance-mini .dashboard-widget-heading{{width:100%;align-items:flex-start}}
+.admin-registrar-overview .performance-ring{{width:88px;height:88px;margin:2px auto 5px;border-color:#dce9df;border-top-color:#315b42;border-right-color:#6ba99a}}
+.admin-registrar-overview .admin-overview-top{{display:block;margin-top:14px}}
+.admin-registrar-overview .admin-overview-charts-panel{{padding:18px;background:linear-gradient(145deg,#fff 0%,#f8fbf6 100%)}}
+.admin-registrar-overview .overview-charts{{margin-top:14px}}
+.admin-registrar-overview .overview-charts>.card{{background:linear-gradient(155deg,#fff 0%,#f1f7ef 100%);border-color:#e0eade}}
+.admin-registrar-overview .admin-overview-recent{{margin-top:14px}}
+.admin-registrar-overview .admin-overview-recent .recent-activity-list{{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 24px}}
+.admin-registrar-overview .admin-overview-health{{margin-top:14px}}
+@media(max-width:850px){{
+  .admin-registrar-overview .dashboard-showcase-grid{{grid-template-columns:1fr}}
+  .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .admin-registrar-overview .dashboard-showcase-main>.performance-mini{{grid-column:1/-1}}
+}}
+@media(max-width:650px){{
+  .admin-registrar-overview .admin-dashboard-showcase{{padding:11px;border-radius:14px}}
+  .admin-registrar-overview .dashboard-showcase-main{{grid-template-columns:1fr;gap:10px}}
+  .admin-registrar-overview .dashboard-showcase-main>.performance-mini{{grid-column:auto}}
+  .admin-registrar-overview .admin-overview-charts-panel{{padding:12px}}
+  .admin-registrar-overview .admin-overview-recent .recent-activity-list{{grid-template-columns:1fr}}
+}}
 </style></div>"""
 
     con.close()
