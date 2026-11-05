@@ -3070,11 +3070,9 @@ def student_subject_allocation_page(request: Request, academic_year: str="", cla
                     AND cohort_current.class_id=? AND cohort_current.student_id=s.id))
                   AND lower(coalesce(s.status,'active'))='active'
                   AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
-                  AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
-                       WHERE snap.school_id=s.school_id AND snap.cycle_year=CAST(? AS INTEGER) AND snap.class_id=?)
-                    OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
-                       WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
-                         AND mem.class_id=? AND mem.student_id=s.id))
+                  -- Current class membership is authoritative for the selected year.
+                  -- Also include learners preserved in that year's promotion cohort.
+
                 ORDER BY s.name""",(sid,cid,academic_year,cid,academic_year,cid,academic_year,cid)).fetchall()
             allocated=_student_subject_allocation_ids(cur,sid,academic_year,cid,subid)
     except Exception as exc:
@@ -3201,11 +3199,9 @@ async def save_student_subject_allocation(request: Request):
               AND cohort_current.class_id=? AND cohort_current.student_id=s.id))
             AND lower(coalesce(s.status,'active'))='active'
             AND NOT EXISTS(SELECT 1 FROM student_graduations g WHERE g.school_id=s.school_id AND g.student_id=s.id)
-            AND (NOT EXISTS(SELECT 1 FROM student_promotion_cohort_snapshots snap
-                 WHERE snap.school_id=s.school_id AND snap.cycle_year=CAST(? AS INTEGER) AND snap.class_id=?)
-              OR EXISTS(SELECT 1 FROM student_promotion_cohort_members mem
-                 WHERE mem.school_id=s.school_id AND mem.cycle_year=CAST(? AS INTEGER)
-                   AND mem.class_id=? AND mem.student_id=s.id))""",(sid,cid,year,cid,year,cid,year,cid)).fetchall()
+            -- Current class membership is authoritative for the selected year;
+            -- the OR above also preserves the historical promotion cohort.
+""",(sid,cid,year,cid,year,cid,year,cid)).fetchall()
         eligible={int(x["id"]) for x in roster}
         requested={int(x) for x in form.getlist("student_ids") if str(x).isdigit()}
         if not requested.issubset(eligible):
