@@ -4203,7 +4203,7 @@ def overall_grading(request: Request):
       ".og-panel{background:#fff;border:1px solid #e1eae2;border-radius:16px;margin-bottom:16px;overflow:hidden;box-shadow:0 4px 16px rgba(32,65,43,.045)}"
       ".og-panel-heading{padding:16px 19px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #edf2ed;background:linear-gradient(100deg,#f5f9f5,#fff)}"
       ".og-panel-heading h3{margin:0 0 4px;font-size:14px;color:#31533c}.og-count{font-size:10px;font-weight:800;color:#52765d;background:#eaf3eb;border:1px solid #d7e7da;border-radius:20px;padding:6px 10px;white-space:nowrap}"
-      ".og-table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.og-table{width:100%;min-width:560px;border-collapse:collapse;text-align:left}"
+      ".og-table-wrap{width:100%%;overflow-x:auto;-webkit-overflow-scrolling:touch}.og-table{width:100%%;min-width:560px;border-collapse:collapse;text-align:left}"
       ".og-table th{background:#edf5ee;color:#4c6c55;font-size:10px;text-transform:uppercase;letter-spacing:.45px;font-weight:900;padding:12px 14px;white-space:nowrap}"
       ".og-table td{padding:12px 14px;border-top:1px solid #edf2ed;color:#465b4c;font-size:12px;vertical-align:middle}.og-table tbody tr:hover{background:#f8fbf8}"
       ".og-table th:last-child,.og-table td:last-child{text-align:center;white-space:nowrap}.og-grade-pill{display:inline-flex;min-width:29px;justify-content:center;padding:5px 9px;border-radius:8px;background:#e5f1e7;color:#2e6540;font-weight:900;border:1px solid #d1e5d5}"
