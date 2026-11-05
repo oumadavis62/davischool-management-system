@@ -14478,14 +14478,72 @@ def subjects_page(request: Request):
     con=_db();cur=con.cursor(); rows=cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall();con.close()
     current_ds_tab=str(request.query_params.get("ds_tab") or "").strip()
     current_ds_tab_q=("?" + "ds_tab=" + quote(current_ds_tab,safe="")) if current_ds_tab else ""
-    trs="".join(f"<tr class='subject-row' tabindex='0' onclick='selectSubjectRow(this,event)' onkeydown='if(event.key===\"Enter\"||event.key===\" \"){{selectSubjectRow(this,event)}}'><td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td><td class='subject-actions'><a class='btn edit' href='/app/subjects/edit/{x['id']}'>Edit</a><form method='post' action='/app/subjects/delete/{x['id']}{current_ds_tab_q}' style='display:inline' onsubmit='return confirm(&quot;Delete this subject? This action cannot be undone.&quot;);'><button type='submit' formaction='/app/subjects/delete/{x['id']}{current_ds_tab_q}' formmethod='post' class='btn danger'>Delete</button></form></td></tr>" for x in rows)
-    body=f"""<div class='page'><h1>Subjects</h1><div class='card section'><div class='subjects-filter-scroll' tabindex='0'><form method='post' action='/app/subjects/add' class='subjects-filter-form'><input name='name' required placeholder='Subject name' class='field'><input name='code' placeholder='Code' class='field'><input name='initial' placeholder='Initial' class='field'><button type='submit' formaction='/app/subjects/add{current_ds_tab_q}' formmethod='post' class='btn'>Add Subject</button></form></div></div><div class='card section'><div class='marksheet-scroll subjects-table-scroll' tabindex='0'><table class='subjects-table'><thead><tr><th>Subject</th><th>Code</th><th>Initial</th><th>Actions</th></tr></thead><tbody>{trs or '<tr><td colspan=4>No subjects.</td></tr>'}</tbody></table></div></div></div><style>.subjects-filter-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:6px}}.subjects-filter-form{{display:grid;grid-template-columns:260px 220px 180px auto;gap:10px;width:max-content;min-width:100%}}.subjects-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px}}.subjects-table{{width:max-content;min-width:700px}}.subjects-table th:first-child,.subjects-table td:first-child{{width:250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.subjects-table tbody tr.subject-row{{cursor:pointer;transition:background .15s,box-shadow .15s}}.subjects-table tbody tr.subject-row:hover,.subjects-table tbody tr.subject-row.selected{{background:#f0fdf4;box-shadow:inset 4px 0 0 #176B3A}}.subject-actions{{white-space:nowrap;text-align:right}}.subject-actions .edit,.subject-actions .danger{{display:none}}.subject-row.selected .subject-actions .edit,.subject-row.selected .subject-actions .danger{{display:inline-block}}.subject-row:focus{{outline:2px solid #176B3A;outline-offset:-2px}}.formgrid{{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px}}.field{{padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:white;font-weight:800}}</style><script>
+    trs="".join(
+        f"<tr class='subject-row' tabindex='0' onclick='selectSubjectRow(this,event)' onkeydown='if(event.key===\"Enter\"||event.key===\" \" ){{selectSubjectRow(this,event)}}'>"
+        f"<td>{escape(str(x['name']))}</td><td>{escape(str(x['code'] or ''))}</td><td>{escape(str(x['initial'] or ''))}</td>"
+        f"<td class='subject-actions'><button type='button' class='btn edit' onclick='openSubjectModal(this)' data-id='{int(x['id'])}' data-name='{escape(str(x['name'] or ''),quote=True)}' data-code='{escape(str(x['code'] or ''),quote=True)}' data-initial='{escape(str(x['initial'] or ''),quote=True)}'>Edit</button>"
+        f"<form method='post' action='/app/subjects/delete/{int(x['id'])}{current_ds_tab_q}' style='display:inline' onsubmit='return confirm(&quot;Delete this subject? This action cannot be undone.&quot;);'><button type='submit' class='btn danger'>Delete</button></form></td></tr>"
+        for x in rows
+    )
+    body=f\"""<div class='page subjects-page'>
+<header class='subjects-hero'><div><div class='subjects-eyebrow'>ACADEMIC SETUP</div><h1>Subjects</h1><p>Manage the subjects offered by your school.</p></div><button type='button' class='btn subjects-add-btn' onclick='openSubjectModal()'><span aria-hidden='true'>＋</span> Add Subject</button></header>
+<section class='subjects-surface'><div class='subjects-list-heading'><div><h2>Subject Register</h2><p>{len(rows)} subjects registered</p></div><span class='subjects-register-icon' aria-hidden='true'>▤</span></div>
+<div class='subjects-table-scroll' tabindex='0'><table class='subjects-table'><thead><tr><th>Subject</th><th>Code</th><th>Initial</th><th>Actions</th></tr></thead><tbody>{trs or "<tr><td colspan='4' class='subjects-empty'>No subjects have been added yet.</td></tr>"}</tbody></table></div>
+</section></div>
+<div class='subject-modal-backdrop' id='subjectModal' hidden onclick='if(event.target===this)closeSubjectModal()'>
+<section class='subject-modal' role='dialog' aria-modal='true' aria-labelledby='subjectModalTitle'>
+<header class='subject-modal-heading'><div><span class='subjects-eyebrow'>SUBJECT DETAILS</span><h2 id='subjectModalTitle'>Add Subject</h2><p id='subjectModalHint'>Enter the subject information below.</p></div><button type='button' class='subject-modal-close' aria-label='Close' onclick='closeSubjectModal()'>×</button></header>
+<form id='subjectModalForm' method='post' action='/app/subjects/add{current_ds_tab_q}' class='subject-modal-form'>
+<label>Subject name<input id='subjectName' name='name' required maxlength='120' placeholder='e.g. Mathematics' class='field'></label>
+<label>Subject code<input id='subjectCode' name='code' maxlength='40' placeholder='Optional code' class='field'></label>
+<label>Subject initial<input id='subjectInitial' name='initial' maxlength='20' placeholder='e.g. MAT' class='field'></label>
+<div class='subject-modal-actions'><button type='button' class='btn secondary' onclick='closeSubjectModal()'>Cancel</button><button type='submit' class='btn subjects-save-btn' id='subjectModalSave'>Save Subject</button></div>
+</form></section></div>
+<style>
+.subjects-page{{padding:18px 0 28px}}
+.subjects-hero{{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 18px;padding:20px 22px;border:1px solid #d5e4d8;border-radius:18px;background:linear-gradient(125deg,#dceadf 0%,#edf4ee 52%,#d5e5d9 100%);box-shadow:0 8px 24px #254b3210}}
+.subjects-eyebrow{{font-size:9px;letter-spacing:1.4px;font-weight:900;color:#567360}}.subjects-hero h1{{font-size:25px;line-height:1.15;color:#203b2a;margin:5px 0}}.subjects-hero p,.subjects-list-heading p{{font-size:11px;color:#718277;margin:0}}
+.subjects-add-btn,.subjects-save-btn{{background:#285b3c;color:#fff;box-shadow:0 4px 12px #285b3c24}}.subjects-add-btn{{white-space:nowrap;display:flex;align-items:center;gap:7px}}.subjects-add-btn span{{font-size:19px;line-height:12px}}
+.subjects-surface{{background:linear-gradient(145deg,#fff 0%,#f8fbf8 100%);border:1px solid #dfe9e1;border-radius:16px;padding:17px;box-shadow:0 5px 18px #244b3210;min-width:0}}
+.subjects-list-heading{{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}}.subjects-list-heading h2{{font-size:15px;color:#294632;margin:0 0 4px;font-weight:850}}.subjects-register-icon{{width:34px;height:34px;border-radius:10px;background:#e6f0e8;color:#356448;display:grid;place-items:center;font-size:19px}}
+.subjects-table-scroll{{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;padding-bottom:8px;border:1px solid #e5ece6;border-radius:11px}}
+.subjects-table{{width:100%;min-width:650px;border-collapse:separate;border-spacing:0}}.subjects-table th{{background:#eaf2eb;color:#496452;text-align:left;font-size:10px;letter-spacing:.6px;text-transform:uppercase;padding:12px 14px;white-space:nowrap}}.subjects-table td{{padding:12px 14px;border-top:1px solid #edf1ed;color:#34483a;font-size:12px;background:#fff}}.subjects-table tbody tr:hover td{{background:#f4f8f4}}.subjects-table th:first-child,.subjects-table td:first-child{{min-width:220px}}.subjects-empty{{text-align:center;color:#829087!important;padding:28px!important}}
+.subject-actions{{white-space:nowrap;text-align:right}}.subject-actions .edit,.subject-actions .danger{{display:none}}.subject-row.selected .subject-actions .edit,.subject-row.selected .subject-actions .danger{{display:inline-block}}.subject-row.selected td{{background:#f0f6f1}}.subject-row:focus{{outline:2px solid #548565;outline-offset:-2px}}
+.subjects-page .btn{{padding:10px 14px;border:0;border-radius:9px;font-size:11px;font-weight:800;cursor:pointer}}.subjects-page .danger{{background:#f8e8e7;color:#9b3934}}.subjects-page .edit{{background:#e6f0e8;color:#285b3c}}
+.subject-modal-backdrop{{position:fixed;inset:0;z-index:10000;background:#17291dcc;backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:18px}}.subject-modal-backdrop[hidden]{{display:none!important}}
+.subject-modal{{width:min(100%,470px);background:linear-gradient(145deg,#fff 0%,#f4f8f4 100%);border:1px solid #d5e4d8;border-radius:18px;box-shadow:0 24px 80px #10251955;overflow:hidden;animation:subjectModalIn .18s ease-out}}
+.subject-modal-heading{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 21px 16px;background:linear-gradient(120deg,#dceadf,#edf4ee);border-bottom:1px solid #dce8de}}.subject-modal-heading h2{{font-size:19px;color:#23422e;margin:5px 0 4px}}.subject-modal-heading p{{font-size:11px;color:#718277;margin:0}}.subject-modal-close{{width:32px;height:32px;border:0;border-radius:9px;background:#ffffffb8;color:#315b40;font-size:23px;line-height:1;cursor:pointer}}
+.subject-modal-form{{display:grid;gap:13px;padding:20px 21px 21px}}.subject-modal-form label{{display:grid;gap:6px;color:#52685a;font-size:11px;font-weight:800}}.subject-modal-form .field{{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #d7e3d9;border-radius:9px;background:#fff;color:#253b2c;font:inherit;font-size:13px;outline:none}}.subject-modal-form .field:focus{{border-color:#6d9b79;box-shadow:0 0 0 3px #dceadf}}
+.subject-modal-actions{{display:flex;justify-content:flex-end;gap:9px;padding-top:5px}}.subject-modal-actions .btn{{padding:11px 17px;border:0;border-radius:9px;font-weight:800;cursor:pointer}}.subject-modal-actions .secondary{{background:#e8eee9;color:#52665a}}
+@keyframes subjectModalIn{{from{{opacity:0;transform:translateY(8px) scale(.985)}}to{{opacity:1;transform:translateY(0) scale(1)}}}}
+@media(max-width:600px){{.subjects-hero{{align-items:flex-start;padding:16px;gap:9px}}.subjects-hero h1{{font-size:21px}}.subjects-add-btn{{padding:9px 10px!important;font-size:10px}}.subjects-surface{{padding:11px}}.subject-modal-backdrop{{padding:12px;align-items:center}}.subject-modal-heading,.subject-modal-form{{padding-left:16px;padding-right:16px}}}}
+</style>
+<script>
 function selectSubjectRow(row,event){{
-  if(event && event.target && event.target.closest && event.target.closest('a,button,form')) return;
+  if(event&&event.target&&event.target.closest&&event.target.closest('a,button,form'))return;
   document.querySelectorAll('.subjects-table tbody tr.subject-row.selected').forEach(function(r){{if(r!==row)r.classList.remove('selected')}});
   row.classList.toggle('selected');
 }}
-</script>"""
+function openSubjectModal(button){{
+  var modal=document.getElementById('subjectModal'),form=document.getElementById('subjectModalForm'),editing=!!(button&&button.dataset&&button.dataset.id);
+  document.getElementById('subjectModalTitle').textContent=editing?'Edit Subject':'Add Subject';
+  document.getElementById('subjectModalHint').textContent=editing?'Update the subject information below.':'Enter the subject information below.';
+  document.getElementById('subjectModalSave').textContent=editing?'Save Changes':'Save Subject';
+  form.action=editing?('/app/subjects/edit/'+button.dataset.id+'{current_ds_tab_q}'):'/app/subjects/add{current_ds_tab_q}';
+  document.getElementById('subjectName').value=editing?button.dataset.name:'';
+  document.getElementById('subjectCode').value=editing?button.dataset.code:'';
+  document.getElementById('subjectInitial').value=editing?button.dataset.initial:'';
+  modal.hidden=false;
+  document.body.style.overflow='hidden';
+  document.getElementById('subjectName').focus();
+}}
+function closeSubjectModal(){{
+  var modal=document.getElementById('subjectModal');
+  if(modal)modal.hidden=true;
+  document.body.style.overflow='';
+}}
+document.addEventListener('keydown',function(event){{if(event.key==='Escape')closeSubjectModal();}});
+</script>\\""" 
     return _school_page(request,"Subjects",body)
 
 @router.post("/app/subjects/add")
