@@ -7023,7 +7023,7 @@ def app_home(request: Request):
   </section>
 </div>
 <section class='admin-overview-health admin-overview-panel'>{admin_health}</section>
-</div>"""
+</div>
 <style>
 .overview-school-heading{{text-align:center;margin-bottom:2px}}
 .overview-home .action,.overview-home .tile{{background:#fff;border-color:#e2ebe3;color:#1f3b2a}}
