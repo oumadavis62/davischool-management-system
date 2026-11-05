@@ -14829,7 +14829,7 @@ def exams_page(request: Request):
         for x in rows:
             selected=_exam_participating_class_ids(cur,sid,int(x["id"]))
             class_count=len(classes) if selected is None else len(selected)
-            exam_cards.append((x,class_count))
+            exam_cards.append((x,class_count,selected))
         con.commit()
     except Exception:
         con.close()
@@ -14841,7 +14841,7 @@ def exams_page(request: Request):
         %(escape(" ".join(str(x[k] or "") for k in ("name","exam_type","term","year")).lower(),quote=True),
           escape(str(x["name"] or "Untitled examination")),escape(str(x["exam_type"] or "Assessment")),
           escape(str(x["term"] or "Term not set")),escape(str(x["year"] or "Year not set")),count,int(x["id"]))
-        for x,count in exam_cards
+        for x,count,_selected in exam_cards
     )
     edit_modals="".join(
         "<dialog id='examEditModal%s' class='exam-dialog exam-edit-dialog'><form method='post' action='/app/exams/edit/%s%s' class='exam-edit-form'><div class='exam-dialog-head'><div><span>EDIT ASSESSMENT</span><h2>Edit Examination</h2><p>Update details and participating classes.</p></div><button type='button' class='exam-dialog-close' onclick=\"document.getElementById('examEditModal%s').close()\">×</button></div><div class='exam-form-grid'><label>Examination name<input name='name' required class='exam-field' value='%s'></label><label>Examination type<select name='exam_type' class='exam-field'><option value=''>Select type</option>%s</select></label><label>Academic term<select name='term' class='exam-field'><option value=''>Select term</option>%s</select></label><label>Academic year<select name='year' class='exam-field'>%s</select></label></div><div class='exam-class-heading'><div><h3>Participating classes &amp; streams</h3><p>Choose every class or stream sitting this examination.</p></div><span>%s available</span></div><div class='exam-class-picker'>%s</div><div class='exam-dialog-actions'><button type='button' class='exam-cancel' onclick=\"document.getElementById('examEditModal%s').close()\">Cancel</button><button type='button' class='exam-delete' onclick=\"openExamDelete(%s,%s)\">Delete examination</button><button type='submit' class='exam-save'>Save Changes</button></div></form></dialog>"
@@ -14850,9 +14850,9 @@ def exams_page(request: Request):
           "".join("<option %s>%s</option>"%("selected" if str(x["term"] or "")==v else "",v) for v in ("Term 1","Term 2","Term 3")),
           "".join("<option %s>%s</option>"%("selected" if str(x["year"] or "")==y else "",y) for y in YEAR_OPTIONS),
           len(classes),
-          "".join("<label class='exam-class-option'><input type='checkbox' name='class_ids' value='%s' %s><span><b>%s</b><small>%s</small></span></label>"%(c["id"],"checked" if (_exam_participating_class_ids(cur,sid,int(x["id"])) is None or int(c["id"]) in (_exam_participating_class_ids(cur,sid,int(x["id"])) or set())) else "",escape(str(c["name"] or "")),escape(str(c["stream"] or "No stream"))) for c in classes),
+          "".join("<label class='exam-class-option'><input type='checkbox' name='class_ids' value='%s' %s><span><b>%s</b><small>%s</small></span></label>"%(c["id"],"checked" if (selected is None or int(c["id"]) in selected) else "",escape(str(c["name"] or "")),escape(str(c["stream"] or "No stream"))) for c in classes),
           int(x["id"]),int(x["id"]),json.dumps(str(x["name"] or "this examination")))
-        for x,_count in exam_cards
+        for x,_count,selected in exam_cards
     )
     body=f"""<div class='page examination-page'>
 <header class='exam-hero'><div><span class='exam-kicker'>ACADEMIC SETUP</span><h1>Examinations</h1><p>Organise assessments, academic periods and participating classes in one place.</p></div><button type='button' class='exam-create-trigger' onclick="document.getElementById('examCreateModal').showModal()">＋ Create Examination</button></header>
