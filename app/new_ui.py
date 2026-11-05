@@ -12332,7 +12332,20 @@ function printReportCard(){
   w.document.open();w.document.write(html);w.document.close();w.focus();
 }
 </script>""";
-    bulk_btn=(f"<div style='margin-top:10px;padding:12px;border:2px solid #176B3A;border-radius:10px;background:#f0fdf4'><b>📚 Whole Class / Stream Report</b><div class='muted' style='margin:5px 0 9px'>The preview below contains every student in the selected class/stream, not just the first student.</div><a class='btn' style='display:inline-block;text-decoration:none;background:#176B3A' target='_blank' href='/app/report-cards/class-preview?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}&ds_tab_shared=1'>🖨️ Print All Class / Stream Reports</a> <a class='btn' style='display:inline-block;text-decoration:none' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&class_id={cid}'>⬇️ Download All Class / Stream Reports</a></div>" if cid and eid else "")
+    bulk_btn=(f"""<section class='whole-class-report-panel' style='margin:18px 0 22px;padding:20px 22px;border:1px solid #cfe2d0;border-radius:18px;background:linear-gradient(125deg,#e8f3e7 0%,#dcebdc 52%,#f8fbf6 100%);box-shadow:0 8px 22px rgba(35,82,53,.09)'>
+      <div style='display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap'>
+        <div style='flex:1 1 260px;min-width:0'>
+          <div style='font-size:10px;font-weight:900;letter-spacing:1.4px;color:#47785a;text-transform:uppercase'>Class &amp; Stream Reports</div>
+          <h3 style='margin:6px 0 7px;color:#214b37;font-size:20px;font-weight:900'>Whole Class / Stream Report</h3>
+          <p style='margin:0;color:#587262;font-size:13px;line-height:1.55'>Generate and review report cards for the selected class or stream together. The full preview includes all eligible learners with recorded results.</p>
+        </div>
+        <div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap'>
+          <a class='btn' target='_blank' rel='noopener' href='/app/report-cards/class-preview?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&amp;class_id={cid}&amp;ds_tab_shared=1' style='display:inline-flex;align-items:center;justify-content:center;padding:11px 15px;border:1px solid #2e6847;border-radius:10px;background:linear-gradient(135deg,#3d7959,#214b37);color:#fff;text-decoration:none;font-weight:850;box-shadow:0 4px 10px rgba(33,75,55,.16)'>Open Full Class Preview</a>
+          <a class='btn' href='/app/report-cards/class-pdf?exam_ids={quote(','.join(str(x) for x in selected_exam_ids))}&amp;class_id={cid}' style='display:inline-flex;align-items:center;justify-content:center;padding:11px 15px;border:1px solid #c5ddc8;border-radius:10px;background:#fff;color:#315b40;text-decoration:none;font-weight:850'>Download All PDF</a>
+        </div>
+      </div>
+      <div style='margin-top:13px;padding-top:11px;border-top:1px solid #cfe2d0;color:#55745d;font-size:11px;font-weight:700'>Preview, search, select individual learner reports, print selected reports, or print the complete class/stream set.</div>
+    </section>""" if cid and eid else "")
     report_pdf_query=quote(",".join(str(x) for x in selected_exam_ids))
     print_btn=((
         "<button type='button' class='btn' style='margin-top:8px;background:#176B3A' onclick='printReportCard()'>🖨️ Print MarkSheet / Report Preview</button> "
