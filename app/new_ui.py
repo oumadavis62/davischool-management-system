@@ -14485,7 +14485,7 @@ def subjects_page(request: Request):
         f"<form method='post' action='/app/subjects/delete/{int(x['id'])}{current_ds_tab_q}' style='display:inline' onsubmit='return confirm(&quot;Delete this subject? This action cannot be undone.&quot;);'><button type='submit' class='btn danger'>Delete</button></form></td></tr>"
         for x in rows
     )
-    body=f\"""<div class='page subjects-page'>
+    body=f"""<div class='page subjects-page'>
 <header class='subjects-hero'><div><div class='subjects-eyebrow'>ACADEMIC SETUP</div><h1>Subjects</h1><p>Manage the subjects offered by your school.</p></div><button type='button' class='btn subjects-add-btn' onclick='openSubjectModal()'><span aria-hidden='true'>＋</span> Add Subject</button></header>
 <section class='subjects-surface'><div class='subjects-list-heading'><div><h2>Subject Register</h2><p>{len(rows)} subjects registered</p></div><span class='subjects-register-icon' aria-hidden='true'>▤</span></div>
 <div class='subjects-table-scroll' tabindex='0'><table class='subjects-table'><thead><tr><th>Subject</th><th>Code</th><th>Initial</th><th>Actions</th></tr></thead><tbody>{trs or "<tr><td colspan='4' class='subjects-empty'>No subjects have been added yet.</td></tr>"}</tbody></table></div>
