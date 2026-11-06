@@ -385,10 +385,13 @@ async def specialist_staff_portal_route_guard(request: Request, call_next):
             or (path == "/app/ops/action" and method == "POST")
             or path in ("/logout", "/app/logout")
         )
-        if path.startswith("/app/") and not allowed:
+        public_path = (
+            path in ("/", "/login", "/logout", "/app/logout", "/healthz", "/favicon.ico")
+            or path.startswith("/static/")
+            or path.startswith("/assets/")
+        )
+        if not allowed and not public_path:
             return HTMLResponse("This account is restricted to its assigned staff portal.", 403)
-        if path == "/app/ops/action" and not allowed:
-            return HTMLResponse("This account cannot perform that portal action.", 403)
         if path in ("/app/librarian", "/app/ict", "/app/support") and path != own_portal:
             return HTMLResponse("This staff portal is not assigned to your account.", 403)
     return await call_next(request)
