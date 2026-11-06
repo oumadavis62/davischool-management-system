@@ -851,6 +851,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('bus')}</span><b>Transport Management</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/transport/vehicles", "Vehicle Register")
+            + _nav_sub("/app/transport/routes", "Routes & Stops")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
