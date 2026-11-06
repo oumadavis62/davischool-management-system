@@ -885,3 +885,151 @@ def save_transport_trip_log(
     finally:
         con.close()
     return RedirectResponse("/app/transport/trip-logs", 303)
+
+
+
+@router.get("/app/transport/reports", response_class=HTMLResponse)
+def transport_reports(request: Request, date_from: str = "", date_to: str = ""):
+    sid, error = _transport_guard(request)
+    if error:
+        return error
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_trip_logs(cur)
+        con.commit()
+        event_where = ["school_id=?"]
+        event_params = [sid]
+        if date_from.strip():
+            event_where.append("trip_date>=?")
+            event_params.append(date_from.strip())
+        if date_to.strip():
+            event_where.append("trip_date<=?")
+            event_params.append(date_to.strip())
+        event_sql = " AND ".join(event_where)
+        fleet = cur.execute(
+            "SELECT COUNT(*) AS total, SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) AS active, "
+            "SUM(CASE WHEN status='Maintenance' THEN 1 ELSE 0 END) AS maintenance FROM transport_vehicles WHERE school_id=?",
+            (sid,)
+        ).fetchone()
+        route_totals = cur.execute(
+            "SELECT COUNT(*) AS total, SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) AS active FROM transport_routes WHERE school_id=?",
+            (sid,)
+        ).fetchone()
+        allocation_total = cur.execute(
+            "SELECT COUNT(*) AS total FROM transport_student_allocations WHERE school_id=? AND status='Active'",
+            (sid,)
+        ).fetchone()
+        activity = cur.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN event_type='Boarded' THEN 1 ELSE 0 END) AS boarded, "
+            "SUM(CASE WHEN event_type='Dropped off' THEN 1 ELSE 0 END) AS dropped, "
+            "SUM(CASE WHEN event_type='Missed pickup' THEN 1 ELSE 0 END) AS missed, "
+            "SUM(CASE WHEN event_type='Absent' THEN 1 ELSE 0 END) AS absent, "
+            "SUM(CASE WHEN event_type='Incident' THEN 1 ELSE 0 END) AS incidents, "
+            "SUM(CASE WHEN event_type='Trip departed' THEN 1 ELSE 0 END) AS departed, "
+            "SUM(CASE WHEN event_type='Trip arrived' THEN 1 ELSE 0 END) AS arrived "
+            "FROM transport_trip_logs WHERE " + event_sql, tuple(event_params)
+        ).fetchone()
+        by_event = cur.execute(
+            "SELECT event_type,COUNT(*) AS total FROM transport_trip_logs WHERE " + event_sql +
+            " GROUP BY event_type ORDER BY total DESC,event_type", tuple(event_params)
+        ).fetchall()
+        by_route = cur.execute(
+            "SELECT r.route_name,r.route_code,COUNT(DISTINCT a.student_id) AS learners,"
+            "COUNT(DISTINCT s.id) AS stops,COUNT(DISTINCT l.id) AS events "
+            "FROM transport_routes r "
+            "LEFT JOIN transport_student_allocations a ON a.school_id=r.school_id AND a.route_id=r.id AND a.status='Active' "
+            "LEFT JOIN transport_route_stops s ON s.school_id=r.school_id AND s.route_id=r.id AND s.status='Active' "
+            "LEFT JOIN transport_trip_logs l ON l.school_id=r.school_id AND l.route_id=r.id "
+            + ("AND l.trip_date>=? " if date_from.strip() else "") +
+            ("AND l.trip_date<=? " if date_to.strip() else "") +
+            "WHERE r.school_id=? GROUP BY r.id,r.route_name,r.route_code ORDER BY learners DESC,r.route_name",
+            tuple(([date_from.strip()] if date_from.strip() else []) + ([date_to.strip()] if date_to.strip() else []) + [sid])
+        ).fetchall()
+        by_vehicle = cur.execute(
+            "SELECT v.registration_no,v.make_model,v.capacity,v.status,COUNT(DISTINCT a.student_id) AS learners,"
+            "COUNT(DISTINCT l.id) AS events "
+            "FROM transport_vehicles v "
+            "LEFT JOIN transport_student_allocations a ON a.school_id=v.school_id AND a.vehicle_id=v.id AND a.status='Active' "
+            "LEFT JOIN transport_trip_logs l ON l.school_id=v.school_id AND l.vehicle_id=v.id "
+            + ("AND l.trip_date>=? " if date_from.strip() else "") +
+            ("AND l.trip_date<=? " if date_to.strip() else "") +
+            "WHERE v.school_id=? GROUP BY v.id,v.registration_no,v.make_model,v.capacity,v.status "
+            "ORDER BY events DESC,learners DESC,v.registration_no",
+            tuple(([date_from.strip()] if date_from.strip() else []) + ([date_to.strip()] if date_to.strip() else []) + [sid])
+        ).fetchall()
+        recent = cur.execute(
+            "SELECT l.trip_date,l.trip_period,l.event_type,l.event_time,l.details,"
+            "s.name AS student_name,s.admission_no,r.route_name,v.registration_no "
+            "FROM transport_trip_logs l "
+            "LEFT JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id "
+            "LEFT JOIN transport_routes r ON r.id=l.route_id AND r.school_id=l.school_id "
+            "LEFT JOIN transport_vehicles v ON v.id=l.vehicle_id AND v.school_id=l.school_id "
+            "WHERE " + event_sql + " ORDER BY l.trip_date DESC,l.event_time DESC,l.id DESC LIMIT 50",
+            tuple(event_params)
+        ).fetchall()
+        event_rows = "".join(
+            f"<tr><td>{escape(str(x['event_type'] or ''))}</td><td>{int(x['total'] or 0)}</td></tr>" for x in by_event
+        ) or "<tr><td colspan='2' class='tr-empty'>No trip events in this period.</td></tr>"
+        route_rows = "".join(
+            f"<tr><td><b>{escape(str(x['route_name'] or ''))}</b><div class='tr-muted'>{escape(str(x['route_code'] or ''))}</div></td>"
+            f"<td>{int(x['learners'] or 0)}</td><td>{int(x['stops'] or 0)}</td><td>{int(x['events'] or 0)}</td></tr>" for x in by_route
+        ) or "<tr><td colspan='4' class='tr-empty'>No routes registered.</td></tr>"
+        vehicle_rows = "".join(
+            f"<tr><td><b>{escape(str(x['registration_no'] or ''))}</b><div class='tr-muted'>{escape(str(x['make_model'] or ''))}</div></td>"
+            f"<td>{escape(str(x['status'] or ''))}</td><td>{int(x['capacity'] or 0)}</td>"
+            f"<td>{int(x['learners'] or 0)}</td><td>{int(x['events'] or 0)}</td></tr>" for x in by_vehicle
+        ) or "<tr><td colspan='5' class='tr-empty'>No vehicles registered.</td></tr>"
+        recent_rows = "".join(
+            f"<tr><td>{escape(str(x['trip_date'] or ''))}<div class='tr-muted'>{escape(str(x['trip_period'] or ''))} · {escape(str(x['event_time'] or ''))}</div></td>"
+            f"<td><b>{escape(str(x['event_type'] or ''))}</b><div class='tr-muted'>{escape(str(x['details'] or ''))}</div></td>"
+            f"<td>{escape(str(x['student_name'] or 'Trip-level record'))}<div class='tr-muted'>{escape(str(x['admission_no'] or ''))}</div></td>"
+            f"<td>{escape(str(x['route_name'] or '—'))}</td><td>{escape(str(x['registration_no'] or '—'))}</td></tr>" for x in recent
+        ) or "<tr><td colspan='5' class='tr-empty'>No trip records in this period.</td></tr>"
+        start_label = escape(date_from or "All dates", quote=True)
+        end_label = escape(date_to or "To date", quote=True)
+        body = f"""
+<div class="page transport-page">
+<style>
+.transport-page .tr-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}}
+.transport-page .tr-kpis>div,.transport-page .tr-panel{{background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:16px;margin-bottom:16px}}
+.transport-page .tr-kpis span,.transport-page .tr-muted{{display:block;color:#718078;font-size:12px}}
+.transport-page .tr-kpis strong{{display:block;font-size:24px;color:#174b35;margin-top:5px}}
+.transport-page .tr-toolbar{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px}}
+.transport-page label{{display:grid;gap:6px;font-size:12px;color:#53665b;flex:1;min-width:150px}}
+.transport-page input{{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce6df;border-radius:9px;background:#fff}}
+.transport-page .tr-scroll{{overflow:auto;width:100%}}.transport-page table{{width:100%;min-width:620px;border-collapse:collapse}}
+.transport-page th,.transport-page td{{padding:11px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px}}
+.transport-page th{{color:#607267;background:#f7faf8;font-weight:650}}.transport-page .tr-empty{{text-align:center;padding:25px;color:#7b8981}}
+.transport-page .tr-report-grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
+@media(max-width:760px){{.transport-page .tr-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.transport-page .tr-report-grid{{grid-template-columns:1fr}}}}
+@media print{{.transport-page .tr-toolbar,.transport-page .no-print{{display:none!important}}.transport-page .tr-panel{{break-inside:avoid;box-shadow:none}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / ANALYTICS</div><h1>Transport Reports</h1><div class="tr-muted">Fleet, route allocation and trip activity summary.</div></div><button class="btn no-print" type="button" onclick="window.print()">Print / Save PDF</button></div>
+<section class="tr-panel no-print"><form method="get" class="tr-toolbar">
+<label>Activity from<input type="date" name="date_from" value="{start_label}"></label>
+<label>Activity to<input type="date" name="date_to" value="{end_label}"></label>
+<button class="btn" type="submit">Apply filters</button><a class="btn btn-light" href="/app/transport/reports">Clear</a>
+</form></section>
+<div class="tr-kpis">
+<div><span>Registered vehicles</span><strong>{int(fleet['total'] or 0)}</strong></div>
+<div><span>Active vehicles</span><strong>{int(fleet['active'] or 0)}</strong></div>
+<div><span>Active routes</span><strong>{int(route_totals['active'] or 0)}</strong></div>
+<div><span>Active learner allocations</span><strong>{int(allocation_total['total'] or 0)}</strong></div>
+<div><span>Trip / attendance events</span><strong>{int(activity['total'] or 0)}</strong></div>
+<div><span>Learners boarded</span><strong>{int(activity['boarded'] or 0)}</strong></div>
+<div><span>Dropped off</span><strong>{int(activity['dropped'] or 0)}</strong></div>
+<div><span>Missed pickups / incidents</span><strong>{int(activity['missed'] or 0)+int(activity['incidents'] or 0)}</strong></div>
+</div>
+<div class="tr-report-grid">
+<section class="tr-panel"><h2>Trip activity by event</h2><div class="tr-muted">Filtered period: {start_label} — {end_label}</div><div class="tr-scroll"><table><thead><tr><th>Event type</th><th>Records</th></tr></thead><tbody>{event_rows}</tbody></table></div></section>
+<section class="tr-panel"><h2>Route utilisation</h2><div class="tr-muted">Current active learner allocations and activity in the selected period.</div><div class="tr-scroll"><table><thead><tr><th>Route</th><th>Learners</th><th>Stops</th><th>Events</th></tr></thead><tbody>{route_rows}</tbody></table></div></section>
+</div>
+<section class="tr-panel"><h2>Vehicle utilisation</h2><div class="tr-muted">Current allocations and recorded trip events by vehicle.</div><div class="tr-scroll"><table><thead><tr><th>Vehicle</th><th>Status</th><th>Capacity</th><th>Learners</th><th>Events</th></tr></thead><tbody>{vehicle_rows}</tbody></table></div></section>
+<section class="tr-panel"><h2>Recent transport activity</h2><div class="tr-muted">Up to 50 latest records within the selected period.</div><div class="tr-scroll"><table><thead><tr><th>Date / Period</th><th>Event / Details</th><th>Learner</th><th>Route</th><th>Vehicle</th></tr></thead><tbody>{recent_rows}</tbody></table></div></section>
+</div>
+"""
+        return _school_page(request, "Transport Reports", body)
+    finally:
+        con.close()
