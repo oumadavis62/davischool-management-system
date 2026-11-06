@@ -14414,7 +14414,7 @@ def users_edit_page(request: Request, uid: int):
 <form method='post' action='/app/users/edit/{uid}' class='edit-user-form'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
 <input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'><input name='password_confirm' type='password' minlength='8' placeholder='Confirm new password' class='field'>
-<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
+<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='bursar' {'selected' if user['role']=='bursar' else ''}>Bursar</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div class='edit-user-actions'><a href='/app/users' class='edit-cancel'>Cancel</a><button class='edit-save' type='submit'>💾 Save Changes</button></div></form>
 <div class='edit-delete-zone'><div><strong>Delete this account</strong><div class='edit-note'>This permanently removes the user's sign-in account.</div></div>{delete_control}</div>
@@ -14428,7 +14428,7 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.",403)
-    allowed={"teacher","parent","student","accountant","registrar"}
+    allowed={"teacher","parent","student","accountant","bursar","registrar"}
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
@@ -14444,9 +14444,9 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     stid=int(student_id) if student_id.isdigit() else None
     if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): con.close(); return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
     if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): con.close(); return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
-    if role=="teacher" and not tid: con.close(); return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
+    if role in ("teacher","accountant","bursar") and not tid: con.close(); return HTMLResponse("Staff accounts must be linked to a staff profile. <a href='/app/users'>Back</a>",400)
     if role in ("student","parent") and not stid: con.close(); return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-    if role not in ("teacher","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+    if role not in ("teacher","accountant","bursar","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
     from app.main import hash_password
     if password and len(password)<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password and password != password_confirm: con.close(); return HTMLResponse("New password and confirmation do not match. <a href='/app/users'>Back</a>",400)
