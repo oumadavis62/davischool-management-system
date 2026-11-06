@@ -882,7 +882,7 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
 }}
 @media(max-width:430px){{.academic-workspace .page .grid{{grid-template-columns:1fr}}.academic-workspace .page .field{{width:100%}}}}
 </style></head><body class='{" overview-active" if title == "DaviSchool" else ""}'><div class='app{" teacher-portal" if teacher_locked else ""}{" academic-workspace" if request_path.startswith(("/app/academics", "/app/exams", "/app/report-cards", "/app/subjects", "/app/classes", "/app/students/promotion")) else ""}'><aside class='side'><div class='sidebar-brand'><div class='sidebar-login-logo' aria-label='DaviSchool logo'><span class='davi-mark'><span class='d-letter'>D</span></span></div><div class='sidebar-brand-title'>DaviSchool<br>Management System</div></div>{links}{"" if teacher_locked else "<div style='padding:14px 12px;color:#94a3b8;font-size:10px;line-height:1.4'>Selection-based data entry is enabled throughout the school workspace.</div><a href='/logout' class='nav' style='margin-top:18px'>↪ Logout</a>"}</aside>
-<main class='main'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
+<main class='main{" staff-workspace" if request_path == "/app/staff" else ""}'><header class='top'><div style='display:flex;align-items:center;gap:10px'><button type='button' class='sidebar-toggle' id='sidebarToggle' aria-label='Hide sidebar' title='Hide sidebar' data-sidebar-toggle='1'>☰</button><div><div class='top-system-title'>DaviSchool</div><div class='top-welcome'>Welcome back, <strong>{escape(name)}</strong></div><div class='muted'>{escape(role.replace('_',' ').title())}</div></div></div><div style='display:flex;gap:10px;align-items:center'>{avatar_html}</div></header>{body}<script>(function(){{
 // Shared workspace performance helpers: warm likely navigation targets on intent,
 // and prevent accidental double-submits without changing form payloads or routes.
 (function(){{
@@ -2813,15 +2813,15 @@ def _staff_manager_styles():
 @media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
 @media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
-/* Critical: the fixed sidebar is outside flex flow. Give the staff main
-   content a zero flex-basis so its width is the full remaining workspace,
-   rather than the min-content width of the register/table. */
-.main:has(>.staff-manager-page){display:block!important;flex:1 1 0%!important;width:0!important;min-width:0!important;max-width:none!important}
-.main:has(>.staff-manager-page)>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
+/* Staff workspace: target the actual main element explicitly. The sidebar is fixed
+   and does not consume flex space, so the main column must grow from a zero basis. */
+.main.staff-workspace{display:block!important;flex:1 1 0!important;width:0!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
+.main.staff-workspace>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
 .staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
 .staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
 .staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
-@media(max-width:600px){.main:has(>.staff-manager-page){flex:1 1 100%!important;width:100%!important;margin-left:0!important}.main:has(>.staff-manager-page)>.staff-manager-page{flex:0 0 100%!important;width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+@media(max-width:900px){.main.staff-workspace{margin-left:72px!important}}
+@media(max-width:600px){.main.staff-workspace{flex:1 1 100%!important;width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{flex:0 0 100%!important;width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
