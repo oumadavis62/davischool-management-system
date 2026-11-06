@@ -501,3 +501,128 @@ async def library_issue_save(
     finally:
         con.close()
     return RedirectResponse("/app/library/issues", 303)
+
+
+@router.get("/app/library/returns", response_class=HTMLResponse)
+def library_book_returns(request: Request, q: str = ""):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        con.commit()
+        filters = ["i.school_id=?", "i.issue_status='Issued'"]
+        params = [sid]
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            filters.append("(b.title LIKE ? OR c.accession_no LIKE ? OR i.borrower_name LIKE ? OR i.borrower_ref LIKE ?)")
+            params.extend([term] * 4)
+        rows = cur.execute(
+            """SELECT i.id,i.borrower_name,i.borrower_type,i.borrower_ref,i.issue_date,i.due_date,
+                      b.title,c.accession_no
+               FROM library_book_issues i
+               JOIN library_books b ON b.id=i.book_id AND b.school_id=i.school_id
+               JOIN library_book_copies c ON c.id=i.copy_id AND c.school_id=i.school_id
+               WHERE """ + " AND ".join(filters) + " ORDER BY i.due_date,i.issue_date",
+            tuple(params),
+        ).fetchall()
+        today = datetime.now().date().isoformat()
+        overdue_count = sum(1 for row in rows if str(row["due_date"]) < today)
+        table = "".join(
+            f"<tr><td><b>{escape(str(row['title']))}</b><div class='lib-muted'>{escape(str(row['accession_no']))}</div></td>"
+            f"<td>{escape(str(row['borrower_name']))}<div class='lib-muted'>{escape(str(row['borrower_type']))} · {escape(str(row['borrower_ref'] or 'No ID recorded'))}</div></td>"
+            f"<td>{escape(str(row['issue_date']))}</td><td>{escape(str(row['due_date']))}</td>"
+            f"<td><span class='lib-status {'lib-inactive' if str(row['due_date']) < today else ''}'>{'Overdue' if str(row['due_date']) < today else 'On loan'}</span></td>"
+            f"<td><button class='btn btn-light' type='button' onclick=\"document.getElementById('return-{int(row['id'])}').showModal()\">Record return</button></td></tr>"
+            for row in rows
+        ) or "<tr><td colspan='6' class='lib-empty'>There are no books currently awaiting return.</td></tr>"
+        dialogs = "".join(
+            f"""<dialog id="return-{int(row['id'])}" class="lib-dialog"><form method="post" action="/app/library/returns/process">
+<input type="hidden" name="issue_id" value="{int(row['id'])}">
+<div class="lib-dialog-head"><div><div class="lib-eyebrow">BOOK RETURN</div><h2>Record returned copy</h2><div class="lib-muted">{escape(str(row['title']))} · {escape(str(row['accession_no']))}</div></div><button type="button" class="lib-close" onclick="this.closest('dialog').close()">×</button></div>
+<div class="lib-form-grid"><label>Return date *<input class="field" type="date" name="return_date" value="{today}" required></label>
+<label>Returned condition *<select class="field" name="return_condition"><option>Good</option><option>Fair</option><option>Poor</option><option>Damaged</option></select></label>
+<label class="lib-notes">Return notes<textarea class="field" name="return_notes" rows="2" placeholder="Optional notes about the returned copy"></textarea></label></div>
+<div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="submit">Confirm return</button></div></form></dialog>"""
+            for row in rows
+        )
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / CIRCULATION</div><h1>Book Returns</h1><div class="lib-muted">Receive borrowed books, record their returned condition and release copies back into circulation.</div></div></div>
+ <div class="lib-kpis"><div><span>Books awaiting return</span><strong>{len(rows)}</strong></div><div><span>Overdue returns</span><strong>{overdue_count}</strong></div><div><span>Returned condition tracked</span><strong>Yes</strong></div></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:2fr auto auto"><label>Find an issued book<input class="field" name="q" value="{escape(q, quote=True)}" placeholder="Title, accession number, borrower or ID"></label><button class="btn">Search</button><a class="btn btn-light" href="/app/library/returns">Clear</a></form></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Outstanding loans</h2><span class="lib-muted">{len(rows)} book(s) awaiting return</span></div><div class="lib-table-scroll"><table style="min-width:950px"><thead><tr><th>Book / Accession</th><th>Borrower</th><th>Issued</th><th>Due date</th><th>Loan status</th><th>Action</th></tr></thead><tbody>{table}</tbody></table></div></section>
+</div>
+{dialogs}
+"""
+        return _school_page(request, "Book Returns", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/library/returns/process")
+async def library_book_return_process(
+    request: Request,
+    issue_id: int = Form(...),
+    return_date: str = Form(...),
+    return_condition: str = Form("Good"),
+    return_notes: str = Form(""),
+):
+    sid, error = _library_guard(request, "library.edit")
+    if error:
+        return error
+    try:
+        from datetime import date
+        returned_day = date.fromisoformat(return_date)
+    except (TypeError, ValueError):
+        return HTMLResponse("Enter a valid return date.", 400)
+    if returned_day > datetime.now().date():
+        return HTMLResponse("The return date cannot be in the future.", 400)
+    return_condition = return_condition if return_condition in ("Good", "Fair", "Poor", "Damaged") else "Good"
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    new_copy_status = "Damaged" if return_condition == "Damaged" else "Available"
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        issue = cur.execute(
+            """SELECT i.id,i.copy_id,i.book_id,i.issue_status,b.title,c.accession_no
+               FROM library_book_issues i
+               JOIN library_books b ON b.id=i.book_id AND b.school_id=i.school_id
+               JOIN library_book_copies c ON c.id=i.copy_id AND c.school_id=i.school_id
+               WHERE i.id=? AND i.school_id=?""",
+            (issue_id, sid),
+        ).fetchone()
+        if not issue:
+            return HTMLResponse("The selected issue record was not found in this school's library.", 404)
+        if issue["issue_status"] != "Issued":
+            return HTMLResponse("This book has already been returned.", 409)
+        cur.execute(
+            """UPDATE library_book_issues SET issue_status='Returned',returned_at=?,updated_at=?,
+               notes=CASE WHEN COALESCE(notes,'')='' THEN ? ELSE notes || ' | Return: ' || ? END
+               WHERE id=? AND school_id=? AND issue_status='Issued'""",
+            (returned_day.isoformat(), now, return_notes.strip(), return_notes.strip(), issue_id, sid),
+        )
+        if cur.rowcount == 0:
+            con.rollback()
+            return HTMLResponse("This loan was already processed. Refresh the page.", 409)
+        cur.execute(
+            """UPDATE library_book_copies SET copy_status=?,condition=?,updated_at=?
+               WHERE id=? AND school_id=?""",
+            (new_copy_status, return_condition, now, issue["copy_id"], sid),
+        )
+        _audit(cur, sid, request, "LIBRARY_BOOK_RETURNED",
+               f"{issue['title']} / {issue['accession_no']} returned; condition {return_condition}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/library/returns", 303)
