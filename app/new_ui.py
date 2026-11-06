@@ -14320,7 +14320,7 @@ def users_page(request: Request):
    status.textContent='Profile linked';email.value=p.email||'';
  }}
  function updateRole(){{
-   const r=role.value,needsStaff=['teacher','registrar','accountant'].includes(r),needsStudent=['parent','student'].includes(r);
+   const r=role.value,needsStaff=['teacher','registrar','accountant','bursar'].includes(r),needsStudent=['parent','student'].includes(r);
    staffWrap.style.display=needsStaff?'grid':'none';studentWrap.style.display=needsStudent?'grid':'none';
    teacherExtra.style.display=(r==='teacher'||r==='registrar')?'grid':'none';
    if(!needsStaff){{teacher.value='';designation.value='';email.value='';clearAllocations();updateProfile();}}
@@ -14549,11 +14549,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
         if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
             return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
-        if role in ("teacher","registrar") and not tid:
+        if role in ("teacher","registrar","bursar") and not tid:
             return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
         if role in ("student","parent") and not stid:
             return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-        if role not in ("teacher","registrar","student","parent","accountant") and (tid or stid):
+        if role not in ("teacher","registrar","student","parent","accountant","bursar") and (tid or stid):
             return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
 
         if role == "parent" and stid:
