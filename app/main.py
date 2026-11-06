@@ -3631,6 +3631,8 @@ app.include_router(library_management_router)
 # Transport workspace routes are registered after the shared school UI helpers.
 from app.transport_management import router as transport_management_router
 app.include_router(transport_management_router)
+from app.inventory_management import router as inventory_management_router
+app.include_router(inventory_management_router)
 
 
 # Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
