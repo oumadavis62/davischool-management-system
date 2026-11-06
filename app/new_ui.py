@@ -754,6 +754,11 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/staff", "Staff List")
             + _nav_sub("/app/staff/attendance", "Attendance Sheet")
             + _nav_sub("/app/staff/attendance-report", "Attendance Report")
+            + _nav_sub("/app/staff/leave", "Leave Management")
+            + _nav_sub("/app/staff/payroll", "Payroll Processing")
+            + _nav_sub("/app/staff/payslips", "Payslips")
+            + _nav_sub("/app/staff/appraisals", "Staff Appraisals")
+            + _nav_sub("/app/staff/hr-reports", "HR Reports")
             + _nav_sub("/app/staff/former", "Former Staff")
             + "</div></details>"
         )
