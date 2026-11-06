@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 def _central_route_permission(path, method, role):
-    """Central fallback permission map for routes that predate the permission checks."""
+    """Permission fallbacks for the small set of school routes lacking local guards."""
     path = str(path or "").rstrip("/") or "/"
     method = str(method or "GET").upper()
     role = str(role or "").lower()
@@ -30,55 +30,10 @@ def _central_route_permission(path, method, role):
     if path == "/app/users/add" or path == "/app/users":
         return "users.manage"
     if path == "/app/accounting/expense":
-        return "finance.edit"
+        return ("accountant_portal.view", "finance.edit")
     if path.startswith("/app/accounting"):
         return "accountant_portal.view"
-    if path.startswith("/app/teacher-performance") or path.startswith("/app/class-monitoring"):
-        return "teacher_portal.view"
-    if path.startswith("/app/class-teacher"):
-        return "class_teacher.edit" if method == "POST" else "class_teacher.view"
-    if path.startswith("/app/parent"):
-        if path.startswith("/app/parent/message"):
-            return "parent_portal.message"
-        return "parent_portal.view"
-    if path.startswith("/app/students"):
-        if any(x in path for x in ("/edit", "/delete", "/promotion", "/graduation", "/clearance")):
-            return "students.edit"
-        if method == "POST":
-            return "students.create"
-        return "students.view"
-    if path.startswith("/app/staff"):
-        if any(x in path for x in ("/edit", "/attendance/save")) or method == "POST":
-            return "staff.edit" if "/attendance" in path or "/edit" in path else "staff.create"
-        return "staff.view"
-    if path.startswith("/app/classes"):
-        return "classes.create" if method == "POST" or "/edit" in path or "/delete" in path else "classes.view"
-    if path.startswith("/app/subjects"):
-        return "subjects.create" if method == "POST" or "/edit" in path or "/delete" in path else "subjects.view"
-    if path.startswith("/app/exams"):
-        return "exams.create" if method == "POST" or "/edit" in path or "/delete" in path else "exams.view"
-    if path.startswith("/app/academics/marks"):
-        return "marks.edit" if method == "POST" or any(x in path for x in ("/save", "/finalize", "/correction")) else "marks.view"
-    if path.startswith("/app/academics"):
-        return "marks.edit" if method == "POST" else "marks.view"
-    if path.startswith("/app/attendance"):
-        return "attendance.edit" if method == "POST" else "attendance.view"
-    if path.startswith("/app/announcements"):
-        return "communications.edit" if method == "POST" else "communications.view"
-    if path.startswith("/app/parent-messages"):
-        return "communications.edit" if method == "POST" else "communications.view"
-    if path.startswith("/app/parent-links"):
-        return "users.manage"
-    if path.startswith("/app/roles") or path.startswith("/app/users"):
-        return "settings.manage" if path.startswith("/app/roles") else "users.manage"
-    if path.startswith("/app/school-settings"):
-        return "settings.edit" if method == "POST" else "settings.view"
-    if path.startswith("/app/audit"):
-        return "audit.view"
-    if path.startswith("/app/timetable"):
-        return "timetable.edit" if method != "GET" else "timetable.view"
     return None
-
 
 class SchoolPermissionRoute(APIRoute):
     """Apply central server-side permission checks, including legacy endpoints."""
@@ -91,7 +46,8 @@ class SchoolPermissionRoute(APIRoute):
             )
             if required:
                 school_id = _school_session(request)
-                if school_id and not _require_permission(request, school_id, required):
+                required_permissions = required if isinstance(required, (tuple, list)) else (required,)
+                if school_id and any(not _require_permission(request, school_id, permission) for permission in required_permissions):
                     return HTMLResponse(
                         "Access to this portal feature has been restricted by your school administrator.",
                         status_code=403,
