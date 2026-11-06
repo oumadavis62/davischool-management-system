@@ -16,9 +16,11 @@ def _central_route_permission(path, method, role):
     path = str(path or "").rstrip("/") or "/"
     method = str(method or "GET").upper()
     role = str(role or "").lower()
-    if path == "/app":
+    if path in ("/app", "/app/teacher"):
         return {"teacher": "teacher_portal.view", "parent": "parent_portal.view",
                 "student": "student_portal.view", "accountant": "accountant_portal.view", "bursar": "bursar_portal.view"}.get(role)
+    if path == "/app/accountant":
+        return "accountant_portal.view"
     if path.startswith("/app/portals"):
         return "settings.manage"
     if path.startswith("/app/academics/marks-corrections") or path.endswith("/academics/marks/request-correction"):
@@ -50,7 +52,7 @@ class SchoolPermissionRoute(APIRoute):
             # This prevents direct URL access to school administration modules.
             if role == "teacher":
                 teacher_routes = {
-                    ("GET", "/app"), ("GET", "/app/class-teacher"),
+                    ("GET", "/app"), ("GET", "/app/teacher"), ("GET", "/app/class-teacher"),
                     ("GET", "/app/class-monitoring"), ("POST", "/app/class-monitoring/follow-up"),
                     ("GET", "/app/teacher-performance"), ("GET", "/app/teacher-performance/learners"),
                     ("GET", "/app/academics/marks"), ("POST", "/app/academics/marks/save"),
@@ -66,7 +68,7 @@ class SchoolPermissionRoute(APIRoute):
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/parent"), ("POST", "/app/parent/message")}:
                     return HTMLResponse("This page is outside the Parent Portal permissions.",403)
             elif role == "accountant":
-                if (method, path) not in {("GET", "/app"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/accountant"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
                     return HTMLResponse("This page is outside the Accountant Portal permissions.",403)
             elif role == "bursar":
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/bursar"), ("POST", "/app/bursar/expense")}:
@@ -14230,12 +14232,15 @@ def users_page(request: Request):
         safe_name=escape(str(u["full_name"] or "user")).replace("'","&#39;")
         current_role=str(request.session.get("role") or "")
         creator_role=str(u["created_by_role"] or "") if "created_by_role" in u.keys() else ""
+        portal_paths={"teacher":"/app/teacher","registrar":"/app/registrar","accountant":"/app/accountant","bursar":"/app/bursar"}
+        portal_path=portal_paths.get(role_name)
+        portal_action=(f"<a href='{portal_path}' title='Portal opens only when signed in as this account' style='display:inline-block;padding:7px 11px;border-radius:8px;background:#edf5ef;color:#20543a;text-decoration:none;font-size:11px;font-weight:800;border:1px solid #c9dfce'>↗ Portal</a> " if portal_path else "")
         if role_name=="school_admin":
             actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Super Admin</span>"
         elif role_name=="registrar":
-            actions="<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Managed by Super Admin</span>"
+            actions=portal_action+"<span style='display:inline-block;padding:6px 9px;border-radius:7px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:700'>🔒 Managed by Super Admin</span>"
         else:
-            actions=f"<a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:7px 11px;border-radius:8px;background:#e6f1e8;color:#20543a;text-decoration:none;font-size:11px;font-weight:800;border:1px solid #c9dfce'>✏️ Edit</a>"
+            actions=portal_action+f"<a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:7px 11px;border-radius:8px;background:#e6f1e8;color:#20543a;text-decoration:none;font-size:11px;font-weight:800;border:1px solid #c9dfce'>✏️ Edit</a>"
         display_password = "—" if role_name in ("school_admin","registrar") else str(u["temporary_password"] or "—")
         rows += f"<tr><td class='user-name-cell'>{name_profile_html}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(display_password)}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{actions}</td></tr>"
     topts="".join(f"<option value='{t['id']}' data-designation='{escape(str(t['role'] or ''),quote=True)}'>{escape(str(t['name']))}</option>" for t in teachers)
@@ -16119,6 +16124,23 @@ def accounting_page(request: Request):
 </div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     page_title="Bursar Workspace" if portal_role=="bursar" else "Accounting"
     return _school_page(request,page_title,body)
+
+@router.get("/app/teacher", response_class=HTMLResponse)
+def teacher_portal_entry(request: Request):
+    if "email" not in request.session or str(request.session.get("role") or "")!="teacher":
+        return HTMLResponse("Teacher Portal access is restricted to Teacher accounts.",403)
+    return app_home(request)
+
+
+@router.get("/app/accountant", response_class=HTMLResponse)
+def accountant_portal_entry(request: Request):
+    if "email" not in request.session or str(request.session.get("role") or "")!="accountant":
+        return HTMLResponse("Accountant Portal access is restricted to Accountant accounts.",403)
+    sid=_school_session(request)
+    if not sid or not _require_permission(request,sid,"accountant_portal.view"):
+        return HTMLResponse("Accountant Portal access has been disabled for this account.",403)
+    return accounting_page(request)
+
 
 @router.get("/app/bursar", response_class=HTMLResponse)
 def bursar_portal_page(request: Request):
