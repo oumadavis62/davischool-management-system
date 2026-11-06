@@ -20294,6 +20294,7 @@ def admission_number_settings_page(request: Request):
     try:
         _ensure_admissions_schema(cur)
         settings = _admission_settings(cur,sid)
+        year = _admission_academic_year(cur,sid)
         con.commit()
     finally:
         con.close()
