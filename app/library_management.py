@@ -688,3 +688,138 @@ def library_overdue_books(request: Request, q: str = "", borrower_type: str = ""
         return _school_page(request, "Overdue Books", body)
     finally:
         con.close()
+
+
+def _ensure_library_members(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS library_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        member_type TEXT NOT NULL DEFAULT 'Student',
+        full_name TEXT NOT NULL,
+        member_ref TEXT DEFAULT '',
+        class_department TEXT DEFAULT '',
+        phone TEXT DEFAULT '',
+        email TEXT DEFAULT '',
+        member_status TEXT NOT NULL DEFAULT 'Active',
+        notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_library_members_school ON library_members(school_id, member_type, member_status)")
+
+
+@router.get("/app/library/members", response_class=HTMLResponse)
+def library_members(request: Request, q: str = "", member_type: str = "", status: str = "Active"):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_library_members(cur)
+        con.commit()
+        filters = ["school_id=?"]
+        params = [sid]
+        if member_type in ("Student", "Staff"):
+            filters.append("member_type=?")
+            params.append(member_type)
+        else:
+            member_type = ""
+        if status in ("Active", "Inactive"):
+            filters.append("member_status=?")
+            params.append(status)
+        else:
+            status = "All"
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            filters.append("(full_name LIKE ? OR member_ref LIKE ? OR class_department LIKE ? OR phone LIKE ?)")
+            params.extend([term] * 4)
+        rows = cur.execute(
+            "SELECT * FROM library_members WHERE " + " AND ".join(filters) + " ORDER BY full_name",
+            tuple(params),
+        ).fetchall()
+        total = cur.execute("SELECT COUNT(*) AS n FROM library_members WHERE school_id=?", (sid,)).fetchone()["n"]
+        active = cur.execute("SELECT COUNT(*) AS n FROM library_members WHERE school_id=? AND member_status='Active'", (sid,)).fetchone()["n"]
+        students = cur.execute("SELECT COUNT(*) AS n FROM library_members WHERE school_id=? AND member_type='Student' AND member_status='Active'", (sid,)).fetchone()["n"]
+        table = "".join(
+            f"<tr><td><b>{escape(str(x['full_name']))}</b><div class='lib-muted'>{escape(str(x['member_ref'] or 'No reference'))}</div></td>"
+            f"<td>{escape(str(x['member_type']))}</td><td>{escape(str(x['class_department'] or '—'))}</td>"
+            f"<td>{escape(str(x['phone'] or '—'))}</td><td>{escape(str(x['email'] or '—'))}</td>"
+            f"<td><span class='lib-status {'lib-inactive' if x['member_status'] != 'Active' else ''}'>{escape(str(x['member_status']))}</span></td></tr>"
+            for x in rows
+        ) or "<tr><td colspan='6' class='lib-empty'>No library members match these filters. Add a student or staff member to begin.</td></tr>"
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / MEMBERSHIP</div><h1>Library Members</h1><div class="lib-muted">Maintain the school's library membership register for students and staff.</div></div><button class="btn" type="button" onclick="document.getElementById('libraryMemberDialog').showModal()">Add Member</button></div>
+ <div class="lib-kpis"><div><span>Registered members</span><strong>{int(total or 0)}</strong></div><div><span>Active members</span><strong>{int(active or 0)}</strong></div><div><span>Active student members</span><strong>{int(students or 0)}</strong></div></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:2fr 1fr 1fr auto auto">
+ <label>Search members<input class="field" name="q" value="{escape(q, quote=True)}" placeholder="Name, admission/staff number, class or phone"></label>
+ <label>Member type<select class="field" name="member_type"><option value="">All types</option><option value="Student" {'selected' if member_type == 'Student' else ''}>Student</option><option value="Staff" {'selected' if member_type == 'Staff' else ''}>Staff</option></select></label>
+ <label>Status<select class="field" name="status"><option value="Active" {'selected' if status == 'Active' else ''}>Active</option><option value="Inactive" {'selected' if status == 'Inactive' else ''}>Inactive</option><option value="All" {'selected' if status == 'All' else ''}>All</option></select></label>
+ <button class="btn">Apply</button><a class="btn btn-light" href="/app/library/members">Clear</a></form></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Membership register</h2><span class="lib-muted">{len(rows)} member(s) shown</span></div><div class="lib-table-scroll"><table style="min-width:850px"><thead><tr><th>Member / Reference</th><th>Type</th><th>Class / Department</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead><tbody>{table}</tbody></table></div></section>
+</div>
+<dialog id="libraryMemberDialog" class="lib-dialog"><form method="post" action="/app/library/members/save">
+ <div class="lib-dialog-head"><div><div class="lib-eyebrow">LIBRARY MEMBERSHIP</div><h2>Register library member</h2></div><button type="button" class="lib-close" onclick="this.closest('dialog').close()">×</button></div>
+ <div class="lib-form-grid"><label>Member type *<select class="field" name="member_type" required><option>Student</option><option>Staff</option></select></label>
+ <label>Full name *<input class="field" name="full_name" maxlength="180" required></label>
+ <label>Admission / Staff number<input class="field" name="member_ref" maxlength="80"></label>
+ <label>Class / Department<input class="field" name="class_department" maxlength="120"></label>
+ <label>Phone<input class="field" name="phone" maxlength="50"></label><label>Email<input class="field" type="email" name="email" maxlength="180"></label>
+ <label>Status<select class="field" name="member_status"><option>Active</option><option>Inactive</option></select></label>
+ <label class="lib-notes">Notes<textarea class="field" name="notes" rows="2"></textarea></label></div>
+ <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="submit">Save Member</button></div>
+</form></dialog>
+"""
+        return _school_page(request, "Library Members", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/library/members/save")
+async def library_member_save(
+    request: Request,
+    member_type: str = Form(...),
+    full_name: str = Form(...),
+    member_ref: str = Form(""),
+    class_department: str = Form(""),
+    phone: str = Form(""),
+    email: str = Form(""),
+    member_status: str = Form("Active"),
+    notes: str = Form(""),
+):
+    sid, error = _library_guard(request, "library.edit")
+    if error:
+        return error
+    member_type = member_type if member_type in ("Student", "Staff") else ""
+    full_name = full_name.strip()
+    member_ref = member_ref.strip()
+    member_status = member_status if member_status in ("Active", "Inactive") else "Active"
+    if not member_type or not full_name:
+        return HTMLResponse("Select a valid member type and enter the member's full name.", 400)
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_library_members(cur)
+        if member_ref:
+            existing = cur.execute(
+                "SELECT id FROM library_members WHERE school_id=? AND member_type=? AND member_ref=?",
+                (sid, member_type, member_ref),
+            ).fetchone()
+            if existing:
+                return HTMLResponse("That admission/staff number is already registered as a library member.", 409)
+        cur.execute(
+            """INSERT INTO library_members(school_id,member_type,full_name,member_ref,class_department,
+               phone,email,member_status,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (sid, member_type, full_name, member_ref, class_department.strip(), phone.strip(),
+             email.strip(), member_status, notes.strip(), now, now),
+        )
+        _audit(cur, sid, request, "LIBRARY_MEMBER_REGISTERED", f"{member_type}: {full_name} ({member_ref or 'no reference'})")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/library/members", 303)
