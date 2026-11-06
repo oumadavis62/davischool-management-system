@@ -15565,7 +15565,7 @@ def roles_page(request: Request):
                      portal_role,escape(feature),next_value,action_label)
                 )
             group_markup.append("<section class='rp-matrix-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(feature_rows)))
-        portal_key={"teacher":"teacher_portal.view","class_teacher":"class_teacher.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
+        portal_key={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
         portal_enabled=role_rule_state.get((portal_role,portal_key),True)
         role_label={"teacher":"Teacher Portal","class_teacher":"Class Teacher Features","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
         role_note=("No separate student portal page is currently implemented." if matrix_role=="student" else ("Class Teacher features are available within the Teacher Portal." if matrix_role=="class_teacher" else ""))
