@@ -6671,6 +6671,25 @@ def parent_portal(request: Request):
     parent_section_contact_html=f"""<section class='parent-view' id='parent-contact' hidden><section class='panel' style='margin-top:16px'><h2>School contact details</h2><div class='muted'>For questions about your child's results, attendance or school activities, reach the school office using the details below.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section></section>""" if _require_permission(request,sid,"parent_portal.contact") else ""
     parent_default_view=next((view for key,view in (("parent_portal.overview","overview"),("parent_portal.academics","academics"),("parent_portal.attendance","attendance"),("parent_portal.fees","fees"),("parent_portal.notices","notices"),("parent_portal.message","messages"),("parent_portal.contact","contact")) if _require_permission(request,sid,key)),"")
     parent_default_view_json=json.dumps(parent_default_view)
+    parent_sections_by_view={"overview":parent_section_overview_html,"academics":parent_section_academics_html,"attendance":parent_section_attendance_html,"fees":parent_section_fees_html,"notices":parent_section_notices_html,"messages":parent_section_messages_html,"contact":parent_section_contact_html}
+    parent_tabs_by_view={"overview":parent_overview_html,"academics":parent_academics_html,"attendance":parent_attendance_html,"fees":parent_fees_html,"notices":parent_notices_html,"messages":parent_messages_html,"contact":parent_contact_html}
+    if parent_default_view:
+        parent_sections_by_view[parent_default_view]=parent_sections_by_view[parent_default_view].replace(" hidden>"," >",1)
+        parent_tabs_by_view[parent_default_view]=parent_tabs_by_view[parent_default_view].replace("class='parent-tab'","class='parent-tab active'",1)
+    parent_section_overview_html=parent_sections_by_view["overview"]
+    parent_section_academics_html=parent_sections_by_view["academics"]
+    parent_section_attendance_html=parent_sections_by_view["attendance"]
+    parent_section_fees_html=parent_sections_by_view["fees"]
+    parent_section_notices_html=parent_sections_by_view["notices"]
+    parent_section_messages_html=parent_sections_by_view["messages"]
+    parent_section_contact_html=parent_sections_by_view["contact"]
+    parent_overview_html=parent_tabs_by_view["overview"]
+    parent_academics_html=parent_tabs_by_view["academics"]
+    parent_attendance_html=parent_tabs_by_view["attendance"]
+    parent_fees_html=parent_tabs_by_view["fees"]
+    parent_notices_html=parent_tabs_by_view["notices"]
+    parent_messages_html=parent_tabs_by_view["messages"]
+    parent_contact_html=parent_tabs_by_view["contact"]
     body = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
 <title>Parent Portal · DaviSchool</title><style>
@@ -6726,7 +6745,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 {parent_section_notices_html}
 {parent_section_messages_html}
 {parent_section_contact_html}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='DaviSchool platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>DaviSchool</strong></span></footer></main>
-<script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}if({parent_default_view_json})parentShow({parent_default_view_json});</script></body></html>"""
+<script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}</script></body></html>"""
     return HTMLResponse(body)
 
 
