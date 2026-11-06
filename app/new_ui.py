@@ -15644,13 +15644,17 @@ def roles_page(request: Request):
             group_markup.append("<section class='rp-matrix-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(feature_rows)))
         portal_key={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
         portal_enabled=role_rule_state.get((portal_role,portal_key),True)
+        portal_toggle_html=(
+            "<div class='rp-matrix-row rp-portal-toggle'><div class='rp-matrix-copy'><strong>Entire portal access</strong><small>Block or restore access to this whole portal</small></div><span class='rp-status %s'>%s</span><form method='post' action='/app/roles/add'><input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form></div>" %
+            ("is-on" if portal_enabled else "is-off","Allowed" if portal_enabled else "Blocked",portal_role,portal_key,0 if portal_enabled else 1,"Disable portal" if portal_enabled else "Enable portal")
+        )
         role_label={"teacher":"Teacher Portal","class_teacher":"Class Teacher Features","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
         role_note=("No separate student portal page is currently implemented." if matrix_role=="student" else ("Class Teacher features are available within the Teacher Portal." if matrix_role=="class_teacher" else ""))
         if matrix_role=="student":
             group_markup=["<section class='rp-matrix-group'><p class='rp-feature-note'>Student login accounts can be created, but this codebase does not currently provide a student-facing portal page or feature tabs. This entry controls only the portal-level permission until that portal is implemented.</p></section>"]
         role_matrix.append(
-            "<details class='rp-matrix-role'><summary><span>%s</span><small>%s</small></summary><div class='rp-matrix-content'>%s%s</div></details>" %
-            (escape(role_label),"Portal enabled" if portal_enabled else "Portal blocked","".join(group_markup),("<p class='rp-feature-note'>%s</p>"%escape(role_note)) if role_note else "")
+            "<details class='rp-matrix-role'><summary><span>%s</span><small>%s</small></summary><div class='rp-matrix-content'>%s%s%s</div></details>" %
+            (escape(role_label),"Portal enabled" if portal_enabled else "Portal blocked",portal_toggle_html,"".join(group_markup),("<p class='rp-feature-note'>%s</p>"%escape(role_note)) if role_note else "")
         )
     role_matrix_html="".join(role_matrix)
     permission_rows=[]
