@@ -11057,7 +11057,7 @@ def teacher_allocations_page(request: Request, history_year: str = "", history_c
     # save workflows. Do not run historical cohort scans when a user merely
     # opens this page: those scans can issue many round trips to remote
     # PostgreSQL and make the tile appear to hang.
-    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     rows=cur.execute("""SELECT a.id,a.teacher_id,a.class_id,a.subject_id,t.name teacher_name,c.name class_name,c.stream class_stream,s.name subject_name
@@ -11454,7 +11454,7 @@ def teacher_allocations_edit_page(request: Request, allocation_id:int):
         return HTMLResponse("You do not have permission to manage teacher allocations.",403)
     con=_db();cur=con.cursor();_ensure_teacher_allocations_table(cur)
     allocation=cur.execute("SELECT id,teacher_id,class_id,subject_id FROM teacher_allocations WHERE id=? AND school_id=?",(allocation_id,sid)).fetchone()
-    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     con.close()
@@ -14415,7 +14415,7 @@ def users_page(request: Request):
  function filterProfiles(){{
    const wanted=(designation.value||'').trim().toLowerCase(),current=teacher.value;
    teacher.replaceChildren(new Option(wanted?'Select staff member':'Select a designation first',''));
-   Object.entries(staffData).forEach(([id,p])=>{{if(wanted&&(p.designation||'').trim().toLowerCase()===wanted)teacher.add(new Option(p.name||('Staff record '+id),id));}});
+   Object.entries(staffData).forEach(([id,p])=>{{const saved=(p.designation||'').trim().toLowerCase();const normalized=(saved==='accountant'||saved==='bursar')?'accountant / bursar':saved;if(wanted&&normalized===wanted)teacher.add(new Option(p.name||('Staff record '+id),id));}});
    if(current&&Array.from(teacher.options).some(o=>o.value===current))teacher.value=current;
    updateProfile();
  }}
@@ -14472,7 +14472,7 @@ def users_edit_page(request: Request, uid: int):
         return HTMLResponse("You do not have permission to manage users.",403)
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
-    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -14485,6 +14485,12 @@ def users_edit_page(request: Request, uid: int):
     if str(user["role"] or "")=="registrar":
         return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited from the School Admin side. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
+    linked_designation=next((str(t["role"] or "") for t in teachers if user["teacher_id"] and int(user["teacher_id"])==int(t["id"])),"")
+    if linked_designation in ("Accountant","Bursar"):linked_designation="Accountant / Bursar"
+    current_designation=linked_designation if linked_designation in STAFF_DESIGNATION_OPTIONS and linked_designation!="School Administrator" else {"parent":"Parent","student":"Student","accountant":"Accountant / Bursar","bursar":"Accountant / Bursar","registrar":"Registrar","librarian":"Librarian","ict_officer":"ICT / Systems Officer","support_staff":"Support Staff"}.get(str(user["role"] or ""),"Teacher")
+    designation_role_map={"Teacher":"teacher","Registrar":"registrar","Accountant / Bursar":"accountant","Librarian":"librarian","ICT / Systems Officer":"ict_officer","Support Staff":"support_staff","School Administrator":"school_admin"}
+    edit_role_options="".join(f"<option value='{designation_role_map.get(d,'teacher')}' {'selected' if current_designation==d else ''} {'disabled' if d=='School Administrator' else ''}>{escape(d + (' (managed by Super Admin)' if d=='School Administrator' else ''))}</option>" for d in STAFF_DESIGNATION_OPTIONS if d!="School Administrator")
+    edit_role_options += f"<option value='parent' {'selected' if current_designation=='Parent' else ''}>Parent</option><option value='student' {'selected' if current_designation=='Student' else ''}>Student</option>"
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
     safe_delete_name=escape(str(user['full_name'] or user['email'] or 'this account')).replace("'","&#39;")
@@ -14494,7 +14500,7 @@ def users_edit_page(request: Request, uid: int):
 <form method='post' action='/app/users/edit/{uid}' class='edit-user-form'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
 <input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'><input name='password_confirm' type='password' minlength='8' placeholder='Confirm new password' class='field'>
-<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='bursar' {'selected' if user['role']=='bursar' else ''}>Bursar</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
+<select name='role' class='field'>{edit_role_options}</select>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div class='edit-user-actions'><a href='/app/users' class='edit-cancel'>Cancel</a><button class='edit-save' type='submit'>💾 Save Changes</button></div></form>
 <div class='edit-delete-zone'><div><strong>Delete this account</strong><div class='edit-note'>This permanently removes the user's sign-in account.</div></div>{delete_control}</div>
@@ -14508,7 +14514,7 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.",403)
-    allowed={"teacher","parent","student","accountant","bursar","registrar"}
+    allowed={"teacher","parent","student","accountant","bursar","registrar","librarian","ict_officer","support_staff"}
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
@@ -14524,9 +14530,11 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     stid=int(student_id) if student_id.isdigit() else None
     if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): con.close(); return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
     if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): con.close(); return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
-    if role in ("teacher","accountant","bursar") and not tid: con.close(); return HTMLResponse("Staff accounts must be linked to a staff profile. <a href='/app/users'>Back</a>",400)
+    staff_roles=("teacher","accountant","bursar","librarian","ict_officer","support_staff")
+    if role in staff_roles and not tid: con.close(); return HTMLResponse("Staff portal accounts must be linked to a staff profile. <a href='/app/users'>Back</a>",400)
     if role in ("student","parent") and not stid: con.close(); return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-    if role not in ("teacher","accountant","bursar","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+    if role in staff_roles and stid: con.close(); return HTMLResponse("Staff accounts cannot be linked to a learner profile.",400)
+    if role in ("student","parent") and tid: con.close(); return HTMLResponse("Parent and student accounts cannot be linked to a staff profile.",400)
     from app.main import hash_password
     if password and len(password)<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password and password != password_confirm: con.close(); return HTMLResponse("New password and confirmation do not match. <a href='/app/users'>Back</a>",400)
@@ -14534,6 +14542,9 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
         cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password),role,tid,stid,uid,sid))
     else:
         cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
+    if role in staff_roles and tid:
+        designation_for_role={"teacher":"Teacher","accountant":"Accountant / Bursar","bursar":"Accountant / Bursar","librarian":"Librarian","ict_officer":"ICT / Systems Officer","support_staff":"Support Staff"}.get(role)
+        if designation_for_role:cur.execute("UPDATE teachers SET role=? WHERE id=? AND school_id=?",(designation_for_role,tid,sid))
     if role=="teacher" and tid:
         _ensure_class_teacher_assignments_table(cur)
         cid=int(class_id) if class_id.isdigit() else None
