@@ -15409,6 +15409,8 @@ def roles_page(request: Request):
         FROM class_teacher_assignments a JOIN classes c ON c.id=a.class_id JOIN teachers t ON t.id=a.teacher_id
         WHERE a.school_id=? ORDER BY c.name,c.stream""",(sid,)).fetchall()
     con.close()
+    class_opts="".join("<option value='%s'>%s%s</option>"%(c["id"],escape(str(c["name"])),(" · "+escape(str(c["stream"] or ""))) if c["stream"] else "") for c in classes)
+    teacher_opts="".join("<option value='%s'>%s — %s</option>"%(t["id"],escape(str(t["name"])),escape(str(t["role"] or ""))) for t in teachers)
     role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}
     permission_groups={
         "Learner Management":["students.view","students.create","students.edit"],
