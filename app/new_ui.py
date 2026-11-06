@@ -15682,9 +15682,9 @@ def roles_page(request: Request):
     permission_rows="".join(permission_rows)
     role_opts="".join("<option value='%s'>%s</option>"%(r,escape(label)) for r,label in role_labels.items())
     permission_opts="".join("<optgroup label='%s'>%s</optgroup>"%(escape(group),"".join("<option value='%s'>%s</option>"%(escape(p),escape(permission_labels[p])) for p in values)) for group,values in permission_groups.items())
-    override_user_opts="".join("<option value='%s' %s>%s · %s</option>"%(u["id"],"selected" if int(u["id"])==selected_user_id else "",escape(str(u["full_name"] or u["email"] or "Account")),escape(str(u["role"] or "").replace("_"," ").title())) for u in school_users)
     selected_user_raw=str(request.query_params.get("account_id") or "").strip()
     selected_user_id=int(selected_user_raw) if selected_user_raw.isdigit() else 0
+    override_user_opts="".join("<option value='%s' %s>%s · %s</option>"%(u["id"],"selected" if int(u["id"])==selected_user_id else "",escape(str(u["full_name"] or u["email"] or "Account")),escape(str(u["role"] or "").replace("_"," ").title())) for u in school_users)
     selected_account=next((u for u in school_users if int(u["id"])==selected_user_id),None)
     selected_override_map={str(x["permission"]):bool(x["enabled"]) for x in user_overrides if selected_account and int(x["user_id"])==selected_user_id}
     account_access_markup="<div class='rp-account-empty'>Choose an account above to manage its portal access.</div>"
