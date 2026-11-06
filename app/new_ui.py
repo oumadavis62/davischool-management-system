@@ -68,6 +68,9 @@ class SchoolPermissionRoute(APIRoute):
             elif role == "accountant":
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
                     return HTMLResponse("This page is outside the Accountant Portal permissions.",403)
+            elif role == "bursar":
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/bursar"), ("POST", "/app/bursar/expense")}:
+                    return HTMLResponse("This page is outside the Bursar Portal permissions.",403)
             elif role == "student":
                 if (method, path) != ("GET", "/app"):
                     return HTMLResponse("The Student Portal is not yet available.",403)
@@ -1532,10 +1535,10 @@ def _require_permission(request, school_id, permission):
     # including direct URLs; individual feature overrides cannot bypass it.
     portal_gate={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view",
                  "parent":"parent_portal.view","student":"student_portal.view",
-                 "accountant":"accountant_portal.view"}.get(role)
+                 "accountant":"accountant_portal.view","bursar":"bursar_portal.view"}.get(role)
     portal_feature_prefix={"teacher":"teacher_portal.","class_teacher":"teacher_portal.",
                            "parent":"parent_portal.","student":"student_portal.",
-                           "accountant":"accountant_portal."}.get(role,"")
+                           "accountant":"accountant_portal.","bursar":"bursar_portal."}.get(role,"")
     portal_feature=(str(permission).startswith(portal_feature_prefix) if portal_feature_prefix else False)
     if role in ("teacher","class_teacher") and permission in ("marks.view","class_teacher.view"):
         portal_feature=True
@@ -16047,8 +16050,10 @@ def audit_clear(request: Request):
 def accounting_page(request: Request):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
-    if not _require_permission(request, sid, "finance.view"):
-        return HTMLResponse("You do not have permission to view accounting.", 403)
+    portal_role=str(request.session.get("role") or "")
+    view_permission="bursar_portal.view" if portal_role=="bursar" else "accountant_portal.view" if portal_role=="accountant" else "finance.view"
+    if not _require_permission(request, sid, view_permission):
+        return HTMLResponse("You do not have permission to view this financial workspace.", 403)
     con=_db();cur=con.cursor()
     expenses=cur.execute("SELECT * FROM expenses WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
     vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
