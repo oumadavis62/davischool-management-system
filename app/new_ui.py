@@ -15060,7 +15060,7 @@ def exams_page(request: Request):
 <header class='exam-hero'><div><span class='exam-kicker'>ACADEMIC SETUP</span><h1>Examinations</h1><p>Organise assessments, academic periods and participating classes in one place.</p></div><button type='button' class='exam-create-trigger' onclick="document.getElementById('examCreateModal').showModal()">＋ Create Examination</button></header>
 <section class='exam-overview'><div><span>ASSESSMENTS</span><strong>{len(rows)}</strong><small>Examinations recorded</small></div><div><span>CLASSES &amp; STREAMS</span><strong>{len(classes)}</strong><small>Available for participation</small></div><div><span>ACADEMIC YEARS</span><strong>{len({str(x['year'] or '') for x in rows if str(x['year'] or '').strip()})}</strong><small>Years represented</small></div></section>
 <section class='exam-list-panel'><div class='exam-list-heading'><div><h2>Examination register</h2><p>Search and manage the examinations already created.</p></div><input id='examSearch' type='search' placeholder='Search examinations…' oninput='filterExaminationCards(this.value)'></div>
-<div class='exam-record-list' id='examRecordList'>{cards or "<div class='exam-empty'><span>▦</span><strong>No examinations created yet</strong><p>Create your first examination to get started.</p></div>"}</div><p id='examNoMatches' class='exam-no-matches' hidden>No examinations match your search.</p></section>
+<div class='exam-register-viewport' tabindex='0' aria-label='Scrollable examination register'><div class='exam-record-list' id='examRecordList'>{cards or "<div class='exam-empty'><span>▦</span><strong>No examinations created yet</strong><p>Create your first examination to get started.</p></div>"}</div></div><p id='examNoMatches' class='exam-no-matches' hidden>No examinations match your search.</p></section>
 <dialog id='examCreateModal' class='exam-dialog'><form method='post' action='{exam_add_action}' data-native-post id='create-exam-form'>
 <div class='exam-dialog-head'><div><span>NEW ASSESSMENT</span><h2>Create Examination</h2><p>Enter the examination details, then choose the participating classes and streams.</p></div><button type='button' class='exam-dialog-close' aria-label='Close' onclick="document.getElementById('examCreateModal').close()">×</button></div>
 <div class='exam-form-grid'><label>Examination name<input name='name' required class='exam-field' placeholder='e.g. End of Term Assessment'></label><label>Examination type<select name='exam_type' class='exam-field'><option value=''>Select type</option><option>CAT</option><option>Mid-Term</option><option>End-Term</option><option>Mock</option><option>Final</option><option>SBA/CBA</option></select></label><label>Academic term<select name='term' class='exam-field' required><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option></select></label><label>Academic year<select name='year' class='exam-field' required>{''.join('<option>'+y+'</option>' for y in YEAR_OPTIONS)}</select></label></div>
@@ -15089,40 +15089,48 @@ def exams_page(request: Request):
 .exam-record-list{{display:block!important;box-sizing:border-box!important;width:100%!important;height:420px!important;min-height:220px!important;max-height:420px!important;overflow-y:scroll!important;overflow-x:hidden!important;overscroll-behavior-y:contain!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;position:relative!important;contain:none!important;}}
 .exam-record-list>.exam-record{{display:block!important;margin:0 0 10px!important;}}
 @media(max-width:650px){{.exam-record-list{{height:55vh!important;min-height:220px!important;max-height:55vh!important;overflow-y:scroll!important;overflow-x:hidden!important;touch-action:pan-y!important;}}}}@media(max-width:650px){{.exam-record-list{{grid-template-columns:minmax(0,1fr)!important;height:55vh!important;min-height:240px!important;max-height:55vh!important;overflow-y:auto!important;overflow-x:hidden!important;touch-action:pan-y!important;}}}}
-/* Final independent scroll viewport for the Examination Register.
-   Keep the title/search outside it; only the examination records scroll. */
-.exam-list-panel{{display:block!important;min-height:0!important;overflow:visible!important}}
+/* Examination Register: the viewport owns both scroll axes, just like Students List. */
+.exam-list-panel{{display:block!important;min-height:0!important;max-height:none!important;overflow:visible!important}}
 .exam-list-heading{{display:flex!important;flex:0 0 auto!important}}
-.exam-record-list{{
+.exam-register-viewport{{
   display:block!important;
   box-sizing:border-box!important;
   width:100%!important;
   height:420px!important;
   min-height:220px!important;
-  max-height:420px!important;
+  max-height:62vh!important;
+  overflow:auto!important;
+  overflow-x:auto!important;
   overflow-y:auto!important;
-  overflow-x:hidden!important;
-  overscroll-behavior-y:contain!important;
+  overscroll-behavior:contain!important;
   -webkit-overflow-scrolling:touch!important;
-  touch-action:pan-y!important;
-  scrollbar-width:thin!important;
-  position:relative!important;
-  padding:8px 10px 8px 8px!important;
+  touch-action:pan-x pan-y!important;
+  scrollbar-gutter:stable;
   border:1px solid #e4eee5!important;
   border-radius:12px!important;
+  position:relative!important;
 }}
-.exam-record-list>.exam-record{{display:block!important;width:100%!important;box-sizing:border-box!important;margin:0 0 10px!important}}
-.exam-record-list>.exam-record:last-child{{margin-bottom:0!important}}
+.exam-record-list{{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(320px,1fr))!important;
+  grid-auto-rows:max-content!important;
+  align-content:start!important;
+  gap:10px!important;
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:660px!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:8px!important;
+  position:relative!important;
+}}
+.exam-record-list>.exam-record{{display:block!important;width:auto!important;min-width:0!important;box-sizing:border-box!important;margin:0!important}}
+.exam-record-list>.exam-empty{{grid-column:1/-1!important}}
 @media(max-width:650px){{
-  .exam-list-panel{{overflow:visible!important}}
-  .exam-record-list{{
-    height:55vh!important;
-    min-height:220px!important;
-    max-height:55vh!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    touch-action:pan-y!important;
-  }}
+  .exam-register-viewport{{height:55vh!important;min-height:220px!important;max-height:55vh!important;overflow:auto!important;overflow-x:auto!important;overflow-y:auto!important;touch-action:pan-x pan-y!important}}
+  .exam-record-list{{grid-template-columns:repeat(2,minmax(320px,1fr))!important;min-width:660px!important}}
 }}
 </style>
 <script>
