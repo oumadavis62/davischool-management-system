@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Form, UploadFile, File
+from fastapi.routing import APIRoute
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from html import escape
 import base64
@@ -10,7 +11,97 @@ import io
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-router = APIRouter()
+def _central_route_permission(path, method, role):
+    """Central fallback permission map for routes that predate the permission checks."""
+    path = str(path or "").rstrip("/") or "/"
+    method = str(method or "GET").upper()
+    role = str(role or "").lower()
+    if path == "/app":
+        return {"teacher": "teacher_portal.view", "parent": "parent_portal.view",
+                "student": "student_portal.view", "accountant": "accountant_portal.view"}.get(role)
+    if path.startswith("/app/portals"):
+        return "settings.manage"
+    if path.startswith("/app/academics/marks-corrections") or path.endswith("/academics/marks/request-correction"):
+        return "marks.edit"
+    if path.startswith("/app/academics/external-analysis"):
+        return "reports.edit" if method == "POST" else "reports.view"
+    if path == "/app/academics/analysis" or path.startswith("/app/academics/marksheet-analysis"):
+        return "reports.view"
+    if path == "/app/users/add" or path == "/app/users":
+        return "users.manage"
+    if path == "/app/accounting/expense":
+        return "finance.edit"
+    if path.startswith("/app/accounting"):
+        return "accountant_portal.view"
+    if path.startswith("/app/teacher-performance") or path.startswith("/app/class-monitoring"):
+        return "teacher_portal.view"
+    if path.startswith("/app/class-teacher"):
+        return "class_teacher.edit" if method == "POST" else "class_teacher.view"
+    if path.startswith("/app/parent"):
+        if path.startswith("/app/parent/message"):
+            return "parent_portal.message"
+        return "parent_portal.view"
+    if path.startswith("/app/students"):
+        if any(x in path for x in ("/edit", "/delete", "/promotion", "/graduation", "/clearance")):
+            return "students.edit"
+        if method == "POST":
+            return "students.create"
+        return "students.view"
+    if path.startswith("/app/staff"):
+        if any(x in path for x in ("/edit", "/attendance/save")) or method == "POST":
+            return "staff.edit" if "/attendance" in path or "/edit" in path else "staff.create"
+        return "staff.view"
+    if path.startswith("/app/classes"):
+        return "classes.create" if method == "POST" or "/edit" in path or "/delete" in path else "classes.view"
+    if path.startswith("/app/subjects"):
+        return "subjects.create" if method == "POST" or "/edit" in path or "/delete" in path else "subjects.view"
+    if path.startswith("/app/exams"):
+        return "exams.create" if method == "POST" or "/edit" in path or "/delete" in path else "exams.view"
+    if path.startswith("/app/academics/marks"):
+        return "marks.edit" if method == "POST" or any(x in path for x in ("/save", "/finalize", "/correction")) else "marks.view"
+    if path.startswith("/app/academics"):
+        return "marks.edit" if method == "POST" else "marks.view"
+    if path.startswith("/app/attendance"):
+        return "attendance.edit" if method == "POST" else "attendance.view"
+    if path.startswith("/app/announcements"):
+        return "communications.edit" if method == "POST" else "communications.view"
+    if path.startswith("/app/parent-messages"):
+        return "communications.edit" if method == "POST" else "communications.view"
+    if path.startswith("/app/parent-links"):
+        return "users.manage"
+    if path.startswith("/app/roles") or path.startswith("/app/users"):
+        return "settings.manage" if path.startswith("/app/roles") else "users.manage"
+    if path.startswith("/app/school-settings"):
+        return "settings.edit" if method == "POST" else "settings.view"
+    if path.startswith("/app/audit"):
+        return "audit.view"
+    if path.startswith("/app/timetable"):
+        return "timetable.edit" if method != "GET" else "timetable.view"
+    return None
+
+
+class SchoolPermissionRoute(APIRoute):
+    """Apply central server-side permission checks, including legacy endpoints."""
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def permission_guarded_handler(request: Request):
+            required = _central_route_permission(
+                request.url.path, request.method, request.session.get("role", "")
+            )
+            if required:
+                school_id = _school_session(request)
+                if school_id and not _require_permission(request, school_id, required):
+                    return HTMLResponse(
+                        "Access to this portal feature has been restricted by your school administrator.",
+                        status_code=403,
+                    )
+            return await original_handler(request)
+
+        return permission_guarded_handler
+
+
+router = APIRouter(route_class=SchoolPermissionRoute)
 
 # Google Search Console HTML-file ownership verification.
 @router.get("/google0dd64183cf2d3d1b.html", include_in_schema=False)
@@ -611,7 +702,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             con = _db()
             try:
                 cur = con.cursor()
-                nav = [item for item in nav if item[3] is None or _permission_enabled(cur, int(school_id), role, item[3])]
+                nav = [item for item in nav if item[3] is None or _require_permission(request, int(school_id), item[3])]
             finally:
                 con.close()
     request_path=str(getattr(getattr(request,"url",None),"path","") or "")
@@ -15460,7 +15551,7 @@ def roles_page(request: Request):
         "Finance & Fees":["fees.view","fees.edit","finance.view","finance.edit"],
         "Reports & Staff":["reports.view","reports.edit","staff.view","staff.create","staff.edit"],
         "Communication & Administration":["communications.view","communications.edit","users.manage","class_teacher.view","class_teacher.edit","audit.view","settings.view","settings.edit","settings.manage"],
-        "Portal Access":["teacher_portal.view","parent_portal.view","parent_portal.message"],
+        "Portal Access":["teacher_portal.view","parent_portal.view","parent_portal.message","student_portal.view","accountant_portal.view"],
     }
     permission_labels={p:p.replace("."," · ").replace("_"," ").title() for values in permission_groups.values() for p in values}
     permission_rows=[]
@@ -15622,7 +15713,7 @@ def roles_user_override(request: Request, user_id: int=Form(...), permission: st
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
         return HTMLResponse("You do not have permission to manage account access.",403)
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message","student_portal.view","accountant_portal.view"}
     permission_v=str(permission or "").strip()
     if permission_v not in allowed_permissions:
         return HTMLResponse("Invalid feature permission.",400)
@@ -15665,7 +15756,7 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message","student_portal.view","accountant_portal.view"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
@@ -15685,7 +15776,7 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message","student_portal.view","accountant_portal.view"}
     role_v=role.strip();perm_v=permission.strip();enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission.",400)
