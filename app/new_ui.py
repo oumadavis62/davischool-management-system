@@ -6819,6 +6819,8 @@ def app_home(request: Request):
         return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     if str(request.session.get("role") or "") == "parent":
         return RedirectResponse("/app/parent", status_code=303)
+    if str(request.session.get("role") or "") == "accountant":
+        return RedirectResponse("/app/accounting", status_code=303)
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
@@ -15839,14 +15841,22 @@ def accounting_page(request: Request):
     vouchers=cur.execute("SELECT * FROM payment_vouchers WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
     lpos=cur.execute("SELECT * FROM lpos WHERE school_id=? ORDER BY id DESC LIMIT 100",(sid,)).fetchall()
     cash=cur.execute("SELECT COALESCE(SUM(credit),0) credit,COALESCE(SUM(debit),0) debit FROM cashbook WHERE school_id=?",(sid,)).fetchone()
+    cashbook_rows=cur.execute("SELECT date,reference,description,debit,credit,account FROM cashbook WHERE school_id=? ORDER BY id DESC LIMIT 200",(sid,)).fetchall()
     con.close()
     exp_total=sum(float(x["amount"] or 0) for x in expenses)
-    body=f"""<div class='page'><h1>Accounting</h1><div class='muted'>School accounting workspace: expenses, vouchers, LPOs and cashbook.</div>
+    is_accountant=str(request.session.get("role") or "")=="accountant"
+    can_expense_create=(not is_accountant) or _require_permission(request,sid,"accountant_portal.expense_create")
+    can_expenses=(not is_accountant) or _require_permission(request,sid,"accountant_portal.expenses")
+    can_vouchers=(not is_accountant) or _require_permission(request,sid,"accountant_portal.vouchers")
+    can_lpos=(not is_accountant) or _require_permission(request,sid,"accountant_portal.lpos")
+    can_cashbook=(not is_accountant) or _require_permission(request,sid,"accountant_portal.cashbook")
+    body=f"""<div class='page'><h1>Accounting</h1><div class='muted'>Accountant workspace: overview, expense records, vouchers, LPOs and cashbook.</div>
 <div class='grid'><div class='card'><div class='label'>Expenses listed</div><div class='kpi'>{exp_total:,.2f}</div></div><div class='card'><div class='label'>Cash credits</div><div class='kpi'>{float(cash['credit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Cash debits</div><div class='kpi'>{float(cash['debit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Open LPOs</div><div class='kpi'>{len(lpos)}</div></div></div>
-<div class='card section'><h2>Record expense</h2><form method='post' action='/app/accounting/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><select name='category' required class='field'><option value=''>Select expense category</option><option>Salaries</option><option>Utilities</option><option>Stationery</option><option>Repairs & Maintenance</option><option>Transport</option><option>Food & Catering</option><option>Learning Materials</option><option>Rent</option><option>Other</option></select><input name='description' required placeholder='Description' class='field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='field'><input name='paid_to' placeholder='Paid to' class='field'><input name='voucher_no' placeholder='Voucher no.' class='field'><input name='date' type='date' class='field'><button class='btn'>Save Expense</button></form></div>
-<div class='card section'><h2>Expenses</h2><table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th><th>Voucher</th><th>Date</th></tr></thead><tbody>{_simple_rows(expenses,['category','description','amount','paid_to','voucher_no','date']) or '<tr><td colspan=6>No expenses yet.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>Payment Vouchers ({len(vouchers)})</h2><table><thead><tr><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(vouchers,['voucher_no','payee','description','amount','date','status']) or '<tr><td colspan=6>No vouchers yet.</td></tr>'}</tbody></table></div>
-<div class='card section'><h2>LPOs ({len(lpos)})</h2><table><thead><tr><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>{_simple_rows(lpos,['lpo_no','supplier','description','amount','date','status']) or '<tr><td colspan=6>No LPOs yet.</td></tr>'}</tbody></table></div>
+{("<div class='card section'><h2>Record expense</h2><form method='post' action='/app/accounting/expense' style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px'><select name='category' required class='field'><option value=''>Select expense category</option><option>Salaries</option><option>Utilities</option><option>Stationery</option><option>Repairs & Maintenance</option><option>Transport</option><option>Food & Catering</option><option>Learning Materials</option><option>Rent</option><option>Other</option></select><input name='description' required placeholder='Description' class='field'><input name='amount' required type='number' step='0.01' placeholder='Amount' class='field'><input name='paid_to' placeholder='Paid to' class='field'><input name='voucher_no' placeholder='Voucher no.' class='field'><input name='date' type='date' class='field'><button class='btn'>Save Expense</button></form></div>" if can_expense_create else "")}
+{("<div class='card section'><h2>Expenses</h2><table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Paid To</th><th>Voucher</th><th>Date</th></tr></thead><tbody>"+(_simple_rows(expenses,['category','description','amount','paid_to','voucher_no','date']) or '<tr><td colspan=6>No expenses yet.</td></tr>')+"</tbody></table></div>" if can_expenses else "")}
+{("<div class='card section'><h2>Payment Vouchers ("+str(len(vouchers))+")</h2><table><thead><tr><th>Voucher</th><th>Payee</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>"+(_simple_rows(vouchers,['voucher_no','payee','description','amount','date','status']) or '<tr><td colspan=6>No vouchers yet.</td></tr>')+"</tbody></table></div>" if can_vouchers else "")}
+{("<div class='card section'><h2>LPOs ("+str(len(lpos))+")</h2><table><thead><tr><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>"+(_simple_rows(lpos,['lpo_no','supplier','description','amount','date','status']) or '<tr><td colspan=6>No LPOs yet.</td></tr>')+"</tbody></table></div>" if can_lpos else "")}
+{("<div class='card section'><h2>Cashbook</h2><div style='overflow:auto'><table><thead><tr><th>Date</th><th>Reference</th><th>Description</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody>"+(_simple_rows(cashbook_rows,['date','reference','description','account','debit','credit']) or '<tr><td colspan=6>No cashbook entries yet.</td></tr>')+"</tbody></table></div></div>" if can_cashbook else "")}
 </div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
     return _school_page(request,"Accounting",body)
 
@@ -15854,6 +15864,8 @@ def accounting_page(request: Request):
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"accountant_portal.expense_create"):
+        return HTMLResponse("Recording expenses has been disabled for this account.",403)
 
 # ---------------------------------------------------------------------------
 # Class MarkSheet Analysis
