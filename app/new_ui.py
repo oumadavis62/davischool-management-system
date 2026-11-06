@@ -122,7 +122,7 @@ def _pdf_route_error(request, route_name, exc):
 TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
 
 # One canonical designation list shared by staff records and account creation.
-STAFF_DESIGNATION_OPTIONS = ['Teacher','Deputy Teacher','Senior Teacher','Head of Department','Deputy Head Teacher','Head Teacher','Deputy Principal','Principal','Director','Registrar','Bursar','Accountant','School Secretary','Administrator','Librarian','Laboratory Technician','ICT Officer','Guidance & Counselling Officer','Nurse','Sports Coach','Security Officer','Driver','Cook','Cleaner','Support Staff','Other']
+STAFF_DESIGNATION_OPTIONS = ['School Administrator','Teacher','Registrar','Accountant / Bursar','Librarian','ICT / Systems Officer','Support Staff']
 YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi")).year, datetime.now(ZoneInfo("Africa/Nairobi")).year + 5))
 
 def _parse_assessment_ids(exam_ids="", exam_id=""):
@@ -14270,7 +14270,7 @@ def users_page(request: Request):
 {credential_modal}<div class='users-toolbar'><div><div class='muted'>Manage sign-in access and linked school profiles.</div></div><button type='button' class='users-primary' id='openCreateUser'>＋ Create User</button></div><div id='createUserModal' class='users-modal' aria-hidden='true'><div class='users-modal-panel' role='dialog' aria-modal='true' aria-labelledby='createUserTitle'><div class='users-modal-head'><div><h2 id='createUserTitle' style='margin:0'>Create user account</h2><div class='muted'>Set up access and link the account to an existing school record.</div></div><button type='button' class='users-close' id='closeCreateUser' aria-label='Close'>×</button></div>
 <form method='post' action='/app/users/add' class='create-user-form' id='createUserForm'>
 <div class='create-user-section-title'><span class='create-user-step'>01</span><div><b>Account access</b><small>Choose which portal this person will use.</small></div></div>
-<label class='create-user-field create-user-role'>Role / designation<select id='userRoleChoice' class='field' required><optgroup label='Staff roles'>{''.join(f"<option value='staff|{escape(x,quote=True)}' {'selected' if x=='Teacher' else ''} {'disabled' if registrar_exists and x=='Registrar' else ''}>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</optgroup><optgroup label='Family & learner access'><option value='parent'>Parent</option><option value='student'>Student</option></optgroup></select><small class='role-choice-hint'>Choose the person's school role or job designation. Portal access and staff profile are selected automatically.</small></label><input type='hidden' name='role' id='newRole' value='teacher'><input type='hidden' name='teacher_designation' id='teacherDesignation' value='Teacher'>
+<label class='create-user-field create-user-role'>Role / designation<select id='userRoleChoice' class='field' required><optgroup label='Staff roles'>{''.join(f"<option value='staff|{escape(x,quote=True)}' {'selected' if x=='Teacher' else ''} {'disabled' if x=='School Administrator' or (registrar_exists and x=='Registrar') else ''}>{escape(x + (' (managed by Super Admin)' if x=='School Administrator' else ''))}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</optgroup><optgroup label='Family & learner access'><option value='parent'>Parent</option><option value='student'>Student</option></optgroup></select><small class='role-choice-hint'>Choose the person's school role or job designation. Portal access and staff profile are selected automatically.</small></label><input type='hidden' name='role' id='newRole' value='teacher'><input type='hidden' name='teacher_designation' id='teacherDesignation' value='Teacher'>
 <div id='staffProfileFields' class='create-user-profile-block'>
 <div class='create-user-section-title'><span class='create-user-step'>02</span><div><b>Staff profile</b><small>Choose the matching staff record for this role.</small></div></div>
 <label class='create-user-field'>Staff member<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select a designation first</option>{topts}</select></label>
@@ -14335,7 +14335,7 @@ def users_page(request: Request):
      cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');renderAssignmentSummary(cs,classSummary,classCount,'classes or streams');renderAssignmentSummary(ss,subjectSummary,subjectCount,'subjects');if(typeDisplay)typeDisplay.textContent=({{subject_teacher:'Subject teacher',class_teacher:'Class teacher',both:'Class teacher + subject teacher'}}[data.teacher_type||type.value]||'Teaching assignment');
    }}catch(err){{console.error('Teacher allocation load failed',err);}}
  }}
- function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=(job==='Registrar'?'registrar':(['Accountant','Bursar'].includes(job)?'accountant':'teacher'));}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
+ function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=(job==='Registrar'?'registrar':(job==='Accountant / Bursar'?'accountant':'teacher'));}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
  designation.addEventListener('change',()=>{{teacher.value='';filterProfiles();clearAllocations();}});
  teacher.addEventListener('change',()=>{{updateProfile();loadTeacherLinks();}});
  roleChoice.addEventListener('change',syncRoleChoice);
@@ -14357,7 +14357,7 @@ def users_edit_page(request: Request, uid: int):
         return HTMLResponse("You do not have permission to manage users.",403)
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
-    teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,role FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -14370,6 +14370,10 @@ def users_edit_page(request: Request, uid: int):
     if str(user["role"] or "")=="registrar":
         return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited from the School Admin side. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
+    linked_designation=next((str(t['role'] or '') for t in teachers if user['teacher_id'] and int(user['teacher_id'])==int(t['id'])), '')
+    current_designation=(linked_designation if user['role']=='teacher' and linked_designation in STAFF_DESIGNATION_OPTIONS else {'parent':'Parent','student':'Student','accountant':'Accountant / Bursar','registrar':'Registrar'}.get(str(user['role'] or ''),'Teacher'))
+    edit_role_options=''.join(f"<option value='{('accountant' if designation=='Accountant / Bursar' else 'registrar' if designation=='Registrar' else 'teacher')}' {'selected' if current_designation==designation else ''} {'disabled' if designation=='School Administrator' else ''}>{escape(designation + (' (managed by Super Admin)' if designation=='School Administrator' else ''))}</option>" for designation in STAFF_DESIGNATION_OPTIONS)
+    edit_role_options += f"<option value='parent' {'selected' if current_designation=='Parent' else ''}>Parent</option><option value='student' {'selected' if current_designation=='Student' else ''}>Student</option>"
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
     safe_delete_name=escape(str(user['full_name'] or user['email'] or 'this account')).replace("'","&#39;")
@@ -14379,7 +14383,7 @@ def users_edit_page(request: Request, uid: int):
 <form method='post' action='/app/users/edit/{uid}' class='edit-user-form'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
 <input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'><input name='password_confirm' type='password' minlength='8' placeholder='Confirm new password' class='field'>
-<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
+<label class='edit-user-role-field'>Role / designation<select name='role' class='field'>{edit_role_options}</select><small>School Administrator accounts are managed by the Super Admin.</small></label>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div class='edit-user-actions'><a href='/app/users' class='edit-cancel'>Cancel</a><button class='edit-save' type='submit'>💾 Save Changes</button></div></form>
 <div class='edit-delete-zone'><div><strong>Delete this account</strong><div class='edit-note'>This permanently removes the user's sign-in account.</div></div>{delete_control}</div>
