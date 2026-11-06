@@ -366,6 +366,33 @@ async def idle_session_timeout(request: Request, call_next):
     response = await call_next(request)
     return response
 
+@app.middleware("http")
+async def specialist_staff_portal_route_guard(request: Request, call_next):
+    """Allow specialist staff accounts to reach only their own portal endpoints."""
+    role = str(request.session.get("role") or "").strip().lower()
+    portal_paths = {
+        "librarian": "/app/librarian",
+        "ict_officer": "/app/ict",
+        "support_staff": "/app/support",
+    }
+    if role in portal_paths:
+        path = request.url.path
+        method = request.method.upper()
+        own_portal = portal_paths[role]
+        allowed = (
+            (path == "/app" and method == "GET")
+            or (path == own_portal and method == "GET")
+            or (path == "/app/ops/action" and method == "POST")
+            or path in ("/logout", "/app/logout")
+        )
+        if path.startswith("/app/") and not allowed:
+            return HTMLResponse("This account is restricted to its assigned staff portal.", 403)
+        if path == "/app/ops/action" and not allowed:
+            return HTMLResponse("This account cannot perform that portal action.", 403)
+        if path in ("/app/librarian", "/app/ict", "/app/support") and path != own_portal:
+            return HTMLResponse("This staff portal is not assigned to your account.", 403)
+    return await call_next(request)
+
 
 
 @app.get("/healthz")
