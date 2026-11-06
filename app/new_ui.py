@@ -15038,7 +15038,7 @@ def exams_page(request: Request):
     con.close()
     class_picker="".join("<label class='exam-class-option'><input type='checkbox' name='class_ids' value='%s'><span><b>%s</b><small>%s</small></span></label>"%(c["id"],escape(str(c["name"] or "")),escape(str(c["stream"] or "No stream"))) for c in classes)
     cards="".join(
-        "<article class='exam-record' data-search='%s'><div class='exam-record-main'><div class='exam-record-icon'>▦</div><div class='exam-record-copy'><strong>%s</strong><div class='exam-record-meta'><span>%s</span><span>%s</span><span>%s</span></div></div></div><div class='exam-record-bottom'><span class='exam-participation'>%s participating classes / streams</span><div class='exam-actions'><button type='button' class='exam-edit' onclick=\\\"document.getElementById('examEditModal%s').showModal()\\\">Edit details</button></div></div></article>"
+        "<article class='exam-record' data-search='%s'><div class='exam-record-main'><div class='exam-record-icon'>▦</div><div class='exam-record-copy'><strong>%s</strong><div class='exam-record-meta'><span>%s</span><span>%s</span><span>%s</span></div></div></div><div class='exam-record-bottom'><span class='exam-participation'>%s participating classes / streams</span><div class='exam-actions'><button type='button' class='exam-edit' onclick=\"document.getElementById('examEditModal%s').showModal()\\\">Edit details</button></div></div></article>"
         %(escape(" ".join(str(x[k] or "") for k in ("name","exam_type","term","year")).lower(),quote=True),
           escape(str(x["name"] or "Untitled examination")),escape(str(x["exam_type"] or "Assessment")),
           escape(str(x["term"] or "Term not set")),escape(str(x["year"] or "Year not set")),count,int(x["id"]))
