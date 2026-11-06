@@ -1531,6 +1531,11 @@ def _require_permission(request, school_id, permission):
     portal_gate={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view","librarian":"librarian_portal.view","ict_officer":"ict_portal.view","support_staff":"support_portal.view"}.get(role)
     portal_feature_prefix={"teacher":"teacher_portal.","class_teacher":"teacher_portal.","parent":"parent_portal.","student":"student_portal.","accountant":"accountant_portal.","librarian":"librarian_portal.","ict_officer":"ict_portal.","support_staff":"support_portal."}.get(role,"")
     portal_feature=(str(permission).startswith(portal_feature_prefix) if portal_feature_prefix else False)
+    # These three specialist roles are deny-by-default outside their own
+    # portal namespace. This prevents unconfigured school-admin permissions
+    # from accidentally granting access to unrelated modules.
+    if role in ("librarian","ict_officer","support_staff") and not portal_feature:
+        return False
     if role in ("teacher","class_teacher") and permission in ("marks.view","class_teacher.view"):
         portal_feature=True
     if portal_gate and portal_feature and str(permission)!=portal_gate:
