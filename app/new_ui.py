@@ -122,7 +122,7 @@ def _pdf_route_error(request, route_name, exc):
 TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
 
 # One canonical designation list shared by staff records and account creation.
-STAFF_DESIGNATION_OPTIONS = ['Teacher','Deputy Teacher','Senior Teacher','Head of Department','Deputy Head Teacher','Head Teacher','Deputy Principal','Principal','Director','Registrar','Bursar','Accountant','School Secretary','Administrator','Librarian','Laboratory Technician','ICT Officer','Guidance & Counselling Officer','Nurse','Sports Coach','Security Officer','Driver','Cook','Cleaner','Support Staff','Other']
+STAFF_DESIGNATION_OPTIONS = ['Teacher','Registrar','Accountant','Bursar']
 YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi")).year, datetime.now(ZoneInfo("Africa/Nairobi")).year + 5))
 
 def _parse_assessment_ids(exam_ids="", exam_id=""):
@@ -3140,7 +3140,7 @@ def staff_edit_page(request: Request,teacher_id:int,modal:int=0):
 <label>Phone number<input name='phone' value='{escape(val("phone"),quote=True)}' placeholder='Phone number' class='field'></label>
 <label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"),quote=True)}' placeholder='TSC number' class='field'></label>
 <label>ID number<input name='id_no' value='{escape(val("id_no"),quote=True)}' placeholder='ID number' class='field'></label>
-<label>Designation<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')">{''.join(f"<option value='{escape(role,quote=True)}' {'selected' if val('role','Teacher')==role else ''}>{escape(role)}</option>" for role in STAFF_DESIGNATION_OPTIONS)}</select></label>
+<label>Designation<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')">{''.join(f"<option value='{escape(role,quote=True)}' {'selected' if val('role','Teacher')==role else ''}>{escape(role)}</option>" for role in STAFF_DESIGNATION_OPTIONS)}{(f"<option value='{escape(str(val('role')),quote=True)}' selected>{escape(str(val('role')))} (legacy)</option>" if val('role','Teacher') and val('role','Teacher') not in STAFF_DESIGNATION_OPTIONS else '')}</select></label>
 <label>Gender<select name='gender' class='field'><option value=''>Select gender</option><option value='Male' {'selected' if val('gender')=='Male' else ''}>Male</option><option value='Female' {'selected' if val('gender')=='Female' else ''}>Female</option><option value='Other' {'selected' if val('gender')=='Other' else ''}>Other</option></select></label>
 <label>Employment type<select name='employment_type' class='field'><option value='Permanent' {'selected' if val('employment_type','Permanent')=='Permanent' else ''}>Permanent</option><option value='Contract' {'selected' if val('employment_type')=='Contract' else ''}>Contract</option><option value='Part-time' {'selected' if val('employment_type')=='Part-time' else ''}>Part-time</option></select></label>
 <label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
@@ -14335,7 +14335,7 @@ def users_page(request: Request):
      cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');renderAssignmentSummary(cs,classSummary,classCount,'classes or streams');renderAssignmentSummary(ss,subjectSummary,subjectCount,'subjects');if(typeDisplay)typeDisplay.textContent=({{subject_teacher:'Subject teacher',class_teacher:'Class teacher',both:'Class teacher + subject teacher'}}[data.teacher_type||type.value]||'Teaching assignment');
    }}catch(err){{console.error('Teacher allocation load failed',err);}}
  }}
- function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=(job==='Registrar'?'registrar':(['Accountant','Bursar'].includes(job)?'accountant':'teacher'));}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
+ function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=({Teacher:'teacher',Registrar:'registrar',Accountant:'accountant',Bursar:'accountant'}[job]||'');}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
  designation.addEventListener('change',()=>{{teacher.value='';filterProfiles();clearAllocations();}});
  teacher.addEventListener('change',()=>{{updateProfile();loadTeacherLinks();}});
  roleChoice.addEventListener('change',syncRoleChoice);
