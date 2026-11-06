@@ -3624,6 +3624,10 @@ app.include_router(new_ui_router)
 from app.hr_management import router as hr_management_router
 app.include_router(hr_management_router)
 
+# Library workspace routes are registered after the shared school UI helpers.
+from app.library_management import router as library_management_router
+app.include_router(library_management_router)
+
 
 # Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
 from app.legacy_redirect import install_legacy_school_redirect
