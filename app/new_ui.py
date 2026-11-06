@@ -14550,6 +14550,10 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             parent_student=cur.execute("SELECT name,parent_name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
             if parent_student:
                 full_name=str(parent_student["parent_name"] or "").strip() or ("Parent of " + str(parent_student["name"] or "Learner"))
+        elif role == "student" and stid:
+            student_profile=cur.execute("SELECT name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
+            if student_profile:
+                full_name=str(student_profile["name"] or "").strip()
         if role in ("teacher","registrar","accountant") and tid:
             designation_value=str(teacher_designation or "").strip()
             if designation_value and designation_value not in STAFF_DESIGNATION_OPTIONS:
