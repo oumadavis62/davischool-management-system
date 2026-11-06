@@ -2797,7 +2797,7 @@ def student_history(request: Request,student_id:int):
 
 def _staff_manager_styles():
     return """<style>
-.staff-manager-page{display:block;width:100%;max-width:1500px;min-width:0;box-sizing:border-box;margin:0 auto;color:#244631}.staff-manager-page>.staff-register-card{display:block;width:100%;min-width:0;max-width:none;box-sizing:border-box;align-self:stretch}.staff-manager-page .page-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}
+.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box;margin:0 auto;color:#244631}.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box;align-self:stretch}.staff-manager-page .staff-register-card,.staff-manager-page .staff-table-scroll{width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box}.staff-manager-page .staff-table-scroll{display:block!important;overflow-x:auto!important}.staff-manager-page .staff-register-card table{width:100%!important;min-width:1100px!important;max-width:none!important}.staff-manager-page .page-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}
 .staff-manager-page h1{margin:3px 0 5px;color:#174b2b;font-size:27px;font-weight:850;letter-spacing:-.5px}.staff-manager-page h2{margin:0 0 14px;color:#244d35;font-size:15px;font-weight:850}
 .staff-manager-page .muted{font-size:13px;color:#718176}.staff-manager-page .card,.staff-manager-page .section{background:#fff;border:1px solid #e3eee6;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 5px 20px #173d2908}
 .staff-manager-page .staff-filters{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;align-items:end}.staff-manager-page label{display:grid;gap:6px;font-size:12px;font-weight:800;color:#365844}
@@ -14133,7 +14133,7 @@ def users_page(request: Request):
         LEFT JOIN teachers t ON t.id=u.teacher_id AND t.school_id=u.school_id
         LEFT JOIN students s ON s.id=u.student_id AND s.school_id=u.school_id
         WHERE u.school_id=? ORDER BY u.id DESC""",(sid,)).fetchall()
-    teachers=cur.execute("SELECT id,name,email FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    teachers=cur.execute("SELECT id,name,email,phone,role FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     subjects=cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     registrar_exists=bool(cur.execute("SELECT id FROM users WHERE school_id=? AND lower(COALESCE(role,''))='registrar' LIMIT 1",(sid,)).fetchone())
@@ -14202,7 +14202,7 @@ def users_page(request: Request):
             actions=f"<a href='/app/users/edit/{int(u['id'])}' style='display:inline-block;padding:7px 11px;border-radius:8px;background:#e6f1e8;color:#20543a;text-decoration:none;font-size:11px;font-weight:800;border:1px solid #c9dfce'>✏️ Edit</a>"
         display_password = "—" if role_name in ("school_admin","registrar") else str(u["temporary_password"] or "—")
         rows += f"<tr><td class='user-name-cell'>{name_profile_html}</td><td>{escape(str(u['username'] or u['email'] or ''))}</td><td>{escape(display_password)}</td><td>{escape(str(u['email'] or ''))}</td><td>{escape(role_name)}</td><td>{actions}</td></tr>"
-    topts="".join(f"<option value='{t['id']}'>{escape(str(t['name']))}</option>" for t in teachers)
+    topts="".join(f"<option value='{t['id']}' data-designation='{escape(str(t['role'] or ''),quote=True)}'>{escape(str(t['name']))}</option>" for t in teachers)
     teacher_alloc_map={}
     for a in allocations:
         tid_alloc=int(a["teacher_id"])
@@ -14223,7 +14223,7 @@ def users_page(request: Request):
         ct=entry.get("class_teacher_class")
         has_subject=bool(entry.get("has_subject"))
         entry["teacher_type"]="both" if ct and has_subject else ("class_teacher" if ct else "subject_teacher")
-    teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or "")} for t in teachers})
+    teacher_data_json=json.dumps({str(t["id"]): {"name": str(t["name"] or ""), "email": str(t["email"] or ""), "phone": str(t["phone"] or ""), "designation": str(t["role"] or "")} for t in teachers}).replace("</","<\\/")
     teacher_allocation_json=json.dumps(teacher_alloc_map)
     # Use the one-time session credentials as the primary popup source.
     # The popup must not depend on re-finding the newly-created account row.
@@ -14267,79 +14267,81 @@ def users_page(request: Request):
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 {success_block}
 {credential_modal}<div class='users-toolbar'><div><div class='muted'>Manage sign-in access and linked school profiles.</div></div><button type='button' class='users-primary' id='openCreateUser'>＋ Create User</button></div><div id='createUserModal' class='users-modal' aria-hidden='true'><div class='users-modal-panel' role='dialog' aria-modal='true' aria-labelledby='createUserTitle'><div class='users-modal-head'><div><h2 id='createUserTitle' style='margin:0'>Create user account</h2><div class='muted'>Set up access and link the account to an existing school record.</div></div><button type='button' class='users-close' id='closeCreateUser' aria-label='Close'>×</button></div>
-<form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
-<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar' {'disabled' if registrar_exists else ''}>Registrar</option></select>
-<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
-<select name='teacher_designation' id='teacherDesignation' class='field'><option value=''>Select staff designation</option>{''.join(f"<option value='{escape(x,quote=True)}'>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select>
-<input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
-<select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
-<div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{class_options_html}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
-<div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{subject_options_html}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations.</div></div>
-<input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'>
-<button class='btn' style='grid-column:1/-1'>Create Account</button></form>
+<form method='post' action='/app/users/add' class='create-user-form' id='createUserForm'>
+<div class='create-user-section-title'><span class='create-user-step'>01</span><div><b>Account access</b><small>Choose which portal this person will use.</small></div></div>
+<label class='create-user-field create-user-role'>Account role<select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar' ${'disabled' if registrar_exists else ''}>Registrar</option></select></label>
+<div id='staffProfileFields' class='create-user-profile-block'>
+<div class='create-user-section-title'><span class='create-user-step'>02</span><div><b>Staff profile</b><small>Choose a designation to find the matching staff record.</small></div></div>
+<label class='create-user-field'>Designation<select name='teacher_designation' id='teacherDesignation' class='field'><option value=''>Choose designation</option>{''.join(f"<option value='{escape(x,quote=True)}'>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select></label>
+<label class='create-user-field'>Staff member<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select a designation first</option>{topts}</select></label>
+<div class='create-user-profile-preview' id='staffProfilePreview'><div class='profile-avatar' id='staffInitials'>DS</div><div class='profile-preview-copy'><b id='staffPreviewName'>Staff profile preview</b><span id='staffPreviewDesignation'>Name and details will appear here automatically.</span><small id='staffPreviewContact'>Choose a staff member to load their saved details.</small></div><span class='profile-ready' id='staffProfileStatus'>Awaiting selection</span></div>
+<label class='create-user-field'>Login email<input name='email' id='newTeacherEmail' type='email' placeholder='Email from staff record' class='field'></label>
+<div id='teacherExtraFields' class='create-user-teacher-extra'><label class='create-user-field'>Teaching assignment<select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select></label>
+<div id='classFieldWrap' class='create-user-wide' style='display:none'><label>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{class_options_html}</select><small>Automatically loaded from existing class-teacher and subject allocations.</small></div>
+<div id='subjectFieldWrap' class='create-user-wide' style='display:none'><label>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{subject_options_html}</select><small>Automatically loaded from existing subject allocations.</small></div></div>
+</div>
+<div id='studentProfileFields' class='create-user-profile-block' style='display:none'><div class='create-user-section-title'><span class='create-user-step'>02</span><div><b>Learner profile</b><small>Link a learner for student or parent access.</small></div></div><label class='create-user-field create-user-wide'>Student record<select name='student_id' id='newStudent' class='field'><option value=''>Select student profile</option>{sopts}</select></label></div>
+<div class='create-user-footer'><div><b>Secure account credentials</b><small>Username and temporary password are generated automatically after creation.</small></div><button class='btn create-user-submit' type='submit'>Create Account <span>→</span></button></div>
+<input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'></form>
 <div class='muted' style='margin-top:12px;padding-top:10px;border-top:1px solid #cbded0'>Username and password are generated automatically when the account is created.</div>
 </div></div>
 <script>
 (function(){{
- const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), email=document.getElementById('newTeacherEmail');
- const type=document.getElementById('teacherType'), designation=document.getElementById('teacherDesignation'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
- const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
- const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
- async function loadTeacherLinks(){{
-   if(role.value!=='teacher' && role.value!=='registrar'){{
-     cw.style.display='none'; sw.style.display='none'; cc.value=''; sc.value=''; return;
-   }}
-   cw.style.display='block'; sw.style.display='block';
-   try{{
-     if(!teacher.value){{
-       email.value=''; if(designation) designation.value=''; cc.value=''; sc.value='';
-       Array.from(cs.options).forEach(o=>{{o.selected=false;o.hidden=true;o.disabled=true;}});
-       Array.from(ss.options).forEach(o=>{{o.hidden=true;o.disabled=true;o.selected=false;}});
-       return;
-     }}
-     const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
-     if(!response.ok) throw new Error('Teacher links request failed');
-     const data=await response.json();
-     if(data.teacher && data.teacher.email) email.value=data.teacher.email;
-     if(data.teacher && data.teacher.designation && designation) designation.value=data.teacher.designation;
-     if(data.teacher_type) type.value=data.teacher_type;
-     const wantedClasses=new Set((data.classes||[]).map(String));
-     Array.from(cs.options).forEach(o=>{{
-       const allowed=wantedClasses.has(String(o.value));
-       o.hidden=!allowed;
-       o.disabled=!allowed;
-       o.selected=allowed;
-     }});
-     const allowed=new Set();
-     Object.values(data.subjects_by_class||{{}}).forEach(list=>(list||[]).forEach(v=>allowed.add(String(v))));
-     Array.from(ss.options).forEach(o=>{{
-       const isAllowed=allowed.has(String(o.value));
-       o.hidden=!isAllowed;
-       o.disabled=!isAllowed;
-       o.selected=isAllowed;
-     }});
-     cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-     sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
-   }}catch(err){{
-     console.error('Teacher allocation load failed',err);
-   }}
+ const role=document.getElementById('newRole'),designation=document.getElementById('teacherDesignation'),teacher=document.getElementById('newTeacher'),email=document.getElementById('newTeacherEmail');
+ const type=document.getElementById('teacherType'),cs=document.getElementById('classIdsSelect'),ss=document.getElementById('subjectIdsSelect'),cw=document.getElementById('classFieldWrap'),sw=document.getElementById('subjectFieldWrap');
+ const staffWrap=document.getElementById('staffProfileFields'),studentWrap=document.getElementById('studentProfileFields'),teacherExtra=document.getElementById('teacherExtraFields'),student=document.getElementById('newStudent');
+ const cc=document.getElementById('classIdsCsv'),sc=document.getElementById('subjectIdsCsv'),staffData={teacher_data_json};
+ const previewName=document.getElementById('staffPreviewName'),previewDesignation=document.getElementById('staffPreviewDesignation'),previewContact=document.getElementById('staffPreviewContact'),initials=document.getElementById('staffInitials'),status=document.getElementById('staffProfileStatus');
+ function clearAllocations(){{if(cc)cc.value='';if(sc)sc.value='';if(cs)Array.from(cs.options).forEach(o=>o.selected=false);if(ss)Array.from(ss.options).forEach(o=>o.selected=false);}}
+ function filterProfiles(){{
+   const wanted=(designation.value||'').trim().toLowerCase(),current=teacher.value;
+   teacher.replaceChildren(new Option(wanted?'Select staff member':'Select a designation first',''));
+   Object.entries(staffData).forEach(([id,p])=>{{if(wanted&&(p.designation||'').trim().toLowerCase()===wanted)teacher.add(new Option(p.name||('Staff record '+id),id));}});
+   if(current&&Array.from(teacher.options).some(o=>o.value===current))teacher.value=current;
+   updateProfile();
  }}
- teacher.addEventListener('change',loadTeacherLinks);
- role.addEventListener('change',loadTeacherLinks);
- cs.addEventListener('change',function(){{
-   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-   if((role.value==='teacher' || role.value==='registrar') && teacher.value) loadTeacherLinks();
- }});
- ss.addEventListener('change',function(){{sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');}});
- document.getElementById('createUserForm').addEventListener('submit',function(){{
-   cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');
-   sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
- }});
-}})();
-</script>
+ function updateProfile(){{
+   const p=staffData[teacher.value];
+   if(!p){{previewName.textContent='Staff profile preview';previewDesignation.textContent='Name and details will appear here automatically.';previewContact.textContent='Choose a staff member to load their saved details.';initials.textContent='DS';status.textContent='Awaiting selection';email.value='';return;}}
+   previewName.textContent=p.name||'Name not recorded';previewDesignation.textContent=p.designation||'Designation not recorded';
+   previewContact.textContent=(p.email||p.phone)?((p.email||'Email not recorded')+' · '+(p.phone||'Phone not recorded')):'Contact details are missing from the staff record.';
+   initials.textContent=(p.name||'DS').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+   status.textContent='Profile linked';email.value=p.email||'';
+ }}
+ function updateRole(){{
+   const r=role.value,needsStaff=['teacher','registrar','accountant'].includes(r),needsStudent=['parent','student'].includes(r);
+   staffWrap.style.display=needsStaff?'grid':'none';studentWrap.style.display=needsStudent?'grid':'none';
+   teacherExtra.style.display=(r==='teacher'||r==='registrar')?'grid':'none';
+   if(!needsStaff){{teacher.value='';designation.value='';email.value='';clearAllocations();updateProfile();}}
+   if(!needsStudent&&student)student.value='';
+   if(needsStaff)filterProfiles();
+   if(cw)cw.style.display=(r==='teacher'||r==='registrar')?'block':'none';
+   if(sw)sw.style.display=(r==='teacher'||r==='registrar')?'block':'none';
+ }}
+ async function loadTeacherLinks(){{
+   if(!['teacher','registrar'].includes(role.value)||!teacher.value){{clearAllocations();return;}}
+   try{{
+     const response=await fetch('/app/users/teacher-links?teacher_id='+encodeURIComponent(teacher.value),{{credentials:'same-origin',cache:'no-store'}});
+     if(!response.ok)throw new Error('Teacher allocations unavailable');
+     const data=await response.json();if(data.teacher_type)type.value=data.teacher_type;
+     const wanted=new Set((data.classes||[]).map(String));
+     Array.from(cs.options).forEach(o=>{{const allowed=wanted.has(String(o.value));o.hidden=!allowed;o.disabled=!allowed;o.selected=allowed;}});
+     const allowed=new Set();Object.values(data.subjects_by_class||{{}}).forEach(list=>(list||[]).forEach(v=>allowed.add(String(v))));
+     Array.from(ss.options).forEach(o=>{{const ok=allowed.has(String(o.value));o.hidden=!ok;o.disabled=!ok;o.selected=ok;}});
+     cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');
+   }}catch(err){{console.error('Teacher allocation load failed',err);}}
+ }}
+ designation.addEventListener('change',()=>{{teacher.value='';filterProfiles();clearAllocations();}});
+ teacher.addEventListener('change',()=>{{updateProfile();loadTeacherLinks();}});
+ role.addEventListener('change',updateRole);
+ if(cs)cs.addEventListener('change',()=>{{cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');}});
+ if(ss)ss.addEventListener('change',()=>{{sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');}});
+ document.getElementById('createUserForm').addEventListener('submit',()=>{{if(cc)cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');if(sc)sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');}});
+ updateRole();
+}})();</script>
 </div>
 <div class='users-summary'><div class='users-stat'><span>Total Accounts</span><b>{len(users)}</b></div><div class='users-stat'><span>Teachers</span><b>{sum(1 for x in users if str(x['role'] or '').lower()=='teacher')}</b></div><div class='users-stat'><span>Parents</span><b>{sum(1 for x in users if str(x['role'] or '').lower()=='parent')}</b></div><div class='users-stat'><span>Students</span><b>{sum(1 for x in users if str(x['role'] or '').lower()=='student')}</b></div></div><div class='card section users-accounts'><div class='users-list-head'><div><h2 style='margin:0'>Accounts</h2><div class='muted'>{len(users)} registered login accounts</div></div><input id='userSearch' class='field users-search' type='search' placeholder='Search name, username, email, class or linked profile' oninput='filterUserAccounts()'></div><div class='users-tabs' role='tablist' aria-label='Account categories'><button type='button' class='users-tab is-active' data-user-group='all' role='tab' aria-selected='true' onclick="setUserGroup('all',this)">All <span>{len(users)}</span></button><button type='button' class='users-tab' data-user-group='teacher' role='tab' aria-selected='false' onclick="setUserGroup('teacher',this)">Teachers <span>{sum(1 for x in users if str(x['role'] or '').lower()=='teacher')}</span></button><button type='button' class='users-tab' data-user-group='parent' role='tab' aria-selected='false' onclick="setUserGroup('parent',this)">Parents <span>{sum(1 for x in users if str(x['role'] or '').lower()=='parent')}</span></button><button type='button' class='users-tab' data-user-group='student' role='tab' aria-selected='false' onclick="setUserGroup('student',this)">Students <span>{sum(1 for x in users if str(x['role'] or '').lower()=='student')}</span></button><button type='button' class='users-tab' data-user-group='other' role='tab' aria-selected='false' onclick="setUserGroup('other',this)">Other Accounts <span>{sum(1 for x in users if str(x['role'] or '').lower() not in ('teacher','parent','student'))}</span></button></div><div style='overflow-x:auto'><table id='userAccountsTable'><thead><tr><th>Name / Profile</th><th>Username</th><th>Password</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead><tbody>{rows or '<tr><td colspan=6>No users yet.</td></tr>'}</tbody></table></div></div><script>let activeUserGroup='all';function setUserGroup(group,button){{activeUserGroup=group;document.querySelectorAll('.users-tab').forEach(function(t){{const active=t===button;t.classList.toggle('is-active',active);t.setAttribute('aria-selected',active?'true':'false');}});filterUserAccounts();}}function filterUserAccounts(){{const q=((document.getElementById('userSearch')||{{}}).value||'').trim().toLowerCase();document.querySelectorAll('#userAccountsTable tbody tr').forEach(function(r){{if(!r.querySelector('td'))return;const role=(r.cells[4]&&r.cells[4].textContent||'').trim().toLowerCase().replace(/\\s+/g,' ');const groupMatch=activeUserGroup==='all'||(activeUserGroup==='other'?!['teacher','parent','student'].includes(role):role===activeUserGroup);const matchText=!q||r.textContent.toLowerCase().includes(q);r.style.display=(groupMatch&&matchText)?'':'none';}});}}</script></div>
-<style>.page:has(.users-toolbar){{max-width:1500px;margin:0 auto;padding:clamp(12px,2vw,24px)}}.users-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:18px 20px;margin:14px 0;background:linear-gradient(120deg,#edf7ef,#f8fbf8);border:1px solid #d7e8da;border-radius:16px}}.users-primary{{border:0;border-radius:10px;padding:12px 18px;background:#176344;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 5px 14px #17634422}}.users-primary:hover{{background:#104d34;transform:translateY(-1px)}}.users-summary{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}}.users-stat{{background:linear-gradient(135deg,#e1efe3 0%,#f1f7f1 52%,#d7e8da 100%);border:1px solid #c9ddcd;border-radius:14px;padding:15px 17px;box-shadow:0 4px 14px #173f3210}}.users-stat span{{display:block;color:#64776b;font-size:12px;font-weight:700}}.users-stat b{{display:block;color:#173f32;font-size:25px;margin-top:5px}}.users-accounts{{border:1px solid #e0e9e2;border-radius:15px;overflow:hidden}}.users-list-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}}.users-search{{max-width:360px}}.users-tabs{{display:flex;gap:8px;overflow-x:auto;padding:3px 1px 12px;margin-bottom:12px;border-bottom:1px solid #e4ece5;scrollbar-width:thin}}.users-tab{{flex:0 0 auto;display:inline-flex;align-items:center;gap:9px;border:1px solid #dce8de;background:#f7faf7;color:#476352;border-radius:10px;padding:9px 13px;font-weight:750;cursor:pointer;white-space:nowrap}}.users-tab span{{font-size:11px;background:#e5eee6;color:#315b40;border-radius:20px;padding:2px 7px}}.users-tab:hover{{border-color:#9bbda2;background:#eff7f0}}.users-tab.is-active{{background:linear-gradient(120deg,#1b6847,#2d8059);border-color:#1b6847;color:#fff;box-shadow:0 4px 12px #1b684733}}.users-tab.is-active span{{background:#ffffff2b;color:#fff}}.users-accounts table{{width:100%;min-width:820px;border-collapse:separate;border-spacing:0}}.user-name-cell{{min-width:205px}}.user-name-profile{{display:grid;gap:4px;min-width:180px}}.user-name-profile strong{{color:#244b38;font-size:13px;font-weight:800;line-height:1.35}}.user-name-profile small{{color:#718176;font-size:11px;line-height:1.5}}.users-accounts th{{background:#edf5ee;color:#244b38;font-size:12px;text-transform:uppercase;letter-spacing:.035em;position:sticky;top:0}}.users-accounts td,.users-accounts th{{padding:12px 11px;border-bottom:1px solid #edf1ed;text-align:left;vertical-align:middle}}.users-accounts tbody tr:hover{{background:#f7fbf7}}.users-modal{{display:none;position:fixed;inset:0;z-index:99990;background:rgba(13,35,25,.58);padding:18px;align-items:center;justify-content:center;overflow-y:auto}}.users-modal.is-open{{display:flex}}.users-modal-panel{{background:linear-gradient(135deg,#e4f1e6 0%,#f5faf5 48%,#dcebdd 100%);width:min(760px,100%);max-height:92vh;overflow-y:auto;border-radius:18px;padding:22px;box-shadow:0 24px 70px #0004;border:1px solid #c8dfcc}}.users-modal-head{{padding:2px 2px 14px;border-bottom:1px solid #cfe0d1}}.users-modal form{{background:rgba(255,255,255,.88);border:1px solid #d9e8db;border-radius:13px;padding:15px}}.users-modal form .muted{{color:#526b5a}}.users-modal-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}}.users-close{{border:0;background:#edf4ee;color:#254d39;border-radius:9px;width:36px;height:36px;font-size:24px;cursor:pointer;line-height:1}}.users-modal .field{{width:100%;padding:11px;border:1px solid #d5e2d8;border-radius:9px;background:#fff}}.users-modal .btn{{padding:11px 16px;border:0;border-radius:9px;background:#176344;color:#fff;font-weight:800;cursor:pointer}}@media(max-width:680px){{.users-modal form{{grid-template-columns:1fr!important}}.users-summary{{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}.users-stat{{padding:12px}}.users-stat b{{font-size:22px}}.users-modal{{padding:9px;align-items:flex-end}}.users-modal-panel{{max-height:94vh;padding:16px;border-radius:17px 17px 12px 12px}}.users-list-head{{align-items:stretch}}.users-search{{max-width:none}}}}.users-accounts{{overflow-x:auto}}.users-accounts>div[style*='overflow-x:auto']{{overflow:auto;max-height:68vh}}.users-accounts table{{min-width:820px}}</style><script>(function(){{const modal=document.getElementById('createUserModal');const open=document.getElementById('openCreateUser');const close=document.getElementById('closeCreateUser');function show(){{modal.classList.add('is-open');modal.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}}function hide(){{modal.classList.remove('is-open');modal.setAttribute('aria-hidden','true');document.body.style.overflow='';}}if(open)open.addEventListener('click',show);if(close)close.addEventListener('click',hide);if(modal){{modal.addEventListener('click',e=>{{if(e.target===modal)hide();}});document.addEventListener('keydown',e=>{{if(e.key==='Escape'&&modal.classList.contains('is-open'))hide();}});}}}})();</script>"""
+<style>.page:has(.users-toolbar){{max-width:1500px;margin:0 auto;padding:clamp(12px,2vw,24px)}}.users-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:18px 20px;margin:14px 0;background:linear-gradient(120deg,#edf7ef,#f8fbf8);border:1px solid #d7e8da;border-radius:16px}}.users-primary{{border:0;border-radius:10px;padding:12px 18px;background:#176344;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 5px 14px #17634422}}.users-primary:hover{{background:#104d34;transform:translateY(-1px)}}.users-summary{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}}.users-stat{{background:linear-gradient(135deg,#e1efe3 0%,#f1f7f1 52%,#d7e8da 100%);border:1px solid #c9ddcd;border-radius:14px;padding:15px 17px;box-shadow:0 4px 14px #173f3210}}.users-stat span{{display:block;color:#64776b;font-size:12px;font-weight:700}}.users-stat b{{display:block;color:#173f32;font-size:25px;margin-top:5px}}.users-accounts{{border:1px solid #e0e9e2;border-radius:15px;overflow:hidden}}.users-list-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}}.users-search{{max-width:360px}}.users-tabs{{display:flex;gap:8px;overflow-x:auto;padding:3px 1px 12px;margin-bottom:12px;border-bottom:1px solid #e4ece5;scrollbar-width:thin}}.users-tab{{flex:0 0 auto;display:inline-flex;align-items:center;gap:9px;border:1px solid #dce8de;background:#f7faf7;color:#476352;border-radius:10px;padding:9px 13px;font-weight:750;cursor:pointer;white-space:nowrap}}.users-tab span{{font-size:11px;background:#e5eee6;color:#315b40;border-radius:20px;padding:2px 7px}}.users-tab:hover{{border-color:#9bbda2;background:#eff7f0}}.users-tab.is-active{{background:linear-gradient(120deg,#1b6847,#2d8059);border-color:#1b6847;color:#fff;box-shadow:0 4px 12px #1b684733}}.users-tab.is-active span{{background:#ffffff2b;color:#fff}}.users-accounts table{{width:100%;min-width:820px;border-collapse:separate;border-spacing:0}}.user-name-cell{{min-width:205px}}.user-name-profile{{display:grid;gap:4px;min-width:180px}}.user-name-profile strong{{color:#244b38;font-size:13px;font-weight:800;line-height:1.35}}.user-name-profile small{{color:#718176;font-size:11px;line-height:1.5}}.users-accounts th{{background:#edf5ee;color:#244b38;font-size:12px;text-transform:uppercase;letter-spacing:.035em;position:sticky;top:0}}.users-accounts td,.users-accounts th{{padding:12px 11px;border-bottom:1px solid #edf1ed;text-align:left;vertical-align:middle}}.users-accounts tbody tr:hover{{background:#f7fbf7}}.users-modal{{display:none;position:fixed;inset:0;z-index:99990;background:rgba(13,35,25,.58);padding:18px;align-items:center;justify-content:center;overflow-y:auto}}.users-modal.is-open{{display:flex}}.users-modal-panel{{background:linear-gradient(135deg,#e4f1e6 0%,#f5faf5 48%,#dcebdd 100%);width:min(760px,100%);max-height:92vh;overflow-y:auto;border-radius:18px;padding:22px;box-shadow:0 24px 70px #0004;border:1px solid #c8dfcc}}.users-modal-head{{padding:2px 2px 14px;border-bottom:1px solid #cfe0d1}}.users-modal form{{background:rgba(255,255,255,.88);border:1px solid #d9e8db;border-radius:13px;padding:15px}}.users-modal form .muted{{color:#526b5a}}.users-modal-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}}.users-close{{border:0;background:#edf4ee;color:#254d39;border-radius:9px;width:36px;height:36px;font-size:24px;cursor:pointer;line-height:1}}.users-modal .field{{width:100%;padding:11px;border:1px solid #d5e2d8;border-radius:9px;background:#fff}}.users-modal .btn{{padding:11px 16px;border:0;border-radius:9px;background:#176344;color:#fff;font-weight:800;cursor:pointer}}@media(max-width:680px){{.users-modal form{{grid-template-columns:1fr!important}}.users-summary{{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}.users-stat{{padding:12px}}.users-stat b{{font-size:22px}}.users-modal{{padding:9px;align-items:flex-end}}.users-modal-panel{{max-height:94vh;padding:16px;border-radius:17px 17px 12px 12px}}.users-list-head{{align-items:stretch}}.users-search{{max-width:none}}}}.users-accounts{{overflow-x:auto}}.users-accounts>div[style*='overflow-x:auto']{{overflow:auto;max-height:68vh}}.users-accounts table{{min-width:820px}}.users-modal{{backdrop-filter:blur(7px);background:rgba(9,35,22,.68);padding:20px}}.users-modal-panel{{width:min(900px,100%);max-height:94vh;padding:0;overflow:auto;border-radius:24px;background:#f7faf7;border:1px solid #cfe1d2;box-shadow:0 30px 100px #071d1280}}.users-modal-head{{position:relative;margin:0;padding:25px 30px 24px;background:radial-gradient(circle at 85% 10%,#ffffff28,transparent 35%),linear-gradient(120deg,#104a30,#176b43 58%,#2d8059);color:#fff;border:0}}.users-modal-head h2{{font-size:25px;letter-spacing:-.5px;color:#fff}}.users-modal-head .muted{{color:#d8eee0!important;margin-top:6px}}.users-close{{background:#ffffff20;color:#fff;border:1px solid #ffffff45;width:40px;height:40px;border-radius:12px}}.users-close:hover{{background:#ffffff35}}.create-user-form{{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px!important;padding:24px 30px 20px!important;background:#f7faf7!important;border:0!important;border-radius:0!important}}.create-user-section-title{{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:2px 0 0;color:#204a32}}.create-user-section-title>div{{display:grid;gap:3px}}.create-user-section-title b{{font-size:14px;font-weight:900}}.create-user-section-title small{{font-size:11px;color:#718477;font-weight:500}}.create-user-step{{width:32px;height:32px;display:grid;place-items:center;border-radius:11px;background:#e1efe3;color:#176b43;font-size:12px;font-weight:900;border:1px solid #c8dfcc}}.create-user-field{{display:grid;gap:7px;min-width:0;color:#365844;font-size:12px;font-weight:800}}.create-user-field .field{{min-height:45px;padding:11px 13px;border:1px solid #d4e2d7;border-radius:11px;background:#fff;color:#214832;box-shadow:0 1px 2px #163b2310}}.create-user-field .field:focus{{outline:0;border-color:#64a77a;box-shadow:0 0 0 3px #2d80591a}}.create-user-role{{grid-column:1/-1;max-width:420px}}.create-user-profile-block{{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:17px;border:1px solid #dce9de;border-radius:17px;background:linear-gradient(145deg,#fff,#f2f8f3)}}.create-user-profile-block>.create-user-section-title{{margin-bottom:2px}}.create-user-profile-preview{{grid-column:1/-1;display:flex;align-items:center;gap:12px;min-width:0;padding:14px;border:1px solid #d9e8dc;border-radius:14px;background:#f8fcf8}}.profile-avatar{{width:43px;height:43px;flex:0 0 43px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#176b43,#3d9866);color:white;font-size:14px;font-weight:900;box-shadow:0 5px 12px #176b4328}}.profile-preview-copy{{display:grid;gap:3px;min-width:0;flex:1}}.profile-preview-copy b{{font-size:13px;color:#214832}}.profile-preview-copy span{{font-size:11px;color:#4e6c58}}.profile-preview-copy small{{font-size:10px;color:#7a8b7d;overflow-wrap:anywhere}}.profile-ready{{flex:0 0 auto;padding:5px 8px;border-radius:20px;background:#e2f2e6;color:#28633f;font-size:10px;font-weight:800}}.create-user-teacher-extra{{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.create-user-wide{{grid-column:1/-1;display:grid;gap:7px;color:#365844;font-size:12px;font-weight:800}}.create-user-wide select{{width:100%;min-width:0}}.create-user-wide small{{font-size:10px;color:#718477;font-weight:500}}.create-user-footer{{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:2px;padding:17px 0 0;border-top:1px solid #dce8de}}.create-user-footer>div{{display:grid;gap:4px}}.create-user-footer b{{font-size:12px;color:#214832}}.create-user-footer small{{font-size:10px;color:#718477;max-width:350px}}.create-user-submit{{min-width:190px;min-height:46px;border-radius:12px!important;background:linear-gradient(120deg,#176b43,#2d8059)!important;box-shadow:0 7px 16px #176b4328}}.create-user-submit span{{font-size:18px;margin-left:8px}}@media(max-width:680px){{.users-modal{{padding:8px;align-items:flex-end}}.users-modal-panel{{max-height:96vh;border-radius:22px 22px 14px 14px}}.users-modal-head{{padding:20px 18px}}.users-modal-head h2{{font-size:21px}}.create-user-form{{grid-template-columns:1fr;padding:16px 14px 18px!important;gap:12px!important}}.create-user-profile-block,.create-user-teacher-extra{{grid-template-columns:1fr;padding:13px}}.create-user-role{{max-width:none}}.create-user-footer{{align-items:stretch;flex-direction:column}}.create-user-submit{{width:100%}}.profile-ready{{display:none}}}}</style><script>(function(){{const modal=document.getElementById('createUserModal');const open=document.getElementById('openCreateUser');const close=document.getElementById('closeCreateUser');function show(){{modal.classList.add('is-open');modal.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}}function hide(){{modal.classList.remove('is-open');modal.setAttribute('aria-hidden','true');document.body.style.overflow='';}}if(open)open.addEventListener('click',show);if(close)close.addEventListener('click',hide);if(modal){{modal.addEventListener('click',e=>{{if(e.target===modal)hide();}});document.addEventListener('keydown',e=>{{if(e.key==='Escape'&&modal.classList.contains('is-open'))hide();}});}}}})();</script>"""
     return _school_page(request,"User Management",body)
 
 @router.get("/app/users/edit/{uid}", response_class=HTMLResponse)
@@ -14539,14 +14541,14 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
         if role in ("student","parent") and not stid:
             return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-        if role not in ("teacher","registrar","student","parent") and (tid or stid):
+        if role not in ("teacher","registrar","student","parent","accountant") and (tid or stid):
             return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
 
         if role == "parent" and stid:
             parent_student=cur.execute("SELECT name,parent_name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
             if parent_student:
                 full_name=str(parent_student["parent_name"] or "").strip() or ("Parent of " + str(parent_student["name"] or "Learner"))
-        if role in ("teacher","registrar"):
+        if role in ("teacher","registrar","accountant") and tid:
             designation_value=str(teacher_designation or "").strip()
             if designation_value and designation_value not in STAFF_DESIGNATION_OPTIONS:
                 return HTMLResponse("Invalid staff designation. Please choose a designation from the list.",400)
