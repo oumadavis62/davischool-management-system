@@ -7163,19 +7163,21 @@ def app_home(request: Request):
             except Exception: exam_rows=[]
             calendar_html="".join(f"<div class='calendar-row'><span class='calendar-date'>{escape(str(r['event_date'] or '—')[:10])}</span><div><b>{escape(str(r['name'] or 'Examination'))}</b><small>Academic assessment</small></div></div>" for r in exam_rows) or "<div class='dashboard-empty'>Academic assessments will appear here.</div>"
             dashboard_graduated_count=0
+            # Do not run the graduation KPI on the overview's shared cursor.
+            # Earlier optional overview queries can fail on older PostgreSQL
+            # schemas; PostgreSQL then marks that transaction as aborted even
+            # when the exception was caught. A clean, independent connection
+            # keeps the graduation register count isolated from those queries.
+            graduation_con=None
             try:
-                # The graduation register is lazily created by the promotion workflow.
-                # Ensure it exists before querying, then include both durable graduation
-                # records and legacy learners already marked graduated in Students.
-                _ensure_student_promotion_cohort_tables(cur)
-                # Count the durable graduation register separately from legacy
-                # student status values. Avoid a UNION-derived table here: the
-                # dashboard runs against both SQLite and PostgreSQL adapters.
-                durable_graduates=cur.execute(
+                graduation_con=_db()
+                graduation_cur=graduation_con.cursor()
+                _ensure_student_promotion_cohort_tables(graduation_cur)
+                durable_graduates=graduation_cur.execute(
                     "SELECT COUNT(DISTINCT student_id) c FROM student_graduations WHERE school_id=?",
                     (school_id,)
                 ).fetchone()
-                legacy_graduates=cur.execute(
+                legacy_graduates=graduation_cur.execute(
                     """SELECT COUNT(*) c FROM students s
                        WHERE s.school_id=?
                          AND lower(trim(coalesce(s.status,''))) IN ('graduated','graduate')
@@ -7189,9 +7191,43 @@ def app_home(request: Request):
                     int(durable_graduates["c"] or 0) +
                     int(legacy_graduates["c"] or 0)
                 )
+                graduation_con.commit()
             except Exception as exc:
+                if graduation_con is not None:
+                    try:
+                        graduation_con.rollback()
+                    except Exception:
+                        pass
                 print("DAVISCHOOL DASHBOARD GRADUATED COUNT WARNING:",repr(exc),flush=True)
-                dashboard_graduated_count=0
+                # Preserve visibility of legacy graduates if the durable
+                # register is temporarily unavailable; never reuse the
+                # overview connection after it may have entered an aborted state.
+                fallback_con=None
+                try:
+                    fallback_con=_db()
+                    fallback_cur=fallback_con.cursor()
+                    fallback_row=fallback_cur.execute(
+                        """SELECT COUNT(*) c FROM students
+                           WHERE school_id=?
+                             AND lower(trim(coalesce(status,''))) IN ('graduated','graduate')""",
+                        (school_id,)
+                    ).fetchone()
+                    dashboard_graduated_count=int(fallback_row["c"] or 0)
+                    fallback_con.commit()
+                except Exception as fallback_exc:
+                    if fallback_con is not None:
+                        try:
+                            fallback_con.rollback()
+                        except Exception:
+                            pass
+                    print("DAVISCHOOL DASHBOARD GRADUATED FALLBACK WARNING:",repr(fallback_exc),flush=True)
+                    dashboard_graduated_count=0
+                finally:
+                    if fallback_con is not None:
+                        fallback_con.close()
+            finally:
+                if graduation_con is not None:
+                    graduation_con.close()
             latest_exam_mean=None
             try:
                 mean_row=cur.execute("""SELECT AVG(m.marks*100.0/COALESCE((SELECT cfg.out_of FROM set_marks_config cfg WHERE cfg.school_id=m.school_id AND cfg.exam_id=m.exam_id AND cfg.subject_id=m.subject_id ORDER BY cfg.id DESC LIMIT 1),100)) mean_pct
