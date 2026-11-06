@@ -626,3 +626,65 @@ async def library_book_return_process(
     finally:
         con.close()
     return RedirectResponse("/app/library/returns", 303)
+
+
+@router.get("/app/library/overdue", response_class=HTMLResponse)
+def library_overdue_books(request: Request, q: str = "", borrower_type: str = ""):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        con.commit()
+        today = datetime.now().date()
+        today_text = today.isoformat()
+        filters = ["i.school_id=?", "i.issue_status='Issued'", "i.due_date<?"]
+        params = [sid, today_text]
+        if borrower_type in ("Student", "Staff"):
+            filters.append("i.borrower_type=?")
+            params.append(borrower_type)
+        else:
+            borrower_type = ""
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            filters.append("(b.title LIKE ? OR c.accession_no LIKE ? OR i.borrower_name LIKE ? OR i.borrower_ref LIKE ?)")
+            params.extend([term] * 4)
+        rows = cur.execute(
+            """SELECT i.id,i.borrower_name,i.borrower_type,i.borrower_ref,i.issue_date,i.due_date,
+                      b.title,c.accession_no
+               FROM library_book_issues i
+               JOIN library_books b ON b.id=i.book_id AND b.school_id=i.school_id
+               JOIN library_book_copies c ON c.id=i.copy_id AND c.school_id=i.school_id
+               WHERE """ + " AND ".join(filters) + " ORDER BY i.due_date,i.borrower_name",
+            tuple(params),
+        ).fetchall()
+        def days_late(value):
+            try:
+                from datetime import date
+                return max(0, (today - date.fromisoformat(str(value)[:10])).days)
+            except (TypeError, ValueError):
+                return 0
+        table = "".join(
+            f"<tr><td><b>{escape(str(row['title']))}</b><div class='lib-muted'>{escape(str(row['accession_no']))}</div></td>"
+            f"<td>{escape(str(row['borrower_name']))}<div class='lib-muted'>{escape(str(row['borrower_type']))} · {escape(str(row['borrower_ref'] or 'No ID recorded'))}</div></td>"
+            f"<td>{escape(str(row['issue_date']))}</td><td>{escape(str(row['due_date']))}</td>"
+            f"<td><span class='lib-status lib-inactive'>{days_late(row['due_date'])} day(s) overdue</span></td></tr>"
+            for row in rows
+        ) or "<tr><td colspan='5' class='lib-empty'>No overdue books. All issued books are within their due dates.</td></tr>"
+        student_count = sum(1 for row in rows if row["borrower_type"] == "Student")
+        staff_count = sum(1 for row in rows if row["borrower_type"] == "Staff")
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / CIRCULATION</div><h1>Overdue Books</h1><div class="lib-muted">Track borrowed books that have passed their due dates and identify borrowers who need a return follow-up.</div></div><a class="btn btn-light" href="/app/library/returns">Manage returns</a></div>
+ <div class="lib-kpis"><div><span>Overdue books</span><strong>{len(rows)}</strong></div><div><span>Student borrowers</span><strong>{student_count}</strong></div><div><span>Staff borrowers</span><strong>{staff_count}</strong></div></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:2fr 1fr auto auto"><label>Search overdue loans<input class="field" name="q" value="{escape(q, quote=True)}" placeholder="Book, accession number, borrower or ID"></label><label>Borrower type<select class="field" name="borrower_type"><option value="">All borrowers</option><option value="Student" {'selected' if borrower_type == 'Student' else ''}>Student</option><option value="Staff" {'selected' if borrower_type == 'Staff' else ''}>Staff</option></select></label><button class="btn">Apply</button><a class="btn btn-light" href="/app/library/overdue">Clear</a></form></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Overdue loan register</h2><span class="lib-muted">{len(rows)} overdue record(s)</span></div><div class="lib-table-scroll"><table style="min-width:900px"><thead><tr><th>Book / Accession</th><th>Borrower</th><th>Issue date</th><th>Due date</th><th>Overdue duration</th></tr></thead><tbody>{table}</tbody></table></div></section>
+</div>
+"""
+        return _school_page(request, "Overdue Books", body)
+    finally:
+        con.close()
