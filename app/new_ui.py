@@ -6476,6 +6476,32 @@ window.addEventListener('popstate',function(event){{
 </script>"""
 
 
+@router.get("/app/registrar", response_class=HTMLResponse)
+def registrar_portal_page(request: Request):
+    if "email" not in request.session or str(request.session.get("role") or "")!="registrar":
+        return HTMLResponse("Registrar Portal access is restricted to Registrar accounts.",403)
+    sid=_school_session(request)
+    if not sid:
+        return RedirectResponse("/",303)
+    # Registrar retains the full school-administration authority requested by
+    # the school, but receives a distinct landing page and login identity.
+    sections=[
+        ("Learner Management","Students Register","/app/students"),
+        ("Staff Management","Staff Register","/app/staff"),
+        ("School Setup","Classes & Streams","/app/classes"),
+        ("Academic Operations","Examination Register","/app/exams"),
+        ("Academic Operations","Academic Manager","/app/academics"),
+        ("School Operations","Attendance","/app/attendance"),
+        ("Finance","Fees Management","/app/finance/fees"),
+        ("Administration","User Accounts","/app/users"),
+        ("Administration","Roles & Permissions","/app/roles"),
+        ("Academic Reports","Academic Analysis","/app/academics/analysis"),
+    ]
+    cards="".join("<a class='card registrar-link' href='%s'><span>%s</span><strong>%s</strong><small>Open workspace →</small></a>"%(url,escape(group),escape(label)) for group,label,url in sections)
+    body="<div class='page'><h1>Registrar Portal</h1><p class='muted'>School administration workspace with full Registrar access.</p><div class='registrar-grid'>"+cards+"</div></div><style>.registrar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.registrar-link{display:flex;flex-direction:column;gap:9px;text-decoration:none;color:inherit;padding:20px;border:1px solid #dce9df;border-radius:14px;background:#fff;min-height:125px}.registrar-link span,.registrar-link small{color:#547361;font-size:12px}.registrar-link strong{font-size:16px;color:#174b30}.registrar-link:hover{border-color:#16834b;transform:translateY(-2px);box-shadow:0 8px 22px #174b3015}</style>"
+    return _school_page(request,"Registrar Portal",body)
+
+
 @router.get("/app/parent", response_class=HTMLResponse)
 def parent_portal(request: Request):
     """Read-only parent workspace, restricted to the learner linked to this login."""
@@ -6946,6 +6972,8 @@ def app_home(request: Request):
         return RedirectResponse("/app/accounting", status_code=303)
     if str(request.session.get("role") or "") == "bursar":
         return RedirectResponse("/app/bursar", status_code=303)
+    if str(request.session.get("role") or "") == "registrar":
+        return RedirectResponse("/app/registrar", status_code=303)
     if str(request.session.get("role") or "") == "student":
         if not _require_permission(request,int(request.session.get("school_id") or 0),"student_portal.view"):
             return HTMLResponse("Student Portal access has been disabled for this account.",403)
