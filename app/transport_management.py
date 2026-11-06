@@ -214,3 +214,246 @@ def save_transport_vehicle(
     finally:
         con.close()
     return RedirectResponse("/app/transport/vehicles", 303)
+
+
+def _ensure_transport_routes(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS transport_routes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        route_name TEXT NOT NULL,
+        route_code TEXT NOT NULL,
+        direction TEXT NOT NULL DEFAULT 'Both',
+        start_point TEXT DEFAULT '',
+        end_point TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'Active',
+        notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(school_id, route_code)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS transport_route_stops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        route_id INTEGER NOT NULL,
+        stop_name TEXT NOT NULL,
+        stop_order INTEGER NOT NULL DEFAULT 1,
+        pickup_time TEXT DEFAULT '',
+        dropoff_time TEXT DEFAULT '',
+        fare NUMERIC NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'Active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(school_id, route_id, stop_order)
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_routes_school_status ON transport_routes(school_id,status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_stops_route_order ON transport_route_stops(school_id,route_id,stop_order)")
+
+
+@router.get("/app/transport/routes", response_class=HTMLResponse)
+def transport_routes_register(request: Request, q: str = "", status: str = "Active", route_id: int = 0):
+    sid, error = _transport_guard(request)
+    if error:
+        return error
+    con = _db()
+    cur = con.cursor()
+    _ensure_transport_routes(cur)
+    con.commit()
+    clauses = ["r.school_id=?"]
+    params = [sid]
+    if q.strip():
+        term = "%" + q.strip() + "%"
+        clauses.append("(r.route_name LIKE ? OR r.route_code LIKE ? OR r.start_point LIKE ? OR r.end_point LIKE ?)")
+        params.extend([term] * 4)
+    if status in ("Active", "Inactive"):
+        clauses.append("r.status=?")
+        params.append(status)
+    routes = cur.execute(
+        "SELECT r.*, (SELECT COUNT(*) FROM transport_route_stops s WHERE s.school_id=r.school_id AND s.route_id=r.id) AS stop_count "
+        "FROM transport_routes r WHERE " + " AND ".join(clauses) + " ORDER BY r.route_name",
+        tuple(params),
+    ).fetchall()
+    totals = cur.execute(
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) AS active FROM transport_routes WHERE school_id=?",
+        (sid,),
+    ).fetchone()
+    stop_total = cur.execute("SELECT COUNT(*) AS total FROM transport_route_stops WHERE school_id=?", (sid,)).fetchone()
+    selected_route = cur.execute(
+        "SELECT * FROM transport_routes WHERE id=? AND school_id=?", (route_id, sid)
+    ).fetchone() if route_id else None
+    stop_rows = cur.execute(
+        "SELECT * FROM transport_route_stops WHERE school_id=? AND route_id=? ORDER BY stop_order,id",
+        (sid, route_id),
+    ).fetchall() if selected_route else []
+    route_rows = "".join(
+        f"<tr><td><b>{escape(str(r['route_name'] or ''))}</b><div class='tr-muted'>{escape(str(r['route_code'] or ''))}</div></td>"
+        f"<td>{escape(str(r['direction'] or 'Both'))}</td><td>{escape(str(r['start_point'] or '—'))} → {escape(str(r['end_point'] or '—'))}</td>"
+        f"<td>{int(r['stop_count'] or 0)}</td><td><span class='tr-status'>{escape(str(r['status'] or 'Active'))}</span></td>"
+        f"<td><a class='btn btn-light' href='/app/transport/routes?route_id={int(r['id'])}'>Manage stops</a> "
+        f"<button class='btn btn-light' type='button' onclick='editTransportRoute(this)' data-id='{int(r['id'])}' "
+        f"data-name='{escape(str(r['route_name'] or ''), quote=True)}' data-code='{escape(str(r['route_code'] or ''), quote=True)}' "
+        f"data-direction='{escape(str(r['direction'] or 'Both'), quote=True)}' data-start='{escape(str(r['start_point'] or ''), quote=True)}' "
+        f"data-end='{escape(str(r['end_point'] or ''), quote=True)}' data-status='{escape(str(r['status'] or 'Active'), quote=True)}' "
+        f"data-notes='{escape(str(r['notes'] or ''), quote=True)}'>Edit</button></td></tr>"
+        for r in routes
+    ) or "<tr><td colspan='6' class='tr-empty'>No routes found. Add the first school transport route.</td></tr>"
+    stop_table = "".join(
+        f"<tr><td>{int(s['stop_order'] or 0)}</td><td><b>{escape(str(s['stop_name'] or ''))}</b></td>"
+        f"<td>{escape(str(s['pickup_time'] or '—'))}</td><td>{escape(str(s['dropoff_time'] or '—'))}</td>"
+        f"<td>{float(s['fare'] or 0):.2f}</td><td>{escape(str(s['status'] or 'Active'))}</td></tr>"
+        for s in stop_rows
+    ) or "<tr><td colspan='6' class='tr-empty'>No stops have been added to this route.</td></tr>"
+    selected_panel = ""
+    if selected_route:
+        selected_panel = f"""
+<section class="tr-panel" style="margin-top:18px">
+ <div class="page-heading"><div><h2>{escape(str(selected_route['route_name']))} — Stops</h2><div class="tr-muted">Ordered pickup and drop-off points for this route.</div></div></div>
+ <form method="post" action="/app/transport/routes/stops/save" class="tr-toolbar">
+  <input type="hidden" name="route_id" value="{int(selected_route['id'])}">
+  <label>Stop name *<input name="stop_name" required maxlength="140"></label>
+  <label>Stop order *<input name="stop_order" type="number" min="1" max="300" value="{len(stop_rows)+1}" required></label>
+  <label>Pickup time<input name="pickup_time" type="time"></label>
+  <label>Drop-off time<input name="dropoff_time" type="time"></label>
+  <label>Fare<input name="fare" type="number" min="0" step="0.01" value="0"></label>
+  <button class="btn" type="submit">Add stop</button>
+ </form>
+ <div class="tr-scroll"><table style="min-width:650px"><thead><tr><th>Order</th><th>Stop</th><th>Pickup</th><th>Drop-off</th><th>Fare</th><th>Status</th></tr></thead><tbody>{stop_table}</tbody></table></div>
+</section>"""
+    body = f"""
+<div class="page transport-page">
+<style>
+.transport-page .tr-kpis{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}}
+.transport-page .tr-kpis>div,.transport-page .tr-panel{{background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:17px}}
+.transport-page .tr-kpis span,.transport-page .tr-muted{{display:block;color:#718078;font-size:12px}}
+.transport-page .tr-kpis strong{{display:block;font-size:25px;color:#174b35;margin-top:5px}}
+.transport-page .tr-toolbar{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px}}
+.transport-page label{{display:grid;gap:6px;font-size:12px;color:#53665b;flex:1;min-width:130px}}
+.transport-page input,.transport-page select{{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce6df;border-radius:9px;background:#fff}}
+.transport-page .tr-scroll{{overflow:auto;width:100%}}
+.transport-page table{{width:100%;min-width:760px;border-collapse:collapse}}
+.transport-page th,.transport-page td{{padding:12px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px}}
+.transport-page th{{color:#607267;background:#f7faf8;font-weight:650}}
+.transport-page .tr-status{{display:inline-block;padding:5px 9px;border-radius:20px;background:#e9f4ed;color:#286344;font-size:11px}}
+.transport-page .tr-empty{{text-align:center;padding:28px;color:#7b8981}}
+.transport-page .tr-dialog{{width:min(680px,94vw);border:0;border-radius:18px;padding:22px;box-shadow:0 20px 70px #10251b44}}
+.transport-page .tr-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+.transport-page .tr-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}}
+@media(max-width:650px){{.transport-page .tr-kpis{{grid-template-columns:1fr}}.transport-page .tr-form{{grid-template-columns:1fr}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / ROUTING</div><h1>Routes &amp; Stops</h1><div class="tr-muted">Define school transport routes and arrange pickup and drop-off points in travel order.</div></div><button class="btn" type="button" onclick="openTransportRoute()">Add Route</button></div>
+<div class="tr-kpis"><div><span>Registered routes</span><strong>{int(totals['total'] or 0)}</strong></div><div><span>Active routes</span><strong>{int(totals['active'] or 0)}</strong></div><div><span>Registered stops</span><strong>{int(stop_total['total'] or 0)}</strong></div></div>
+<section class="tr-panel">
+<form method="get" class="tr-toolbar"><label>Search routes<input name="q" value="{escape(q, quote=True)}" placeholder="Route, code or terminal point"></label><label>Status<select name="status"><option value="Active" {'selected' if status=='Active' else ''}>Active</option><option value="Inactive" {'selected' if status=='Inactive' else ''}>Inactive</option><option value="All" {'selected' if status=='All' else ''}>All</option></select></label><button class="btn" type="submit">Apply</button><a class="btn btn-light" href="/app/transport/routes">Clear</a></form>
+<div class="tr-scroll"><table><thead><tr><th>Route / Code</th><th>Direction</th><th>Start → End</th><th>Stops</th><th>Status</th><th>Actions</th></tr></thead><tbody>{route_rows}</tbody></table></div>
+</section>
+{selected_panel}
+</div>
+<dialog id="transportRouteDialog" class="tr-dialog"><form method="post" action="/app/transport/routes/save" id="transportRouteForm"><h2 id="transportRouteTitle">Add route</h2><input type="hidden" name="route_id" value="0"><div class="tr-form">
+<label>Route name *<input name="route_name" required maxlength="140"></label><label>Route code *<input name="route_code" required maxlength="40"></label>
+<label>Direction<select name="direction"><option>Both</option><option>Pickup</option><option>Drop-off</option></select></label><label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
+<label>Starting point<input name="start_point" maxlength="140"></label><label>End point<input name="end_point" maxlength="140"></label>
+<label style="grid-column:1/-1">Notes<input name="notes" maxlength="500"></label></div>
+<div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportRouteDialog').close()">Cancel</button><button class="btn" type="submit">Save route</button></div></form></dialog>
+<script>
+function openTransportRoute(){{const f=document.getElementById('transportRouteForm');f.reset();f.elements.route_id.value='0';document.getElementById('transportRouteTitle').textContent='Add route';document.getElementById('transportRouteDialog').showModal();}}
+function editTransportRoute(b){{const f=document.getElementById('transportRouteForm');f.elements.route_id.value=b.dataset.id;f.elements.route_name.value=b.dataset.name;f.elements.route_code.value=b.dataset.code;f.elements.direction.value=b.dataset.direction;f.elements.start_point.value=b.dataset.start;f.elements.end_point.value=b.dataset.end;f.elements.status.value=b.dataset.status;f.elements.notes.value=b.dataset.notes;document.getElementById('transportRouteTitle').textContent='Edit route';document.getElementById('transportRouteDialog').showModal();}}
+</script>
+"""
+    try:
+        return _school_page(request, "Routes & Stops", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/transport/routes/save")
+def save_transport_route(
+    request: Request,
+    route_id: int = Form(0),
+    route_name: str = Form(""),
+    route_code: str = Form(""),
+    direction: str = Form("Both"),
+    start_point: str = Form(""),
+    end_point: str = Form(""),
+    status: str = Form("Active"),
+    notes: str = Form(""),
+):
+    sid, error = _transport_guard(request, "transport.manage")
+    if error:
+        return error
+    route_name, route_code = route_name.strip(), route_code.strip().upper()
+    if not route_name or not route_code:
+        return HTMLResponse("Route name and route code are required.", 400)
+    if direction not in ("Both", "Pickup", "Drop-off") or status not in ("Active", "Inactive"):
+        return HTMLResponse("Invalid route direction or status.", 400)
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_routes(cur)
+        vals = (route_name, route_code, direction, start_point.strip(), end_point.strip(), status, notes.strip(), now)
+        if route_id:
+            cur.execute(
+                "UPDATE transport_routes SET route_name=?,route_code=?,direction=?,start_point=?,end_point=?,status=?,notes=?,updated_at=? WHERE id=? AND school_id=?",
+                vals + (route_id, sid),
+            )
+            if cur.rowcount == 0:
+                con.rollback()
+                return HTMLResponse("Route was not found.", 404)
+            event = "TRANSPORT_ROUTE_UPDATED"
+        else:
+            cur.execute(
+                "INSERT INTO transport_routes (school_id,route_name,route_code,direction,start_point,end_point,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (sid,) + vals[:-1] + (now, now),
+            )
+            event = "TRANSPORT_ROUTE_CREATED"
+        con.commit()
+        _audit(sid, event, f"Route {route_code}")
+    except Exception as exc:
+        con.rollback()
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            return HTMLResponse("That route code is already in use.", 409)
+        print(f"DAVISCHOOL TRANSPORT ROUTE SAVE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("Route could not be saved. Please try again.", 500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/transport/routes", 303)
+
+
+@router.post("/app/transport/routes/stops/save")
+def save_transport_route_stop(
+    request: Request,
+    route_id: int = Form(...),
+    stop_name: str = Form(""),
+    stop_order: int = Form(1),
+    pickup_time: str = Form(""),
+    dropoff_time: str = Form(""),
+    fare: float = Form(0),
+):
+    sid, error = _transport_guard(request, "transport.manage")
+    if error:
+        return error
+    stop_name = stop_name.strip()
+    if not stop_name or stop_order < 1 or stop_order > 300 or fare < 0:
+        return HTMLResponse("Enter a stop name, valid order and non-negative fare.", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_routes(cur)
+        route = cur.execute("SELECT id FROM transport_routes WHERE id=? AND school_id=?", (route_id, sid)).fetchone()
+        if not route:
+            return HTMLResponse("Route was not found.", 404)
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        cur.execute(
+            "INSERT INTO transport_route_stops (school_id,route_id,stop_name,stop_order,pickup_time,dropoff_time,fare,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'Active',?,?)",
+            (sid, route_id, stop_name, stop_order, pickup_time.strip(), dropoff_time.strip(), fare, now, now),
+        )
+        con.commit()
+        _audit(sid, "TRANSPORT_ROUTE_STOP_ADDED", f"{stop_name} on route {route_id}")
+    except Exception as exc:
+        con.rollback()
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            return HTMLResponse("That stop order is already used on this route.", 409)
+        print(f"DAVISCHOOL TRANSPORT STOP SAVE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("Stop could not be saved. Please try again.", 500)
+    finally:
+        con.close()
+    return RedirectResponse(f"/app/transport/routes?route_id={route_id}", 303)
