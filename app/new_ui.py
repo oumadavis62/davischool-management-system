@@ -2813,19 +2813,6 @@ def _staff_manager_styles():
 @media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
 @media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
-/* The sidebar is fixed-position and removed from flex flow. Use a normal block workspace
-   instead of flex-basis arithmetic, which caused the staff page to collapse horizontally. */
-.app:has(.staff-manager-page){display:block!important;width:100%!important;min-height:100vh!important}
-.app:has(.staff-manager-page)>.main{display:block!important;position:relative!important;box-sizing:border-box!important;flex:none!important;float:none!important;margin-left:250px!important;width:calc(100% - 250px)!important;max-width:none!important;min-width:0!important;padding:0!important}
-.app:has(.staff-manager-page)>.main>.staff-manager-page{display:block!important;position:relative!important;float:none!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
-.staff-manager-page{width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
-.staff-manager-page>.staff-add-panel,.staff-manager-page>.staff-register-card{grid-column:1/-1!important;width:100%!important;max-width:none!important}
-.staff-manager-page>.staff-register-card{min-height:0!important}
-.staff-manager-page .staff-register-card{display:block!important;overflow:hidden!important;width:100%!important;max-width:none!important}
-.staff-manager-page .staff-register-heading{width:100%!important;min-width:0!important}
-.staff-manager-page .staff-register-search{width:min(360px,100%)}
-.sidebar-hidden .app:has(.staff-manager-page)>.main{margin-left:0!important;width:100%!important}
-@media(max-width:768px){.app:has(.staff-manager-page)>.main{margin-left:0!important;width:100%!important;max-width:none!important;padding:0!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}.staff-manager-page .staff-add-panel{min-height:78px;padding:15px}.staff-manager-page .staff-register-card{width:100%!important;max-width:none!important;padding:12px!important}.staff-manager-page .staff-register-heading{align-items:stretch}.staff-manager-page .staff-table-scroll{width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;max-height:65vh}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
