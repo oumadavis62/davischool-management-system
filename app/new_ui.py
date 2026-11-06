@@ -7168,16 +7168,27 @@ def app_home(request: Request):
                 # Ensure it exists before querying, then include both durable graduation
                 # records and legacy learners already marked graduated in Students.
                 _ensure_student_promotion_cohort_tables(cur)
-                graduated_row=cur.execute(
-                    """SELECT COUNT(*) c FROM (
-                           SELECT student_id FROM student_graduations WHERE school_id=?
-                           UNION
-                           SELECT id AS student_id FROM students
-                           WHERE school_id=? AND lower(trim(coalesce(status,''))) IN ('graduated','graduate')
-                       ) graduated_learners""",
-                    (school_id,school_id)
+                # Count the durable graduation register separately from legacy
+                # student status values. Avoid a UNION-derived table here: the
+                # dashboard runs against both SQLite and PostgreSQL adapters.
+                durable_graduates=cur.execute(
+                    "SELECT COUNT(DISTINCT student_id) c FROM student_graduations WHERE school_id=?",
+                    (school_id,)
                 ).fetchone()
-                dashboard_graduated_count=int(graduated_row["c"] or 0)
+                legacy_graduates=cur.execute(
+                    """SELECT COUNT(*) c FROM students s
+                       WHERE s.school_id=?
+                         AND lower(trim(coalesce(s.status,''))) IN ('graduated','graduate')
+                         AND NOT EXISTS (
+                             SELECT 1 FROM student_graduations g
+                             WHERE g.school_id=s.school_id AND g.student_id=s.id
+                         )""",
+                    (school_id,)
+                ).fetchone()
+                dashboard_graduated_count=(
+                    int(durable_graduates["c"] or 0) +
+                    int(legacy_graduates["c"] or 0)
+                )
             except Exception as exc:
                 print("DAVISCHOOL DASHBOARD GRADUATED COUNT WARNING:",repr(exc),flush=True)
                 dashboard_graduated_count=0
