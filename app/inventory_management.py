@@ -76,8 +76,8 @@ def inventory_register(request: Request, q: str = "", category: str = "", status
 <label style="grid-column:1/-1">Description<textarea name="description" id="ivDescription" rows="2"></textarea></label></div>
 <div class="actions"><button class="btn btn-light" type="button" onclick="document.getElementById('invDialog').close()">Cancel</button><button class="btn">Save item</button></div></form></dialog>
 <script>
-function openInv(){document.getElementById('invForm').reset();document.getElementById('ivId').value='0';document.getElementById('invTitle').textContent='Add inventory item';document.getElementById('invDialog').showModal();}
-function editInv(b){let d=b.dataset;[['ivId','id'],['ivCode','code'],['ivName','name'],['ivCategory','category'],['ivUnit','unit'],['ivQty','qty'],['ivReorder','reorder'],['ivLocation','location'],['ivStatus','status'],['ivDescription','description']].forEach(x=>document.getElementById(x[0]).value=d[x[1]]);document.getElementById('invTitle').textContent='Edit inventory item';document.getElementById('invDialog').showModal();}
+function openInv(){{document.getElementById('invForm').reset();document.getElementById('ivId').value='0';document.getElementById('invTitle').textContent='Add inventory item';document.getElementById('invDialog').showModal();}}
+function editInv(b){{let d=b.dataset;[['ivId','id'],['ivCode','code'],['ivName','name'],['ivCategory','category'],['ivUnit','unit'],['ivQty','qty'],['ivReorder','reorder'],['ivLocation','location'],['ivStatus','status'],['ivDescription','description']].forEach(x=>document.getElementById(x[0]).value=d[x[1]]);document.getElementById('invTitle').textContent='Edit inventory item';document.getElementById('invDialog').showModal();}}
 </script>
 """
         return _school_page(request, "Inventory Register", body)
