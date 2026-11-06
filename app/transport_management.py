@@ -457,3 +457,240 @@ def save_transport_route_stop(
     finally:
         con.close()
     return RedirectResponse(f"/app/transport/routes?route_id={route_id}", 303)
+
+
+def _ensure_transport_allocations(cur):
+    _ensure_transport_vehicles(cur)
+    _ensure_transport_routes(cur)
+    cur.execute("""CREATE TABLE IF NOT EXISTS transport_student_allocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        route_id INTEGER NOT NULL,
+        stop_id INTEGER NOT NULL,
+        vehicle_id INTEGER,
+        effective_from TEXT NOT NULL,
+        effective_to TEXT DEFAULT '',
+        pickup_required INTEGER NOT NULL DEFAULT 1,
+        dropoff_required INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'Active',
+        notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_alloc_school_status ON transport_student_allocations(school_id,status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_alloc_student ON transport_student_allocations(school_id,student_id)")
+
+
+@router.get("/app/transport/allocations", response_class=HTMLResponse)
+def transport_student_allocations(request: Request, q: str = "", status: str = "Active"):
+    sid, error = _transport_guard(request)
+    if error:
+        return error
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_allocations(cur)
+        con.commit()
+        students = cur.execute(
+            "SELECT s.id,s.admission_no,s.name,s.status,c.name AS class_name,c.stream "
+            "FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id "
+            "WHERE s.school_id=? AND COALESCE(s.status,'Active') NOT IN ('Graduated','Inactive','Transferred') "
+            "ORDER BY s.name LIMIT 600", (sid,)
+        ).fetchall()
+        routes = cur.execute(
+            "SELECT id,route_name,route_code FROM transport_routes WHERE school_id=? AND status='Active' ORDER BY route_name",
+            (sid,)
+        ).fetchall()
+        stops = cur.execute(
+            "SELECT s.id,s.route_id,s.stop_name,s.stop_order,r.route_name FROM transport_route_stops s "
+            "JOIN transport_routes r ON r.id=s.route_id AND r.school_id=s.school_id "
+            "WHERE s.school_id=? AND s.status='Active' AND r.status='Active' ORDER BY r.route_name,s.stop_order",
+            (sid,)
+        ).fetchall()
+        vehicles = cur.execute(
+            "SELECT id,registration_no,capacity FROM transport_vehicles WHERE school_id=? AND status='Active' ORDER BY registration_no",
+            (sid,)
+        ).fetchall()
+        clauses = ["a.school_id=?"]
+        params = [sid]
+        if status in ("Active", "Inactive"):
+            clauses.append("a.status=?")
+            params.append(status)
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            clauses.append("(s.name LIKE ? OR s.admission_no LIKE ? OR r.route_name LIKE ? OR v.registration_no LIKE ? OR st.stop_name LIKE ?)")
+            params.extend([term] * 5)
+        rows = cur.execute(
+            "SELECT a.*,s.name AS student_name,s.admission_no,c.name AS class_name,c.stream,"
+            "r.route_name,st.stop_name,v.registration_no "
+            "FROM transport_student_allocations a JOIN students s ON s.id=a.student_id AND s.school_id=a.school_id "
+            "LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id "
+            "JOIN transport_routes r ON r.id=a.route_id AND r.school_id=a.school_id "
+            "JOIN transport_route_stops st ON st.id=a.stop_id AND st.school_id=a.school_id AND st.route_id=a.route_id "
+            "LEFT JOIN transport_vehicles v ON v.id=a.vehicle_id AND v.school_id=a.school_id "
+            "WHERE " + " AND ".join(clauses) + " ORDER BY a.status,a.updated_at DESC LIMIT 1000",
+            tuple(params)
+        ).fetchall()
+        totals = cur.execute(
+            "SELECT COUNT(*) AS total,SUM(CASE WHEN status='Active' THEN 1 ELSE 0 END) AS active "
+            "FROM transport_student_allocations WHERE school_id=?", (sid,)
+        ).fetchone()
+        active_students = cur.execute(
+            "SELECT COUNT(*) AS total FROM students WHERE school_id=? AND COALESCE(status,'Active') NOT IN ('Graduated','Inactive','Transferred')",
+            (sid,)
+        ).fetchone()
+        student_options = "".join(
+            f"<option value='{int(s['id'])}'>{escape(str(s['admission_no'] or '—'))} · {escape(str(s['name'] or ''))} · {escape(str(s['class_name'] or 'Unassigned'))} {escape(str(s['stream'] or ''))}</option>"
+            for s in students
+        ) or "<option value=''>No eligible learners found</option>"
+        route_options = "".join(
+            f"<option value='{int(r['id'])}'>{escape(str(r['route_name']))} ({escape(str(r['route_code']))})</option>" for r in routes
+        ) or "<option value=''>No active routes</option>"
+        stop_options = "".join(
+            f"<option value='{int(s['id'])}' data-route='{int(s['route_id'])}'>{escape(str(s['route_name']))} · {int(s['stop_order'])}. {escape(str(s['stop_name']))}</option>" for s in stops
+        ) or "<option value=''>No active stops</option>"
+        vehicle_options = "<option value=''>Not assigned</option>" + "".join(
+            f"<option value='{int(v['id'])}'>{escape(str(v['registration_no']))} · capacity {int(v['capacity'] or 0)}</option>" for v in vehicles
+        )
+        table_rows = "".join(
+            f"<tr><td><b>{escape(str(a['student_name'] or ''))}</b><div class='tr-muted'>{escape(str(a['admission_no'] or ''))} · {escape(str(a['class_name'] or 'Unassigned'))} {escape(str(a['stream'] or ''))}</div></td>"
+            f"<td>{escape(str(a['route_name'] or ''))}<div class='tr-muted'>{escape(str(a['stop_name'] or ''))}</div></td>"
+            f"<td>{escape(str(a['registration_no'] or 'Not assigned'))}</td><td>{escape(str(a['effective_from'] or ''))}</td>"
+            f"<td>{escape(str(a['effective_to'] or '—'))}</td><td><span class='tr-status'>{escape(str(a['status']))}</span></td>"
+            f"<td><button class='btn btn-light' type='button' onclick='editTransportAllocation(this)' data-id='{int(a['id'])}' data-student='{int(a['student_id'])}' data-route='{int(a['route_id'])}' data-stop='{int(a['stop_id'])}' data-vehicle='{int(a['vehicle_id'] or 0)}' data-from='{escape(str(a['effective_from'] or ''),quote=True)}' data-to='{escape(str(a['effective_to'] or ''),quote=True)}' data-pickup='{int(a['pickup_required'] or 0)}' data-dropoff='{int(a['dropoff_required'] or 0)}' data-status='{escape(str(a['status']),quote=True)}' data-notes='{escape(str(a['notes'] or ''),quote=True)}'>Edit</button></td></tr>"
+            for a in rows
+        ) or "<tr><td colspan='7' class='tr-empty'>No transport allocations match this view.</td></tr>"
+        body = f"""
+<div class="page transport-page">
+<style>
+.transport-page .tr-kpis{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}}
+.transport-page .tr-kpis>div,.transport-page .tr-panel{{background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:17px}}
+.transport-page .tr-kpis span,.transport-page .tr-muted{{display:block;color:#718078;font-size:12px}}
+.transport-page .tr-kpis strong{{display:block;font-size:25px;color:#174b35;margin-top:5px}}
+.transport-page .tr-toolbar{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px}}
+.transport-page label{{display:grid;gap:6px;font-size:12px;color:#53665b;flex:1;min-width:150px}}
+.transport-page input,.transport-page select,.transport-page textarea{{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce6df;border-radius:9px;background:#fff}}
+.transport-page .tr-scroll{{overflow:auto;width:100%}}.transport-page table{{width:100%;min-width:900px;border-collapse:collapse}}
+.transport-page th,.transport-page td{{padding:12px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px}}
+.transport-page th{{color:#607267;background:#f7faf8;font-weight:650}}
+.transport-page .tr-status{{display:inline-block;padding:5px 9px;border-radius:20px;background:#e9f4ed;color:#286344;font-size:11px}}
+.transport-page .tr-empty{{text-align:center;padding:30px;color:#7b8981}}
+.transport-page .tr-dialog{{width:min(760px,94vw);border:0;border-radius:18px;padding:22px;box-shadow:0 20px 70px #10251b44}}
+.transport-page .tr-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+.transport-page .tr-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}}
+@media(max-width:650px){{.transport-page .tr-kpis{{grid-template-columns:1fr}}.transport-page .tr-form{{grid-template-columns:1fr}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / LEARNERS</div><h1>Student Transport Allocation</h1><div class="tr-muted">Assign eligible learners to active routes, pickup stops and school vehicles, with effective dates.</div></div><button class="btn" type="button" onclick="openTransportAllocation()">Allocate Learner</button></div>
+<div class="tr-kpis"><div><span>Eligible learners</span><strong>{int(active_students['total'] or 0)}</strong></div><div><span>Active allocations</span><strong>{int(totals['active'] or 0)}</strong></div><div><span>Total allocation records</span><strong>{int(totals['total'] or 0)}</strong></div></div>
+<section class="tr-panel">
+<form method="get" class="tr-toolbar"><label>Search allocations<input name="q" value="{escape(q,quote=True)}" placeholder="Learner, admission no., route, stop or vehicle"></label><label>Status<select name="status"><option value="Active" {'selected' if status=='Active' else ''}>Active</option><option value="Inactive" {'selected' if status=='Inactive' else ''}>Inactive</option><option value="All" {'selected' if status=='All' else ''}>All</option></select></label><button class="btn" type="submit">Apply</button><a class="btn btn-light" href="/app/transport/allocations">Clear</a></form>
+<div class="tr-scroll"><table><thead><tr><th>Learner</th><th>Route / Stop</th><th>Vehicle</th><th>Effective from</th><th>Effective to</th><th>Status</th><th>Action</th></tr></thead><tbody>{table_rows}</tbody></table></div>
+</section></div>
+<dialog id="transportAllocationDialog" class="tr-dialog"><form method="post" action="/app/transport/allocations/save" id="transportAllocationForm">
+<h2 id="transportAllocationTitle">Allocate learner</h2><input type="hidden" name="allocation_id" value="0">
+<div class="tr-form">
+<label>Learner *<select name="student_id" required><option value="">Select learner</option>{student_options}</select></label>
+<label>Route *<select name="route_id" id="trAllocRoute" required><option value="">Select route</option>{route_options}</select></label>
+<label>Pickup / drop-off stop *<select name="stop_id" id="trAllocStop" required><option value="">Select stop</option>{stop_options}</select></label>
+<label>Vehicle<select name="vehicle_id"><option value="0">Not assigned</option>{''.join(vehicle_options.split('>',1)[1:]) if False else ''}</select></label>
+<label>Effective from *<input type="date" name="effective_from" required></label>
+<label>Effective to<input type="date" name="effective_to"></label>
+<label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
+<label>Notes<input name="notes" maxlength="500"></label>
+</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="pickup_required" value="1" checked style="width:auto;min-height:0">Pickup required</label><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="dropoff_required" value="1" checked style="width:auto;min-height:0">Drop-off required</label></div>
+<div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportAllocationDialog').close()">Cancel</button><button class="btn" type="submit">Save Allocation</button></div>
+</form></dialog>
+<script>
+const trAllocStops=Array.from(document.getElementById('trAllocStop').options).map(o=>({{value:o.value,route:o.dataset.route||''}}));
+function filterTransportStops(){{const route=document.getElementById('trAllocRoute').value;const sel=document.getElementById('trAllocStop');Array.from(sel.options).forEach(o=>{{if(!o.value){{o.hidden=false;return;}}o.hidden=!!route&&o.dataset.route!==route;}});if(sel.selectedOptions[0]&&sel.selectedOptions[0].hidden)sel.value='';}}
+document.getElementById('trAllocRoute').addEventListener('change',filterTransportStops);
+function openTransportAllocation(){{const f=document.getElementById('transportAllocationForm');f.reset();f.elements.allocation_id.value='0';document.getElementById('transportAllocationTitle').textContent='Allocate learner';filterTransportStops();document.getElementById('transportAllocationDialog').showModal();}}
+function editTransportAllocation(b){{const f=document.getElementById('transportAllocationForm');f.reset();f.elements.allocation_id.value=b.dataset.id;f.elements.student_id.value=b.dataset.student;f.elements.route_id.value=b.dataset.route;filterTransportStops();f.elements.stop_id.value=b.dataset.stop;f.elements.vehicle_id.value=b.dataset.vehicle;f.elements.effective_from.value=b.dataset.from;f.elements.effective_to.value=b.dataset.to;f.elements.status.value=b.dataset.status;f.elements.notes.value=b.dataset.notes;f.elements.pickup_required.checked=b.dataset.pickup==='1';f.elements.dropoff_required.checked=b.dataset.dropoff==='1';document.getElementById('transportAllocationTitle').textContent='Edit allocation';document.getElementById('transportAllocationDialog').showModal();}}
+</script>
+"""
+        return _school_page(request, "Student Transport Allocation", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/transport/allocations/save")
+def save_transport_allocation(
+    request: Request,
+    allocation_id: int = Form(0),
+    student_id: int = Form(...),
+    route_id: int = Form(...),
+    stop_id: int = Form(...),
+    vehicle_id: int = Form(0),
+    effective_from: str = Form(""),
+    effective_to: str = Form(""),
+    pickup_required: str = Form(""),
+    dropoff_required: str = Form(""),
+    status: str = Form("Active"),
+    notes: str = Form(""),
+):
+    sid, error = _transport_guard(request, "transport.manage")
+    if error:
+        return error
+    if status not in ("Active", "Inactive") or not effective_from.strip():
+        return HTMLResponse("Select a valid status and effective start date.", 400)
+    if effective_to.strip() and effective_to.strip() < effective_from.strip():
+        return HTMLResponse("Effective-to date cannot be earlier than effective-from date.", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_allocations(cur)
+        learner = cur.execute(
+            "SELECT id FROM students WHERE id=? AND school_id=? AND COALESCE(status,'Active') NOT IN ('Graduated','Inactive','Transferred')",
+            (student_id, sid)
+        ).fetchone()
+        route = cur.execute("SELECT id FROM transport_routes WHERE id=? AND school_id=? AND status='Active'", (route_id, sid)).fetchone()
+        stop = cur.execute(
+            "SELECT id FROM transport_route_stops WHERE id=? AND route_id=? AND school_id=? AND status='Active'",
+            (stop_id, route_id, sid)
+        ).fetchone()
+        vehicle = cur.execute("SELECT id,capacity FROM transport_vehicles WHERE id=? AND school_id=? AND status='Active'", (vehicle_id, sid)).fetchone() if vehicle_id else None
+        if not learner or not route or not stop or (vehicle_id and not vehicle):
+            return HTMLResponse("Select a current learner and valid active route, stop and vehicle from this school.", 400)
+        if vehicle and int(vehicle["capacity"] or 0) > 0:
+            occupied = cur.execute(
+                "SELECT COUNT(*) AS n FROM transport_student_allocations WHERE school_id=? AND vehicle_id=? AND status='Active' AND id<>?",
+                (sid, vehicle_id, allocation_id)
+            ).fetchone()
+            if int(occupied["n"] or 0) >= int(vehicle["capacity"]):
+                return HTMLResponse("The selected vehicle has reached its registered seating capacity.", 409)
+        if status == "Active":
+            duplicate = cur.execute(
+                "SELECT id FROM transport_student_allocations WHERE school_id=? AND student_id=? AND status='Active' AND id<>? LIMIT 1",
+                (sid, student_id, allocation_id)
+            ).fetchone()
+            if duplicate:
+                return HTMLResponse("This learner already has an active transport allocation. Edit the existing record or deactivate it first.", 409)
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        vals = (student_id, route_id, stop_id, vehicle_id or None, effective_from.strip(), effective_to.strip(),
+                1 if pickup_required else 0, 1 if dropoff_required else 0, status, notes.strip(), now)
+        if allocation_id:
+            cur.execute(
+                "UPDATE transport_student_allocations SET student_id=?,route_id=?,stop_id=?,vehicle_id=?,effective_from=?,effective_to=?,pickup_required=?,dropoff_required=?,status=?,notes=?,updated_at=? WHERE id=? AND school_id=?",
+                vals + (allocation_id, sid)
+            )
+            if cur.rowcount == 0:
+                con.rollback()
+                return HTMLResponse("Allocation record was not found.", 404)
+            event = "TRANSPORT_STUDENT_ALLOCATION_UPDATED"
+        else:
+            cur.execute(
+                "INSERT INTO transport_student_allocations (school_id,student_id,route_id,stop_id,vehicle_id,effective_from,effective_to,pickup_required,dropoff_required,status,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (sid,) + vals[:-1] + (now, now)
+            )
+            event = "TRANSPORT_STUDENT_ALLOCATED"
+        con.commit()
+        _audit(sid, event, f"Student {student_id} on route {route_id}")
+    except Exception as exc:
+        con.rollback()
+        print(f"DAVISCHOOL TRANSPORT ALLOCATION SAVE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("Transport allocation could not be saved. Please check the learner and route details.", 500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/transport/allocations", 303)
