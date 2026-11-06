@@ -30,7 +30,7 @@ def _central_route_permission(path, method, role):
     if path == "/app/users/add" or path == "/app/users":
         return "users.manage"
     if path == "/app/accounting/expense":
-        return ("accountant_portal.view", "finance.edit")
+        return "accountant_portal.view"
     if path.startswith("/app/accounting"):
         return "accountant_portal.view"
     return None
@@ -15546,6 +15546,8 @@ def roles_page(request: Request):
         portal_role="teacher" if matrix_role=="class_teacher" else matrix_role
         group_markup=[]
         role_features=portal_catalog.get(portal_role,[])
+        if matrix_role=="class_teacher":
+            role_features=[feature for feature in role_features if feature[0]=="Class Teacher"]
         grouped_features={}
         for group_name, feature_name, feature_key, feature_description in role_features:
             grouped_features.setdefault(group_name,[]).append((feature_name,feature_key,feature_description))
