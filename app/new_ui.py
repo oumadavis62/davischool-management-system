@@ -865,7 +865,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/inventory/items", "Inventory Register")
             + _nav_sub("/app/inventory/transactions", "Stock Receipts & Issues")
             + _nav_sub("/app/inventory/requisitions", "Stock Requisitions & Approvals")
-            + _nav_sub("/app/inventory/requisitions", "Stock Requisitions & Approvals")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
