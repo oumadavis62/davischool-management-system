@@ -842,6 +842,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/library/returns", "Book Returns")
             + _nav_sub("/app/library/overdue", "Overdue Books")
             + _nav_sub("/app/library/members", "Library Members")
+            + _nav_sub("/app/library/reports", "Library Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
