@@ -6632,6 +6632,13 @@ def parent_portal(request: Request):
         str(school["phone"] or "").strip() if school else "",
         str(school["email"] or "").strip() if school else ""
     ] if x)
+    parent_overview_html=f"""<button type='button' class='parent-tab active' data-view='overview' onclick="parentShow('overview')">Overview</button>""" if _require_permission(request,sid,"parent_portal.overview") else ""
+    parent_academics_html=f"""<button type='button' class='parent-tab' data-view='academics' onclick="parentShow('academics')">Academics</button>""" if _require_permission(request,sid,"parent_portal.academics") else ""
+    parent_attendance_html=f"""<button type='button' class='parent-tab' data-view='attendance' onclick="parentShow('attendance')">Attendance</button>""" if _require_permission(request,sid,"parent_portal.attendance") else ""
+    parent_fees_html=f"""<button type='button' class='parent-tab' data-view='fees' onclick="parentShow('fees')">Fees</button>""" if _require_permission(request,sid,"parent_portal.fees") else ""
+    parent_notices_html=f"""<button type='button' class='parent-tab' data-view='notices' onclick="parentShow('notices')">Notices</button>""" if _require_permission(request,sid,"parent_portal.notices") else ""
+    parent_messages_html=f"""<button type='button' class='parent-tab' data-view='messages' onclick="parentShow('messages')">Messages</button>""" if _require_permission(request,sid,"parent_portal.message") else ""
+    parent_contact_html=f"""<button type='button' class='parent-tab' data-view='contact' onclick="parentShow('contact')">School Contact</button>""" if _require_permission(request,sid,"parent_portal.contact") else ""
     body = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
 <title>Parent Portal · DaviSchool</title><style>
@@ -6672,13 +6679,13 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 </style></head><body><header><div class='brand'>{logo_html}<span class='brand-copy'><span class='brand-name'>{school_name}</span></span></div><div class='parent-top-right'><div class='parent-top-welcome'><strong>{escape(str(request.session.get("name") or "Parent"))}</strong><div class='parent-top-role'>Parent</div></div><details class='parent-account-menu'><summary class='parent-top-avatar' aria-label='Open parent account menu'>{escape((str(request.session.get("name") or "P").strip()[:1] or "P").upper())}</summary><a class='parent-logout' href='/logout'>Log out ↗</a></details></div></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div>{("<form method='get' action='/app/parent' class='parent-header-switch'><label for='parent-child-select'><span aria-hidden='true'>♙</span> Viewing learner</label><select id='parent-child-select' name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
 <nav class='parent-nav' aria-label='Parent portal sections'>
-{("<button type='button' class='parent-tab active' data-view='overview' onclick=\"parentShow('overview')\">Overview</button>" if _require_permission(request,sid,"parent_portal.overview") else "")}
-{("<button type='button' class='parent-tab' data-view='academics' onclick=\"parentShow('academics')\">Academics</button>" if _require_permission(request,sid,"parent_portal.academics") else "")}
-{("<button type='button' class='parent-tab' data-view='attendance' onclick=\"parentShow('attendance')\">Attendance</button>" if _require_permission(request,sid,"parent_portal.attendance") else "")}
-{("<button type='button' class='parent-tab' data-view='fees' onclick=\"parentShow('fees')\">Fees</button>" if _require_permission(request,sid,"parent_portal.fees") else "")}
-{("<button type='button' class='parent-tab' data-view='notices' onclick=\"parentShow('notices')\">Notices</button>" if _require_permission(request,sid,"parent_portal.notices") else "")}
-{("<button type='button' class='parent-tab' data-view='messages' onclick=\"parentShow('messages')\">Messages</button>" if _require_permission(request,sid,"parent_portal.message") else "")}
-{("<button type='button' class='parent-tab' data-view='contact' onclick=\"parentShow('contact')\">School Contact</button>" if _require_permission(request,sid,"parent_portal.contact") else "")}
+{parent_overview_html}
+{parent_academics_html}
+{parent_attendance_html}
+{parent_fees_html}
+{parent_notices_html}
+{parent_messages_html}
+{parent_contact_html}
 </nav>
 {("<section class='parent-view' id='parent-overview'>\n<section class='parent-learner-banner'>\n<div class='parent-learner-main'><div class='parent-learner-avatar' aria-hidden='true'>{escape((str(student[\"name\"] or \"L\").strip()[:1] or \"L\").upper())}</div><div><div class='muted'>Learner profile</div><div class='parent-learner-name'>{learner_name}</div><div class='parent-learner-meta'><span>Admission No. {admission}</span><span>Current class: {class_label}</span></div></div></div>\n{(\"<div class='parent-learner-class'>\"+class_label+\"</div>\") if len(linked_children)<=1 else \"\"}\n</section>\n<div class='parent-overview-grid'>\n<section class='parent-overview-panel'><h2>Attendance snapshot</h2><div class='parent-attendance-number'>{attendance_pct:.1f}%</div><div class='parent-attendance-caption'>Attendance rate based on recorded attendance</div><div class='parent-progress-track' role='progressbar' aria-label='Attendance rate' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{attendance_pct:.1f}'><div class='parent-progress-fill'></div></div><div class='parent-attendance-breakdown'><div class='parent-attendance-count'><strong>{present_att}</strong><span>Present</span></div><div class='parent-attendance-count'><strong>{absent_att}</strong><span>Absent</span></div><div class='parent-attendance-count'><strong>{late_att}</strong><span>Late</span></div><div class='parent-attendance-count'><strong>{excused_att}</strong><span>Excused</span></div></div><div class='muted' style='margin-top:12px'>{total_att} attendance records in total</div></section>\n<section class='parent-overview-panel'><h2>Recent activity</h2><div class='parent-activity-list'>{activity_html}</div></section>\n</div>\n</section>" if _require_permission(request,sid,"parent_portal.overview") else "")}
 {("<section class='parent-view' id='parent-academics' hidden><section class='panel'>\n<h2>Academic results</h2>\n<form method='get' action='/app/parent' style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px'>\n<input type='hidden' name='student_id' value='{student_id}'>\n<label for='parent-exam-select' style='font-size:12px;font-weight:800;color:#557060'>Select examination</label>\n<select id='parent-exam-select' name='exam_id' class='child-select' onchange='this.form.submit()'>{exam_options_html or \"<option value=''>No examinations recorded</option>\"}</select>\n</form>\n<div class='parent-overview-summary'>\n<div class='stat'><small>Total marks</small><strong>{mark_total:.2f}</strong></div>\n<div class='stat'><small>Overall mean</small><strong>{parent_mean:.2f}</strong></div>\n<div class='stat'><small>Overall grade</small><strong>{escape(str(parent_overall_grade))}</strong></div>\n</div>\n<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th></tr></thead>\n<tbody>{mark_rows or \"<tr><td colspan='3' class='empty'>No results are recorded for this examination.</td></tr>\"}</tbody></table></div>\n</section></section>" if _require_permission(request,sid,"parent_portal.academics") else "")}
@@ -7039,25 +7046,28 @@ def app_home(request: Request):
             teacher_health=_overview_health_panel("Teacher Workspace",teacher_health_overall,teacher_health_summary,teacher_health_items," ".join(teacher_attention) if teacher_attention else "No items currently require attention.")
             flip_script = "<script>(function(){\n  var tiles=document.querySelectorAll('.overview-flip-tile');\n  tiles.forEach(function(tile){\n    var moved=false,startX=0,startY=0;\n    tile.addEventListener('touchstart',function(e){\n      if(e.touches&&e.touches[0]){startX=e.touches[0].clientX;startY=e.touches[0].clientY;}\n      moved=false;\n    },{passive:true});\n    tile.addEventListener('touchmove',function(e){\n      if(e.touches&&e.touches[0] && (Math.abs(e.touches[0].clientX-startX)>8 || Math.abs(e.touches[0].clientY-startY)>8)) moved=true;\n    },{passive:true});\n    tile.addEventListener('click',function(e){\n      if(moved || e.target.closest('.class-size-bars')) return;\n      tile.classList.toggle('is-flipped');\n    });\n  });\n})();</script>"
 
-            body=f"""<div class='page overview-home teacher-workspace-page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
-<div class='teacher-workspace-grid'>
-  <div class='teacher-workspace-column teacher-workspace-primary'>
-    <section class='section card teacher-assignment-panel' id='teacher-classes'>
+            teacher_classes_html=f"""<section class='section card teacher-assignment-panel' id='teacher-classes'>
       <div class='teacher-section-heading'><div><h2>My Classes & Teaching Assignments</h2><div class='muted'>Your allocated classes, streams and subjects.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Record Marks</a></div>
       <div class='teacher-assignment-scroll'><table><thead><tr><th>Class</th><th>Stream</th><th>Subject</th></tr></thead><tbody>{teacher_assignment_rows or "<tr><td colspan='3'>No teaching assignments are available.</td></tr>"}</tbody></table></div>
-    </section>
-    <section class='section card teacher-assignment-panel' id='teacher-subjects'>
+    </section>""" if _require_permission(request,int(school_id or 0),"teacher_portal.classes") else ""
+            teacher_subjects_html=f"""<section class='section card teacher-assignment-panel' id='teacher-subjects'>
       <div class='teacher-section-heading'><div><h2>My Subjects</h2><div class='muted'>Subjects currently appearing in your teaching allocations.</div></div></div>
       <div class='teacher-chip-list'>{teacher_subjects_html}</div>
-    </section>
-  </div>
-  <div class='teacher-workspace-column teacher-workspace-secondary'>
-    <section class='section card teacher-assignment-panel' id='teacher-submission-status'>
+    </section>""" if _require_permission(request,int(school_id or 0),"teacher_portal.subjects") else ""
+            teacher_submission_html=f"""<section class='section card teacher-assignment-panel' id='teacher-submission-status'>
       <div class='teacher-section-heading'><div><h2>Marks Submission Progress</h2><div class='muted'>Your progress for {escape(latest_exam_name)}.</div></div><a class='teacher-section-link' href='/app/academics/marks'>Open Marks Entry</a></div>
       <div class='teacher-progress-meta'><strong>{entered_marks:,} of {expected_marks:,} marks entered</strong><span>{marks_pct:.0f}%</span></div>
       <div class='teacher-progress-track'><span style='width:{max(0,min(100,marks_pct)):.2f}%'></span></div>
       <div class='teacher-workspace-detail-row'><span>{open_mark_subjects} subject/class combinations still open for editing</span><span>{pending_corrections} pending correction requests</span></div>
-    </section>
+    </section>""" if _require_permission(request,int(school_id or 0),"teacher_portal.submission") else ""
+            body=f"""<div class='page overview-home teacher-workspace-page'><div class='overview-school-heading'><h1>{escape(school_name)}</h1><div class='muted'>Teacher workspace</div></div>
+<div class='teacher-workspace-grid'>
+  <div class='teacher-workspace-column teacher-workspace-primary'>
+    {teacher_classes_html}
+    {teacher_subjects_html}
+  </div>
+  <div class='teacher-workspace-column teacher-workspace-secondary'>
+    {teacher_submission_html}
     <div class='teacher-health-slot'>{teacher_health}</div>
   </div>
 </div>
