@@ -21,6 +21,7 @@ def google_search_console_verification():
     )
 
 _USER_ACCOUNT_COLUMNS_READY = False
+_USER_PERMISSION_TABLE_READY = False
 # Schema compatibility work is expensive on PostgreSQL because each ALTER
 # check/savepoint is a database round trip. Run these additive migrations once
 # per worker process, not on every Save Marks request.
@@ -1416,6 +1417,24 @@ def _is_school_admin_like(request):
     """School-level administrator-equivalent roles retain separate account identities."""
     return str(request.session.get("role","")) in ("school_admin","registrar")
 
+def _ensure_user_permissions_table(cur, con=None):
+    """Create the per-account override table additively and once per worker."""
+    global _USER_PERMISSION_TABLE_READY
+    if _USER_PERMISSION_TABLE_READY:
+        return
+    cur.execute("""CREATE TABLE IF NOT EXISTS user_permissions (
+        school_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        permission TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT,
+        updated_by TEXT,
+        UNIQUE(school_id,user_id,permission)
+    )""")
+    if con is not None:
+        con.commit()
+    _USER_PERMISSION_TABLE_READY = True
+
 def _permission_enabled(cur, school_id, role, permission):
     row=cur.execute("SELECT enabled FROM roles_permissions WHERE school_id=? AND role=? AND permission=? ORDER BY id DESC LIMIT 1",
                     (school_id,role,permission)).fetchone()
@@ -1433,12 +1452,22 @@ def _require_permission(request, school_id, permission):
     if cache is None:
         cache={}
         request.state.davischool_permission_cache=cache
-    key=(int(school_id),role,str(permission))
+    user_id=request.session.get("user_id")
+    key=(int(school_id),role,str(permission),int(user_id or 0))
     if key in cache:
         return cache[key]
     con=_db()
     try:
-        allowed=_permission_enabled(con.cursor(),school_id,role,permission)
+        cur=con.cursor()
+        _ensure_user_permissions_table(cur,con)
+        override=None
+        if user_id:
+            override=cur.execute(
+                "SELECT enabled FROM user_permissions WHERE school_id=? AND user_id=? AND permission=? LIMIT 1",
+                (school_id,int(user_id),str(permission))
+            ).fetchone()
+        # An account-specific decision takes precedence over its role default.
+        allowed=bool(int(override["enabled"] or 0)) if override is not None else _permission_enabled(cur,school_id,role,permission)
     finally:
         con.close()
     cache[key]=allowed
@@ -1627,6 +1656,8 @@ def class_monitoring_follow_up(
         return RedirectResponse("/",status_code=303)
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
+    if not _require_permission(request,sid,"teacher_portal.view"):
+        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
@@ -1688,6 +1719,8 @@ def class_monitoring_page(request: Request):
         return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
+    if not _require_permission(request,sid,"teacher_portal.view"):
+        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
@@ -2064,6 +2097,8 @@ def teacher_performance_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
+    if not _require_permission(request,sid,"teacher_portal.view"):
+        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
     con=_db()
@@ -2196,6 +2231,8 @@ def teacher_performance_learners_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
+    if not _require_permission(request,sid,"teacher_portal.view"):
+        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
     def positive_id(key):
@@ -6335,6 +6372,8 @@ def parent_portal(request: Request):
     if "email" not in request.session or str(request.session.get("role") or "") != "parent":
         return RedirectResponse("/login", status_code=303)
     sid = int(request.session.get("school_id") or 0)
+    if not sid or not _require_permission(request,sid,"parent_portal.view"):
+        return HTMLResponse("Parent Portal access has been disabled for this account.",403)
     student_id = int(request.session.get("student_id") or 0)
     if not sid or not student_id:
         return HTMLResponse("This parent account is not linked to a learner. Please contact the school.", 403)
@@ -6634,6 +6673,8 @@ def parent_send_message(request: Request, student_id: int = Form(...), subject: 
         return RedirectResponse("/login",303)
     sid=int(request.session.get("school_id") or 0)
     if not sid:return RedirectResponse("/login",303)
+    if not _require_permission(request,sid,"parent_portal.message"):
+        return HTMLResponse("Messaging the school is disabled for this parent account.",403)
     subject_v=str(subject or "").strip()[:120]; message_v=str(message or "").strip()[:4000]
     if not subject_v or not message_v:return HTMLResponse("Subject and message are required.",400)
     con=_db()
@@ -6750,6 +6791,8 @@ def parent_messages_reply(request: Request,message_id:int=Form(...),reply:str=Fo
 def app_home(request: Request):
     if "email" not in request.session:
         return RedirectResponse("/")
+    if str(request.session.get("role") or "") == "teacher" and not _require_permission(request,int(request.session.get("school_id") or 0),"teacher_portal.view"):
+        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
     if str(request.session.get("role") or "") == "parent":
         return RedirectResponse("/app/parent", status_code=303)
     role=request.session.get("role","")
@@ -15401,7 +15444,12 @@ def roles_page(request: Request):
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     con=_db();cur=con.cursor()
+    _ensure_user_permissions_table(cur,con)
     rows=cur.execute("SELECT * FROM roles_permissions WHERE school_id=? ORDER BY role,permission",(sid,)).fetchall()
+    school_users=cur.execute("SELECT id,full_name,email,role FROM users WHERE school_id=? AND lower(COALESCE(role,'')) NOT IN ('school_admin','registrar') ORDER BY role,full_name,email",(sid,)).fetchall()
+    user_overrides=cur.execute("""SELECT p.user_id,p.permission,p.enabled,u.full_name,u.email,u.role
+        FROM user_permissions p JOIN users u ON u.id=p.user_id AND u.school_id=p.school_id
+        WHERE p.school_id=? ORDER BY u.role,u.full_name,p.permission""",(sid,)).fetchall()
     con.close()
     role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}
     permission_groups={
@@ -15412,6 +15460,7 @@ def roles_page(request: Request):
         "Finance & Fees":["fees.view","fees.edit","finance.view","finance.edit"],
         "Reports & Staff":["reports.view","reports.edit","staff.view","staff.create","staff.edit"],
         "Communication & Administration":["communications.view","communications.edit","users.manage","class_teacher.view","class_teacher.edit","audit.view","settings.view","settings.edit","settings.manage"],
+        "Portal Access":["teacher_portal.view","parent_portal.view","parent_portal.message"],
     }
     permission_labels={p:p.replace("."," · ").replace("_"," ").title() for values in permission_groups.values() for p in values}
     permission_rows=[]
@@ -15427,19 +15476,32 @@ def roles_page(request: Request):
     permission_rows="".join(permission_rows)
     role_opts="".join("<option value='%s'>%s</option>"%(r,escape(label)) for r,label in role_labels.items())
     permission_opts="".join("<optgroup label='%s'>%s</optgroup>"%(escape(group),"".join("<option value='%s'>%s</option>"%(escape(p),escape(permission_labels[p])) for p in values)) for group,values in permission_groups.items())
+    override_user_opts="".join("<option value='%s'>%s · %s</option>"%(u["id"],escape(str(u["full_name"] or u["email"] or "Account")),escape(str(u["role"] or "").replace("_"," ").title())) for u in school_users)
+    override_rows=[]
+    for item in user_overrides:
+        account_name=escape(str(item["full_name"] or item["email"] or "Account"))
+        account_role=escape(str(item["role"] or "").replace("_"," ").title())
+        permission_name=escape(permission_labels.get(str(item["permission"]),str(item["permission"]).replace("."," · ").title()))
+        is_enabled=bool(item["enabled"])
+        override_rows.append("<tr><td><strong>%s</strong><small class='rp-subtext'>%s</small></td><td>%s</td><td><span class='rp-status %s'>%s</span></td><td><form method='post' action='/app/roles/user-override/delete' onsubmit=\"return confirm('Remove this account override and restore its role default?')\"><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><button class='rp-btn rp-btn-light' type='submit'>Remove override</button></form></td></tr>"%(account_name,account_role,permission_name,"is-on" if is_enabled else "is-off","Allowed" if is_enabled else "Blocked",item["user_id"],escape(str(item["permission"]))))
+    override_rows="".join(override_rows)
     body=f"""<div class='page rp-page'>
-<header class='rp-header'><div><div class='rp-eyebrow'>ACCESS CONTROL</div><h1>Roles &amp; Permissions</h1><p>Manage access rights and permissions for each school role.</p></div><div class='rp-header-icon'>♧</div></header>
+<header class='rp-header'><div><div class='rp-eyebrow'>PORTAL ACCESS CONTROL</div><h1>Roles &amp; Permissions</h1><p>Control feature access through role defaults, then make account-specific exceptions where needed.</p></div><div class='rp-header-icon'>♧</div></header>
 <div class='rp-summary'>
-<div class='rp-stat'><span>Configured permissions</span><strong>{len(rows)}</strong><small>Role-specific access rules</small></div>
-<div class='rp-stat'><span>Roles available</span><strong>{len(role_labels)}</strong><small>School account categories</small></div>
+<div class='rp-stat'><span>Role rules configured</span><strong>{len(rows)}</strong><small>Default access decisions</small></div>
+<div class='rp-stat'><span>School roles</span><strong>{len(role_labels)}</strong><small>Existing account categories</small></div>
+<div class='rp-stat'><span>Individual overrides</span><strong>{len(user_overrides)}</strong><small>Account-specific exceptions</small></div>
 </div>
 <section class='rp-panel'><div class='rp-panel-head'><div><h2>Permission settings</h2><p>Grant or disable individual access rights for each role.</p></div><button type='button' class='rp-btn rp-btn-primary' onclick='openPermissionAdd()'>＋ Add permission</button></div>
 <div class='rp-table-wrap'><table class='rp-table'><thead><tr><th>Role</th><th>Permission</th><th>Status</th><th>Action</th></tr></thead><tbody>{permission_rows or "<tr><td colspan='4' class='rp-empty'>No custom permissions configured yet. Add a permission to get started.</td></tr>"}</tbody></table></div></section>
-<div class='rp-note'><strong>Access reminder</strong><span>Changes apply to accounts using the selected role. Keep administrator access limited to trusted school staff.</span></div>
+<section class='rp-panel rp-account-panel'><div class='rp-panel-head'><div><h2>Individual account access</h2><p>Override the role default for a specific teacher, parent, student or other non-administrator account.</p></div></div>
+<form method='post' action='/app/roles/user-override' class='rp-override-form'><label>Account<select class='rp-field' name='user_id' required><option value=''>Choose an account</option>{override_user_opts}</select></label><label>Feature permission<select class='rp-field' name='permission' required><option value=''>Choose a permission</option>{permission_opts}</select></label><label>Account access<select class='rp-field' name='enabled'><option value='1'>Allow this account</option><option value='0'>Block this account</option></select></label><button class='rp-btn rp-btn-primary' type='submit' {'disabled' if not school_users else ''}>Save account override</button></form>
+<div class='rp-table-wrap' style='margin-top:16px'><table class='rp-table'><thead><tr><th>Account</th><th>Feature</th><th>Override</th><th>Action</th></tr></thead><tbody>{override_rows or "<tr><td colspan='4' class='rp-empty'>No individual overrides. Accounts currently inherit their role permissions.</td></tr>"}</tbody></table></div></section>
+<div class='rp-note'><strong>Access rules</strong><span>Account overrides take precedence over role defaults for permissions enforced by the application. School Administrator and Registrar retain their existing full school-side access. Teacher class/subject allocations and parent/student record ownership restrictions remain in force.</span></div>
 <div class='rp-modal' id='rpPermissionModal' aria-hidden='true'><div class='rp-modal-backdrop' onclick='closeRpModal("rpPermissionModal")'></div><div class='rp-dialog'><button class='rp-close' type='button' onclick='closeRpModal("rpPermissionModal")'>×</button><div class='rp-modal-kicker'>ACCESS CONTROL</div><h2 id='rpPermissionTitle'>Add permission</h2><p>Choose a role, permission and access status.</p><form id='rpPermissionForm' method='post' action='/app/roles/add' class='rp-form'><label>School role<select class='rp-field' name='role' id='rpPermissionRole' required>{role_opts}</select></label><label>Permission<select class='rp-field' name='permission' id='rpPermissionValue' required><option value=''>Select permission</option>{permission_opts}</select></label><label>Access status<select class='rp-field' name='enabled' id='rpPermissionEnabled'><option value='1'>Enabled</option><option value='0'>Disabled</option></select></label><div class='rp-modal-actions'><button class='rp-btn rp-btn-light' type='button' onclick='closeRpModal("rpPermissionModal")'>Cancel</button><button class='rp-btn rp-btn-primary' type='submit'>Save permission</button></div></form></div></div>
 </div>
 <style>
-.rp-page{{max-width:1240px;margin:0 auto;color:#244536}}.rp-header{{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:24px 26px;border:1px solid #cbded0;border-radius:20px;background:linear-gradient(125deg,#e3f0e5,#f5f9f4 55%,#d9eadc);margin-bottom:18px}}.rp-eyebrow,.rp-modal-kicker{{font-size:11px;font-weight:850;letter-spacing:1.5px;color:#568069}}.rp-header h1{{margin:5px 0;font-size:28px;color:#214b38}}.rp-header p,.rp-panel-head p,.rp-dialog>p{{margin:0;color:#668071;font-size:13px}}.rp-header-icon{{width:54px;height:54px;border-radius:16px;background:#d2e6d7;color:#286244;display:grid;place-items:center;font-size:26px}}.rp-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:18px}}.rp-stat{{padding:17px 19px;border:1px solid #d4e4d7;border-radius:16px;background:linear-gradient(135deg,#e1efe3,#f3f8f3 58%,#d8e9dc);box-shadow:0 4px 14px #173f3209}}.rp-stat span,.rp-stat small{{display:block;color:#668071;font-size:12px}}.rp-stat strong{{display:block;font-size:27px;color:#24583d;margin:5px 0}}.rp-panel{{background:#fff;border:1px solid #e0e9e2;border-radius:17px;padding:20px;margin-bottom:17px;box-shadow:0 5px 18px #173f3208}}.rp-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}}.rp-panel-head h2{{font-size:18px;margin:0 0 5px;color:#28523d}}.rp-table-wrap{{overflow:auto;max-width:100%;border:1px solid #e7eee8;border-radius:12px}}.rp-table{{width:100%;border-collapse:collapse;min-width:650px}}.rp-table th{{background:#f4f8f4;color:#547360;font-size:11px;letter-spacing:.5px;text-transform:uppercase;text-align:left;padding:12px 14px}}.rp-table td{{padding:12px 14px;border-top:1px solid #edf2ed;font-size:13px;color:#344f40}}.rp-role{{font-weight:750;color:#28583e}}.rp-status{{display:inline-flex;padding:5px 10px;border-radius:30px;font-size:11px;font-weight:800}}.rp-status.is-on{{background:#e3f3e7;color:#277044}}.rp-status.is-off{{background:#fcebea;color:#a43d36}}.rp-btn{{border:0;border-radius:10px;padding:10px 14px;font-weight:750;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}}.rp-btn-primary{{background:linear-gradient(135deg,#286b47,#194d35);color:white;box-shadow:0 4px 10px #194d3520}}.rp-btn-light{{background:#edf4ee;color:#315c43;border:1px solid #d6e5d9}}.rp-empty{{text-align:center!important;padding:25px!important;color:#829487!important}}.rp-note{{display:flex;gap:12px;align-items:center;padding:14px 17px;border-radius:13px;background:#f1f7f2;color:#597463;font-size:12px}}.rp-note strong{{color:#2d5b40;white-space:nowrap}}.rp-modal{{display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:16px}}.rp-modal.is-open{{display:flex}}.rp-modal-backdrop{{position:absolute;inset:0;background:#10251bcc;backdrop-filter:blur(4px)}}.rp-dialog{{position:relative;width:min(520px,100%);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#f7fbf7,#fff 55%,#edf5ef);border:1px solid #cbded0;border-radius:20px;padding:25px;box-shadow:0 24px 70px #10251c55}}.rp-dialog h2{{margin:6px 0;font-size:22px;color:#244f38}}.rp-close{{position:absolute;right:16px;top:13px;border:0;background:#e8f1e9;color:#315b42;border-radius:50%;width:32px;height:32px;font-size:22px;cursor:pointer}}.rp-form{{display:grid;gap:13px;margin-top:20px}}.rp-form label{{display:grid;gap:6px;font-size:12px;font-weight:750;color:#496b56}}.rp-field{{width:100%;padding:12px;border:1px solid #cfdfd2;border-radius:10px;background:#fff;color:#294b37;font:inherit}}.rp-modal-actions{{display:flex;justify-content:flex-end;gap:9px;margin-top:7px}}@media(max-width:700px){{.rp-summary{{grid-template-columns:1fr 1fr}}.rp-header{{padding:18px}}.rp-header h1{{font-size:23px}}.rp-panel{{padding:14px}}.rp-panel-head{{align-items:flex-start;flex-direction:column}}.rp-note{{align-items:flex-start;flex-direction:column}}}}@media(max-width:430px){{.rp-summary{{grid-template-columns:1fr}}}}
+.rp-page{{max-width:1240px;margin:0 auto;color:#244536}}.rp-header{{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:24px 26px;border:1px solid #cbded0;border-radius:20px;background:linear-gradient(125deg,#e3f0e5,#f5f9f4 55%,#d9eadc);margin-bottom:18px}}.rp-eyebrow,.rp-modal-kicker{{font-size:11px;font-weight:850;letter-spacing:1.5px;color:#568069}}.rp-header h1{{margin:5px 0;font-size:28px;color:#214b38}}.rp-header p,.rp-panel-head p,.rp-dialog>p{{margin:0;color:#668071;font-size:13px}}.rp-header-icon{{width:54px;height:54px;border-radius:16px;background:#d2e6d7;color:#286244;display:grid;place-items:center;font-size:26px}}.rp-summary{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:18px}}.rp-stat{{padding:17px 19px;border:1px solid #d4e4d7;border-radius:16px;background:linear-gradient(135deg,#e1efe3,#f3f8f3 58%,#d8e9dc);box-shadow:0 4px 14px #173f3209}}.rp-stat span,.rp-stat small{{display:block;color:#668071;font-size:12px}}.rp-stat strong{{display:block;font-size:27px;color:#24583d;margin:5px 0}}.rp-panel{{background:#fff;border:1px solid #e0e9e2;border-radius:17px;padding:20px;margin-bottom:17px;box-shadow:0 5px 18px #173f3208}}.rp-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}}.rp-panel-head h2{{font-size:18px;margin:0 0 5px;color:#28523d}}.rp-table-wrap{{overflow:auto;max-width:100%;border:1px solid #e7eee8;border-radius:12px}}.rp-table{{width:100%;border-collapse:collapse;min-width:650px}}.rp-table th{{background:#f4f8f4;color:#547360;font-size:11px;letter-spacing:.5px;text-transform:uppercase;text-align:left;padding:12px 14px}}.rp-table td{{padding:12px 14px;border-top:1px solid #edf2ed;font-size:13px;color:#344f40}}.rp-role{{font-weight:750;color:#28583e}}.rp-status{{display:inline-flex;padding:5px 10px;border-radius:30px;font-size:11px;font-weight:800}}.rp-status.is-on{{background:#e3f3e7;color:#277044}}.rp-status.is-off{{background:#fcebea;color:#a43d36}}.rp-btn{{border:0;border-radius:10px;padding:10px 14px;font-weight:750;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}}.rp-btn-primary{{background:linear-gradient(135deg,#286b47,#194d35);color:white;box-shadow:0 4px 10px #194d3520}}.rp-btn-light{{background:#edf4ee;color:#315c43;border:1px solid #d6e5d9}}.rp-empty{{text-align:center!important;padding:25px!important;color:#829487!important}}.rp-subtext{{display:block;margin-top:4px;color:#7b9082;font-size:11px}}.rp-override-form{{display:grid;grid-template-columns:1.3fr 1.3fr 1fr auto;gap:10px;align-items:end}}.rp-override-form label{{display:grid;gap:6px;font-size:12px;font-weight:750;color:#496b56}}.rp-override-form button:disabled{{opacity:.5;cursor:not-allowed}}.rp-account-panel{{border-color:#cfe1d2;background:linear-gradient(150deg,#fbfefb,#f2f8f2)}}.rp-note{{display:flex;gap:12px;align-items:center;padding:14px 17px;border-radius:13px;background:#f1f7f2;color:#597463;font-size:12px}}.rp-note strong{{color:#2d5b40;white-space:nowrap}}.rp-modal{{display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:16px}}.rp-modal.is-open{{display:flex}}.rp-modal-backdrop{{position:absolute;inset:0;background:#10251bcc;backdrop-filter:blur(4px)}}.rp-dialog{{position:relative;width:min(520px,100%);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#f7fbf7,#fff 55%,#edf5ef);border:1px solid #cbded0;border-radius:20px;padding:25px;box-shadow:0 24px 70px #10251c55}}.rp-dialog h2{{margin:6px 0;font-size:22px;color:#244f38}}.rp-close{{position:absolute;right:16px;top:13px;border:0;background:#e8f1e9;color:#315b42;border-radius:50%;width:32px;height:32px;font-size:22px;cursor:pointer}}.rp-form{{display:grid;gap:13px;margin-top:20px}}.rp-form label{{display:grid;gap:6px;font-size:12px;font-weight:750;color:#496b56}}.rp-field{{width:100%;padding:12px;border:1px solid #cfdfd2;border-radius:10px;background:#fff;color:#294b37;font:inherit}}.rp-modal-actions{{display:flex;justify-content:flex-end;gap:9px;margin-top:7px}}@media(max-width:850px){{.rp-override-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:700px){{.rp-summary{{grid-template-columns:1fr 1fr}}.rp-header{{padding:18px}}.rp-header h1{{font-size:23px}}.rp-panel{{padding:14px}}.rp-panel-head{{align-items:flex-start;flex-direction:column}}.rp-note{{align-items:flex-start;flex-direction:column}}.rp-override-form{{grid-template-columns:1fr}}}}@media(max-width:430px){{.rp-summary{{grid-template-columns:1fr}}}}
 </style>
 <script>
 function openRpModal(id){{document.getElementById(id).classList.add('is-open');document.getElementById(id).setAttribute('aria-hidden','false')}}
@@ -15554,6 +15616,48 @@ def delete_class_teacher_assignment(request: Request, assignment_id:int):
     return RedirectResponse("/app/roles",303)
 
 
+@router.post("/app/roles/user-override")
+def roles_user_override(request: Request, user_id: int=Form(...), permission: str=Form(...), enabled: int=Form(1)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"settings.manage"):
+        return HTMLResponse("You do not have permission to manage account access.",403)
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
+    permission_v=str(permission or "").strip()
+    if permission_v not in allowed_permissions:
+        return HTMLResponse("Invalid feature permission.",400)
+    con=_db();cur=con.cursor()
+    account=cur.execute("SELECT id,role FROM users WHERE id=? AND school_id=?",(user_id,sid)).fetchone()
+    if not account:
+        con.close();return HTMLResponse("Account not found in this school.",404)
+    if str(account["role"] or "") in ("school_admin","registrar"):
+        con.close();return HTMLResponse("School Administrator and Registrar access remains unchanged.",400)
+    _ensure_user_permissions_table(cur,con)
+    existing=cur.execute("SELECT user_id FROM user_permissions WHERE school_id=? AND user_id=? AND permission=?",(sid,user_id,permission_v)).fetchone()
+    enabled_v=1 if int(enabled) else 0
+    now=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    if existing:
+        cur.execute("UPDATE user_permissions SET enabled=?,updated_at=?,updated_by=? WHERE school_id=? AND user_id=? AND permission=?",(enabled_v,now,str(request.session.get("email") or ""),sid,user_id,permission_v))
+    else:
+        cur.execute("INSERT INTO user_permissions(school_id,user_id,permission,enabled,updated_at,updated_by) VALUES(?,?,?,?,?,?)",(sid,user_id,permission_v,enabled_v,now,str(request.session.get("email") or "")))
+    _audit(cur,sid,request,"USER_PERMISSION_OVERRIDE",f"user_id={user_id}; {permission_v}={enabled_v}")
+    con.commit();con.close()
+    return RedirectResponse("/app/roles",303)
+
+
+@router.post("/app/roles/user-override/delete")
+def roles_user_override_delete(request: Request, user_id: int=Form(...), permission: str=Form(...)):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    if not _require_permission(request,sid,"settings.manage"):
+        return HTMLResponse("You do not have permission to manage account access.",403)
+    con=_db();cur=con.cursor()
+    cur.execute("DELETE FROM user_permissions WHERE school_id=? AND user_id=? AND permission=?",(sid,user_id,str(permission or "").strip()))
+    _audit(cur,sid,request,"USER_PERMISSION_OVERRIDE_REMOVE",f"user_id={user_id}; {permission}")
+    con.commit();con.close()
+    return RedirectResponse("/app/roles",303)
+
+
 @router.post("/app/roles/add")
 def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabled:int=Form(1)):
     sid=_school_session(request)
@@ -15561,7 +15665,7 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
@@ -15581,7 +15685,7 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","parent_portal.view","parent_portal.message"}
     role_v=role.strip();perm_v=permission.strip();enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission.",400)
