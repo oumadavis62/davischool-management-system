@@ -14577,8 +14577,8 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
         if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
             return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
-        if role in ("teacher","registrar","bursar") and not tid:
-            return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
+        if role in ("teacher","registrar","accountant","bursar") and not tid:
+            return HTMLResponse("Staff accounts must be linked to a staff profile selected from Staff Records.",400)
         if role in ("student","parent") and not stid:
             return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
         if role not in ("teacher","registrar","student","parent","accountant","bursar") and (tid or stid):
