@@ -15669,14 +15669,69 @@ def roles_page(request: Request):
     role_opts="".join("<option value='%s'>%s</option>"%(r,escape(label)) for r,label in role_labels.items())
     permission_opts="".join("<optgroup label='%s'>%s</optgroup>"%(escape(group),"".join("<option value='%s'>%s</option>"%(escape(p),escape(permission_labels[p])) for p in values)) for group,values in permission_groups.items())
     override_user_opts="".join("<option value='%s'>%s · %s</option>"%(u["id"],escape(str(u["full_name"] or u["email"] or "Account")),escape(str(u["role"] or "").replace("_"," ").title())) for u in school_users)
-    override_rows=[]
-    for item in user_overrides:
-        account_name=escape(str(item["full_name"] or item["email"] or "Account"))
-        account_role=escape(str(item["role"] or "").replace("_"," ").title())
-        permission_name=escape(permission_labels.get(str(item["permission"]),str(item["permission"]).replace("."," · ").title()))
-        is_enabled=bool(item["enabled"])
-        override_rows.append("<tr><td><strong>%s</strong><small class='rp-subtext'>%s</small></td><td>%s</td><td><span class='rp-status %s'>%s</span></td><td><form method='post' action='/app/roles/user-override/delete' onsubmit=\"return confirm('Remove this account override and restore its role default?')\"><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><button class='rp-btn rp-btn-light' type='submit'>Remove override</button></form></td></tr>"%(account_name,account_role,permission_name,"is-on" if is_enabled else "is-off","Allowed" if is_enabled else "Blocked",item["user_id"],escape(str(item["permission"]))))
-    override_rows="".join(override_rows)
+    selected_user_raw=str(request.query_params.get("account_id") or "").strip()
+    selected_user_id=int(selected_user_raw) if selected_user_raw.isdigit() else 0
+    selected_account=next((u for u in school_users if int(u["id"])==selected_user_id),None)
+    selected_override_map={str(x["permission"]):bool(x["enabled"]) for x in user_overrides if selected_account and int(x["user_id"])==selected_user_id}
+    account_access_markup="<div class='rp-account-empty'>Choose an account above to manage its portal access.</div>"
+    if selected_account:
+        selected_role=str(selected_account["role"] or "")
+        catalog_role="teacher" if selected_role=="class_teacher" else selected_role
+        selected_features=portal_catalog.get(catalog_role,[])
+        portal_permission={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}.get(catalog_role)
+        if portal_permission:
+            portal_default=role_rule_state.get((catalog_role,portal_permission),True)
+            portal_override=selected_override_map.get(portal_permission)
+            portal_effective=portal_override if portal_override is not None else portal_default
+            portal_source="Individual override" if portal_override is not None else "Inherited from role default"
+            portal_action=0 if portal_effective else 1
+            portal_action_label="Disable entire portal" if portal_effective else "Enable entire portal"
+            portal_status="Enabled" if portal_effective else "Disabled"
+            portal_status_class="is-on" if portal_effective else "is-off"
+            portal_form=("<form method='post' action='/app/roles/user-override' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><input type='hidden' name='return_to' value='/app/roles?account_id=%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form>"%(selected_user_id,portal_permission,portal_action,selected_user_id,portal_action_label))
+            portal_markup="<div class='rp-account-portal'><div><span class='rp-mini-label'>WHOLE PORTAL</span><strong>Teacher portal access</strong><small>%s</small></div><span class='rp-status %s'>%s</span>%s</div>"%(portal_source,portal_status_class,portal_status,portal_form)
+        else:
+            portal_markup="<div class='rp-account-empty'>No separate portal access switch is configured for this account role.</div>"
+        feature_rows=[]
+        for group_name,feature_name,feature_key,feature_description in selected_features:
+            default=role_rule_state.get((catalog_role,feature_key),True)
+            override=selected_override_map.get(feature_key)
+            effective=override if override is not None else default
+            source="Individual override" if override is not None else "Role default"
+            state_label="Allowed" if effective else "Blocked"
+            state_class="is-on" if effective else "is-off"
+            toggle_value=0 if effective else 1
+            toggle_label="Block" if effective else "Allow"
+            return_to="/app/roles?account_id=%s"%selected_user_id
+            controls="<form method='post' action='/app/roles/user-override' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><input type='hidden' name='return_to' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form>"%(selected_user_id,escape(feature_key),toggle_value,return_to,toggle_label)
+            reset=""
+            if override is not None:
+                reset="<form method='post' action='/app/roles/user-override/delete' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='return_to' value='%s'><button class='rp-reset-link' type='submit'>Reset to role default</button></form>"%(selected_user_id,escape(feature_key),return_to)
+            feature_rows.append("<div class='rp-account-feature'><div class='rp-account-feature-copy'><strong>%s</strong><small>%s</small><em>%s</em></div><span class='rp-status %s'>%s</span><div class='rp-account-actions'>%s%s</div></div>"%(escape(feature_name),escape(feature_description),source,state_class,state_label,controls,reset))
+        grouped_rows=[]
+        grouped={}
+        for feature in selected_features:
+            grouped.setdefault(feature[0],[]).append(feature)
+        for group_name,features in grouped.items():
+            rows_html=[]
+            for _,feature_name,feature_key,feature_description in features:
+                default=role_rule_state.get((catalog_role,feature_key),True)
+                override=selected_override_map.get(feature_key)
+                effective=override if override is not None else default
+                source="Individual override" if override is not None else "Role default"
+                state_label="Allowed" if effective else "Blocked"
+                state_class="is-on" if effective else "is-off"
+                toggle_value=0 if effective else 1
+                toggle_label="Block" if effective else "Allow"
+                return_to="/app/roles?account_id=%s"%selected_user_id
+                controls="<form method='post' action='/app/roles/user-override' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><input type='hidden' name='return_to' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form>"%(selected_user_id,escape(feature_key),toggle_value,return_to,toggle_label)
+                reset=""
+                if override is not None:
+                    reset="<form method='post' action='/app/roles/user-override/delete' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='return_to' value='%s'><button class='rp-reset-link' type='submit'>Reset</button></form>"%(selected_user_id,escape(feature_key),return_to)
+                rows_html.append("<div class='rp-account-feature'><div class='rp-account-feature-copy'><strong>%s</strong><small>%s</small><em>%s</em></div><span class='rp-status %s'>%s</span><div class='rp-account-actions'>%s%s</div></div>"%(escape(feature_name),escape(feature_description),source,state_class,state_label,controls,reset))
+            grouped_rows.append("<section class='rp-account-feature-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(rows_html)))
+        account_name=escape(str(selected_account["full_name"] or selected_account["email"] or "Account"))
+        account_access_markup="<div class='rp-selected-account'><div class='rp-selected-account-head'><div><span class='rp-mini-label'>SELECTED ACCOUNT</span><strong>%s</strong><small>%s</small></div><span class='rp-status is-on'>Individual controls</span></div>%s<div class='rp-account-feature-list'>%s</div></div>"%(account_name,escape(selected_role.replace("_"," ").title()),portal_markup,"".join(grouped_rows))
     body=f"""<div class='page rp-page'>
 <header class='rp-header'><div><div class='rp-eyebrow'>PORTAL ACCESS CONTROL</div><h1>Roles &amp; Permissions</h1><p>Control feature access through role defaults, then make account-specific exceptions where needed.</p></div><div class='rp-header-icon'>♧</div></header>
 <div class='rp-summary'>
@@ -15685,9 +15740,9 @@ def roles_page(request: Request):
 <div class='rp-stat'><span>Individual overrides</span><strong>{len(user_overrides)}</strong><small>Account-specific exceptions</small></div>
 </div>
 <section class='rp-panel rp-matrix-panel'><div class='rp-panel-head'><div><h2>Portal &amp; feature access matrix</h2><p>Expand a role to control its portal and every available feature. Unconfigured permissions remain allowed until explicitly blocked.</p></div></div><div class='rp-matrix'>{role_matrix_html}</div></section>
-<section class='rp-panel rp-account-panel'><div class='rp-panel-head'><div><h2>Individual account access</h2><p>Override the role default for a specific teacher, parent, student or other non-administrator account.</p></div></div>
-<form method='post' action='/app/roles/user-override' class='rp-override-form'><label>Account<select class='rp-field' name='user_id' required><option value=''>Choose an account</option>{override_user_opts}</select></label><label>Feature permission<select class='rp-field' name='permission' required><option value=''>Choose a permission</option>{permission_opts}</select></label><label>Account access<select class='rp-field' name='enabled'><option value='1'>Allow this account</option><option value='0'>Block this account</option></select></label><button class='rp-btn rp-btn-primary' type='submit' {'disabled' if not school_users else ''}>Save account override</button></form>
-<div class='rp-table-wrap' style='margin-top:16px'><table class='rp-table'><thead><tr><th>Account</th><th>Feature</th><th>Override</th><th>Action</th></tr></thead><tbody>{override_rows or "<tr><td colspan='4' class='rp-empty'>No individual overrides. Accounts currently inherit their role permissions.</td></tr>"}</tbody></table></div></section>
+<section class='rp-panel rp-account-panel'><div class='rp-panel-head'><div><h2>Individual account access</h2><p>Select one account to control its entire portal or fine-tune individual features without changing other teachers or the role defaults.</p></div></div>
+<form method='get' action='/app/roles' class='rp-account-picker'><label for='rpAccountPicker'>Choose account</label><select class='rp-field' id='rpAccountPicker' name='account_id' onchange='this.form.submit()' required><option value=''>Select a teacher or account</option>{override_user_opts}</select><span>Changes apply only to the selected account.</span></form>
+{account_access_markup}</section>
 <div class='rp-note'><strong>Access rules</strong><span>Account overrides take precedence over role defaults for permissions enforced by the application. School Administrator and Registrar retain their existing full school-side access. Teacher class/subject allocations and parent/student record ownership restrictions remain in force.</span></div>
 <div class='rp-modal' id='rpPermissionModal' aria-hidden='true'><div class='rp-modal-backdrop' onclick='closeRpModal("rpPermissionModal")'></div><div class='rp-dialog'><button class='rp-close' type='button' onclick='closeRpModal("rpPermissionModal")'>×</button><div class='rp-modal-kicker'>ACCESS CONTROL</div><h2 id='rpPermissionTitle'>Add permission</h2><p>Choose a role, permission and access status.</p><form id='rpPermissionForm' method='post' action='/app/roles/add' class='rp-form'><label>School role<select class='rp-field' name='role' id='rpPermissionRole' required>{role_opts}</select></label><label>Permission<select class='rp-field' name='permission' id='rpPermissionValue' required><option value=''>Select permission</option>{permission_opts}</select></label><label>Access status<select class='rp-field' name='enabled' id='rpPermissionEnabled'><option value='1'>Enabled</option><option value='0'>Disabled</option></select></label><div class='rp-modal-actions'><button class='rp-btn rp-btn-light' type='button' onclick='closeRpModal("rpPermissionModal")'>Cancel</button><button class='rp-btn rp-btn-primary' type='submit'>Save permission</button></div></form></div></div>
 </div>
@@ -15808,7 +15863,7 @@ def delete_class_teacher_assignment(request: Request, assignment_id:int):
 
 
 @router.post("/app/roles/user-override")
-def roles_user_override(request: Request, user_id: int=Form(...), permission: str=Form(...), enabled: int=Form(1)):
+def roles_user_override(request: Request, user_id: int=Form(...), permission: str=Form(...), enabled: int=Form(1), return_to: str=Form("/app/roles")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
@@ -15833,11 +15888,12 @@ def roles_user_override(request: Request, user_id: int=Form(...), permission: st
         cur.execute("INSERT INTO user_permissions(school_id,user_id,permission,enabled,updated_at,updated_by) VALUES(?,?,?,?,?,?)",(sid,user_id,permission_v,enabled_v,now,str(request.session.get("email") or "")))
     _audit(cur,sid,request,"USER_PERMISSION_OVERRIDE",f"user_id={user_id}; {permission_v}={enabled_v}")
     con.commit();con.close()
-    return RedirectResponse("/app/roles",303)
+    safe_return=return_to if str(return_to or "").startswith("/app/roles") else "/app/roles"
+    return RedirectResponse(safe_return,303)
 
 
 @router.post("/app/roles/user-override/delete")
-def roles_user_override_delete(request: Request, user_id: int=Form(...), permission: str=Form(...)):
+def roles_user_override_delete(request: Request, user_id: int=Form(...), permission: str=Form(...), return_to: str=Form("/app/roles")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
@@ -15846,7 +15902,8 @@ def roles_user_override_delete(request: Request, user_id: int=Form(...), permiss
     cur.execute("DELETE FROM user_permissions WHERE school_id=? AND user_id=? AND permission=?",(sid,user_id,str(permission or "").strip()))
     _audit(cur,sid,request,"USER_PERMISSION_OVERRIDE_REMOVE",f"user_id={user_id}; {permission}")
     con.commit();con.close()
-    return RedirectResponse("/app/roles",303)
+    safe_return=return_to if str(return_to or "").startswith("/app/roles") else "/app/roles"
+    return RedirectResponse(safe_return,303)
 
 
 @router.post("/app/roles/add")
