@@ -210,3 +210,116 @@ def inventory_transaction_save(request: Request, item_id: int = Form(...), trans
     finally:
         con.close()
     return RedirectResponse("/app/inventory/transactions", 303)
+
+
+def _requisition_schema(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS inventory_requisitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL,
+      item_id INTEGER NOT NULL, quantity REAL NOT NULL, purpose TEXT NOT NULL,
+      requested_by TEXT DEFAULT '', requested_date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Pending', reviewed_by TEXT DEFAULT '',
+      reviewed_at TEXT DEFAULT '', decision_notes TEXT DEFAULT '',
+      issued_at TEXT DEFAULT '', issue_reference TEXT DEFAULT '', created_at TEXT NOT NULL)""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_inventory_req_school_status ON inventory_requisitions(school_id,status,requested_date)")
+
+
+@router.get("/app/inventory/requisitions", response_class=HTMLResponse)
+def inventory_requisitions(request: Request, status: str = "All", q: str = ""):
+    sid, err = _guard(request)
+    if err: return err
+    con = _db()
+    try:
+        cur = con.cursor()
+        _schema(cur)
+        _requisition_schema(cur)
+        _transaction_schema(cur)
+        con.commit()
+        items = cur.execute("SELECT id,item_code,item_name,unit,quantity FROM inventory_items WHERE school_id=? AND status='Active' ORDER BY item_name",(sid,)).fetchall()
+        where, params = ["r.school_id=?"], [sid]
+        if status in ("Pending","Approved","Rejected","Issued"):
+            where.append("r.status=?"); params.append(status)
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            where.append("(i.item_name LIKE ? OR i.item_code LIKE ? OR r.purpose LIKE ? OR r.requested_by LIKE ?)")
+            params.extend([term]*4)
+        rows = cur.execute("SELECT r.*,i.item_name,i.item_code,i.unit FROM inventory_requisitions r JOIN inventory_items i ON i.id=r.item_id AND i.school_id=r.school_id WHERE "+" AND ".join(where)+" ORDER BY r.id DESC LIMIT 500",tuple(params)).fetchall()
+        counts = cur.execute("SELECT COUNT(*) total, SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END) pending, SUM(CASE WHEN status='Approved' THEN 1 ELSE 0 END) approved, SUM(CASE WHEN status='Issued' THEN 1 ELSE 0 END) issued FROM inventory_requisitions WHERE school_id=?",(sid,)).fetchone()
+        opts = "".join(f"<option value='{int(x['id'])}'>{escape(str(x['item_code'] or ''))} — {escape(str(x['item_name'] or ''))} (balance {float(x['quantity'] or 0):g})</option>" for x in items)
+        trs = ""
+        for x in rows:
+            action = ""
+            if x["status"] == "Pending":
+                action = f"""<form method="post" action="/app/inventory/requisitions/review"><input type="hidden" name="requisition_id" value="{int(x['id'])}"><input type="hidden" name="decision" value="Approved"><input name="decision_notes" placeholder="Approval note"><button class="btn">Approve</button></form><form method="post" action="/app/inventory/requisitions/review"><input type="hidden" name="requisition_id" value="{int(x['id'])}"><input type="hidden" name="decision" value="Rejected"><input name="decision_notes" placeholder="Reason required"><button class="btn btn-light">Reject</button></form>"""
+            elif x["status"] == "Approved":
+                action = f"""<form method="post" action="/app/inventory/requisitions/issue"><input type="hidden" name="requisition_id" value="{int(x['id'])}"><input name="issue_reference" placeholder="Issue voucher"><button class="btn">Issue stock</button></form>"""
+            trs += f"<tr><td>REQ-{int(x['id']):05d}<small>{escape(str(x['requested_date'] or ''))}</small></td><td>{escape(str(x['item_name'] or ''))}<small>{escape(str(x['item_code'] or ''))}</small></td><td>{float(x['quantity'] or 0):g} {escape(str(x['unit'] or ''))}</td><td>{escape(str(x['purpose'] or ''))}</td><td>{escape(str(x['requested_by'] or ''))}</td><td>{escape(str(x['status'] or ''))}<small>{escape(str(x['decision_notes'] or ''))}</small></td><td>{action}</td></tr>"
+        trs = trs or "<tr><td colspan='7'>No requisitions found.</td></tr>"
+        body = f"""
+<div class="page inv-req"><style>
+.inv-req .stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}}.inv-req .stats>div,.inv-req .panel{{background:#fff;border:1px solid #e3ebe5;border-radius:14px;padding:15px}}.inv-req .stats span,.inv-req small{{display:block;color:#718078;font-size:12px}}.inv-req .stats strong{{font-size:24px;color:#174b35}}.inv-req .grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.inv-req label{{display:grid;gap:6px;font-size:12px}}.inv-req input,.inv-req select,.inv-req textarea{{width:100%;min-height:39px;padding:8px;border:1px solid #dce6df;border-radius:9px;background:#fff}}.inv-req .wide{{grid-column:1/-1}}.inv-req .scroll{{overflow:auto;width:100%}}.inv-req table{{width:100%;min-width:1050px;border-collapse:collapse}}.inv-req th,.inv-req td{{padding:10px;border-bottom:1px solid #edf1ee;text-align:left;font-size:13px;vertical-align:top}}.inv-req th{{background:#f7faf8}}.inv-req form{{margin:0 0 5px}}@media(max-width:700px){{.inv-req .stats,.inv-req .grid{{grid-template-columns:1fr}}.inv-req .wide{{grid-column:auto}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">INVENTORY &amp; STORES / STOCK CONTROL</div><h1>Stock Requisitions &amp; Approvals</h1><div>Submit stock requests, approve or reject them, and issue approved quantities with an auditable ledger.</div></div><a class="btn btn-light" href="/app/inventory/transactions">Stock Receipts &amp; Issues</a></div>
+<div class="stats"><div><span>Total requests</span><strong>{int(counts['total'] or 0)}</strong></div><div><span>Pending review</span><strong>{int(counts['pending'] or 0)}</strong></div><div><span>Approved</span><strong>{int(counts['approved'] or 0)}</strong></div><div><span>Issued</span><strong>{int(counts['issued'] or 0)}</strong></div></div>
+<section class="panel"><h2>New stock requisition</h2><form method="post" action="/app/inventory/requisitions/create" class="grid"><label class="wide">Item *<select name="item_id" required><option value="">Select item</option>{opts}</select></label><label>Quantity *<input type="number" name="quantity" min="0.01" step="0.01" required></label><label>Requested by<input name="requested_by" value="{escape(str(request.session.get('name') or request.session.get('email') or ''),quote=True)}"></label><label class="wide">Purpose *<textarea name="purpose" required maxlength="1000"></textarea></label><div class="wide"><button class="btn">Submit request</button></div></form></section>
+<section class="panel" style="margin-top:16px"><form method="get" class="grid"><label>Search<input name="q" value="{escape(q,quote=True)}" placeholder="Item, requester or purpose"></label><label>Status<select name="status"><option value="All">All</option><option value="Pending" {'selected' if status=='Pending' else ''}>Pending</option><option value="Approved" {'selected' if status=='Approved' else ''}>Approved</option><option value="Rejected" {'selected' if status=='Rejected' else ''}>Rejected</option><option value="Issued" {'selected' if status=='Issued' else ''}>Issued</option></select></label><div class="wide"><button class="btn">Filter</button> <a class="btn btn-light" href="/app/inventory/requisitions">Clear</a></div></form><div class="scroll"><table><thead><tr><th>Request</th><th>Item</th><th>Quantity</th><th>Purpose</th><th>Requester</th><th>Status / decision</th><th>Actions</th></tr></thead><tbody>{trs}</tbody></table></div></section></div>
+"""
+        return _school_page(request, "Stock Requisitions & Approvals", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/inventory/requisitions/create")
+def inventory_requisition_create(request: Request, item_id: int = Form(...), quantity: float = Form(...), purpose: str = Form(...), requested_by: str = Form("")):
+    sid, err = _guard(request, "inventory.manage")
+    if err: return err
+    if quantity <= 0 or not purpose.strip(): return HTMLResponse("Enter a positive quantity and purpose.",400)
+    con = _db()
+    try:
+        cur = con.cursor(); _schema(cur); _requisition_schema(cur)
+        item = cur.execute("SELECT id FROM inventory_items WHERE id=? AND school_id=? AND status='Active'",(item_id,sid)).fetchone()
+        if not item: return HTMLResponse("Active inventory item not found.",404)
+        now = datetime.utcnow().isoformat()
+        cur.execute("INSERT INTO inventory_requisitions (school_id,item_id,quantity,purpose,requested_by,requested_date,status,created_at) VALUES (?,?,?,?,?,?,?,?)",(sid,item_id,quantity,purpose.strip(),requested_by.strip() or str(request.session.get("name") or request.session.get("email") or ""),now[:10],"Pending",now))
+        con.commit()
+    except Exception: con.rollback(); raise
+    finally: con.close()
+    return RedirectResponse("/app/inventory/requisitions",303)
+
+
+@router.post("/app/inventory/requisitions/review")
+def inventory_requisition_review(request: Request, requisition_id: int = Form(...), decision: str = Form(...), decision_notes: str = Form("")):
+    sid, err = _guard(request, "inventory.manage")
+    if err: return err
+    if decision not in ("Approved","Rejected") or (decision=="Rejected" and not decision_notes.strip()): return HTMLResponse("Choose a valid decision; a rejection reason is required.",400)
+    con = _db()
+    try:
+        cur=con.cursor(); _requisition_schema(cur)
+        now=datetime.utcnow().isoformat()
+        cur.execute("UPDATE inventory_requisitions SET status=?,reviewed_by=?,reviewed_at=?,decision_notes=? WHERE id=? AND school_id=? AND status='Pending'",(decision,str(request.session.get("name") or request.session.get("email") or ""),now,decision_notes.strip(),requisition_id,sid))
+        if cur.rowcount != 1: con.rollback(); return HTMLResponse("Request not pending or already reviewed. Refresh the page.",409)
+        con.commit()
+    except Exception: con.rollback(); raise
+    finally: con.close()
+    return RedirectResponse("/app/inventory/requisitions",303)
+
+
+@router.post("/app/inventory/requisitions/issue")
+def inventory_requisition_issue(request: Request, requisition_id: int = Form(...), issue_reference: str = Form("")):
+    sid, err = _guard(request, "inventory.manage")
+    if err: return err
+    con = _db()
+    try:
+        cur=con.cursor(); _schema(cur); _requisition_schema(cur); _transaction_schema(cur)
+        req=cur.execute("SELECT r.*,i.quantity AS balance,i.status AS item_status FROM inventory_requisitions r JOIN inventory_items i ON i.id=r.item_id AND i.school_id=r.school_id WHERE r.id=? AND r.school_id=? AND r.status='Approved'",(requisition_id,sid)).fetchone()
+        if not req: return HTMLResponse("Only an approved request can be issued.",409)
+        qty=float(req["quantity"] or 0); balance=float(req["balance"] or 0)
+        if req["item_status"]!="Active" or qty<=0 or balance<qty: return HTMLResponse("Item inactive or insufficient stock. No stock was issued.",400)
+        now=datetime.utcnow().isoformat(); new_balance=balance-qty
+        cur.execute("UPDATE inventory_items SET quantity=?,updated_at=? WHERE id=? AND school_id=?",(new_balance,now,req["item_id"],sid))
+        cur.execute("INSERT INTO inventory_transactions (school_id,item_id,transaction_type,quantity,balance_after,reference_no,movement_date,notes,recorded_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",(sid,req["item_id"],"Issue",qty,new_balance,issue_reference.strip() or ("REQ-%05d" % requisition_id),now[:10],"Issued against approved requisition REQ-%05d: %s" % (requisition_id,req["purpose"]),str(request.session.get("name") or request.session.get("email") or ""),now))
+        cur.execute("UPDATE inventory_requisitions SET status='Issued',issued_at=?,issue_reference=? WHERE id=? AND school_id=? AND status='Approved'",(now,issue_reference.strip(),requisition_id,sid))
+        if cur.rowcount != 1: con.rollback(); return HTMLResponse("Request changed; no stock was issued. Refresh and retry.",409)
+        con.commit()
+    except Exception: con.rollback(); raise
+    finally: con.close()
+    return RedirectResponse("/app/inventory/requisitions",303)
