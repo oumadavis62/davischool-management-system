@@ -18,7 +18,7 @@ def _central_route_permission(path, method, role):
     role = str(role or "").lower()
     if path == "/app":
         return {"teacher": "teacher_portal.view", "parent": "parent_portal.view",
-                "student": "student_portal.view", "accountant": "accountant_portal.view"}.get(role)
+                "student": "student_portal.view", "accountant": "accountant_portal.view", "bursar": "bursar_portal.view"}.get(role)
     if path.startswith("/app/portals"):
         return "settings.manage"
     if path.startswith("/app/academics/marks-corrections") or path.endswith("/academics/marks/request-correction"):
@@ -33,6 +33,8 @@ def _central_route_permission(path, method, role):
         return "accountant_portal.view"
     if path.startswith("/app/accounting"):
         return "accountant_portal.view"
+    if path.startswith("/app/bursar"):
+        return "bursar_portal.view"
     return None
 
 class SchoolPermissionRoute(APIRoute):
@@ -6939,6 +6941,8 @@ def app_home(request: Request):
         return RedirectResponse("/app/parent", status_code=303)
     if str(request.session.get("role") or "") == "accountant":
         return RedirectResponse("/app/accounting", status_code=303)
+    if str(request.session.get("role") or "") == "bursar":
+        return RedirectResponse("/app/bursar", status_code=303)
     if str(request.session.get("role") or "") == "student":
         if not _require_permission(request,int(request.session.get("school_id") or 0),"student_portal.view"):
             return HTMLResponse("Student Portal access has been disabled for this account.",403)
@@ -14521,7 +14525,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
     email=(email or "").strip()
-    allowed={"school_admin","teacher","parent","student","accountant","registrar"}
+    allowed={"school_admin","teacher","parent","student","accountant","bursar","registrar"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.
     if role=="school_admin":
@@ -14557,7 +14561,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             student_profile=cur.execute("SELECT name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
             if student_profile:
                 full_name=str(student_profile["name"] or "").strip()
-        if role in ("teacher","registrar","accountant") and tid:
+        if role in ("teacher","registrar","accountant","bursar") and tid:
             designation_value=str(teacher_designation or "").strip()
             if designation_value and designation_value not in STAFF_DESIGNATION_OPTIONS:
                 return HTMLResponse("Invalid staff designation. Please choose a designation from the list.",400)
@@ -15619,7 +15623,7 @@ def roles_page(request: Request):
         FROM user_permissions p JOIN users u ON u.id=p.user_id AND u.school_id=p.school_id
         WHERE p.school_id=? ORDER BY u.role,u.full_name,p.permission""",(sid,)).fetchall()
     con.close()
-    role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","class_teacher":"Class Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}
+    role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","class_teacher":"Class Teacher","parent":"Parent","student":"Student","accountant":"Accountant","bursar":"Bursar"}
     portal_catalog={
         "teacher":[
             ("Workspace","Overview","teacher_portal.overview","Teacher home and school workspace summary"),
@@ -15648,6 +15652,14 @@ def roles_page(request: Request):
             ("Accounting","LPO Register","accountant_portal.lpos","View local purchase orders"),
             ("Accounting","Cashbook","accountant_portal.cashbook","View cashbook totals"),
         ],
+        "bursar":[
+            ("Bursar workspace","Bursar Overview","bursar_portal.overview","Bursar dashboard and financial summary"),
+            ("Bursar workspace","Record Expense","bursar_portal.expense_create","Record school expenses"),
+            ("Bursar workspace","Expenses Register","bursar_portal.expenses","Review expense records"),
+            ("Bursar workspace","Payment Vouchers","bursar_portal.vouchers","Review payment vouchers"),
+            ("Bursar workspace","LPO Register","bursar_portal.lpos","Review local purchase orders"),
+            ("Bursar workspace","Cashbook","bursar_portal.cashbook","Review cashbook records"),
+        ],
         "student":[
             ("Portal access","Student Portal","student_portal.view","Student Portal page is not yet implemented in this application"),
         ],
@@ -15667,7 +15679,7 @@ def roles_page(request: Request):
     for rule in rows:
         role_rule_state.setdefault((str(rule["role"]),str(rule["permission"])),bool(rule["enabled"]))
     role_matrix=[]
-    for matrix_role in ("teacher","parent","student","accountant"):
+    for matrix_role in ("teacher","parent","student","accountant","bursar"):
         portal_role=matrix_role
         group_markup=[]
         role_features=portal_catalog.get(portal_role,[])
@@ -15687,13 +15699,13 @@ def roles_page(request: Request):
                      portal_role,escape(feature),next_value,action_label)
                 )
             group_markup.append("<section class='rp-matrix-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(feature_rows)))
-        portal_key={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
+        portal_key={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view","bursar":"bursar_portal.view"}[matrix_role]
         portal_enabled=role_rule_state.get((portal_role,portal_key),True)
         portal_toggle_html=(
             "<div class='rp-matrix-row rp-portal-toggle'><div class='rp-matrix-copy'><strong>Entire portal access</strong><small>Block or restore access to this whole portal</small></div><span class='rp-status %s'>%s</span><form method='post' action='/app/roles/add'><input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form></div>" %
             ("is-on" if portal_enabled else "is-off","Allowed" if portal_enabled else "Blocked",portal_role,portal_key,0 if portal_enabled else 1,"Disable portal" if portal_enabled else "Enable portal")
         )
-        role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
+        role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal","bursar":"Bursar Portal"}[matrix_role]
         role_note="No separate student portal page is currently implemented." if matrix_role=="student" else ""
         if matrix_role=="student":
             group_markup=["<section class='rp-matrix-group'><p class='rp-feature-note'>Student login accounts can be created, but this codebase does not currently provide a student-facing portal page or feature tabs. This entry controls only the portal-level permission until that portal is implemented.</p></section>"]
@@ -15916,7 +15928,7 @@ def roles_user_override(request: Request, user_id: int=Form(...), permission: st
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
         return HTMLResponse("You do not have permission to manage account access.",403)
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","bursar_portal.view","bursar_portal.overview","bursar_portal.expense_create","bursar_portal.expenses","bursar_portal.vouchers","bursar_portal.lpos","bursar_portal.cashbook"}
     permission_v=str(permission or "").strip()
     if permission_v not in allowed_permissions:
         return HTMLResponse("Invalid feature permission.",400)
@@ -15961,7 +15973,7 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","bursar_portal.view","bursar_portal.overview","bursar_portal.expense_create","bursar_portal.expenses","bursar_portal.vouchers","bursar_portal.lpos","bursar_portal.cashbook"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
@@ -15981,7 +15993,7 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","bursar_portal.view","bursar_portal.overview","bursar_portal.expense_create","bursar_portal.expenses","bursar_portal.vouchers","bursar_portal.lpos","bursar_portal.cashbook"}
     role_v=role.strip();perm_v=permission.strip();enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission.",400)
@@ -16045,13 +16057,15 @@ def accounting_page(request: Request):
     cashbook_rows=cur.execute("SELECT date,reference,description,debit,credit,account FROM cashbook WHERE school_id=? ORDER BY id DESC LIMIT 200",(sid,)).fetchall()
     con.close()
     exp_total=sum(float(x["amount"] or 0) for x in expenses)
-    is_accountant=str(request.session.get("role") or "")=="accountant"
-    can_expense_create=(not is_accountant) or _require_permission(request,sid,"accountant_portal.expense_create")
-    can_expenses=(not is_accountant) or _require_permission(request,sid,"accountant_portal.expenses")
-    can_vouchers=(not is_accountant) or _require_permission(request,sid,"accountant_portal.vouchers")
-    can_lpos=(not is_accountant) or _require_permission(request,sid,"accountant_portal.lpos")
-    can_cashbook=(not is_accountant) or _require_permission(request,sid,"accountant_portal.cashbook")
-    can_accounting_overview=(not is_accountant) or _require_permission(request,sid,"accountant_portal.overview")
+    portal_role=str(request.session.get("role") or "")
+    is_portal_account=portal_role in ("accountant","bursar")
+    permission_prefix="bursar_portal" if portal_role=="bursar" else "accountant_portal"
+    can_expense_create=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".expense_create")
+    can_expenses=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".expenses")
+    can_vouchers=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".vouchers")
+    can_lpos=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".lpos")
+    can_cashbook=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".cashbook")
+    can_accounting_overview=(not is_portal_account) or _require_permission(request,sid,permission_prefix+".overview")
     accounting_overview_html=f"""<div class='grid'><div class='card'><div class='label'>Expenses listed</div><div class='kpi'>{exp_total:,.2f}</div></div><div class='card'><div class='label'>Cash credits</div><div class='kpi'>{float(cash['credit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Cash debits</div><div class='kpi'>{float(cash['debit'] or 0):,.2f}</div></div><div class='card'><div class='label'>Open LPOs</div><div class='kpi'>{len(lpos)}</div></div></div>""" if can_accounting_overview else ""
     body=f"""<div class='page'><h1>Accounting</h1><div class='muted'>Accountant workspace: overview, expense records, vouchers, LPOs and cashbook.</div>
 {accounting_overview_html}
@@ -16061,13 +16075,31 @@ def accounting_page(request: Request):
 {("<div class='card section'><h2>LPOs ("+str(len(lpos))+")</h2><table><thead><tr><th>LPO</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>"+(_simple_rows(lpos,['lpo_no','supplier','description','amount','date','status']) or '<tr><td colspan=6>No LPOs yet.</td></tr>')+"</tbody></table></div>" if can_lpos else "")}
 {("<div class='card section'><h2>Cashbook</h2><div style='overflow:auto'><table><thead><tr><th>Date</th><th>Reference</th><th>Description</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody>"+(_simple_rows(cashbook_rows,['date','reference','description','account','debit','credit']) or '<tr><td colspan=6>No cashbook entries yet.</td></tr>')+"</tbody></table></div></div>" if can_cashbook else "")}
 </div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
-    return _school_page(request,"Accounting",body)
+    page_title="Bursar Workspace" if portal_role=="bursar" else "Accounting"
+    return _school_page(request,page_title,body)
+
+@router.get("/app/bursar", response_class=HTMLResponse)
+def bursar_portal_page(request: Request):
+    if "email" not in request.session or str(request.session.get("role") or "")!="bursar":
+        return HTMLResponse("Bursar Portal access is restricted to Bursar accounts.",403)
+    sid=_school_session(request)
+    if not sid or not _require_permission(request,sid,"bursar_portal.view"):
+        return HTMLResponse("Bursar Portal access has been disabled for this account.",403)
+    return accounting_page(request)
+
+@router.post("/app/bursar/expense")
+def bursar_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
+    if str(request.session.get("role") or "")!="bursar":
+        return HTMLResponse("Bursar access required.",403)
+    return accounting_expense(request,category,description,amount,paid_to,voucher_no,date)
 
 @router.post("/app/accounting/expense")
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request,sid,"accountant_portal.expense_create"):
+    role=str(request.session.get("role") or "")
+    permission_key="bursar_portal.expense_create" if role=="bursar" else "accountant_portal.expense_create"
+    if role not in ("accountant","bursar") or not _require_permission(request,sid,permission_key):
         return HTMLResponse("Recording expenses has been disabled for this account.",403)
 
 # ---------------------------------------------------------------------------
