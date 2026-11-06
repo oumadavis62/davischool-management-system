@@ -2813,15 +2813,23 @@ def _staff_manager_styles():
 @media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
 @media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
-/* Staff workspace: target the actual main element explicitly. The sidebar is fixed
-   and does not consume flex space, so the main column must grow from a zero basis. */
-.main.staff-workspace{display:block!important;flex:1 1 0!important;width:0!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
-.main.staff-workspace>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
-.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
-.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
-.staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
-@media(max-width:900px){.main.staff-workspace{margin-left:72px!important}}
-@media(max-width:600px){.main.staff-workspace{flex:1 1 100%!important;width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{flex:0 0 100%!important;width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+/* Staff workspace uses an explicit remaining-width calculation; avoid a zero-width
+   flex basis, which allowed the shell to collapse around intrinsic content. */
+.main.staff-workspace{display:block!important;flex:0 0 calc(100% - 250px)!important;width:calc(100% - 250px)!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
+.main.staff-workspace>.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
+.main.staff-workspace>.staff-manager-page,.staff-manager-page,.staff-manager-page>.staff-register-card,.staff-manager-page .staff-add-panel,.staff-manager-page .staff-table-scroll{float:none!important;min-width:0!important;box-sizing:border-box!important}
+.staff-manager-page{display:block!important;width:100%!important;max-width:none!important}
+.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important}
+.staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+@media(max-width:900px){.main.staff-workspace{flex:0 0 calc(100% - 72px)!important;width:calc(100% - 72px)!important;margin-left:72px!important}}
+@media(max-width:600px){.main.staff-workspace{flex:0 0 100%!important;width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+
+/* Add Staff opens as a full-page form workspace, not a capped modal card. */
+.staff-manager-page .staff-add-dialog{position:fixed!important;inset:0!important;left:0!important;top:0!important;margin:0!important;width:100vw!important;max-width:100vw!important;height:100vh!important;height:100dvh!important;max-height:100vh!important;max-height:100dvh!important;border:0!important;border-radius:0!important;padding:24px clamp(16px,4vw,56px)!important;overflow:auto!important;box-sizing:border-box!important}
+.staff-manager-page .staff-add-dialog .staff-dialog-heading,.staff-manager-page .staff-add-dialog .staff-add-form{width:min(1120px,100%)!important;margin-left:auto!important;margin-right:auto!important}
+.staff-manager-page .staff-add-dialog .staff-add-form{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important}
+.staff-manager-page .staff-add-dialog .staff-dialog-actions{position:sticky;bottom:-24px;background:#fff;padding:16px 0!important}
+@media(max-width:600px){.staff-manager-page .staff-add-dialog{padding:16px!important}.staff-manager-page .staff-add-dialog .staff-add-form{grid-template-columns:1fr!important}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
