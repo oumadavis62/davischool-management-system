@@ -20219,6 +20219,35 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             return HTMLResponse("This applicant has already been enrolled or is not accepted.",409)
         class_row = cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
         if not class_row: return HTMLResponse("Select a valid class belonging to this school.",400)
+        # If the same learner is already in this school's register, link the
+        # application to that record instead of creating a second student.
+        existing_student = None
+        applicant_parent_phone = str(app_row["parent_phone"] or "").strip()
+        applicant_parent_name = str(app_row["parent_name"] or "").strip()
+        if applicant_parent_phone or applicant_parent_name:
+            existing_student = cur.execute("""SELECT id,admission_no FROM students
+                WHERE school_id=? AND lower(trim(coalesce(name,'')))=lower(trim(?))
+                  AND ((?<>'' AND lower(trim(coalesce(parent_phone,'')))=lower(trim(?)))
+                    OR (?<>'' AND lower(trim(coalesce(parent_name,'')))=lower(trim(?))))
+                ORDER BY id LIMIT 1""",
+                (sid,str(app_row["applicant_name"] or ""),applicant_parent_phone,applicant_parent_phone,
+                 applicant_parent_name,applicant_parent_name)).fetchone()
+        if existing_student:
+            existing_no = str(existing_student["admission_no"] or "").strip()
+            if not existing_no:
+                existing_no = _next_admission_number(cur,sid,_admission_academic_year(cur,sid))
+                cur.execute("UPDATE students SET admission_no=? WHERE id=? AND school_id=?",
+                    (existing_no,int(existing_student["id"]),sid))
+            now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("""UPDATE admission_applications SET status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
+                WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
+                (int(existing_student["id"]),existing_no,now,application_id,sid))
+            if cur.rowcount != 1:
+                raise RuntimeError("The application enrolment state changed. No duplicate learner was created.")
+            _audit(cur,sid,request,"ADMISSION_LINK_EXISTING_STUDENT",
+                f"Linked admission application {application_id} to existing student {int(existing_student['id'])} ({existing_no})")
+            con.commit()
+            return RedirectResponse("/app/students",303)
         year = _admission_academic_year(cur,sid)
         admission_no = _next_admission_number(cur,sid,year)
         for _ in range(100):
