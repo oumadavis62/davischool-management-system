@@ -855,8 +855,16 @@ def _shell(title, name, role, body, school_id=None, request=None):
       + _nav_sub("/app/transport/allocations", "Student Transport Allocation")
       + _nav_sub("/app/transport/trip-logs", "Transport Attendance & Trip Logs")
       + _nav_sub("/app/transport/reports", "Transport Reports")
+            + "</div></details>"
+        ) if role in ("school_admin", "registrar") else ""
+        inventory_group = (
+            "<details class='nav-group' id='inventoryManagerNav' "
+            + ("open" if request_path.startswith("/app/inventory") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('report')}</span><b>Inventory &amp; Stores</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
             + _nav_sub("/app/inventory/items", "Inventory Register")
             + _nav_sub("/app/inventory/transactions", "Stock Receipts & Issues")
+            + _nav_sub("/app/inventory/requisitions", "Stock Requisitions & Approvals")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
@@ -866,7 +874,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
             else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             for u,i,l,_ in nav
-        ) + library_group + transport_group
+        ) + library_group + inventory_group + transport_group
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
         avatar_html = "<div class='avatar-wrap' id='teacherProfileMenu'><button type='button' class='avatar' id='teacherAvatarButton' aria-label='Open account menu' aria-expanded='false' onclick='toggleTeacherProfileMenu(event)'>" + escape(initials) + "</button><div class='logout-tab' id='teacherLogoutTab'><a href='/logout'>Log out</a></div></div>"
