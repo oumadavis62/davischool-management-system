@@ -823,3 +823,101 @@ async def library_member_save(
     finally:
         con.close()
     return RedirectResponse("/app/library/members", 303)
+
+
+@router.get("/app/library/reports", response_class=HTMLResponse)
+def library_reports(request: Request, date_from: str = "", date_to: str = ""):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    today = datetime.now().date()
+    date_from = date_from or today.replace(day=1).isoformat()
+    date_to = date_to or today.isoformat()
+    try:
+        start = datetime.strptime(date_from, "%Y-%m-%d").date()
+        end = datetime.strptime(date_to, "%Y-%m-%d").date()
+        if start > end:
+            raise ValueError("Invalid date range")
+    except (TypeError, ValueError):
+        return HTMLResponse("Enter a valid reporting date range.", 400)
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        _ensure_library_members(cur)
+        con.commit()
+
+        def metric(sql, params=(sid,)):
+            result = cur.execute(sql, params).fetchone()
+            return int(result["n"] or 0)
+
+        titles = metric("SELECT COUNT(*) n FROM library_books WHERE school_id=? AND status='Active'")
+        copies = metric("SELECT COUNT(*) n FROM library_book_copies WHERE school_id=?")
+        available = metric("SELECT COUNT(*) n FROM library_book_copies WHERE school_id=? AND copy_status='Available'")
+        issued_copies = metric("SELECT COUNT(*) n FROM library_book_copies WHERE school_id=? AND copy_status='Issued'")
+        damaged = metric("SELECT COUNT(*) n FROM library_book_copies WHERE school_id=? AND copy_status='Damaged'")
+        lost = metric("SELECT COUNT(*) n FROM library_book_copies WHERE school_id=? AND copy_status='Lost'")
+        outstanding = metric("SELECT COUNT(*) n FROM library_book_issues WHERE school_id=? AND issue_status='Issued'")
+        overdue = metric("SELECT COUNT(*) n FROM library_book_issues WHERE school_id=? AND issue_status='Issued' AND due_date<?", (sid, today.isoformat()))
+        issued_period = metric("SELECT COUNT(*) n FROM library_book_issues WHERE school_id=? AND issue_date BETWEEN ? AND ?", (sid, date_from, date_to))
+        returned_period = metric("SELECT COUNT(*) n FROM library_book_issues WHERE school_id=? AND issue_status='Returned' AND substr(returned_at,1,10) BETWEEN ? AND ?", (sid, date_from, date_to))
+        members = metric("SELECT COUNT(*) n FROM library_members WHERE school_id=? AND member_status='Active'")
+        student_members = metric("SELECT COUNT(*) n FROM library_members WHERE school_id=? AND member_status='Active' AND member_type='Student'")
+        staff_members = metric("SELECT COUNT(*) n FROM library_members WHERE school_id=? AND member_status='Active' AND member_type='Staff'")
+
+        categories = cur.execute(
+            """SELECT COALESCE(NULLIF(TRIM(b.category),''),'Uncategorised') category,
+                      COUNT(DISTINCT b.id) titles, COUNT(c.id) copies,
+                      SUM(CASE WHEN c.copy_status='Available' THEN 1 ELSE 0 END) available
+               FROM library_books b LEFT JOIN library_book_copies c
+                 ON c.book_id=b.id AND c.school_id=b.school_id
+               WHERE b.school_id=? AND b.status='Active'
+               GROUP BY COALESCE(NULLIF(TRIM(b.category),''),'Uncategorised')
+               ORDER BY category""", (sid,)
+        ).fetchall()
+        category_rows = "".join(
+            f"<tr><td>{escape(str(x['category']))}</td><td class='lib-num'>{int(x['titles'] or 0)}</td><td class='lib-num'>{int(x['copies'] or 0)}</td><td class='lib-num'>{int(x['available'] or 0)}</td></tr>"
+            for x in categories
+        ) or "<tr><td colspan='4' class='lib-empty'>No catalogue categories recorded.</td></tr>"
+
+        activity = cur.execute(
+            """SELECT i.borrower_name,i.borrower_type,i.issue_date,i.due_date,i.issue_status,
+                      b.title,c.accession_no
+               FROM library_book_issues i
+               JOIN library_books b ON b.id=i.book_id AND b.school_id=i.school_id
+               JOIN library_book_copies c ON c.id=i.copy_id AND c.school_id=i.school_id
+               WHERE i.school_id=? AND i.issue_date BETWEEN ? AND ?
+               ORDER BY i.issue_date DESC,i.id DESC LIMIT 30""",
+            (sid, date_from, date_to),
+        ).fetchall()
+        activity_rows = "".join(
+            f"<tr><td>{escape(str(x['issue_date']))}</td><td><b>{escape(str(x['title']))}</b><div class='lib-muted'>{escape(str(x['accession_no']))}</div></td>"
+            f"<td>{escape(str(x['borrower_name']))}<div class='lib-muted'>{escape(str(x['borrower_type']))}</div></td>"
+            f"<td>{escape(str(x['due_date']))}</td><td>{escape(str(x['issue_status']))}</td></tr>"
+            for x in activity
+        ) or "<tr><td colspan='5' class='lib-empty'>No circulation activity in this date range.</td></tr>"
+
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / ANALYTICS</div><h1>Library Reports</h1><div class="lib-muted">Collection, circulation and membership overview.</div></div><button class="btn" type="button" onclick="window.print()">Print Report</button></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:1fr 1fr auto auto">
+  <label>From date<input class="field" type="date" name="date_from" value="{escape(date_from, quote=True)}" required></label>
+  <label>To date<input class="field" type="date" name="date_to" value="{escape(date_to, quote=True)}" required></label>
+  <button class="btn">Generate</button><a class="btn btn-light" href="/app/library/reports">This month</a>
+ </form><div class="lib-muted" style="margin-top:8px">Circulation period: {escape(date_from)} to {escape(date_to)}</div></section>
+ <div class="lib-kpis">
+  <div><span>Active catalogue titles</span><strong>{titles}</strong></div><div><span>Physical copies</span><strong>{copies}</strong></div><div><span>Available copies</span><strong>{available}</strong></div><div><span>Currently on loan</span><strong>{outstanding}</strong></div>
+  <div><span>Overdue loans</span><strong>{overdue}</strong></div><div><span>Issued in period</span><strong>{issued_period}</strong></div><div><span>Returned in period</span><strong>{returned_period}</strong></div><div><span>Active members</span><strong>{members}</strong></div>
+ </div>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Collection by category</h2></div><div class="lib-table-scroll"><table><thead><tr><th>Category</th><th>Titles</th><th>Copies</th><th>Available</th></tr></thead><tbody>{category_rows}</tbody></table></div></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Copy status</h2></div><div class="lib-kpis"><div><span>Available</span><strong>{available}</strong></div><div><span>Issued</span><strong>{issued_copies}</strong></div><div><span>Damaged</span><strong>{damaged}</strong></div><div><span>Lost</span><strong>{lost}</strong></div></div></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Active membership</h2></div><div class="lib-kpis"><div><span>Total active</span><strong>{members}</strong></div><div><span>Students</span><strong>{student_members}</strong></div><div><span>Staff</span><strong>{staff_members}</strong></div></div></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Circulation activity</h2><span class="lib-muted">Latest 30 issues in the selected period</span></div><div class="lib-table-scroll"><table style="min-width:850px"><thead><tr><th>Issue date</th><th>Book / Accession</th><th>Borrower</th><th>Due date</th><th>Status</th></tr></thead><tbody>{activity_rows}</tbody></table></div></section>
+</div>
+<style>@media print{.nav,.sidebar,.lib-filter-card,.lib-heading button{display:none!important}.page{width:100%!important;max-width:none!important;margin:0!important}.card{break-inside:avoid;box-shadow:none!important}body{background:#fff!important}}</style>
+"""
+        return _school_page(request, "Library Reports", body)
+    finally:
+        con.close()
