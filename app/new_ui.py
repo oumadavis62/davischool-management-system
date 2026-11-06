@@ -19896,14 +19896,18 @@ def _ensure_admissions_schema(cur):
         last_number INTEGER NOT NULL DEFAULT 0,
         UNIQUE(school_id,sequence_key)
     )""")
-    cur.execute("""INSERT INTO admission_number_settings(school_id)
-        VALUES(?) ON CONFLICT(school_id) DO NOTHING""", (int(cur._davischool_school_id),))
 
 
 def _admission_settings(cur, school_id):
     cur.execute("""INSERT INTO admission_number_settings(school_id)
         VALUES(?) ON CONFLICT(school_id) DO NOTHING""", (int(school_id),))
     return cur.execute("SELECT * FROM admission_number_settings WHERE school_id=?", (int(school_id),)).fetchone()
+
+
+def _admission_academic_year(cur, school_id):
+    row = cur.execute("SELECT MAX(CAST(year AS INTEGER)) AS academic_year FROM exams WHERE school_id=?", (int(school_id),)).fetchone()
+    value = row["academic_year"] if row else None
+    return str(int(value)) if value else str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
 
 
 def _next_admission_number(cur, school_id, academic_year=None):
@@ -20168,6 +20172,7 @@ def enrolment_form_page(request: Request, application_id: int):
             return HTMLResponse("This application is not awaiting enrolment.",409)
         classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
         settings = _admission_settings(cur,sid)
+        year = _admission_academic_year(cur,sid)
         con.commit()
     finally:
         con.close()
@@ -20203,7 +20208,7 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
             return HTMLResponse("This applicant has already been enrolled or is not accepted.",409)
         class_row = cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
         if not class_row: return HTMLResponse("Select a valid class belonging to this school.",400)
-        year = str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        year = _admission_academic_year(cur,sid)
         admission_no = _next_admission_number(cur,sid,year)
         for _ in range(100):
             duplicate = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission_no)).fetchone()
@@ -20216,7 +20221,7 @@ def enrolment_complete(request: Request, application_id: int, class_id: str = Fo
         now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cur.execute("""INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status)
             VALUES(?,?,?,?,?,?,?,?,?,'active')""",
-            (sid,admission,assessment_no.strip(),learner_name,cid,str(app_row["gender"] or ""),
+            (sid,admission_no,assessment_no.strip(),learner_name,cid,str(app_row["gender"] or ""),
              parent_name,str(app_row["parent_phone"] or ""),str(class_row["stream"] or "").strip()))
         student = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission_no)).fetchone()
         if not student: raise RuntimeError("Student record was not created.")
@@ -20258,7 +20263,6 @@ def admission_number_settings_page(request: Request):
     reset_annually = bool(int(settings["reset_annually"] or 0))
     start = int(settings["start_number"] or 1)
     digits = int(settings["digits"] or 4)
-    year = str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
     parts = [prefix] if prefix else []
     if include_year: parts.append(year)
     parts.append(str(start).zfill(digits))
