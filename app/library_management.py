@@ -335,3 +335,169 @@ async def library_book_copy_save(
     finally:
         con.close()
     return RedirectResponse("/app/library/register", 303)
+
+
+
+def _ensure_library_issues(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS library_book_issues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        copy_id INTEGER NOT NULL,
+        book_id INTEGER NOT NULL,
+        borrower_type TEXT NOT NULL,
+        borrower_name TEXT NOT NULL,
+        borrower_ref TEXT DEFAULT '',
+        issue_date TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        issued_by TEXT DEFAULT '',
+        issue_status TEXT NOT NULL DEFAULT 'Issued',
+        returned_at TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+
+
+@router.get("/app/library/issues", response_class=HTMLResponse)
+def library_issue_books(request: Request, q: str = "", borrower_type: str = "", status: str = "Issued"):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        con.commit()
+        available_copies = cur.execute(
+            """SELECT c.id,c.accession_no,b.title FROM library_book_copies c
+               JOIN library_books b ON b.id=c.book_id AND b.school_id=c.school_id
+               WHERE c.school_id=? AND c.copy_status='Available' AND b.status='Active'
+               ORDER BY LOWER(b.title),LOWER(c.accession_no)""",
+            (sid,),
+        ).fetchall()
+        filters = ["i.school_id=?"]
+        params = [sid]
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            filters.append("(b.title LIKE ? OR c.accession_no LIKE ? OR i.borrower_name LIKE ? OR i.borrower_ref LIKE ?)")
+            params.extend([term] * 4)
+        if borrower_type in ("Student", "Staff"):
+            filters.append("i.borrower_type=?")
+            params.append(borrower_type)
+        if status in ("Issued", "Returned", "All"):
+            if status != "All":
+                filters.append("i.issue_status=?")
+                params.append(status)
+        else:
+            filters.append("i.issue_status='Issued'")
+            status = "Issued"
+        rows = cur.execute(
+            """SELECT i.*,b.title,c.accession_no FROM library_book_issues i
+               JOIN library_books b ON b.id=i.book_id AND b.school_id=i.school_id
+               JOIN library_book_copies c ON c.id=i.copy_id AND c.school_id=i.school_id
+               WHERE """ + " AND ".join(filters) + " ORDER BY i.issue_date DESC,i.id DESC",
+            tuple(params),
+        ).fetchall()
+        outstanding = cur.execute(
+            "SELECT COUNT(*) AS n FROM library_book_issues WHERE school_id=? AND issue_status='Issued'",
+            (sid,),
+        ).fetchone()["n"]
+        overdue = cur.execute(
+            "SELECT COUNT(*) AS n FROM library_book_issues WHERE school_id=? AND issue_status='Issued' AND due_date<?",
+            (sid, datetime.now().date().isoformat()),
+        ).fetchone()["n"]
+        copy_options = "".join(
+            f"<option value='{int(c['id'])}'>{escape(str(c['title']))} — {escape(str(c['accession_no']))}</option>"
+            for c in available_copies
+        ) or "<option value=''>No available copies — register a copy or process a return first</option>"
+        table = "".join(
+            f"<tr><td><b>{escape(str(r['title']))}</b><div class='lib-muted'>{escape(str(r['accession_no']))}</div></td>"
+            f"<td>{escape(str(r['borrower_name']))}<div class='lib-muted'>{escape(str(r['borrower_type']))} · {escape(str(r['borrower_ref'] or 'No ID recorded'))}</div></td>"
+            f"<td>{escape(str(r['issue_date']))}</td><td>{escape(str(r['due_date']))}</td>"
+            f"<td><span class='lib-status {'lib-inactive' if r['issue_status'] == 'Returned' else ''}'>{escape(str(r['issue_status']))}</span></td></tr>"
+            for r in rows
+        ) or "<tr><td colspan='5' class='lib-empty'>No book issues match these filters.</td></tr>"
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / CIRCULATION</div><h1>Issue Books</h1><div class="lib-muted">Issue available physical copies to learners and staff, with a clear due date and borrower record.</div></div><button class="btn" type="button" onclick="document.getElementById('issueDialog').showModal()" {'disabled' if not available_copies else ''}>Issue a Book</button></div>
+ <div class="lib-kpis"><div><span>Books currently issued</span><strong>{int(outstanding or 0)}</strong></div><div><span>Overdue issues</span><strong>{int(overdue or 0)}</strong></div><div><span>Copies available to issue</span><strong>{len(available_copies)}</strong></div></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:2fr 1fr 1fr auto auto"><label>Search issues<input class="field" name="q" value="{escape(q, quote=True)}" placeholder="Book, accession number, borrower or ID"></label><label>Borrower type<select class="field" name="borrower_type"><option value="">All borrowers</option><option value="Student" {'selected' if borrower_type == 'Student' else ''}>Student</option><option value="Staff" {'selected' if borrower_type == 'Staff' else ''}>Staff</option></select></label><label>Issue status<select class="field" name="status"><option value="Issued" {'selected' if status == 'Issued' else ''}>Issued</option><option value="Returned" {'selected' if status == 'Returned' else ''}>Returned</option><option value="All" {'selected' if status == 'All' else ''}>All</option></select></label><button class="btn">Apply</button><a class="btn btn-light" href="/app/library/issues">Clear</a></form></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Issue register</h2><span class="lib-muted">{len(rows)} record(s) shown</span></div><div class="lib-table-scroll"><table style="min-width:850px"><thead><tr><th>Book / Accession</th><th>Borrower</th><th>Issue date</th><th>Due date</th><th>Status</th></tr></thead><tbody>{table}</tbody></table></div></section>
+</div>
+<dialog id="issueDialog" class="lib-dialog"><form method="post" action="/app/library/issues/save"><div class="lib-dialog-head"><div><div class="lib-eyebrow">LIBRARY CIRCULATION</div><h2>Issue a book</h2></div><button type="button" class="lib-close" onclick="document.getElementById('issueDialog').close()">×</button></div>
+<div class="lib-form-grid"><label>Available book copy *<select class="field" name="copy_id" required>{copy_options}</select></label><label>Borrower type *<select class="field" name="borrower_type" required><option>Student</option><option>Staff</option></select></label><label>Borrower full name *<input class="field" name="borrower_name" required maxlength="180"></label><label>Admission / Staff number<input class="field" name="borrower_ref" maxlength="80"></label><label>Issue date *<input class="field" type="date" name="issue_date" value="{datetime.now().date().isoformat()}" required></label><label>Due date *<input class="field" type="date" name="due_date" min="{datetime.now().date().isoformat()}" required></label><label class="lib-notes">Notes<textarea class="field" name="notes" rows="2"></textarea></label></div>
+<div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('issueDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not available_copies else ''}>Confirm Issue</button></div></form></dialog>
+"""
+        return _school_page(request, "Issue Books", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/library/issues/save")
+async def library_issue_save(
+    request: Request,
+    copy_id: int = Form(...),
+    borrower_type: str = Form(...),
+    borrower_name: str = Form(...),
+    borrower_ref: str = Form(""),
+    issue_date: str = Form(...),
+    due_date: str = Form(...),
+    notes: str = Form(""),
+):
+    sid, error = _library_guard(request, "library.edit")
+    if error:
+        return error
+    borrower_type = borrower_type if borrower_type in ("Student", "Staff") else ""
+    borrower_name = borrower_name.strip()
+    try:
+        from datetime import date
+        issue_day = date.fromisoformat(issue_date)
+        due_day = date.fromisoformat(due_date)
+    except (TypeError, ValueError):
+        return HTMLResponse("Enter valid issue and due dates.", 400)
+    if not borrower_type or not borrower_name:
+        return HTMLResponse("Select a borrower type and enter the borrower's full name.", 400)
+    if due_day < issue_day:
+        return HTMLResponse("The due date cannot be earlier than the issue date.", 400)
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        _ensure_library_issues(cur)
+        copy = cur.execute(
+            """SELECT c.id,c.book_id,c.copy_status,c.accession_no,b.title FROM library_book_copies c
+               JOIN library_books b ON b.id=c.book_id AND b.school_id=c.school_id
+               WHERE c.id=? AND c.school_id=? AND b.status='Active'""",
+            (copy_id, sid),
+        ).fetchone()
+        if not copy:
+            return HTMLResponse("The selected book copy was not found in this school's register.", 404)
+        if copy["copy_status"] != "Available":
+            return HTMLResponse("This copy is no longer available. Refresh the page and select another copy.", 409)
+        cur.execute(
+            """INSERT INTO library_book_issues(school_id,copy_id,book_id,borrower_type,borrower_name,
+               borrower_ref,issue_date,due_date,issued_by,issue_status,returned_at,notes,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,'Issued','',?,?,?)""",
+            (sid, copy_id, copy["book_id"], borrower_type, borrower_name, borrower_ref.strip(),
+             issue_day.isoformat(), due_day.isoformat(), str(getattr(request.state, "user", "") or ""),
+             notes.strip(), now, now),
+        )
+        cur.execute(
+            "UPDATE library_book_copies SET copy_status='Issued',updated_at=? WHERE id=? AND school_id=? AND copy_status='Available'",
+            (now, copy_id, sid),
+        )
+        if cur.rowcount == 0:
+            con.rollback()
+            return HTMLResponse("This copy has just been issued by another user. Refresh and try again.", 409)
+        _audit(cur, sid, request, "LIBRARY_BOOK_ISSUED", f"{copy['title']} / {copy['accession_no']} to {borrower_name}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/library/issues", 303)
