@@ -694,3 +694,194 @@ def save_transport_allocation(
     finally:
         con.close()
     return RedirectResponse("/app/transport/allocations", 303)
+
+
+def _ensure_transport_trip_logs(cur):
+    _ensure_transport_allocations(cur)
+    cur.execute("""CREATE TABLE IF NOT EXISTS transport_trip_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        trip_date TEXT NOT NULL,
+        trip_period TEXT NOT NULL DEFAULT 'Morning',
+        route_id INTEGER,
+        vehicle_id INTEGER,
+        student_id INTEGER,
+        event_type TEXT NOT NULL,
+        event_time TEXT DEFAULT '',
+        details TEXT DEFAULT '',
+        recorded_by TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_trip_logs_school_date ON transport_trip_logs(school_id,trip_date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transport_trip_logs_school_event ON transport_trip_logs(school_id,event_type)")
+
+
+@router.get("/app/transport/trip-logs", response_class=HTMLResponse)
+def transport_trip_logs(request: Request, q: str = "", date_from: str = "", date_to: str = "", event_type: str = "All"):
+    sid, error = _transport_guard(request)
+    if error:
+        return error
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_trip_logs(cur)
+        con.commit()
+        allocations = cur.execute(
+            "SELECT a.student_id,s.name,s.admission_no,c.name AS class_name,c.stream,a.route_id "
+            "FROM transport_student_allocations a JOIN students s ON s.id=a.student_id AND s.school_id=a.school_id "
+            "LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id "
+            "WHERE a.school_id=? AND a.status='Active' ORDER BY s.name LIMIT 800", (sid,)
+        ).fetchall()
+        routes = cur.execute("SELECT id,route_name FROM transport_routes WHERE school_id=? AND status='Active' ORDER BY route_name", (sid,)).fetchall()
+        vehicles = cur.execute("SELECT id,registration_no FROM transport_vehicles WHERE school_id=? AND status='Active' ORDER BY registration_no", (sid,)).fetchall()
+        clauses = ["l.school_id=?"]
+        params = [sid]
+        if date_from.strip():
+            clauses.append("l.trip_date>=?")
+            params.append(date_from.strip())
+        if date_to.strip():
+            clauses.append("l.trip_date<=?")
+            params.append(date_to.strip())
+        valid_events = ("Boarded", "Dropped off", "Missed pickup", "Absent", "Trip departed", "Trip arrived", "Incident")
+        if event_type in valid_events:
+            clauses.append("l.event_type=?")
+            params.append(event_type)
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            clauses.append("(s.name LIKE ? OR s.admission_no LIKE ? OR r.route_name LIKE ? OR v.registration_no LIKE ? OR l.details LIKE ?)")
+            params.extend([term] * 5)
+        logs = cur.execute(
+            "SELECT l.*,s.name AS student_name,s.admission_no,r.route_name,v.registration_no "
+            "FROM transport_trip_logs l LEFT JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id "
+            "LEFT JOIN transport_routes r ON r.id=l.route_id AND r.school_id=l.school_id "
+            "LEFT JOIN transport_vehicles v ON v.id=l.vehicle_id AND v.school_id=l.school_id "
+            "WHERE " + " AND ".join(clauses) + " ORDER BY l.trip_date DESC,l.event_time DESC,l.id DESC LIMIT 1000",
+            tuple(params)
+        ).fetchall()
+        summary = cur.execute(
+            "SELECT COUNT(*) AS total,SUM(CASE WHEN event_type='Boarded' THEN 1 ELSE 0 END) AS boarded,"
+            "SUM(CASE WHEN event_type='Dropped off' THEN 1 ELSE 0 END) AS dropped,"
+            "SUM(CASE WHEN event_type='Missed pickup' THEN 1 ELSE 0 END) AS missed,"
+            "SUM(CASE WHEN event_type='Incident' THEN 1 ELSE 0 END) AS incidents "
+            "FROM transport_trip_logs WHERE school_id=? AND trip_date=?", (sid, datetime.utcnow().date().isoformat())
+        ).fetchone()
+        learner_options = "<option value=''>Trip-level / no individual learner</option>" + "".join(
+            f"<option value='{int(a['student_id'])}' data-route='{int(a['route_id'])}'>{escape(str(a['admission_no'] or '—'))} · {escape(str(a['name'] or ''))} · {escape(str(a['class_name'] or 'Unassigned'))} {escape(str(a['stream'] or ''))}</option>"
+            for a in allocations
+        )
+        route_options = "<option value=''>Not specified</option>" + "".join(
+            f"<option value='{int(r['id'])}'>{escape(str(r['route_name']))}</option>" for r in routes
+        )
+        vehicle_options = "<option value=''>Not specified</option>" + "".join(
+            f"<option value='{int(v['id'])}'>{escape(str(v['registration_no']))}</option>" for v in vehicles
+        )
+        rows_html = "".join(
+            f"<tr><td>{escape(str(l['trip_date'] or ''))}<div class='tr-muted'>{escape(str(l['trip_period'] or ''))} · {escape(str(l['event_time'] or 'Time not recorded'))}</div></td>"
+            f"<td><b>{escape(str(l['event_type'] or ''))}</b><div class='tr-muted'>{escape(str(l['details'] or ''))}</div></td>"
+            f"<td>{escape(str(l['student_name'] or 'Trip-level record'))}<div class='tr-muted'>{escape(str(l['admission_no'] or ''))}</div></td>"
+            f"<td>{escape(str(l['route_name'] or '—'))}</td><td>{escape(str(l['registration_no'] or '—'))}</td>"
+            f"<td>{escape(str(l['recorded_by'] or '—'))}</td></tr>" for l in logs
+        ) or "<tr><td colspan='6' class='tr-empty'>No trip or attendance records match these filters.</td></tr>"
+        body = f"""
+<div class="page transport-page">
+<style>
+.transport-page .tr-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}}
+.transport-page .tr-kpis>div,.transport-page .tr-panel{{background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:16px}}
+.transport-page .tr-kpis span,.transport-page .tr-muted{{display:block;color:#718078;font-size:12px}}
+.transport-page .tr-kpis strong{{display:block;font-size:24px;color:#174b35;margin-top:5px}}
+.transport-page .tr-toolbar{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px}}
+.transport-page label{{display:grid;gap:6px;font-size:12px;color:#53665b;flex:1;min-width:145px}}
+.transport-page input,.transport-page select,.transport-page textarea{{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce6df;border-radius:9px;background:#fff}}
+.transport-page .tr-scroll{{overflow:auto;width:100%}}.transport-page table{{width:100%;min-width:900px;border-collapse:collapse}}
+.transport-page th,.transport-page td{{padding:12px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px}}
+.transport-page th{{color:#607267;background:#f7faf8;font-weight:650}}.transport-page .tr-empty{{text-align:center;padding:30px;color:#7b8981}}
+.transport-page .tr-dialog{{width:min(760px,94vw);border:0;border-radius:18px;padding:22px;box-shadow:0 20px 70px #10251b44}}
+.transport-page .tr-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+.transport-page .tr-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}}
+@media(max-width:700px){{.transport-page .tr-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.transport-page .tr-form{{grid-template-columns:1fr}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / DAILY OPERATIONS</div><h1>Transport Attendance & Trip Logs</h1><div class="tr-muted">Record learner boarding, drop-offs, missed pickups, trip movements and incidents.</div></div><button class="btn" type="button" onclick="document.getElementById('transportTripDialog').showModal()">Record Trip Event</button></div>
+<div class="tr-kpis"><div><span>Today's records</span><strong>{int(summary['total'] or 0)}</strong></div><div><span>Learners boarded</span><strong>{int(summary['boarded'] or 0)}</strong></div><div><span>Dropped off</span><strong>{int(summary['dropped'] or 0)}</strong></div><div><span>Missed pickups / incidents</span><strong>{int(summary['missed'] or 0)+int(summary['incidents'] or 0)}</strong></div></div>
+<section class="tr-panel">
+<form method="get" class="tr-toolbar"><label>Search<input name="q" value="{escape(q,quote=True)}" placeholder="Learner, admission no., route, vehicle or details"></label><label>From<input type="date" name="date_from" value="{escape(date_from,quote=True)}"></label><label>To<input type="date" name="date_to" value="{escape(date_to,quote=True)}"></label><label>Event<select name="event_type"><option value="All">All events</option>{''.join(f"<option {'selected' if event_type==e else ''}>{e}</option>" for e in valid_events)}</select></label><button class="btn" type="submit">Apply</button><a class="btn btn-light" href="/app/transport/trip-logs">Clear</a></form>
+<div class="tr-scroll"><table><thead><tr><th>Date / Period</th><th>Event / Details</th><th>Learner</th><th>Route</th><th>Vehicle</th><th>Recorded by</th></tr></thead><tbody>{rows_html}</tbody></table></div>
+</section></div>
+<dialog id="transportTripDialog" class="tr-dialog"><form method="post" action="/app/transport/trip-logs/save">
+<h2>Record transport event</h2><div class="tr-form">
+<label>Trip date *<input type="date" name="trip_date" value="{datetime.utcnow().date().isoformat()}" required></label>
+<label>Trip period<select name="trip_period"><option>Morning</option><option>Afternoon</option><option>Other</option></select></label>
+<label>Event type *<select name="event_type" required>{''.join(f'<option>{e}</option>' for e in valid_events)}</select></label>
+<label>Event time<input type="time" name="event_time"></label>
+<label>Learner<select name="student_id">{learner_options}</select></label>
+<label>Route<select name="route_id">{route_options}</select></label>
+<label>Vehicle<select name="vehicle_id">{vehicle_options}</select></label>
+<label>Details / incident notes<input name="details" maxlength="1000" placeholder="Optional notes"></label>
+</div><div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportTripDialog').close()">Cancel</button><button class="btn" type="submit">Save Record</button></div>
+</form></dialog>
+</div>
+"""
+        return _school_page(request, "Transport Attendance & Trip Logs", body)
+    finally:
+        con.close()
+
+
+@router.post("/app/transport/trip-logs/save")
+def save_transport_trip_log(
+    request: Request,
+    trip_date: str = Form(""),
+    trip_period: str = Form("Morning"),
+    event_type: str = Form(""),
+    event_time: str = Form(""),
+    student_id: int = Form(0),
+    route_id: int = Form(0),
+    vehicle_id: int = Form(0),
+    details: str = Form(""),
+):
+    sid, error = _transport_guard(request, "transport.manage")
+    if error:
+        return error
+    allowed_events = ("Boarded", "Dropped off", "Missed pickup", "Absent", "Trip departed", "Trip arrived", "Incident")
+    if event_type not in allowed_events or trip_period not in ("Morning", "Afternoon", "Other") or len(details) > 1000:
+        return HTMLResponse("Please provide a valid trip event and details.", 400)
+    try:
+        datetime.strptime(trip_date, "%Y-%m-%d")
+        if event_time:
+            datetime.strptime(event_time, "%H:%M")
+    except ValueError:
+        return HTMLResponse("Enter a valid trip date and time.", 400)
+    con = _db()
+    cur = con.cursor()
+    try:
+        _ensure_transport_trip_logs(cur)
+        route = cur.execute("SELECT id FROM transport_routes WHERE id=? AND school_id=? AND status='Active'", (route_id, sid)).fetchone() if route_id else None
+        vehicle = cur.execute("SELECT id FROM transport_vehicles WHERE id=? AND school_id=? AND status='Active'", (vehicle_id, sid)).fetchone() if vehicle_id else None
+        allocation = cur.execute(
+            "SELECT a.student_id,a.route_id FROM transport_student_allocations a JOIN students s ON s.id=a.student_id AND s.school_id=a.school_id "
+            "WHERE a.school_id=? AND a.student_id=? AND a.status='Active' AND (a.effective_to='' OR a.effective_to>=?) LIMIT 1",
+            (sid, student_id, trip_date)
+        ).fetchone() if student_id else None
+        if (route_id and not route) or (vehicle_id and not vehicle):
+            return HTMLResponse("Select an active route and vehicle belonging to this school.", 400)
+        if student_id and not allocation:
+            return HTMLResponse("The selected learner has no active transport allocation.", 400)
+        if student_id and route_id and int(allocation["route_id"]) != route_id:
+            return HTMLResponse("The selected learner is not allocated to this route.", 400)
+        actor = ""
+        try:
+            actor = str(_school_session(request) or "")
+        except Exception:
+            actor = ""
+        now = datetime.utcnow().isoformat(timespec="seconds")
+        cur.execute(
+            "INSERT INTO transport_trip_logs (school_id,trip_date,trip_period,route_id,vehicle_id,student_id,event_type,event_time,details,recorded_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (sid, trip_date, trip_period, route_id or None, vehicle_id or None, student_id or None, event_type, event_time, details.strip(), actor, now)
+        )
+        con.commit()
+        _audit(sid, "TRANSPORT_TRIP_EVENT_RECORDED", f"{event_type} on {trip_date}")
+    except Exception as exc:
+        con.rollback()
+        print(f"DAVISCHOOL TRANSPORT TRIP LOG SAVE ERROR: {exc!r}", flush=True)
+        return HTMLResponse("Transport event could not be saved. Please verify the selected records.", 500)
+    finally:
+        con.close()
+    return RedirectResponse("/app/transport/trip-logs", 303)
