@@ -15091,9 +15091,9 @@ def exams_page(request: Request):
 @media(max-width:650px){{.exam-record-list{{height:55vh!important;min-height:220px!important;max-height:55vh!important;overflow-y:scroll!important;overflow-x:hidden!important;touch-action:pan-y!important;}}}}@media(max-width:650px){{.exam-record-list{{grid-template-columns:minmax(0,1fr)!important;height:55vh!important;min-height:240px!important;max-height:55vh!important;overflow-y:auto!important;overflow-x:hidden!important;touch-action:pan-y!important;}}}}
 /* Final independent scroll viewport for the Examination Register.
    Keep the title/search outside it; only the examination records scroll. */
-.exam-list-panel{display:block!important;min-height:0!important;overflow:visible!important}
-.exam-list-heading{display:flex!important;flex:0 0 auto!important}
-.exam-record-list{
+.exam-list-panel{{display:block!important;min-height:0!important;overflow:visible!important}}
+.exam-list-heading{{display:flex!important;flex:0 0 auto!important}}
+.exam-record-list{{
   display:block!important;
   box-sizing:border-box!important;
   width:100%!important;
@@ -15110,20 +15110,20 @@ def exams_page(request: Request):
   padding:8px 10px 8px 8px!important;
   border:1px solid #e4eee5!important;
   border-radius:12px!important;
-}
-.exam-record-list>.exam-record{display:block!important;width:100%!important;box-sizing:border-box!important;margin:0 0 10px!important}
-.exam-record-list>.exam-record:last-child{margin-bottom:0!important}
-@media(max-width:650px){
-  .exam-list-panel{overflow:visible!important}
-  .exam-record-list{
+}}
+.exam-record-list>.exam-record{{display:block!important;width:100%!important;box-sizing:border-box!important;margin:0 0 10px!important}}
+.exam-record-list>.exam-record:last-child{{margin-bottom:0!important}}
+@media(max-width:650px){{
+  .exam-list-panel{{overflow:visible!important}}
+  .exam-record-list{{
     height:55vh!important;
     min-height:220px!important;
     max-height:55vh!important;
     overflow-y:auto!important;
     overflow-x:hidden!important;
     touch-action:pan-y!important;
-  }
-}
+  }}
+}}
 </style>
 <script>
 function filterExaminationCards(value){{const q=String(value||'').toLowerCase();let visible=0;document.querySelectorAll('.exam-record').forEach(card=>{{const show=(card.dataset.search||'').includes(q);card.hidden=!show;if(show)visible++;}});const empty=document.getElementById('examNoMatches');if(empty)empty.hidden=visible>0;}}
