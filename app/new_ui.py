@@ -672,6 +672,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
     else:
         nav = [
             ("/app",_modern_icon("dashboard"),"Overview",None),
+            ("/app/admissions",_modern_icon("clipboard-check"),"Admissions & Enrolment","students.view"),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
@@ -719,6 +720,20 @@ def _shell(title, name, role, body, school_id=None, request=None):
             icons = {"Students List":"students", "Transferred/Inactive List":"users", "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"attendance", "Alumni List":"students", "Staff List":"staff", "Former Staff":"users", "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam", "Grade and Points":"grading", "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion":"allocation", "Class MarkSheets":"marks", "Class MarkSheet Analysis":"analysis", "Marks Entry":"marks", "Report Cards":"report", "SBA/CBA":"subject", "Classes and Streams":"school"}
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
+        admissions_group = (
+            "<details class='nav-group' id='admissionsManagerNav' "
+            + ("open" if request_path.startswith(("/app/admissions", "/app/enrolment", "/app/admission-letters", "/app/admission-reports", "/app/admission-number-settings")) else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('clipboard-check')}</span><b>Admissions &amp; Enrolment</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/admissions", "Applications Register")
+            + _nav_sub("/app/admissions/review", "Admission Review")
+            + _nav_sub("/app/admissions/accepted", "Accepted Applicants")
+            + _nav_sub("/app/enrolment", "Enrolment & Registration")
+            + _nav_sub("/app/admission-letters", "Admission Letters")
+            + _nav_sub("/app/admission-reports", "Admission Reports")
+            + _nav_sub("/app/admission-number-settings", "Admission Number Settings")
+            + "</div></details>"
+        )
         students_group = (
             "<details class='nav-group' id='studentsManagerNav' "
             + ("open" if (request_path.startswith("/app/students") and not request_path.startswith("/app/students/promotion")) or request_path.startswith("/app/student-attendance") or request_path == "/app/attendance" else "") + ">"
@@ -812,7 +827,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + "</div></details>"
         )
         links = "".join(
-            students_group if u == "/app/students" and role in ("school_admin", "registrar")
+            admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
+            else students_group if u == "/app/students" and role in ("school_admin", "registrar")
             else staff_group if u == "/app/staff"
             else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
             else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
@@ -19833,3 +19849,531 @@ def class_marksheet_analysis_pdf(
         return HTMLResponse("Unable to export analysis PDF: " + escape(str(exc))[:300], status_code=500)
     finally:
         con.close()
+
+
+# ---------------------------------------------------------------------------
+# Admissions, enrolment and school-configurable admission numbering.
+# This is an additive module: existing student/staff/academic routes and
+# screens remain in place. Enrolment writes into the existing students table.
+# ---------------------------------------------------------------------------
+
+def _ensure_admissions_schema(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS admission_applications(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        applicant_name TEXT NOT NULL,
+        gender TEXT,
+        parent_name TEXT,
+        parent_phone TEXT,
+        parent_email TEXT,
+        previous_school TEXT,
+        applying_class_id INTEGER,
+        application_date TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        notes TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        enrolled_student_id INTEGER,
+        admission_no TEXT
+    )""")
+    cur.execute("""CREATE INDEX IF NOT EXISTS idx_admission_applications_school_status
+        ON admission_applications(school_id,status,id)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS admission_number_settings(
+        school_id INTEGER PRIMARY KEY,
+        prefix TEXT NOT NULL DEFAULT 'DAV',
+        include_year INTEGER NOT NULL DEFAULT 1,
+        separator TEXT NOT NULL DEFAULT '/',
+        start_number INTEGER NOT NULL DEFAULT 1,
+        digits INTEGER NOT NULL DEFAULT 4,
+        reset_annually INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT,
+        updated_by TEXT
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS admission_number_sequences(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        sequence_key TEXT NOT NULL,
+        last_number INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(school_id,sequence_key)
+    )""")
+    cur.execute("""INSERT INTO admission_number_settings(school_id)
+        VALUES(?) ON CONFLICT(school_id) DO NOTHING""", (int(cur._davischool_school_id),))
+
+
+def _admission_settings(cur, school_id):
+    cur.execute("""INSERT INTO admission_number_settings(school_id)
+        VALUES(?) ON CONFLICT(school_id) DO NOTHING""", (int(school_id),))
+    return cur.execute("SELECT * FROM admission_number_settings WHERE school_id=?", (int(school_id),)).fetchone()
+
+
+def _next_admission_number(cur, school_id, academic_year=None):
+    settings = _admission_settings(cur, school_id)
+    year = str(academic_year or datetime.now(ZoneInfo("Africa/Nairobi")).year).strip()
+    if not re.fullmatch(r"[0-9]{4}", year):
+        year = str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+    reset_annually = bool(int(settings["reset_annually"] or 0))
+    sequence_key = year if reset_annually else "all"
+    start_number = max(1, int(settings["start_number"] or 1))
+    cur.execute("""INSERT INTO admission_number_sequences(school_id,sequence_key,last_number)
+        VALUES(?,?,?)
+        ON CONFLICT(school_id,sequence_key)
+        DO UPDATE SET last_number=admission_number_sequences.last_number+1""",
+        (int(school_id), sequence_key, start_number))
+    sequence = cur.execute("""SELECT last_number FROM admission_number_sequences
+        WHERE school_id=? AND sequence_key=?""", (int(school_id), sequence_key)).fetchone()
+    serial = int(sequence["last_number"] or start_number)
+    prefix = str(settings["prefix"] or "").strip()
+    separator = str(settings["separator"] or "/")
+    digits = min(8, max(1, int(settings["digits"] or 4)))
+    parts = []
+    if prefix:
+        parts.append(prefix)
+    if bool(int(settings["include_year"] or 0)):
+        parts.append(year)
+    parts.append(str(serial).zfill(digits))
+    return separator.join(parts)
+
+
+def _admission_guard(request, permission="students.view"):
+    sid = _school_session(request)
+    if not sid:
+        return None, RedirectResponse("/", status_code=303)
+    if str(request.session.get("role") or "") not in ("school_admin", "registrar"):
+        return None, HTMLResponse("Admissions and enrolment are available to School Administrators and Registrars.", 403)
+    if not _require_permission(request, sid, permission):
+        return None, HTMLResponse("You do not have permission to access this admissions feature.", 403)
+    return sid, None
+
+
+def _admission_table_html(rows, show_action=True):
+    out = []
+    for row in rows:
+        applicant_id = int(row["id"])
+        status = str(row["status"] or "pending").lower()
+        class_name = str(row["class_name"] or "") if "class_name" in row.keys() else ""
+        admission_no = str(row["admission_no"] or "") if "admission_no" in row.keys() else ""
+        enrolled = bool(row["enrolled_student_id"]) if "enrolled_student_id" in row.keys() else False
+        action = ""
+        if show_action and status == "pending":
+            action = (
+                f"<form method='post' action='/app/admissions/{applicant_id}/decision' class='inline-form'>"
+                "<button name='decision' value='accepted' class='admit-btn'>Accept</button>"
+                "<button name='decision' value='rejected' class='reject-btn'>Reject</button></form>"
+            )
+        elif show_action and status == "accepted" and not enrolled:
+            action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
+        elif admission_no:
+            action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>View letter</a>"
+        out.append(
+            "<tr>"
+            f"<td>{applicant_id}</td><td>{escape(str(row['applicant_name'] or ''))}</td>"
+            f"<td>{escape(str(row['parent_name'] or ''))}</td>"
+            f"<td>{escape(str(row['parent_phone'] or ''))}</td>"
+            f"<td>{escape(class_name)}</td><td><span class='status-pill status-{escape(status)}'>{escape(status.title())}</span></td>"
+            f"<td>{escape(admission_no)}</td><td>{action}</td></tr>"
+        )
+    return "".join(out) or "<tr><td colspan='8' class='empty-cell'>No applications found.</td></tr>"
+
+
+def _admission_workspace(request, title, description, rows, show_action=True):
+    table = _admission_table_html(rows, show_action)
+    body = f"""<div class='page adm-page'>
+      <div class='adm-heading'><div><h1>{escape(title)}</h1><p>{escape(description)}</p></div></div>
+      <div class='adm-card'><div class='adm-table-wrap'><table class='adm-table'>
+      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
+      <tbody>{table}</tbody></table></div></div></div>
+      <style>
+      .adm-page{{max-width:1500px}}.adm-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}}
+      .adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{margin:5px 0 0;color:#687c6d;font-size:13px}}
+      .adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:15px;box-shadow:0 5px 20px #163b2410}}
+      .adm-table-wrap{{overflow:auto}}.adm-table{{width:100%;border-collapse:collapse;min-width:900px}}
+      .adm-table th,.adm-table td{{padding:12px 10px;text-align:left;border-bottom:1px solid #e7eee7;font-size:12px}}
+      .adm-table th{{background:#f0f7f0;color:#315c3d;font-weight:900;white-space:nowrap}}
+      .adm-table tr:last-child td{{border-bottom:0}}.empty-cell{{text-align:center;color:#7b8b7e;padding:25px!important}}
+      .status-pill{{display:inline-block;padding:5px 9px;border-radius:99px;background:#edf3ed;color:#526b57;font-size:10px;font-weight:900}}
+      .status-accepted{{background:#e2f5e8;color:#176b3a}}.status-rejected{{background:#fcebea;color:#a13c32}}
+      .inline-form{{display:flex;gap:6px}}.admit-btn,.reject-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}
+      .reject-btn{{background:#f8e9e7;color:#a13c32}}
+      </style>"""
+    return _school_page(request, title, body)
+
+
+@router.get("/app/admissions", response_class=HTMLResponse)
+def admissions_register_page(request: Request):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+            LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? ORDER BY a.id DESC""", (sid,)).fetchall()
+        con.commit()
+    finally:
+        con.close()
+    table = _admission_table_html(rows)
+    body = f"""<div class='page adm-page'>
+      <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
+      <div class='adm-card adm-form-card'><h2>New Application</h2>
+      <form method='post' action='/app/admissions/add' class='adm-form'>
+        <label>Applicant full name<input name='applicant_name' required maxlength='160'></label>
+        <label>Gender<select name='gender'><option value=''>Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+        <label>Parent / Guardian name<input name='parent_name' maxlength='160'></label>
+        <label>Parent / Guardian phone<input name='parent_phone' maxlength='40'></label>
+        <label>Parent email<input name='parent_email' type='email' maxlength='160'></label>
+        <label>Previous school<input name='previous_school' maxlength='160'></label>
+        <label>Applying class<select name='applying_class_id'><option value=''>Select class</option>{_admission_class_options(sid)}</select></label>
+        <label>Application date<input name='application_date' type='date' value='{datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")}'></label>
+        <label class='wide'>Notes<textarea name='notes' rows='2'></textarea></label>
+        <div class='wide'><button class='adm-submit'>Save Application</button></div>
+      </form></div>
+      <div class='adm-card'><h2>All Applications</h2><div class='adm-table-wrap'><table class='adm-table'>
+      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
+      <tbody>{table}</tbody></table></div></div></div>
+      <style>
+      .adm-page{{max-width:1500px;display:grid;gap:16px}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{margin:5px 0 0;color:#687c6d;font-size:13px}}
+      .adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:16px;box-shadow:0 5px 20px #163b2410}}
+      .adm-card h2{{margin:0 0 13px;color:#245235;font-size:16px}}.adm-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}
+      .adm-form label{{display:grid;gap:5px;font-size:11px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select,.adm-form textarea{{width:100%;padding:10px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb;font:inherit;font-size:13px;color:#213b29}}
+      .adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:11px 17px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}
+      .adm-table-wrap{{overflow:auto}}.adm-table{{width:100%;border-collapse:collapse;min-width:900px}}.adm-table th,.adm-table td{{padding:12px 10px;text-align:left;border-bottom:1px solid #e7eee7;font-size:12px}}
+      .adm-table th{{background:#f0f7f0;color:#315c3d;font-weight:900;white-space:nowrap}}.adm-table tr:last-child td{{border-bottom:0}}
+      .empty-cell{{text-align:center;color:#7b8b7e;padding:25px!important}}.status-pill{{display:inline-block;padding:5px 9px;border-radius:99px;background:#edf3ed;color:#526b57;font-size:10px;font-weight:900}}
+      .status-accepted{{background:#e2f5e8;color:#176b3a}}.status-rejected{{background:#fcebea;color:#a13c32}}
+      .inline-form{{display:flex;gap:6px}}.admit-btn,.reject-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.reject-btn{{background:#f8e9e7;color:#a13c32}}
+      @media(max-width:900px){{.adm-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:520px){{.adm-form{{grid-template-columns:1fr}}}}
+      </style>"""
+    return _school_page(request, "Applications Register", body)
+
+
+def _admission_class_options(school_id):
+    con = _db()
+    try:
+        rows = con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
+        return "".join(
+            f"<option value='{int(row['id'])}'>{escape(str(row['name'] or '') + (' - ' + str(row['stream']) if row['stream'] else ''))}</option>"
+            for row in rows
+        )
+    finally:
+        con.close()
+
+
+@router.post("/app/admissions/add")
+def admissions_add_application(request: Request, applicant_name: str = Form(...), gender: str = Form(""),
+    parent_name: str = Form(""), parent_phone: str = Form(""), parent_email: str = Form(""),
+    previous_school: str = Form(""), applying_class_id: str = Form(""), application_date: str = Form(""),
+    notes: str = Form("")):
+    sid, denied = _admission_guard(request, "students.create")
+    if denied: return denied
+    name = applicant_name.strip()
+    if not name: return HTMLResponse("Applicant name is required.", 400)
+    cid = int(applying_class_id) if str(applying_class_id).isdigit() else None
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone():
+            return HTMLResponse("The selected class does not belong to this school.", 400)
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""INSERT INTO admission_applications
+            (school_id,applicant_name,gender,parent_name,parent_phone,parent_email,previous_school,
+             applying_class_id,application_date,status,notes,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,'pending',?,?,?)""",
+            (sid,name,gender.strip(),parent_name.strip(),parent_phone.strip(),parent_email.strip(),
+             previous_school.strip(),cid,application_date.strip(),notes.strip(),now,now))
+        _audit(cur,sid,request,"ADMISSION_APPLICATION_CREATE",f"Created admission application for {name}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/admissions",303)
+
+
+@router.post("/app/admissions/{application_id}/decision")
+def admissions_decision(request: Request, application_id: int, decision: str = Form(...)):
+    sid, denied = _admission_guard(request, "students.edit")
+    if denied: return denied
+    decision = str(decision or "").strip().lower()
+    if decision not in ("accepted", "rejected"):
+        return HTMLResponse("Invalid admission decision.", 400)
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        row = cur.execute("SELECT * FROM admission_applications WHERE id=? AND school_id=?", (application_id,sid)).fetchone()
+        if not row: return HTMLResponse("Application not found.",404)
+        if str(row["status"] or "").lower() != "pending":
+            return HTMLResponse("Only pending applications can receive an admission decision.",409)
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("UPDATE admission_applications SET status=?,updated_at=? WHERE id=? AND school_id=?",
+            (decision,now,application_id,sid))
+        _audit(cur,sid,request,"ADMISSION_DECISION",f"{decision.title()} application {application_id}: {row['applicant_name']}")
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/admissions",303)
+
+
+def _admission_filtered_page(request, title, description, where_clause, params, show_action=True):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+            LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND """ + where_clause + " ORDER BY a.id DESC", [sid] + list(params)).fetchall()
+        con.commit()
+    finally:
+        con.close()
+    return _admission_workspace(request,title,description,rows,show_action)
+
+
+@router.get("/app/admissions/review", response_class=HTMLResponse)
+def admissions_review_page(request: Request):
+    return _admission_filtered_page(request,"Admission Review","Review pending applications and record an admission decision.","lower(a.status)='pending'",[])
+
+
+@router.get("/app/admissions/accepted", response_class=HTMLResponse)
+def admissions_accepted_page(request: Request):
+    return _admission_filtered_page(request,"Accepted Applicants","Accepted applicants awaiting enrolment.","lower(a.status)='accepted' AND a.enrolled_student_id IS NULL",[])
+
+
+@router.get("/app/enrolment", response_class=HTMLResponse)
+def enrolment_register_page(request: Request):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+            LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND lower(a.status)='accepted' ORDER BY a.id DESC""",(sid,)).fetchall()
+        con.commit()
+    finally:
+        con.close()
+    return _admission_workspace(request,"Enrolment & Registration","Complete registration for accepted applicants. Admission numbers are assigned automatically when enrolment is saved.",rows)
+
+
+@router.get("/app/enrolment/{application_id}", response_class=HTMLResponse)
+def enrolment_form_page(request: Request, application_id: int):
+    sid, denied = _admission_guard(request, "students.create")
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        app_row = cur.execute("SELECT * FROM admission_applications WHERE id=? AND school_id=?",(application_id,sid)).fetchone()
+        if not app_row: return HTMLResponse("Application not found.",404)
+        if str(app_row["status"] or "").lower() != "accepted" or app_row["enrolled_student_id"]:
+            return HTMLResponse("This application is not awaiting enrolment.",409)
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        settings = _admission_settings(cur,sid)
+        con.commit()
+    finally:
+        con.close()
+    options = "".join(f"<option value='{int(c['id'])}' {'selected' if int(c['id'])==int(app_row['applying_class_id'] or 0) else ''}>{escape(str(c['name'] or '') + (' - ' + str(c['stream']) if c['stream'] else ''))}</option>" for c in classes)
+    body = f"""<div class='page adm-page'><div class='adm-card'><h1>Complete Learner Enrolment</h1>
+      <p>Confirm the accepted applicant's details. DaviSchool will issue the admission number when you complete enrolment.</p>
+      <form method='post' action='/app/enrolment/{application_id}' class='adm-form'>
+      <label>Learner name<input value='{escape(str(app_row['applicant_name'] or ''),quote=True)}' disabled></label>
+      <label>Gender<input value='{escape(str(app_row['gender'] or ''),quote=True)}' disabled></label>
+      <label>Parent / Guardian<input value='{escape(str(app_row['parent_name'] or ''),quote=True)}' disabled></label>
+      <label>Parent phone<input value='{escape(str(app_row['parent_phone'] or ''),quote=True)}' disabled></label>
+      <label>Class / Stream<select name='class_id' required>{options}</select></label>
+      <label>Assessment number (optional)<input name='assessment_no' maxlength='80'></label>
+      <div class='wide'><button class='adm-submit'>Complete Enrolment &amp; Issue Admission Number</button></div>
+      </form></div></div>
+      <style>.adm-page{{max-width:1050px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{margin:0;color:#174b2b}}.adm-card p{{color:#687c6d;font-size:13px}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
+    return _school_page(request,"Complete Learner Enrolment",body)
+
+
+@router.post("/app/enrolment/{application_id}")
+def enrolment_complete(request: Request, application_id: int, class_id: str = Form(...), assessment_no: str = Form("")):
+    sid, denied = _admission_guard(request, "students.create")
+    if denied: return denied
+    cid = int(class_id) if str(class_id).isdigit() else 0
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        _ensure_student_history_table(cur)
+        _ensure_student_parent_name_column(cur,con)
+        app_row = cur.execute("SELECT * FROM admission_applications WHERE id=? AND school_id=?",(application_id,sid)).fetchone()
+        if not app_row: return HTMLResponse("Application not found.",404)
+        if str(app_row["status"] or "").lower() != "accepted" or app_row["enrolled_student_id"]:
+            return HTMLResponse("This applicant has already been enrolled or is not accepted.",409)
+        class_row = cur.execute("SELECT id,name,stream FROM classes WHERE id=? AND school_id=?",(cid,sid)).fetchone()
+        if not class_row: return HTMLResponse("Select a valid class belonging to this school.",400)
+        year = str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+        admission_no = _next_admission_number(cur,sid,year)
+        for _ in range(100):
+            duplicate = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission_no)).fetchone()
+            if not duplicate: break
+            admission_no = _next_admission_number(cur,sid,year)
+        else:
+            return HTMLResponse("Could not issue a unique admission number. Review the school's numbering settings.",500)
+        learner_name = str(app_row["applicant_name"] or "").strip()
+        parent_name = str(app_row["parent_name"] or "").strip()
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""INSERT INTO students(school_id,admission_no,assessment_no,name,class_id,gender,parent_name,parent_phone,stream,status)
+            VALUES(?,?,?,?,?,?,?,?,?,'active')""",
+            (sid,admission,assessment_no.strip(),learner_name,cid,str(app_row["gender"] or ""),
+             parent_name,str(app_row["parent_phone"] or ""),str(class_row["stream"] or "").strip()))
+        student = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?) ORDER BY id DESC LIMIT 1",(sid,admission_no)).fetchone()
+        if not student: raise RuntimeError("Student record was not created.")
+        student_id = int(student["id"])
+        entry_year_row = cur.execute("SELECT MAX(CAST(year AS INTEGER)) AS entry_year FROM exams WHERE school_id=?",(sid,)).fetchone()
+        entry_year = int(entry_year_row["entry_year"]) if entry_year_row and entry_year_row["entry_year"] else int(year)
+        cur.execute("""INSERT INTO student_class_history
+            (school_id,student_id,from_class_id,to_class_id,changed_at,changed_by,reason,from_academic_year,to_academic_year)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid,student_id,None,cid,now,request.session.get("email",""),"Initial class enrollment",None,entry_year))
+        cur.execute("""UPDATE admission_applications SET status='enrolled',enrolled_student_id=?,admission_no=?,updated_at=?
+            WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
+            (student_id,admission_no,now,application_id,sid))
+        if cur.rowcount != 1: raise RuntimeError("The application enrolment state changed. No duplicate learner was created.")
+        _audit(cur,sid,request,"STUDENT_ENROLLED",f"Enrolled {learner_name} with admission number {admission_no}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/students",303)
+
+
+@router.get("/app/admission-number-settings", response_class=HTMLResponse)
+def admission_number_settings_page(request: Request):
+    sid, denied = _admission_guard(request, "settings.view")
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        settings = _admission_settings(cur,sid)
+        con.commit()
+    finally:
+        con.close()
+    prefix = escape(str(settings["prefix"] or ""),quote=True)
+    separator = escape(str(settings["separator"] or "/"),quote=True)
+    include_year = bool(int(settings["include_year"] or 0))
+    reset_annually = bool(int(settings["reset_annually"] or 0))
+    start = int(settings["start_number"] or 1)
+    digits = int(settings["digits"] or 4)
+    year = str(datetime.now(ZoneInfo("Africa/Nairobi")).year)
+    parts = [prefix] if prefix else []
+    if include_year: parts.append(year)
+    parts.append(str(start).zfill(digits))
+    example = escape(separator.join(parts))
+    body = f"""<div class='page adm-page'><div class='adm-card'>
+      <h1>Admission Number Settings</h1><p>Choose the numbering format used by this school. The sequence is isolated per school and is issued automatically during enrolment.</p>
+      <form method='post' action='/app/admission-number-settings' class='adm-form'>
+      <label>Prefix (optional)<input name='prefix' maxlength='12' value='{prefix}' placeholder='e.g. DAV'></label>
+      <label>Separator<input name='separator' maxlength='3' value='{separator}' placeholder='/'></label>
+      <label>Starting number<input name='start_number' type='number' min='1' max='999999999' value='{start}' required></label>
+      <label>Number of digits<input name='digits' type='number' min='1' max='8' value='{digits}' required></label>
+      <label class='adm-check'><input type='checkbox' name='include_year' value='1' {'checked' if include_year else ''}> Include academic year in admission number</label>
+      <label class='adm-check'><input type='checkbox' name='reset_annually' value='1' {'checked' if reset_annually else ''}> Reset sequence each academic year</label>
+      <div class='wide'><div class='adm-preview'><small>Example next format</small><strong>{example}</strong></div><button class='adm-submit'>Save Numbering Preferences</button></div>
+      </form></div></div>
+      <style>.adm-page{{max-width:1000px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{margin:0;color:#174b2b}}.adm-card p{{color:#687c6d;font-size:13px}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.adm-form label{{display:grid;gap:6px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .adm-check{{display:flex;align-items:center;gap:9px}}.adm-form .adm-check input{{width:auto}}.adm-form .wide{{grid-column:1/-1}}.adm-preview{{display:grid;gap:6px;padding:15px;border:1px dashed #b7d6be;border-radius:10px;background:#f3faf4;margin-bottom:14px}}.adm-preview small{{color:#66806a;font-weight:800}}.adm-preview strong{{font-size:23px;color:#176b3a;letter-spacing:.03em}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
+    return _school_page(request,"Admission Number Settings",body)
+
+
+@router.post("/app/admission-number-settings")
+def admission_number_settings_save(request: Request, prefix: str = Form(""), separator: str = Form("/"),
+    start_number: str = Form("1"), digits: str = Form("4"), include_year: str = Form(""),
+    reset_annually: str = Form("")):
+    sid, denied = _admission_guard(request, "settings.edit")
+    if denied: return denied
+    prefix = prefix.strip()
+    separator = separator if separator is not None else "/"
+    try:
+        start = int(start_number)
+        width = int(digits)
+    except (TypeError,ValueError):
+        return HTMLResponse("Starting number and digit width must be valid numbers.",400)
+    if len(prefix) > 12 or len(separator) > 3 or start < 1 or start > 999999999 or width < 1 or width > 8:
+        return HTMLResponse("Check the prefix, separator, starting number and digit width.",400)
+    now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        cur.execute("""INSERT INTO admission_number_settings
+            (school_id,prefix,include_year,separator,start_number,digits,reset_annually,updated_at,updated_by)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(school_id) DO UPDATE SET prefix=excluded.prefix,include_year=excluded.include_year,
+            separator=excluded.separator,start_number=excluded.start_number,digits=excluded.digits,
+            reset_annually=excluded.reset_annually,updated_at=excluded.updated_at,updated_by=excluded.updated_by""",
+            (sid,prefix,1 if include_year else 0,separator,start,width,1 if reset_annually else 0,now,request.session.get("email","")))
+        _audit(cur,sid,request,"ADMISSION_NUMBER_SETTINGS_UPDATE","Updated admission number generation preferences")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/admission-number-settings",303)
+
+
+@router.get("/app/admission-letters", response_class=HTMLResponse)
+def admission_letters_page(request: Request):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+            LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
+            WHERE a.school_id=? AND a.enrolled_student_id IS NOT NULL ORDER BY a.id DESC""",(sid,)).fetchall()
+        con.commit()
+    finally:
+        con.close()
+    return _admission_workspace(request,"Admission Letters","View and print admission letters for enrolled learners.",rows,False)
+
+
+@router.get("/app/admission-letters/{application_id}", response_class=HTMLResponse)
+def admission_letter_print(request: Request, application_id: int):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db()
+    try:
+        row = con.execute("""SELECT a.*,s.admission_no issued_no,c.name class_name,c.stream class_stream,sch.name school_name,
+            sch.location school_location,sch.phone school_phone FROM admission_applications a
+            JOIN students s ON s.id=a.enrolled_student_id AND s.school_id=a.school_id
+            LEFT JOIN classes c ON c.id=s.class_id
+            LEFT JOIN schools sch ON sch.id=a.school_id
+            WHERE a.id=? AND a.school_id=?""",(application_id,sid)).fetchone()
+    finally:
+        con.close()
+    if not row: return HTMLResponse("Admission letter not found.",404)
+    body = f"""<div class='page letter-page'><div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button onclick='window.print()'>Print Letter</button></div>
+      <article class='letter-paper'><header><h1>{escape(str(row['school_name'] or ''))}</h1><p>{escape(str(row['school_location'] or ''))} · {escape(str(row['school_phone'] or ''))}</p></header>
+      <h2>ADMISSION LETTER</h2><p>Date: {escape(str(row['application_date'] or ''))}</p>
+      <p>Dear {escape(str(row['parent_name'] or 'Parent / Guardian'))},</p>
+      <p>We are pleased to confirm the admission of <strong>{escape(str(row['applicant_name'] or ''))}</strong> to {escape(str(row['class_name'] or 'the selected class'))}.</p>
+      <p>Admission Number: <strong>{escape(str(row['issued_no'] or row['admission_no'] or ''))}</strong></p>
+      <p>Please retain this number for all future school records and communication.</p><p>Yours faithfully,<br><strong>School Administration</strong></p></article></div>
+      <style>.letter-page{{max-width:900px}}.letter-tools{{display:flex;justify-content:space-between;margin-bottom:15px}}.letter-tools a,.letter-tools button{{border:0;border-radius:8px;padding:10px 14px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-weight:800;cursor:pointer}}.letter-tools button{{background:#176b3a;color:#fff}}.letter-paper{{background:#fff;border:1px solid #dbe7dc;border-radius:12px;padding:45px;min-height:650px;color:#263d2b;line-height:1.8}}.letter-paper header{{text-align:center;border-bottom:2px solid #176b3a;padding-bottom:18px}}.letter-paper h1{{margin:0;color:#176b3a}}.letter-paper header p{{margin:4px 0;color:#718276;font-size:12px}}.letter-paper h2{{text-align:center;margin:35px 0}}@media print{{.letter-tools{{display:none}}.letter-paper{{border:0;border-radius:0;padding:20px;min-height:0}}}}</style>"""
+    return _school_page(request,"Admission Letter",body)
+
+
+@router.get("/app/admission-reports", response_class=HTMLResponse)
+def admission_reports_page(request: Request):
+    sid, denied = _admission_guard(request)
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        counts = cur.execute("""SELECT lower(status) status,COUNT(*) total FROM admission_applications
+            WHERE school_id=? GROUP BY lower(status)""",(sid,)).fetchall()
+        con.commit()
+    finally:
+        con.close()
+    values = {str(row["status"] or ""):int(row["total"] or 0) for row in counts}
+    body = f"""<div class='page adm-page'><div class='adm-heading'><div><h1>Admission Reports</h1><p>Summary of applications and enrolment progress for this school.</p></div></div>
+      <div class='adm-report-grid'><div><small>Total Applications</small><strong>{sum(values.values())}</strong></div>
+      <div><small>Pending Review</small><strong>{values.get('pending',0)}</strong></div>
+      <div><small>Accepted</small><strong>{values.get('accepted',0)}</strong></div>
+      <div><small>Rejected</small><strong>{values.get('rejected',0)}</strong></div>
+      <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div></div></div>
+      <style>.adm-page{{max-width:1200px}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{color:#687c6d}}.adm-report-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}.adm-report-grid>div{{background:#fff;border:1px solid #dce9de;border-radius:13px;padding:18px;display:grid;gap:8px}}.adm-report-grid small{{font-size:11px;color:#6b7e6d;font-weight:800}}.adm-report-grid strong{{font-size:25px;color:#176b3a}}@media(max-width:800px){{.adm-report-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}</style>"""
+    return _school_page(request,"Admission Reports",body)
