@@ -61,7 +61,7 @@ class SchoolPermissionRoute(APIRoute):
                 if (method, path) not in teacher_routes:
                     return HTMLResponse("This page is outside the Teacher Portal permissions.",403)
             elif role == "parent":
-                if (method, path) not in {("GET", "/app/parent"), ("POST", "/app/parent/message")}:
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/parent"), ("POST", "/app/parent/message")}:
                     return HTMLResponse("This page is outside the Parent Portal permissions.",403)
             elif role == "accountant":
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
