@@ -853,6 +853,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/transport/vehicles", "Vehicle Register")
             + _nav_sub("/app/transport/routes", "Routes & Stops")
       + _nav_sub("/app/transport/allocations", "Student Transport Allocation")
+      + _nav_sub("/app/transport/trip-logs", "Transport Attendance & Trip Logs")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
