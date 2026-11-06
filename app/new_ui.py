@@ -14275,7 +14275,9 @@ def users_page(request: Request):
 <label class='create-user-field'>Designation<select name='teacher_designation' id='teacherDesignation' class='field'><option value=''>Choose designation</option>{''.join(f"<option value='{escape(x,quote=True)}'>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select></label>
 <label class='create-user-field'>Staff member<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select a designation first</option>{topts}</select></label>
 <div class='create-user-profile-preview' id='staffProfilePreview'><div class='profile-avatar' id='staffInitials'>DS</div><div class='profile-preview-copy'><b id='staffPreviewName'>Staff profile preview</b><span id='staffPreviewDesignation'>Name and details will appear here automatically.</span><small id='staffPreviewContact'>Choose a staff member to load their saved details.</small></div><span class='profile-ready' id='staffProfileStatus'>Awaiting selection</span></div>
-<label class='create-user-field'>Login email<input name='email' id='newTeacherEmail' type='email' placeholder='Email from staff record' class='field'></label>
+<label class='create-user-field'>Full name<input id='staffFullName' type='text' class='field' placeholder='Full name from staff record' readonly></label>
+<label class='create-user-field'>Phone number<input id='staffPhone' type='text' class='field' placeholder='Phone number from staff record' readonly></label>
+<label class='create-user-field create-user-wide'>Login email<input name='email' id='newTeacherEmail' type='email' placeholder='Email from staff record' class='field'></label>
 <div id='teacherExtraFields' class='create-user-teacher-extra'><label class='create-user-field'>Teaching assignment<select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select></label>
 <div id='classFieldWrap' class='create-user-wide' style='display:none'><label>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{class_options_html}</select><small>Automatically loaded from existing class-teacher and subject allocations.</small></div>
 <div id='subjectFieldWrap' class='create-user-wide' style='display:none'><label>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{subject_options_html}</select><small>Automatically loaded from existing subject allocations.</small></div></div>
@@ -14291,7 +14293,7 @@ def users_page(request: Request):
  const type=document.getElementById('teacherType'),cs=document.getElementById('classIdsSelect'),ss=document.getElementById('subjectIdsSelect'),cw=document.getElementById('classFieldWrap'),sw=document.getElementById('subjectFieldWrap');
  const staffWrap=document.getElementById('staffProfileFields'),studentWrap=document.getElementById('studentProfileFields'),teacherExtra=document.getElementById('teacherExtraFields'),student=document.getElementById('newStudent');
  const cc=document.getElementById('classIdsCsv'),sc=document.getElementById('subjectIdsCsv'),staffData={teacher_data_json};
- const previewName=document.getElementById('staffPreviewName'),previewDesignation=document.getElementById('staffPreviewDesignation'),previewContact=document.getElementById('staffPreviewContact'),initials=document.getElementById('staffInitials'),status=document.getElementById('staffProfileStatus');
+ const previewName=document.getElementById('staffPreviewName'),previewDesignation=document.getElementById('staffPreviewDesignation'),previewContact=document.getElementById('staffPreviewContact'),initials=document.getElementById('staffInitials'),status=document.getElementById('staffProfileStatus'),fullName=document.getElementById('staffFullName'),phone=document.getElementById('staffPhone');
  function clearAllocations(){{if(cc)cc.value='';if(sc)sc.value='';if(cs)Array.from(cs.options).forEach(o=>o.selected=false);if(ss)Array.from(ss.options).forEach(o=>o.selected=false);}}
  function filterProfiles(){{
    const wanted=(designation.value||'').trim().toLowerCase(),current=teacher.value;
@@ -14302,8 +14304,8 @@ def users_page(request: Request):
  }}
  function updateProfile(){{
    const p=staffData[teacher.value];
-   if(!p){{previewName.textContent='Staff profile preview';previewDesignation.textContent='Name and details will appear here automatically.';previewContact.textContent='Choose a staff member to load their saved details.';initials.textContent='DS';status.textContent='Awaiting selection';email.value='';return;}}
-   previewName.textContent=p.name||'Name not recorded';previewDesignation.textContent=p.designation||'Designation not recorded';
+   if(!p){{if(fullName)fullName.value='';if(phone)phone.value='';previewName.textContent='Staff profile preview';previewDesignation.textContent='Name and details will appear here automatically.';previewContact.textContent='Choose a staff member to load their saved details.';initials.textContent='DS';status.textContent='Awaiting selection';email.value='';return;}}
+   if(fullName)fullName.value=p.name||'';if(phone)phone.value=p.phone||'';previewName.textContent=p.name||'Name not recorded';previewDesignation.textContent=p.designation||'Designation not recorded';
    previewContact.textContent=(p.email||p.phone)?((p.email||'Email not recorded')+' · '+(p.phone||'Phone not recorded')):'Contact details are missing from the staff record.';
    initials.textContent=(p.name||'DS').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
    status.textContent='Profile linked';email.value=p.email||'';
