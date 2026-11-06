@@ -667,12 +667,13 @@ def _shell(title, name, role, body, school_id=None, request=None):
     if teacher_locked:
         teacher_nav = [
             ("/app",_modern_icon("dashboard"),"Overview","teacher_portal.view"),
-            ("/app#teacher-classes",_modern_icon("school"),"My Classes","teacher_portal.view"),
-            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects","teacher_portal.view"),
+            ("/app#teacher-classes",_modern_icon("school"),"My Classes","teacher_portal.classes"),
+            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects","teacher_portal.subjects"),
             ("/app/academics/marks",_modern_icon("marks"),"Record Marks","marks.view"),
-            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status","marks.view"),
-            ("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring","teacher_portal.view"),
-            ("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring","teacher_portal.view"),
+            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status","teacher_portal.submission"),
+            ("/app/class-teacher",_modern_icon("users"),"Class Register","class_teacher.view"),
+            ("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring","teacher_portal.class_monitoring"),
+            ("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring","teacher_portal.performance"),
         ]
         teacher_nav = [item for item in teacher_nav if _require_permission(request,int(school_id or 0),item[3])]
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l,_permission in teacher_nav)
@@ -1702,8 +1703,8 @@ def class_monitoring_follow_up(
         return RedirectResponse("/",status_code=303)
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
-    if not _require_permission(request,sid,"teacher_portal.view"):
-        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
+    if not _require_permission(request,sid,"teacher_portal.class_monitoring"):
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
@@ -1765,8 +1766,8 @@ def class_monitoring_page(request: Request):
         return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher":
         return RedirectResponse("/app",status_code=303)
-    if not _require_permission(request,sid,"teacher_portal.view"):
-        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
+    if not _require_permission(request,sid,"teacher_portal.class_monitoring"):
+        return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id:
         return HTMLResponse("Class Monitoring access has been disabled by the School Admin.",403)
@@ -2143,8 +2144,8 @@ def teacher_performance_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
-    if not _require_permission(request,sid,"teacher_portal.view"):
-        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
+    if not _require_permission(request,sid,"teacher_portal.performance"):
+        return HTMLResponse("Performance Monitoring access has been disabled by the School Admin.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
     con=_db()
@@ -2277,8 +2278,8 @@ def teacher_performance_learners_page(request: Request):
     sid=_school_session(request)
     if not sid: return RedirectResponse("/")
     if str(request.session.get("role",""))!="teacher": return RedirectResponse("/app",status_code=303)
-    if not _require_permission(request,sid,"teacher_portal.view"):
-        return HTMLResponse("Teacher Portal access has been disabled for this account.",403)
+    if not _require_permission(request,sid,"teacher_portal.performance"):
+        return HTMLResponse("Performance Monitoring access has been disabled by the School Admin.",403)
     teacher_id=int(request.session.get("teacher_id") or 0)
     if not teacher_id: return HTMLResponse("Teacher Performance access is unavailable.",403)
     def positive_id(key):
@@ -6671,44 +6672,21 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 </style></head><body><header><div class='brand'>{logo_html}<span class='brand-copy'><span class='brand-name'>{school_name}</span></span></div><div class='parent-top-right'><div class='parent-top-welcome'><strong>{escape(str(request.session.get("name") or "Parent"))}</strong><div class='parent-top-role'>Parent</div></div><details class='parent-account-menu'><summary class='parent-top-avatar' aria-label='Open parent account menu'>{escape((str(request.session.get("name") or "P").strip()[:1] or "P").upper())}</summary><a class='parent-logout' href='/logout'>Log out ↗</a></details></div></header>
 <main><section class='welcome'><h1>Welcome, {escape(str(request.session.get("name") or "Parent"))}</h1><div class='muted'>Follow your child's school progress and recent activity.</div>{("<form method='get' action='/app/parent' class='parent-header-switch'><label for='parent-child-select'><span aria-hidden='true'>♙</span> Viewing learner</label><select id='parent-child-select' name='student_id' onchange='this.form.submit()' class='child-select'>"+child_options+"</select></form>") if len(linked_children)>1 else ""}</section>
 <nav class='parent-nav' aria-label='Parent portal sections'>
-<button type='button' class='parent-tab active' data-view='overview' onclick="parentShow('overview')">Overview</button>
-<button type='button' class='parent-tab' data-view='academics' onclick="parentShow('academics')">Academics</button>
-<button type='button' class='parent-tab' data-view='attendance' onclick="parentShow('attendance')">Attendance</button>
-<button type='button' class='parent-tab' data-view='fees' onclick="parentShow('fees')">Fees</button>
-<button type='button' class='parent-tab' data-view='notices' onclick="parentShow('notices')">Notices</button>
-<button type='button' class='parent-tab' data-view='messages' onclick="parentShow('messages')">Messages</button>
-<button type='button' class='parent-tab' data-view='contact' onclick="parentShow('contact')">School Contact</button>
+{("<button type='button' class='parent-tab active' data-view='overview' onclick=\"parentShow('overview')\">Overview</button>" if _require_permission(request,sid,"parent_portal.overview") else "")}
+{("<button type='button' class='parent-tab' data-view='academics' onclick=\"parentShow('academics')\">Academics</button>" if _require_permission(request,sid,"parent_portal.academics") else "")}
+{("<button type='button' class='parent-tab' data-view='attendance' onclick=\"parentShow('attendance')\">Attendance</button>" if _require_permission(request,sid,"parent_portal.attendance") else "")}
+{("<button type='button' class='parent-tab' data-view='fees' onclick=\"parentShow('fees')\">Fees</button>" if _require_permission(request,sid,"parent_portal.fees") else "")}
+{("<button type='button' class='parent-tab' data-view='notices' onclick=\"parentShow('notices')\">Notices</button>" if _require_permission(request,sid,"parent_portal.notices") else "")}
+{("<button type='button' class='parent-tab' data-view='messages' onclick=\"parentShow('messages')\">Messages</button>" if _require_permission(request,sid,"parent_portal.message") else "")}
+{("<button type='button' class='parent-tab' data-view='contact' onclick=\"parentShow('contact')\">School Contact</button>" if _require_permission(request,sid,"parent_portal.contact") else "")}
 </nav>
-<section class='parent-view' id='parent-overview'>
-<section class='parent-learner-banner'>
-<div class='parent-learner-main'><div class='parent-learner-avatar' aria-hidden='true'>{escape((str(student["name"] or "L").strip()[:1] or "L").upper())}</div><div><div class='muted'>Learner profile</div><div class='parent-learner-name'>{learner_name}</div><div class='parent-learner-meta'><span>Admission No. {admission}</span><span>Current class: {class_label}</span></div></div></div>
-{("<div class='parent-learner-class'>"+class_label+"</div>") if len(linked_children)<=1 else ""}
-</section>
-<div class='parent-overview-grid'>
-<section class='parent-overview-panel'><h2>Attendance snapshot</h2><div class='parent-attendance-number'>{attendance_pct:.1f}%</div><div class='parent-attendance-caption'>Attendance rate based on recorded attendance</div><div class='parent-progress-track' role='progressbar' aria-label='Attendance rate' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{attendance_pct:.1f}'><div class='parent-progress-fill'></div></div><div class='parent-attendance-breakdown'><div class='parent-attendance-count'><strong>{present_att}</strong><span>Present</span></div><div class='parent-attendance-count'><strong>{absent_att}</strong><span>Absent</span></div><div class='parent-attendance-count'><strong>{late_att}</strong><span>Late</span></div><div class='parent-attendance-count'><strong>{excused_att}</strong><span>Excused</span></div></div><div class='muted' style='margin-top:12px'>{total_att} attendance records in total</div></section>
-<section class='parent-overview-panel'><h2>Recent activity</h2><div class='parent-activity-list'>{activity_html}</div></section>
-</div>
-</section>
-<section class='parent-view' id='parent-academics' hidden><section class='panel'>
-<h2>Academic results</h2>
-<form method='get' action='/app/parent' style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px'>
-<input type='hidden' name='student_id' value='{student_id}'>
-<label for='parent-exam-select' style='font-size:12px;font-weight:800;color:#557060'>Select examination</label>
-<select id='parent-exam-select' name='exam_id' class='child-select' onchange='this.form.submit()'>{exam_options_html or "<option value=''>No examinations recorded</option>"}</select>
-</form>
-<div class='parent-overview-summary'>
-<div class='stat'><small>Total marks</small><strong>{mark_total:.2f}</strong></div>
-<div class='stat'><small>Overall mean</small><strong>{parent_mean:.2f}</strong></div>
-<div class='stat'><small>Overall grade</small><strong>{escape(str(parent_overall_grade))}</strong></div>
-</div>
-<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th></tr></thead>
-<tbody>{mark_rows or "<tr><td colspan='3' class='empty'>No results are recorded for this examination.</td></tr>"}</tbody></table></div>
-</section></section>
-<section class='parent-view' id='parent-attendance' hidden><section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>"}</tbody></table></div></section></section>
-<section class='parent-view' id='parent-fees' hidden><section class='panel' style='margin-top:16px'><h2>Fee statement</h2><div class='stats' style='margin:0 0 12px'><div class='stat'><small>Total charged</small><strong>KES {fee_total:,.2f}</strong></div><div class='stat'><small>Total paid</small><strong>KES {fee_paid:,.2f}</strong></div><div class='stat'><small>Outstanding balance</small><strong>KES {fee_balance:,.2f}</strong></div></div><div class='table-wrap'><table><thead><tr><th>Charge</th><th>Due date</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_html or "<tr><td colspan='5' class='empty'>No fee statement is available.</td></tr>"}</tbody></table></div></section></section>
-<section class='parent-view' id='parent-notices' hidden><section class='panel' style='margin-top:16px'><h2>School notices</h2>{notice_html or "<div class='empty'>There are no parent announcements at the moment.</div>"}</section></section>
-<section class='parent-view' id='parent-messages' hidden><section class='panel' style='margin-top:16px'><h2>Messages to school</h2><form method='post' action='/app/parent/message' style='display:grid;gap:9px'><input type='hidden' name='student_id' value='{student_id}'><input name='subject' required maxlength='120' placeholder='Subject' class='child-select'><textarea name='message' required maxlength='4000' rows='4' placeholder='Write a message to the school' class='child-select'></textarea><button class='send-btn'>Send message</button></form><div style='margin-top:14px'>{message_html or "<div class='empty'>Your messages and school replies will appear here.</div>"}</div></section></section>
-<section class='parent-view' id='parent-contact' hidden><section class='panel' style='margin-top:16px'><h2>School contact details</h2><div class='muted'>For questions about your child's results, attendance or school activities, reach the school office using the details below.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section></section><p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='DaviSchool platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>DaviSchool</strong></span></footer></main>
+{("<section class='parent-view' id='parent-overview'>\n<section class='parent-learner-banner'>\n<div class='parent-learner-main'><div class='parent-learner-avatar' aria-hidden='true'>{escape((str(student[\"name\"] or \"L\").strip()[:1] or \"L\").upper())}</div><div><div class='muted'>Learner profile</div><div class='parent-learner-name'>{learner_name}</div><div class='parent-learner-meta'><span>Admission No. {admission}</span><span>Current class: {class_label}</span></div></div></div>\n{(\"<div class='parent-learner-class'>\"+class_label+\"</div>\") if len(linked_children)<=1 else \"\"}\n</section>\n<div class='parent-overview-grid'>\n<section class='parent-overview-panel'><h2>Attendance snapshot</h2><div class='parent-attendance-number'>{attendance_pct:.1f}%</div><div class='parent-attendance-caption'>Attendance rate based on recorded attendance</div><div class='parent-progress-track' role='progressbar' aria-label='Attendance rate' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{attendance_pct:.1f}'><div class='parent-progress-fill'></div></div><div class='parent-attendance-breakdown'><div class='parent-attendance-count'><strong>{present_att}</strong><span>Present</span></div><div class='parent-attendance-count'><strong>{absent_att}</strong><span>Absent</span></div><div class='parent-attendance-count'><strong>{late_att}</strong><span>Late</span></div><div class='parent-attendance-count'><strong>{excused_att}</strong><span>Excused</span></div></div><div class='muted' style='margin-top:12px'>{total_att} attendance records in total</div></section>\n<section class='parent-overview-panel'><h2>Recent activity</h2><div class='parent-activity-list'>{activity_html}</div></section>\n</div>\n</section>" if _require_permission(request,sid,"parent_portal.overview") else "")}
+{("<section class='parent-view' id='parent-academics' hidden><section class='panel'>\n<h2>Academic results</h2>\n<form method='get' action='/app/parent' style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px'>\n<input type='hidden' name='student_id' value='{student_id}'>\n<label for='parent-exam-select' style='font-size:12px;font-weight:800;color:#557060'>Select examination</label>\n<select id='parent-exam-select' name='exam_id' class='child-select' onchange='this.form.submit()'>{exam_options_html or \"<option value=''>No examinations recorded</option>\"}</select>\n</form>\n<div class='parent-overview-summary'>\n<div class='stat'><small>Total marks</small><strong>{mark_total:.2f}</strong></div>\n<div class='stat'><small>Overall mean</small><strong>{parent_mean:.2f}</strong></div>\n<div class='stat'><small>Overall grade</small><strong>{escape(str(parent_overall_grade))}</strong></div>\n</div>\n<div class='table-wrap'><table><thead><tr><th>Subject</th><th style='text-align:center'>Marks</th><th style='text-align:center'>Grade</th></tr></thead>\n<tbody>{mark_rows or \"<tr><td colspan='3' class='empty'>No results are recorded for this examination.</td></tr>\"}</tbody></table></div>\n</section></section>" if _require_permission(request,sid,"parent_portal.academics") else "")}
+{("<section class='parent-view' id='parent-attendance' hidden><section class='panel'><h2>Recent attendance</h2><div class='attendance-list'><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or \"<tr><td colspan='2' class='empty'>No attendance records are available yet.</td></tr>\"}</tbody></table></div></section></section>" if _require_permission(request,sid,"parent_portal.attendance") else "")}
+{("<section class='parent-view' id='parent-fees' hidden><section class='panel' style='margin-top:16px'><h2>Fee statement</h2><div class='stats' style='margin:0 0 12px'><div class='stat'><small>Total charged</small><strong>KES {fee_total:,.2f}</strong></div><div class='stat'><small>Total paid</small><strong>KES {fee_paid:,.2f}</strong></div><div class='stat'><small>Outstanding balance</small><strong>KES {fee_balance:,.2f}</strong></div></div><div class='table-wrap'><table><thead><tr><th>Charge</th><th>Due date</th><th>Charged</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_html or \"<tr><td colspan='5' class='empty'>No fee statement is available.</td></tr>\"}</tbody></table></div></section></section>" if _require_permission(request,sid,"parent_portal.fees") else "")}
+{("<section class='parent-view' id='parent-notices' hidden><section class='panel' style='margin-top:16px'><h2>School notices</h2>{notice_html or \"<div class='empty'>There are no parent announcements at the moment.</div>\"}</section></section>" if _require_permission(request,sid,"parent_portal.notices") else "")}
+{("<section class='parent-view' id='parent-messages' hidden><section class='panel' style='margin-top:16px'><h2>Messages to school</h2><form method='post' action='/app/parent/message' style='display:grid;gap:9px'><input type='hidden' name='student_id' value='{student_id}'><input name='subject' required maxlength='120' placeholder='Subject' class='child-select'><textarea name='message' required maxlength='4000' rows='4' placeholder='Write a message to the school' class='child-select'></textarea><button class='send-btn'>Send message</button></form><div style='margin-top:14px'>{message_html or \"<div class='empty'>Your messages and school replies will appear here.</div>\"}</div></section></section>" if _require_permission(request,sid,"parent_portal.message") else "")}
+{("<section class='parent-view' id='parent-contact' hidden><section class='panel' style='margin-top:16px'><h2>School contact details</h2><div class='muted'>For questions about your child's results, attendance or school activities, reach the school office using the details below.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section></section>" if _require_permission(request,sid,"parent_portal.contact") else "")}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='DaviSchool platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>DaviSchool</strong></span></footer></main>
 <script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}</script></body></html>"""
     return HTMLResponse(body)
 
