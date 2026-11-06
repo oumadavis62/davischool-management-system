@@ -14062,19 +14062,16 @@ def users_page(request: Request):
     body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div><div style='display:flex;gap:9px;flex-wrap:wrap;margin:14px 0'><a href='/app/parent-links' class='btn'>Manage Parent–Learner Links</a><a href='/app/parent-messages' class='btn'>Parent Messages Inbox</a></div>
 {success_block}
 {credential_modal}<div class='users-toolbar'><div><h2 style='margin:0;color:#173f32'>User Accounts</h2><div class='muted'>Manage sign-in access and linked school profiles.</div></div><button type='button' class='users-primary' id='openCreateUser'>＋ Create User</button></div><div id='createUserModal' class='users-modal' aria-hidden='true'><div class='users-modal-panel' role='dialog' aria-modal='true' aria-labelledby='createUserTitle'><div class='users-modal-head'><div><h2 id='createUserTitle' style='margin:0'>Create user account</h2><div class='muted'>Set up access and link the account to an existing school record.</div></div><button type='button' class='users-close' id='closeCreateUser' aria-label='Close'>×</button></div>
-<div class='muted' style='margin-bottom:12px'>For teacher accounts, select the teacher from the existing Teachers records. The School Admin assigns the teacher's role, class/stream and subjects here; no teacher name needs to be retyped.</div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar' {'disabled' if registrar_exists else ''}>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
-<div class='muted' style='grid-column:1/-1;padding:10px;background:#f8fafc;border-radius:9px'>Username and password are generated automatically when the account is created.</div>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{class_options_html}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
 <div id='subjectFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Subjects</label><select id='subjectIdsSelect' class='field' multiple size='4' title='Subjects automatically linked to this teacher'>{subject_options_html}</select><div class='muted' style='margin-top:5px'>Subjects are filled automatically from the teacher's existing allocations.</div></div>
 <input type='hidden' name='class_ids_csv' id='classIdsCsv'><input type='hidden' name='subject_ids_csv' id='subjectIdsCsv'>
-<select name='student_id' class='field'><option value=''>Link student (for student/parent account)</option>{sopts}</select>
 <button class='btn' style='grid-column:1/-1'>Create Account</button></form>
-<div class='muted' style='margin-top:10px'>Class Teacher: select exactly one class/stream. Subject Teacher: select all classes/streams and subjects they teach. Both: assign both.</div>
+<div class='muted' style='margin-top:12px;padding-top:10px;border-top:1px solid #cbded0'>Username and password are generated automatically when the account is created.</div>
 </div></div>
 <script>
 (function(){{
