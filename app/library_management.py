@@ -916,7 +916,7 @@ def library_reports(request: Request, date_from: str = "", date_to: str = ""):
  <section class="card lib-table-card"><div class="page-heading"><h2>Active membership</h2></div><div class="lib-kpis"><div><span>Total active</span><strong>{members}</strong></div><div><span>Students</span><strong>{student_members}</strong></div><div><span>Staff</span><strong>{staff_members}</strong></div></div></section>
  <section class="card lib-table-card"><div class="page-heading"><h2>Circulation activity</h2><span class="lib-muted">Latest 30 issues in the selected period</span></div><div class="lib-table-scroll"><table style="min-width:850px"><thead><tr><th>Issue date</th><th>Book / Accession</th><th>Borrower</th><th>Due date</th><th>Status</th></tr></thead><tbody>{activity_rows}</tbody></table></div></section>
 </div>
-<style>@media print{.nav,.sidebar,.lib-filter-card,.lib-heading button{display:none!important}.page{width:100%!important;max-width:none!important;margin:0!important}.card{break-inside:avoid;box-shadow:none!important}body{background:#fff!important}}</style>
+<style>@media print{{.nav,.sidebar,.lib-filter-card,.lib-heading button{{display:none!important}}.page{{width:100%!important;max-width:none!important;margin:0!important}}.card{{break-inside:avoid;box-shadow:none!important}}body{{background:#fff!important}}}}</style>
 """
         return _school_page(request, "Library Reports", body)
     finally:
