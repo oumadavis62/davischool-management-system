@@ -593,7 +593,7 @@ def transport_student_allocations(request: Request, q: str = "", status: str = "
 <label>Learner *<select name="student_id" required><option value="">Select learner</option>{student_options}</select></label>
 <label>Route *<select name="route_id" id="trAllocRoute" required><option value="">Select route</option>{route_options}</select></label>
 <label>Pickup / drop-off stop *<select name="stop_id" id="trAllocStop" required><option value="">Select stop</option>{stop_options}</select></label>
-<label>Vehicle<select name="vehicle_id"><option value="0">Not assigned</option>{''.join(vehicle_options.split('>',1)[1:]) if False else ''}</select></label>
+<label>Vehicle<select name="vehicle_id">{vehicle_options}</select></label>
 <label>Effective from *<input type="date" name="effective_from" required></label>
 <label>Effective to<input type="date" name="effective_to"></label>
 <label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
