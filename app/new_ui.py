@@ -13470,7 +13470,7 @@ def student_promotion_page(request: Request, class_id: str = "", cycle_year: str
  var search=root.querySelector('#promotion-student-search');if(search)search.addEventListener('input',function(){{var q=search.value.toLowerCase().trim();root.querySelectorAll('.promotion-student-table tbody tr').forEach(function(tr){{tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';}});}});
  root.querySelectorAll('.promotion-modal button[type=submit]').forEach(function(btn){{btn.addEventListener('click',function(e){{if(btn.name==='reverse_selected_promotions'&&!checks.some(function(x){{return x.checked;}})){{e.preventDefault();alert('Select at least one learner first.');return;}}var d=btn.closest('dialog');if(d)d.close();}});}});
 }})();
-</script>""""""
+</script>"""
     return _school_page(request, "Student Promotion / Transfer", body)
 
 
