@@ -15581,8 +15581,8 @@ def roles_page(request: Request):
             ("Workspace","Marks Submission Progress","teacher_portal.submission","Entered marks, pending corrections and submission progress"),
             ("Assessment","Record Marks","marks.view","Open allocated-class marks entry"),
             ("Class Teacher","Class Register","class_teacher.view","Learners in the assigned class"),
-            ("Class Teacher","Class Monitoring","teacher_portal.class_monitoring","Subject submission status and follow-up records"),
-            ("Class Teacher","Performance Monitoring","teacher_portal.performance","Class and subject performance with learner detail"),
+            ("Monitoring","Class Monitoring","teacher_portal.class_monitoring","Subject submission status and follow-up records"),
+            ("Monitoring","Performance Monitoring","teacher_portal.performance","Class and subject performance with learner detail"),
         ],
         "parent":[
             ("Parent workspace","Overview","parent_portal.overview","Learner profile, attendance snapshot and recent activity"),
@@ -15620,12 +15620,10 @@ def roles_page(request: Request):
     for rule in rows:
         role_rule_state.setdefault((str(rule["role"]),str(rule["permission"])),bool(rule["enabled"]))
     role_matrix=[]
-    for matrix_role in ("teacher","class_teacher","parent","student","accountant"):
-        portal_role="teacher" if matrix_role=="class_teacher" else matrix_role
+    for matrix_role in ("teacher","parent","student","accountant"):
+        portal_role=matrix_role
         group_markup=[]
         role_features=portal_catalog.get(portal_role,[])
-        if matrix_role=="class_teacher":
-            role_features=[feature for feature in role_features if feature[0]=="Class Teacher"]
         grouped_features={}
         for group_name, feature_name, feature_key, feature_description in role_features:
             grouped_features.setdefault(group_name,[]).append((feature_name,feature_key,feature_description))
@@ -15642,14 +15640,14 @@ def roles_page(request: Request):
                      portal_role,escape(feature),next_value,action_label)
                 )
             group_markup.append("<section class='rp-matrix-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(feature_rows)))
-        portal_key={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
+        portal_key={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
         portal_enabled=role_rule_state.get((portal_role,portal_key),True)
         portal_toggle_html=(
             "<div class='rp-matrix-row rp-portal-toggle'><div class='rp-matrix-copy'><strong>Entire portal access</strong><small>Block or restore access to this whole portal</small></div><span class='rp-status %s'>%s</span><form method='post' action='/app/roles/add'><input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form></div>" %
             ("is-on" if portal_enabled else "is-off","Allowed" if portal_enabled else "Blocked",portal_role,portal_key,0 if portal_enabled else 1,"Disable portal" if portal_enabled else "Enable portal")
         )
-        role_label={"teacher":"Teacher Portal","class_teacher":"Class Teacher Features","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
-        role_note=("No separate student portal page is currently implemented." if matrix_role=="student" else ("Class Teacher features are available within the Teacher Portal." if matrix_role=="class_teacher" else ""))
+        role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
+        role_note="No separate student portal page is currently implemented." if matrix_role=="student" else ""
         if matrix_role=="student":
             group_markup=["<section class='rp-matrix-group'><p class='rp-feature-note'>Student login accounts can be created, but this codebase does not currently provide a student-facing portal page or feature tabs. This entry controls only the portal-level permission until that portal is implemented.</p></section>"]
         role_matrix.append(
