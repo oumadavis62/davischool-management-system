@@ -1528,12 +1528,8 @@ def _require_permission(request, school_id, permission):
         return True
     # A disabled portal is a hard gate for every route-level feature inside it,
     # including direct URLs; individual feature overrides cannot bypass it.
-    portal_gate={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view",
-                 "parent":"parent_portal.view","student":"student_portal.view",
-                 "accountant":"accountant_portal.view"}.get(role)
-    portal_feature_prefix={"teacher":"teacher_portal.","class_teacher":"teacher_portal.",
-                           "parent":"parent_portal.","student":"student_portal.",
-                           "accountant":"accountant_portal."}.get(role,"")
+    portal_gate={"teacher":"teacher_portal.view","class_teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view","librarian":"librarian_portal.view","ict_officer":"ict_portal.view","support_staff":"support_portal.view"}.get(role)
+    portal_feature_prefix={"teacher":"teacher_portal.","class_teacher":"teacher_portal.","parent":"parent_portal.","student":"student_portal.","accountant":"accountant_portal.","librarian":"librarian_portal.","ict_officer":"ict_portal.","support_staff":"support_portal."}.get(role,"")
     portal_feature=(str(permission).startswith(portal_feature_prefix) if portal_feature_prefix else False)
     if role in ("teacher","class_teacher") and permission in ("marks.view","class_teacher.view"):
         portal_feature=True
@@ -6943,6 +6939,9 @@ def app_home(request: Request):
         if not _require_permission(request,int(request.session.get("school_id") or 0),"student_portal.view"):
             return HTMLResponse("Student Portal access has been disabled for this account.",403)
         return HTMLResponse("The Student Portal is not yet available. Please contact the school administrator.",501)
+    new_portals={"librarian":"/app/librarian","ict_officer":"/app/ict","support_staff":"/app/support"}
+    if str(request.session.get("role") or "") in new_portals:
+        return RedirectResponse(new_portals[str(request.session.get("role"))],303)
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
@@ -14313,7 +14312,7 @@ def users_page(request: Request):
    status.textContent='Profile linked';email.value=p.email||'';
  }}
  function updateRole(){{
-   const r=role.value,needsStaff=['teacher','registrar','accountant'].includes(r),needsStudent=['parent','student'].includes(r);
+   const r=role.value,needsStaff=['teacher','registrar','accountant','librarian','ict_officer','support_staff'].includes(r),needsStudent=['parent','student'].includes(r);
    staffWrap.style.display=needsStaff?'grid':'none';studentWrap.style.display=needsStudent?'grid':'none';
    teacherExtra.style.display=(r==='teacher'||r==='registrar')?'grid':'none';
    if(!needsStaff){{teacher.value='';designation.value='';email.value='';clearAllocations();updateProfile();}}
@@ -14335,7 +14334,7 @@ def users_page(request: Request):
      cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');renderAssignmentSummary(cs,classSummary,classCount,'classes or streams');renderAssignmentSummary(ss,subjectSummary,subjectCount,'subjects');if(typeDisplay)typeDisplay.textContent=({{subject_teacher:'Subject teacher',class_teacher:'Class teacher',both:'Class teacher + subject teacher'}}[data.teacher_type||type.value]||'Teaching assignment');
    }}catch(err){{console.error('Teacher allocation load failed',err);}}
  }}
- function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=(job==='Registrar'?'registrar':(job==='Accountant / Bursar'?'accountant':'teacher'));}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
+ function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=({'Registrar':'registrar','Accountant / Bursar':'accountant','Librarian':'librarian','ICT / Systems Officer':'ict_officer','Support Staff':'support_staff'}[job]||'teacher');}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
  designation.addEventListener('change',()=>{{teacher.value='';filterProfiles();clearAllocations();}});
  teacher.addEventListener('change',()=>{{updateProfile();loadTeacherLinks();}});
  roleChoice.addEventListener('change',syncRoleChoice);
@@ -14371,8 +14370,8 @@ def users_edit_page(request: Request, uid: int):
         return HTMLResponse("This Registrar account is managed by the Super Admin and cannot be edited from the School Admin side. <a href='/app/users'>Back</a>",403)
     topts="".join(f"<option value='{t['id']}' {'selected' if user['teacher_id'] and int(user['teacher_id'])==int(t['id']) else ''}>{escape(str(t['name']))}</option>" for t in teachers)
     linked_designation=next((str(t['role'] or '') for t in teachers if user['teacher_id'] and int(user['teacher_id'])==int(t['id'])), '')
-    current_designation=(linked_designation if user['role']=='teacher' and linked_designation in STAFF_DESIGNATION_OPTIONS and linked_designation!='School Administrator' else {'parent':'Parent','student':'Student','accountant':'Accountant / Bursar','registrar':'Registrar'}.get(str(user['role'] or ''),'Teacher'))
-    edit_role_options=''.join(f"<option value='{('accountant' if designation=='Accountant / Bursar' else 'registrar' if designation=='Registrar' else 'teacher')}' {'selected' if current_designation==designation else ''} {'disabled' if designation=='School Administrator' else ''}>{escape(designation + (' (managed by Super Admin)' if designation=='School Administrator' else ''))}</option>" for designation in STAFF_DESIGNATION_OPTIONS)
+    current_designation=(linked_designation if user['teacher_id'] and linked_designation in STAFF_DESIGNATION_OPTIONS and linked_designation!='School Administrator' else {'parent':'Parent','student':'Student','accountant':'Accountant / Bursar','registrar':'Registrar','librarian':'Librarian','ict_officer':'ICT / Systems Officer','support_staff':'Support Staff'}.get(str(user['role'] or ''),'Teacher'))
+    edit_role_options=''.join(f"<option value='{({'Accountant / Bursar':'accountant','Registrar':'registrar','Librarian':'librarian','ICT / Systems Officer':'ict_officer','Support Staff':'support_staff'}.get(designation,'teacher'))}' {'selected' if current_designation==designation else ''} {'disabled' if designation=='School Administrator' else ''}>{escape(designation + (' (managed by Super Admin)' if designation=='School Administrator' else ''))}</option>" for designation in STAFF_DESIGNATION_OPTIONS)
     edit_role_options += f"<option value='parent' {'selected' if current_designation=='Parent' else ''}>Parent</option><option value='student' {'selected' if current_designation=='Student' else ''}>Student</option>"
     sopts="".join(f"<option value='{s['id']}' {'selected' if user['student_id'] and int(user['student_id'])==int(s['id']) else ''}>{escape(str(s['name']))} ({escape(str(s['admission_no'] or ''))})</option>" for s in students)
     classopts="".join(f"<option value='{x['id']}' {'selected' if assigned_class and int(assigned_class['class_id'])==int(x['id']) else ''}>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
@@ -14397,7 +14396,7 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.",403)
-    allowed={"teacher","parent","student","accountant","registrar"}
+    allowed={"teacher","parent","student","accountant","registrar","librarian","ict_officer","support_staff"}
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
@@ -14525,7 +14524,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
     if not _require_permission(request, sid, "users.manage"):
         return HTMLResponse("You do not have permission to manage users.", 403)
     email=(email or "").strip()
-    allowed={"school_admin","teacher","parent","student","accountant","registrar"}
+    allowed={"school_admin","teacher","parent","student","accountant","registrar","librarian","ict_officer","support_staff"}
     if role not in allowed:return HTMLResponse("Invalid role. <a href='/app/users'>Back</a>",400)
     # School Admin accounts are created only by the Super Admin, not from the school-level User Management page.
     if role=="school_admin":
@@ -14546,11 +14545,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
         if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone():
             return HTMLResponse("Selected student does not belong to a student record in this school. <a href='/app/users'>Back</a>",400)
-        if role in ("teacher","registrar") and not tid:
+        if role in ("teacher","registrar","accountant","librarian","ict_officer","support_staff") and not tid:
             return HTMLResponse("Teacher accounts must be linked to a teacher profile selected from Teachers Records.",400)
         if role in ("student","parent") and not stid:
             return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-        if role not in ("teacher","registrar","student","parent","accountant") and (tid or stid):
+        if role not in ("teacher","registrar","student","parent","accountant","librarian","ict_officer","support_staff") and (tid or stid):
             return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
 
         if role == "parent" and stid:
@@ -14561,7 +14560,7 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             student_profile=cur.execute("SELECT name FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone()
             if student_profile:
                 full_name=str(student_profile["name"] or "").strip()
-        if role in ("teacher","registrar","accountant") and tid:
+        if role in ("teacher","registrar","accountant","librarian","ict_officer","support_staff") and tid:
             designation_value=str(teacher_designation or "").strip()
             if designation_value and designation_value not in STAFF_DESIGNATION_OPTIONS:
                 return HTMLResponse("Invalid staff designation. Please choose a designation from the list.",400)
@@ -15623,7 +15622,7 @@ def roles_page(request: Request):
         FROM user_permissions p JOIN users u ON u.id=p.user_id AND u.school_id=p.school_id
         WHERE p.school_id=? ORDER BY u.role,u.full_name,p.permission""",(sid,)).fetchall()
     con.close()
-    role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","class_teacher":"Class Teacher","parent":"Parent","student":"Student","accountant":"Accountant"}
+    role_labels={"school_admin":"School Administrator","registrar":"Registrar","teacher":"Teacher","class_teacher":"Class Teacher","parent":"Parent","student":"Student","accountant":"Accountant","librarian":"Librarian","ict_officer":"ICT / Systems Officer","support_staff":"Support Staff"}
     portal_catalog={
         "teacher":[
             ("Workspace","Overview","teacher_portal.overview","Teacher home and school workspace summary"),
@@ -15655,6 +15654,27 @@ def roles_page(request: Request):
         "student":[
             ("Portal access","Student Portal","student_portal.view","Student Portal page is not yet implemented in this application"),
         ],
+        "librarian":[
+            ("Library","Overview","librarian_portal.overview","Library collection and circulation summary"),
+            ("Library","Book Register","librarian_portal.books","View the school's book collection"),
+            ("Library","Register Books","librarian_portal.books.create","Add books to the collection"),
+            ("Circulation","Issue Books","librarian_portal.loans.create","Issue books to learners"),
+            ("Circulation","Loan Register","librarian_portal.loans","View and return issued books"),
+        ],
+        "ict_officer":[
+            ("ICT Operations","Overview","ict_portal.overview","ICT equipment and incident summary"),
+            ("ICT Assets","Asset Register","ict_portal.assets","View registered school equipment"),
+            ("ICT Assets","Register Asset","ict_portal.assets.create","Register ICT equipment"),
+            ("ICT Support","Support Tickets","ict_portal.tickets","View ICT support tickets"),
+            ("ICT Support","Create Ticket","ict_portal.tickets.create","Log a technology issue"),
+            ("ICT Support","Update Ticket","ict_portal.tickets.update","Update ticket progress"),
+        ],
+        "support_staff":[
+            ("Support Services","Overview","support_portal.overview","School support task summary"),
+            ("Work Queue","Task Register","support_portal.tasks","View support and facilities tasks"),
+            ("Work Queue","Create Task","support_portal.tasks.create","Record a school support task"),
+            ("Work Queue","Update Task","support_portal.tasks.update","Complete or update assigned tasks"),
+        ],
     }
     permission_groups={}
     for portal_role, portal_features in portal_catalog.items():
@@ -15671,7 +15691,7 @@ def roles_page(request: Request):
     for rule in rows:
         role_rule_state.setdefault((str(rule["role"]),str(rule["permission"])),bool(rule["enabled"]))
     role_matrix=[]
-    for matrix_role in ("teacher","parent","student","accountant"):
+    for matrix_role in ("teacher","parent","student","accountant","librarian","ict_officer","support_staff"):
         portal_role=matrix_role
         group_markup=[]
         role_features=portal_catalog.get(portal_role,[])
@@ -15691,13 +15711,13 @@ def roles_page(request: Request):
                      portal_role,escape(feature),next_value,action_label)
                 )
             group_markup.append("<section class='rp-matrix-group'><h3>%s</h3>%s</section>"%(escape(group_name),"".join(feature_rows)))
-        portal_key={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}[matrix_role]
+        portal_key={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view","librarian":"librarian_portal.view","ict_officer":"ict_portal.view","support_staff":"support_portal.view"}[matrix_role]
         portal_enabled=role_rule_state.get((portal_role,portal_key),True)
         portal_toggle_html=(
             "<div class='rp-matrix-row rp-portal-toggle'><div class='rp-matrix-copy'><strong>Entire portal access</strong><small>Block or restore access to this whole portal</small></div><span class='rp-status %s'>%s</span><form method='post' action='/app/roles/add'><input type='hidden' name='role' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form></div>" %
             ("is-on" if portal_enabled else "is-off","Allowed" if portal_enabled else "Blocked",portal_role,portal_key,0 if portal_enabled else 1,"Disable portal" if portal_enabled else "Enable portal")
         )
-        role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal"}[matrix_role]
+        role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal","librarian":"Librarian Portal","ict_officer":"ICT / Systems Portal","support_staff":"Support Staff Portal"}[matrix_role]
         role_note="No separate student portal page is currently implemented." if matrix_role=="student" else ""
         if matrix_role=="student":
             group_markup=["<section class='rp-matrix-group'><p class='rp-feature-note'>Student login accounts can be created, but this codebase does not currently provide a student-facing portal page or feature tabs. This entry controls only the portal-level permission until that portal is implemented.</p></section>"]
@@ -15729,7 +15749,7 @@ def roles_page(request: Request):
         selected_role=str(selected_account["role"] or "")
         catalog_role="teacher" if selected_role=="class_teacher" else selected_role
         selected_features=portal_catalog.get(catalog_role,[])
-        portal_permission={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view"}.get(catalog_role)
+        portal_permission={"teacher":"teacher_portal.view","parent":"parent_portal.view","student":"student_portal.view","accountant":"accountant_portal.view","librarian":"librarian_portal.view","ict_officer":"ict_portal.view","support_staff":"support_portal.view"}.get(catalog_role)
         if portal_permission:
             portal_default=role_rule_state.get((catalog_role,portal_permission),True)
             portal_override=selected_override_map.get(portal_permission)
@@ -15740,7 +15760,7 @@ def roles_page(request: Request):
             portal_status="Enabled" if portal_effective else "Disabled"
             portal_status_class="is-on" if portal_effective else "is-off"
             portal_form=("<form method='post' action='/app/roles/user-override' class='rp-inline-control'><input type='hidden' name='user_id' value='%s'><input type='hidden' name='permission' value='%s'><input type='hidden' name='enabled' value='%s'><input type='hidden' name='return_to' value='/app/roles?account_id=%s'><button class='rp-btn rp-btn-light' type='submit'>%s</button></form>"%(selected_user_id,portal_permission,portal_action,selected_user_id,portal_action_label))
-            portal_title={"teacher":"Teacher portal access","parent":"Parent portal access","student":"Student portal access","accountant":"Accountant portal access"}.get(catalog_role,"Portal access")
+            portal_title={"teacher":"Teacher portal access","parent":"Parent portal access","student":"Student portal access","accountant":"Accountant portal access","librarian":"Librarian portal access","ict_officer":"ICT portal access","support_staff":"Support Staff portal access"}.get(catalog_role,"Portal access")
             portal_markup="<div class='rp-account-portal'><div><span class='rp-mini-label'>WHOLE PORTAL</span><strong>%s</strong><small>%s</small></div><span class='rp-status %s'>%s</span>%s</div>"%(portal_title,portal_source,portal_status_class,portal_status,portal_form)
         else:
             portal_markup="<div class='rp-account-empty'>No separate portal access switch is configured for this account role.</div>"
@@ -15920,7 +15940,7 @@ def roles_user_override(request: Request, user_id: int=Form(...), permission: st
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
         return HTMLResponse("You do not have permission to manage account access.",403)
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","librarian_portal.view","librarian_portal.overview","librarian_portal.books","librarian_portal.books.create","librarian_portal.loans","librarian_portal.loans.create","ict_portal.view","ict_portal.overview","ict_portal.assets","ict_portal.assets.create","ict_portal.tickets","ict_portal.tickets.create","ict_portal.tickets.update","support_portal.view","support_portal.overview","support_portal.tasks","support_portal.tasks.create","support_portal.tasks.update"}
     permission_v=str(permission or "").strip()
     if permission_v not in allowed_permissions:
         return HTMLResponse("Invalid feature permission.",400)
@@ -15964,8 +15984,8 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
-    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar","librarian","ict_officer","support_staff"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","librarian_portal.view","librarian_portal.overview","librarian_portal.books","librarian_portal.books.create","librarian_portal.loans","librarian_portal.loans.create","ict_portal.view","ict_portal.overview","ict_portal.assets","ict_portal.assets.create","ict_portal.tickets","ict_portal.tickets.create","ict_portal.tickets.update","support_portal.view","support_portal.overview","support_portal.tasks","support_portal.tasks.create","support_portal.tasks.update"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
@@ -15984,8 +16004,8 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
-    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_roles={"school_admin","teacher","parent","student","accountant","registrar","librarian","ict_officer","support_staff"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook","librarian_portal.view","librarian_portal.overview","librarian_portal.books","librarian_portal.books.create","librarian_portal.loans","librarian_portal.loans.create","ict_portal.view","ict_portal.overview","ict_portal.assets","ict_portal.assets.create","ict_portal.tickets","ict_portal.tickets.create","ict_portal.tickets.update","support_portal.view","support_portal.overview","support_portal.tasks","support_portal.tasks.create","support_portal.tasks.update"}
     role_v=role.strip();perm_v=permission.strip();enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission.",400)
@@ -16073,6 +16093,163 @@ def accounting_expense(request: Request,category:str=Form(...),description:str=F
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"accountant_portal.expense_create"):
         return HTMLResponse("Recording expenses has been disabled for this account.",403)
+
+# Dedicated operational portals for Librarian, ICT / Systems Officer and Support Staff.
+def _ensure_ops_portal_tables(cur, con):
+    cur.execute("""CREATE TABLE IF NOT EXISTS library_books(id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,title TEXT NOT NULL,author TEXT,isbn TEXT,copies INTEGER NOT NULL DEFAULT 1,created_at TEXT,created_by TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS library_loans(id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,book_id INTEGER NOT NULL,learner_name TEXT NOT NULL,admission_no TEXT,issue_date TEXT NOT NULL,due_date TEXT,returned_at TEXT,status TEXT NOT NULL DEFAULT 'Issued',created_by TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ict_assets(id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,asset_name TEXT NOT NULL,asset_tag TEXT,location TEXT,condition TEXT DEFAULT 'Operational',created_at TEXT,created_by TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ict_tickets(id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,title TEXT NOT NULL,description TEXT,priority TEXT DEFAULT 'Normal',status TEXT DEFAULT 'Open',created_at TEXT,created_by TEXT,updated_at TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS support_tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,school_id INTEGER NOT NULL,title TEXT NOT NULL,details TEXT,location TEXT,priority TEXT DEFAULT 'Normal',status TEXT DEFAULT 'Pending',created_at TEXT,created_by TEXT,updated_at TEXT)""")
+    con.commit()
+
+
+def _ops_allowed(request, sid, role, permission):
+    return str(request.session.get("role") or "") == role and _require_permission(request,sid,permission)
+
+
+def _ops_now():
+    return datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+
+
+@router.get("/app/librarian", response_class=HTMLResponse)
+def librarian_portal(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _ops_allowed(request,sid,"librarian","librarian_portal.overview"):return HTMLResponse("Librarian portal access is disabled.",403)
+    con=_db();cur=con.cursor();_ensure_ops_portal_tables(cur,con)
+    books=cur.execute("SELECT * FROM library_books WHERE school_id=? ORDER BY title",(sid,)).fetchall()
+    loans=cur.execute("SELECT l.*,b.title book_title FROM library_loans l JOIN library_books b ON b.id=l.book_id AND b.school_id=l.school_id WHERE l.school_id=? ORDER BY l.id DESC LIMIT 150",(sid,)).fetchall()
+    copies=cur.execute("SELECT COALESCE(SUM(copies),0) n FROM library_books WHERE school_id=?",(sid,)).fetchone()["n"]
+    active=cur.execute("SELECT COUNT(*) n FROM library_loans WHERE school_id=? AND status='Issued'",(sid,)).fetchone()["n"]
+    can_add=_require_permission(request,sid,"librarian_portal.books.create");can_books=_require_permission(request,sid,"librarian_portal.books")
+    can_issue=_require_permission(request,sid,"librarian_portal.loans.create");can_loans=_require_permission(request,sid,"librarian_portal.loans")
+    body="<div class='page'><div class='muted'>LIBRARY SERVICES</div><h1>Librarian Portal</h1><p class='muted'>Manage the school collection and learner book circulation.</p><div class='grid'><div class='card'><div class='label'>Book titles</div><div class='kpi'>%s</div></div><div class='card'><div class='label'>Total copies</div><div class='kpi'>%s</div></div><div class='card'><div class='label'>Books on loan</div><div class='kpi'>%s</div></div></div>"%(len(books),copies,active)
+    if can_add:body+="<div class='card section'><h2>Register books</h2><form method='post' action='/app/ops/action' class='grid'><input type='hidden' name='action' value='book_add'><input class='field' name='title' required placeholder='Book title'><input class='field' name='author' placeholder='Author'><input class='field' name='isbn' placeholder='ISBN / catalogue number'><input class='field' name='copies' type='number' min='1' value='1'><button class='btn'>Add to collection</button></form></div>"
+    if can_issue:
+        opts="".join("<option value='%s'>%s</option>"%(int(x["id"]),escape(str(x["title"]))) for x in books)
+        body+="<div class='card section'><h2>Issue a book</h2><form method='post' action='/app/ops/action' class='grid'><input type='hidden' name='action' value='loan_add'><select class='field' name='book_id' required><option value=''>Select book</option>"+opts+"</select><input class='field' name='learner_name' required placeholder='Learner name'><input class='field' name='admission_no' placeholder='Admission number'><input class='field' name='issue_date' type='date' required><input class='field' name='due_date' type='date'><button class='btn'>Issue book</button></form></div>"
+    if can_books:body+="<div class='card section'><h2>Book register</h2><div style='overflow:auto'><table><thead><tr><th>Title</th><th>Author</th><th>ISBN</th><th>Copies</th></tr></thead><tbody>"+(_simple_rows(books,["title","author","isbn","copies"]) or "<tr><td colspan='4'>No books registered.</td></tr>")+"</tbody></table></div></div>"
+    if can_loans:
+        rows=[]
+        for x in loans:
+            action="<form method='post' action='/app/ops/action'><input type='hidden' name='action' value='loan_return'><input type='hidden' name='record_id' value='%s'><button class='btn btn-light'>Mark returned</button></form>"%int(x["id"]) if x["status"]=="Issued" else ""
+            rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(x["book_title"])),escape(str(x["learner_name"])),escape(str(x["admission_no"] or "")),escape(str(x["issue_date"])),escape(str(x["status"])),action))
+        body+="<div class='card section'><h2>Circulation register</h2><div style='overflow:auto'><table><thead><tr><th>Book</th><th>Learner</th><th>Admission No.</th><th>Issue date</th><th>Status</th><th>Action</th></tr></thead><tbody>"+("".join(rows) or "<tr><td colspan='6'>No loans recorded.</td></tr>")+"</tbody></table></div></div>"
+    body+="</div><style>.field{width:100%;padding:11px;border:1px solid #dbe5dc;border-radius:9px}.page .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}</style>"
+    con.close();return _school_page(request,"Librarian Portal",body)
+
+
+@router.get("/app/ict", response_class=HTMLResponse)
+def ict_portal(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _ops_allowed(request,sid,"ict_officer","ict_portal.overview"):return HTMLResponse("ICT portal access is disabled.",403)
+    con=_db();cur=con.cursor();_ensure_ops_portal_tables(cur,con)
+    assets=cur.execute("SELECT * FROM ict_assets WHERE school_id=? ORDER BY asset_name",(sid,)).fetchall()
+    tickets=cur.execute("SELECT * FROM ict_tickets WHERE school_id=? ORDER BY id DESC LIMIT 150",(sid,)).fetchall()
+    open_count=cur.execute("SELECT COUNT(*) n FROM ict_tickets WHERE school_id=? AND status<>'Closed'",(sid,)).fetchone()["n"]
+    can_assets=_require_permission(request,sid,"ict_portal.assets");can_add=_require_permission(request,sid,"ict_portal.assets.create")
+    can_tickets=_require_permission(request,sid,"ict_portal.tickets");can_create=_require_permission(request,sid,"ict_portal.tickets.create");can_update=_require_permission(request,sid,"ict_portal.tickets.update")
+    body="<div class='page'><div class='muted'>SCHOOL TECHNOLOGY SERVICES</div><h1>ICT / Systems Officer Portal</h1><p class='muted'>Track school technology assets, incidents and support work.</p><div class='grid'><div class='card'><div class='label'>Registered assets</div><div class='kpi'>%s</div></div><div class='card'><div class='label'>Open support tickets</div><div class='kpi'>%s</div></div></div>"%(len(assets),open_count)
+    if can_add:body+="<div class='card section'><h2>Register ICT asset</h2><form method='post' action='/app/ops/action' class='grid'><input type='hidden' name='action' value='asset_add'><input class='field' name='asset_name' required placeholder='Equipment name'><input class='field' name='asset_tag' placeholder='Asset tag / serial number'><input class='field' name='location' placeholder='Location'><select class='field' name='condition'><option>Operational</option><option>Needs repair</option><option>Retired</option></select><button class='btn'>Save asset</button></form></div>"
+    if can_create:body+="<div class='card section'><h2>Log ICT issue</h2><form method='post' action='/app/ops/action' class='grid'><input type='hidden' name='action' value='ticket_add'><input class='field' name='title' required placeholder='Issue title'><input class='field' name='description' placeholder='Description'><select class='field' name='priority'><option>Normal</option><option>High</option><option>Urgent</option></select><button class='btn'>Create ticket</button></form></div>"
+    if can_assets:body+="<div class='card section'><h2>ICT asset register</h2><div style='overflow:auto'><table><thead><tr><th>Equipment</th><th>Asset tag</th><th>Location</th><th>Condition</th></tr></thead><tbody>"+(_simple_rows(assets,["asset_name","asset_tag","location","condition"]) or "<tr><td colspan='4'>No ICT assets registered.</td></tr>")+"</tbody></table></div></div>"
+    if can_tickets:
+        rows=[]
+        for x in tickets:
+            action="<form method='post' action='/app/ops/action'><input type='hidden' name='action' value='ticket_status'><input type='hidden' name='record_id' value='%s'><select name='status'><option>In Progress</option><option>Closed</option></select><button class='btn btn-light'>Update</button></form>"%int(x["id"]) if can_update and x["status"]!="Closed" else ""
+            rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(x["title"])),escape(str(x["priority"])),escape(str(x["status"])),escape(str(x["created_at"])),action))
+        body+="<div class='card section'><h2>ICT support tickets</h2><div style='overflow:auto'><table><thead><tr><th>Issue</th><th>Priority</th><th>Status</th><th>Logged</th><th>Action</th></tr></thead><tbody>"+("".join(rows) or "<tr><td colspan='5'>No tickets recorded.</td></tr>")+"</tbody></table></div></div>"
+    body+="</div><style>.field{width:100%;padding:11px;border:1px solid #dbe5dc;border-radius:9px}.page .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}</style>"
+    con.close();return _school_page(request,"ICT / Systems Officer Portal",body)
+
+
+@router.get("/app/support", response_class=HTMLResponse)
+def support_staff_portal(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/")
+    if not _ops_allowed(request,sid,"support_staff","support_portal.overview"):return HTMLResponse("Support Staff portal access is disabled.",403)
+    con=_db();cur=con.cursor();_ensure_ops_portal_tables(cur,con)
+    tasks=cur.execute("SELECT * FROM support_tasks WHERE school_id=? ORDER BY id DESC LIMIT 150",(sid,)).fetchall()
+    pending=cur.execute("SELECT COUNT(*) n FROM support_tasks WHERE school_id=? AND status<>'Completed'",(sid,)).fetchone()["n"]
+    can_tasks=_require_permission(request,sid,"support_portal.tasks");can_create=_require_permission(request,sid,"support_portal.tasks.create");can_update=_require_permission(request,sid,"support_portal.tasks.update")
+    body="<div class='page'><div class='muted'>SCHOOL OPERATIONS</div><h1>Support Staff Portal</h1><p class='muted'>Coordinate facilities, grounds, cleaning and general school support tasks.</p><div class='grid'><div class='card'><div class='label'>Tasks recorded</div><div class='kpi'>%s</div></div><div class='card'><div class='label'>Outstanding tasks</div><div class='kpi'>%s</div></div></div>"%(len(tasks),pending)
+    if can_create:body+="<div class='card section'><h2>Record support task</h2><form method='post' action='/app/ops/action' class='grid'><input type='hidden' name='action' value='task_add'><input class='field' name='title' required placeholder='Task / service required'><input class='field' name='details' placeholder='Details or instructions'><input class='field' name='location' placeholder='Location / department'><select class='field' name='priority'><option>Normal</option><option>High</option><option>Urgent</option></select><button class='btn'>Add task</button></form></div>"
+    if can_tasks:
+        rows=[]
+        for x in tasks:
+            action="<form method='post' action='/app/ops/action'><input type='hidden' name='action' value='task_complete'><input type='hidden' name='record_id' value='%s'><button class='btn btn-light'>Mark completed</button></form>"%int(x["id"]) if can_update and x["status"]!="Completed" else ""
+            rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(x["title"])),escape(str(x["location"] or "")),escape(str(x["priority"])),escape(str(x["status"])),action))
+        body+="<div class='card section'><h2>Support work queue</h2><div style='overflow:auto'><table><thead><tr><th>Task</th><th>Location</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>"+("".join(rows) or "<tr><td colspan='5'>No support tasks recorded.</td></tr>")+"</tbody></table></div></div>"
+    body+="</div><style>.field{width:100%;padding:11px;border:1px solid #dbe5dc;border-radius:9px}.page .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}</style>"
+    con.close();return _school_page(request,"Support Staff Portal",body)
+
+
+@router.post("/app/ops/action")
+async def operations_portal_action(request: Request):
+    sid=_school_session(request)
+    if not sid:return RedirectResponse("/",303)
+    form=await request.form()
+    action=str(form.get("action") or "")
+    role=str(request.session.get("role") or "")
+    permissions={
+        "book_add":("librarian","librarian_portal.books.create"),
+        "loan_add":("librarian","librarian_portal.loans.create"),
+        "loan_return":("librarian","librarian_portal.loans"),
+        "asset_add":("ict_officer","ict_portal.assets.create"),
+        "ticket_add":("ict_officer","ict_portal.tickets.create"),
+        "ticket_status":("ict_officer","ict_portal.tickets.update"),
+        "task_add":("support_staff","support_portal.tasks.create"),
+        "task_complete":("support_staff","support_portal.tasks.update"),
+    }
+    rule=permissions.get(action)
+    if not rule or not _ops_allowed(request,sid,rule[0],rule[1]):return HTMLResponse("This operation is not permitted for your portal account.",403)
+    con=_db();cur=con.cursor();_ensure_ops_portal_tables(cur,con);now=_ops_now();actor=str(request.session.get("email") or "")
+    if action=="book_add":
+        title=str(form.get("title") or "").strip()
+        if not title:con.close();return HTMLResponse("Book title is required.",400)
+        try:copies=max(1,int(form.get("copies") or 1))
+        except (TypeError,ValueError):copies=1
+        cur.execute("INSERT INTO library_books(school_id,title,author,isbn,copies,created_at,created_by) VALUES(?,?,?,?,?,?,?)",(sid,title,str(form.get("author") or "").strip(),str(form.get("isbn") or "").strip(),copies,now,actor))
+        target="/app/librarian"
+    elif action=="loan_add":
+        try:book_id=int(form.get("book_id") or 0)
+        except (TypeError,ValueError):book_id=0
+        book=cur.execute("SELECT id,copies FROM library_books WHERE id=? AND school_id=?",(book_id,sid)).fetchone()
+        if not book:con.close();return HTMLResponse("Book not found in this school's library.",404)
+        issued=cur.execute("SELECT COUNT(*) n FROM library_loans WHERE school_id=? AND book_id=? AND status='Issued'",(sid,book_id)).fetchone()["n"]
+        if int(issued)>=int(book["copies"] or 0):con.close();return HTMLResponse("All copies of this book are currently on loan.",409)
+        cur.execute("INSERT INTO library_loans(school_id,book_id,learner_name,admission_no,issue_date,due_date,status,created_by) VALUES(?,?,?,?,?,?,?,?)",(sid, str(book_id),str(form.get("learner_name") or "").strip(),str(form.get("admission_no") or "").strip(),str(form.get("issue_date") or ""),str(form.get("due_date") or ""),"Issued",actor))
+        target="/app/librarian"
+    elif action=="loan_return":
+        cur.execute("UPDATE library_loans SET status='Returned',returned_at=? WHERE id=? AND school_id=? AND status='Issued'",(now,int(form.get("record_id") or 0),sid));target="/app/librarian"
+    elif action=="asset_add":
+        title=str(form.get("asset_name") or "").strip()
+        if not title:con.close();return HTMLResponse("Equipment name is required.",400)
+        condition=str(form.get("condition") or "Operational")
+        if condition not in ("Operational","Needs repair","Retired"):condition="Operational"
+        cur.execute("INSERT INTO ict_assets(school_id,asset_name,asset_tag,location,condition,created_at,created_by) VALUES(?,?,?,?,?,?,?)",(sid,title,str(form.get("asset_tag") or "").strip(),str(form.get("location") or "").strip(),condition,now,actor));target="/app/ict"
+    elif action=="ticket_add":
+        title=str(form.get("title") or "").strip()
+        if not title:con.close();return HTMLResponse("Issue title is required.",400)
+        priority=str(form.get("priority") or "Normal")
+        if priority not in ("Normal","High","Urgent"):priority="Normal"
+        cur.execute("INSERT INTO ict_tickets(school_id,title,description,priority,status,created_at,created_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,title,str(form.get("description") or "").strip(),priority,"Open",now,actor,now));target="/app/ict"
+    elif action=="ticket_status":
+        status=str(form.get("status") or "")
+        if status not in ("In Progress","Closed"):con.close();return HTMLResponse("Invalid ticket status.",400)
+        cur.execute("UPDATE ict_tickets SET status=?,updated_at=? WHERE id=? AND school_id=?",(status,now,int(form.get("record_id") or 0),sid));target="/app/ict"
+    elif action=="task_add":
+        title=str(form.get("title") or "").strip()
+        if not title:con.close();return HTMLResponse("Task title is required.",400)
+        priority=str(form.get("priority") or "Normal")
+        if priority not in ("Normal","High","Urgent"):priority="Normal"
+        cur.execute("INSERT INTO support_tasks(school_id,title,details,location,priority,status,created_at,created_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,title,str(form.get("details") or "").strip(),str(form.get("location") or "").strip(),priority,"Pending",now,actor,now));target="/app/support"
+    else:
+        cur.execute("UPDATE support_tasks SET status='Completed',updated_at=? WHERE id=? AND school_id=?",(now,int(form.get("record_id") or 0),sid));target="/app/support"
+    con.commit();con.close();return RedirectResponse(target,303)
+
 
 # ---------------------------------------------------------------------------
 # Class MarkSheet Analysis
