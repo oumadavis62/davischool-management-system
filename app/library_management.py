@@ -214,3 +214,124 @@ async def library_book_save(
     finally:
         con.close()
     return RedirectResponse("/app/library/catalogue", 303)
+
+
+def _ensure_book_copies(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS library_book_copies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        book_id INTEGER NOT NULL,
+        accession_no TEXT NOT NULL,
+        condition TEXT NOT NULL DEFAULT 'Good',
+        copy_status TEXT NOT NULL DEFAULT 'Available',
+        acquisition_date TEXT DEFAULT '',
+        purchase_cost REAL NOT NULL DEFAULT 0,
+        notes TEXT DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(school_id, accession_no)
+    )""")
+
+
+@router.get("/app/library/register", response_class=HTMLResponse)
+def library_book_register(request: Request, q: str = "", status: str = ""):
+    sid, error = _library_guard(request)
+    if error:
+        return error
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        con.commit()
+        books = cur.execute(
+            "SELECT id,title FROM library_books WHERE school_id=? AND status='Active' ORDER BY LOWER(title)",
+            (sid,),
+        ).fetchall()
+        filters = ["c.school_id=?"]
+        params = [sid]
+        if q.strip():
+            term = "%" + q.strip() + "%"
+            filters.append("(b.title LIKE ? OR c.accession_no LIKE ? OR c.notes LIKE ?)")
+            params.extend([term, term, term])
+        if status in ("Available", "Issued", "Damaged", "Lost", "Withdrawn"):
+            filters.append("c.copy_status=?")
+            params.append(status)
+        rows = cur.execute(
+            "SELECT c.*,b.title FROM library_book_copies c JOIN library_books b ON b.id=c.book_id AND b.school_id=c.school_id WHERE "
+            + " AND ".join(filters) + " ORDER BY LOWER(b.title),LOWER(c.accession_no)",
+            tuple(params),
+        ).fetchall()
+        total = cur.execute("SELECT COUNT(*) AS n FROM library_book_copies WHERE school_id=?", (sid,)).fetchone()["n"]
+        available = cur.execute("SELECT COUNT(*) AS n FROM library_book_copies WHERE school_id=? AND copy_status='Available'", (sid,)).fetchone()["n"]
+        options = "".join(
+            f"<option value='{int(b['id'])}'>{escape(str(b['title']), quote=True)}</option>" for b in books
+        ) or "<option value=''>Add a title in Book Catalogue first</option>"
+        table = "".join(
+            f"<tr><td><b>{escape(str(r['accession_no']))}</b></td><td>{escape(str(r['title']))}</td>"
+            f"<td>{escape(str(r['condition']))}</td><td><span class='lib-status'>{escape(str(r['copy_status']))}</span></td>"
+            f"<td>{escape(str(r['acquisition_date'] or '—'))}</td><td>{float(r['purchase_cost'] or 0):,.2f}</td>"
+            f"<td>{escape(str(r['notes'] or '—'))}</td></tr>" for r in rows
+        ) or "<tr><td colspan='7' class='lib-empty'>No physical copies are registered for these filters.</td></tr>"
+        body = f"""
+<div class="page library-page">
+ <div class="page-heading lib-heading"><div><div class="lib-eyebrow">LIBRARY MANAGER / COLLECTION</div><h1>Book Register</h1><div class="lib-muted">Register each physical copy separately and track its accession number, condition and status.</div></div><button class="btn" type="button" onclick="document.getElementById('copyDialog').showModal()">Register Copy</button></div>
+ <div class="lib-kpis"><div><span>Registered copies</span><strong>{int(total or 0)}</strong></div><div><span>Available copies</span><strong>{int(available or 0)}</strong></div><div><span>Catalogue titles</span><strong>{len(books)}</strong></div></div>
+ <section class="card lib-filter-card"><form method="get" class="lib-filters" style="grid-template-columns:2fr 1fr auto auto"><label>Search<input class="field" name="q" value="{escape(q, quote=True)}" placeholder="Title, accession number or notes"></label><label>Copy status<select class="field" name="status"><option value="">All statuses</option>{''.join(f"<option {'selected' if status == s else ''}>{s}</option>" for s in ('Available','Issued','Damaged','Lost','Withdrawn'))}</select></label><button class="btn">Apply</button><a class="btn btn-light" href="/app/library/register">Clear</a></form></section>
+ <section class="card lib-table-card"><div class="page-heading"><h2>Individual copy register</h2><span class="lib-muted">{len(rows)} copy/copies shown</span></div><div class="lib-table-scroll"><table style="min-width:900px"><thead><tr><th>Accession no.</th><th>Book title</th><th>Condition</th><th>Status</th><th>Acquired</th><th>Cost</th><th>Notes</th></tr></thead><tbody>{table}</tbody></table></div></section>
+</div>
+<dialog id="copyDialog" class="lib-dialog"><form method="post" action="/app/library/register/save"><div class="lib-dialog-head"><div><div class="lib-eyebrow">PHYSICAL COPY</div><h2>Register book copy</h2></div><button type="button" class="lib-close" onclick="document.getElementById('copyDialog').close()">×</button></div>
+<div class="lib-form-grid"><label>Catalogue title *<select class="field" name="book_id" required>{options}</select></label><label>Accession number *<input class="field" name="accession_no" required maxlength="80"></label><label>Condition<select class="field" name="condition"><option>New</option><option selected>Good</option><option>Fair</option><option>Poor</option></select></label><label>Status<select class="field" name="copy_status"><option>Available</option><option>Damaged</option><option>Lost</option><option>Withdrawn</option></select></label><label>Acquisition date<input class="field" type="date" name="acquisition_date"></label><label>Purchase cost<input class="field" type="number" min="0" step="0.01" name="purchase_cost" value="0"></label><label class="lib-notes">Notes<textarea class="field" name="notes" rows="2"></textarea></label></div>
+<div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('copyDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not books else ''}>Save Copy</button></div></form></dialog>
+"""
+        con.close()
+        return _school_page(request, "Book Register", body)
+    except Exception:
+        con.close()
+        raise
+
+
+@router.post("/app/library/register/save")
+async def library_book_copy_save(
+    request: Request,
+    book_id: int = Form(...),
+    accession_no: str = Form(...),
+    condition: str = Form("Good"),
+    copy_status: str = Form("Available"),
+    acquisition_date: str = Form(""),
+    purchase_cost: float = Form(0),
+    notes: str = Form(""),
+):
+    sid, error = _library_guard(request, "library.edit")
+    if error:
+        return error
+    accession_no = accession_no.strip()
+    if not accession_no:
+        return HTMLResponse("Accession number is required.", 400)
+    condition = condition if condition in ("New", "Good", "Fair", "Poor") else "Good"
+    copy_status = copy_status if copy_status in ("Available", "Damaged", "Lost", "Withdrawn") else "Available"
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_book_catalogue(cur)
+        _ensure_book_copies(cur)
+        exists = cur.execute("SELECT id FROM library_books WHERE id=? AND school_id=?", (book_id, sid)).fetchone()
+        if not exists:
+            return HTMLResponse("Select a valid catalogue title.", 400)
+        cur.execute(
+            """INSERT INTO library_book_copies(school_id,book_id,accession_no,condition,copy_status,
+               acquisition_date,purchase_cost,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (sid, book_id, accession_no, condition, copy_status, acquisition_date.strip(),
+             max(0, purchase_cost), notes.strip(), now, now),
+        )
+        _audit(cur, sid, request, "LIBRARY_COPY_REGISTERED", f"{accession_no} / book {book_id}")
+        con.commit()
+    except Exception as exc:
+        con.rollback()
+        if "unique" in str(exc).lower():
+            return HTMLResponse("That accession number is already registered in this school.", 409)
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/library/register", 303)
