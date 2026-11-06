@@ -331,3 +331,50 @@ def inventory_requisition_issue(request: Request, requisition_id: int = Form(...
     except Exception: con.rollback(); raise
     finally: con.close()
     return RedirectResponse("/app/inventory/requisitions",303)
+
+
+@router.get("/app/inventory/reports", response_class=HTMLResponse)
+def inventory_reports(request: Request, start_date: str = "", end_date: str = "", category: str = ""):
+    sid, err = _guard(request)
+    if err: return err
+    con = _db()
+    try:
+        cur = con.cursor()
+        _schema(cur)
+        _transaction_schema(cur)
+        con.commit()
+        items = cur.execute("SELECT * FROM inventory_items WHERE school_id=? AND status='Active' ORDER BY category,item_name",(sid,)).fetchall()
+        selected_category = category.strip()
+        categories = sorted({str(x["category"] or "Uncategorised") for x in items})
+        stock_rows = [x for x in items if not selected_category or str(x["category"] or "Uncategorised")==selected_category]
+        low_rows = [x for x in stock_rows if float(x["quantity"] or 0) <= float(x["reorder_level"] or 0)]
+        where, params = ["t.school_id=?"], [sid]
+        if start_date: where.append("t.movement_date>=?"); params.append(start_date)
+        if end_date: where.append("t.movement_date<=?"); params.append(end_date)
+        if selected_category: where.append("i.category=?"); params.append("" if selected_category=="Uncategorised" else selected_category)
+        movements = cur.execute("SELECT t.*,i.item_code,i.item_name,i.category,i.unit FROM inventory_transactions t JOIN inventory_items i ON i.id=t.item_id AND i.school_id=t.school_id WHERE "+" AND ".join(where)+" ORDER BY t.movement_date DESC,t.id DESC LIMIT 1000",tuple(params)).fetchall()
+        received=sum(float(x["quantity"] or 0) for x in movements if str(x["transaction_type"]).lower() in ("receive","adjustment in"))
+        issued=sum(float(x["quantity"] or 0) for x in movements if str(x["transaction_type"]).lower() in ("issue","adjustment out"))
+        total_qty=sum(float(x["quantity"] or 0) for x in stock_rows)
+        cats={}
+        for x in stock_rows:
+            k=str(x["category"] or "Uncategorised"); cats[k]=cats.get(k,0)+1
+        cat_html="".join("<tr><td>"+escape(k)+"</td><td>"+str(v)+"</td></tr>" for k,v in sorted(cats.items())) or "<tr><td colspan='2'>No categories.</td></tr>"
+        low_html="".join("<tr><td>"+escape(str(x["item_code"]))+"</td><td>"+escape(str(x["item_name"]))+"</td><td>"+escape(str(x["category"] or "Uncategorised"))+"</td><td>"+format(float(x["quantity"] or 0),".2f")+"</td><td>"+format(float(x["reorder_level"] or 0),".2f")+"</td></tr>" for x in low_rows) or "<tr><td colspan='5'>No items at or below reorder level.</td></tr>"
+        move_html="".join("<tr><td>"+escape(str(x["movement_date"] or ""))+"</td><td>"+escape(str(x["item_code"] or ""))+" — "+escape(str(x["item_name"] or ""))+"</td><td>"+escape(str(x["transaction_type"] or ""))+"</td><td>"+format(float(x["quantity"] or 0),".2f")+" "+escape(str(x["unit"] or ""))+"</td><td>"+format(float(x["balance_after"] or 0),".2f")+"</td><td>"+escape(str(x["reference_no"] or ""))+"</td></tr>" for x in movements) or "<tr><td colspan='6'>No movements found.</td></tr>"
+        cat_options="<option value=''>All categories</option>"+"".join("<option value='"+escape(c,quote=True)+"'"+(" selected" if c==selected_category else "")+">"+escape(c)+"</option>" for c in categories)
+        body=f"""
+<div class="page inv-report"><style>
+.inv-report .stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}}.inv-report .stats>div,.inv-report .panel{{background:#fff;border:1px solid #e3ebe5;border-radius:14px;padding:15px}}.inv-report .stats span,.inv-report small{{display:block;color:#718078;font-size:12px}}.inv-report .stats strong{{font-size:24px;color:#174b35}}.inv-report .filters{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:10px;align-items:end}}.inv-report label{{display:grid;gap:6px;font-size:12px}}.inv-report input,.inv-report select{{width:100%;min-height:39px;padding:8px;border:1px solid #dce6df;border-radius:9px;background:#fff}}.inv-report .scroll{{overflow:auto;width:100%;margin-top:10px}}.inv-report table{{width:100%;min-width:680px;border-collapse:collapse}}.inv-report th,.inv-report td{{padding:10px;border-bottom:1px solid #edf1ee;text-align:left;font-size:13px}}.inv-report th{{background:#f7faf8}}@media(max-width:700px){{.inv-report .stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.inv-report .filters{{grid-template-columns:1fr}}}}@media print{{.inv-report .no-print{{display:none!important}}.inv-report .panel{{break-inside:avoid}}}}
+</style>
+<div class="page-heading"><div><div class="lib-eyebrow">INVENTORY &amp; STORES / REPORTING</div><h1>Stock Reports</h1><div>Stock balances, reorder alerts, category coverage and movement history.</div></div><button class="btn no-print" onclick="window.print()">Print Report</button></div>
+<section class="panel no-print"><form method="get" class="filters"><label>From date<input type="date" name="start_date" value="{escape(start_date,quote=True)}"></label><label>To date<input type="date" name="end_date" value="{escape(end_date,quote=True)}"></label><label>Category<select name="category">{cat_options}</select></label><button class="btn">Apply Filters</button></form></section>
+<div class="stats"><div><span>Active stock items</span><strong>{len(stock_rows)}</strong></div><div><span>Total units in stock</span><strong>{total_qty:,.2f}</strong></div><div><span>Reorder alerts</span><strong>{len(low_rows)}</strong></div><div><span>Movement entries</span><strong>{len(movements)}</strong></div></div>
+<section class="panel"><h2>Movement summary</h2><div>Received / adjustment in: <b>{received:,.2f}</b> &nbsp; | &nbsp; Issued / adjustment out: <b>{issued:,.2f}</b></div><small>Latest 1,000 matching movements.</small></section>
+<section class="panel" style="margin-top:14px"><h2>Low-stock and reorder alerts</h2><div class="scroll"><table><thead><tr><th>Item code</th><th>Item</th><th>Category</th><th>Balance</th><th>Reorder level</th></tr></thead><tbody>{low_html}</tbody></table></div></section>
+<section class="panel" style="margin-top:14px"><h2>Stock by category</h2><div class="scroll"><table><thead><tr><th>Category</th><th>Active items</th></tr></thead><tbody>{cat_html}</tbody></table></div></section>
+<section class="panel" style="margin-top:14px"><h2>Stock movement ledger</h2><div class="scroll"><table><thead><tr><th>Date</th><th>Item</th><th>Movement</th><th>Quantity</th><th>Balance after</th><th>Reference</th></tr></thead><tbody>{move_html}</tbody></table></div></section></div>
+"""
+        return _school_page(request, "Stock Reports", body)
+    finally:
+        con.close()
