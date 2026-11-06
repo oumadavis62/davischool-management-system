@@ -666,17 +666,16 @@ def _shell(title, name, role, body, school_id=None, request=None):
     teacher_locked = (role == "teacher")
     if teacher_locked:
         teacher_nav = [
-            ("/app",_modern_icon("dashboard"),"Overview"),
-            ("/app#teacher-classes",_modern_icon("school"),"My Classes"),
-            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects"),
-            ("/app/academics/marks",_modern_icon("marks"),"Record Marks"),
-            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status"),
+            ("/app",_modern_icon("dashboard"),"Overview","teacher_portal.view"),
+            ("/app#teacher-classes",_modern_icon("school"),"My Classes","teacher_portal.view"),
+            ("/app#teacher-subjects",_modern_icon("subject"),"My Subjects","teacher_portal.view"),
+            ("/app/academics/marks",_modern_icon("marks"),"Record Marks","marks.view"),
+            ("/app#teacher-submission-status",_modern_icon("clipboard-check"),"Submission Status","marks.view"),
+            ("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring","teacher_portal.view"),
+            ("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring","teacher_portal.view"),
         ]
-        # Keep the entry visible in every teacher workspace. The page itself
-        # verifies the teacher's current class-teacher assignment before showing class data.
-        teacher_nav.insert(4,("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring"))
-        teacher_nav.insert(5,("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring"))
-        links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l in teacher_nav)
+        teacher_nav = [item for item in teacher_nav if _require_permission(request,int(school_id or 0),item[3])]
+        links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l,_permission in teacher_nav)
     else:
         def _nav_sub(url, label):
             route = url.split("?", 1)[0]
