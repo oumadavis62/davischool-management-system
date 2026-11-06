@@ -41,6 +41,34 @@ class SchoolPermissionRoute(APIRoute):
         original_handler = super().get_route_handler()
 
         async def permission_guarded_handler(request: Request):
+            role = str(request.session.get("role") or "").lower()
+            path = str(request.url.path or "").rstrip("/") or "/"
+            method = str(request.method or "GET").upper()
+            # Non-administrator accounts are confined to their own portal routes.
+            # This prevents direct URL access to school administration modules.
+            if role == "teacher":
+                teacher_routes = {
+                    ("GET", "/app"), ("GET", "/app/class-teacher"),
+                    ("GET", "/app/class-monitoring"), ("POST", "/app/class-monitoring/follow-up"),
+                    ("GET", "/app/teacher-performance"), ("GET", "/app/teacher-performance/learners"),
+                    ("GET", "/app/academics/marks"), ("POST", "/app/academics/marks/save"),
+                    ("POST", "/app/academics/marks/save-draft"),
+                    ("GET", "/app/academics/marks/request-correction"),
+                    ("POST", "/app/academics/marks/request-correction"),
+                    ("GET", "/app/academics/marksheets"), ("GET", "/app/academics/marksheets/csv"),
+                    ("GET", "/app/academics/marksheets/pdf"),
+                }
+                if (method, path) not in teacher_routes:
+                    return HTMLResponse("This page is outside the Teacher Portal permissions.",403)
+            elif role == "parent":
+                if (method, path) not in {("GET", "/app/parent"), ("POST", "/app/parent/message")}:
+                    return HTMLResponse("This page is outside the Parent Portal permissions.",403)
+            elif role == "accountant":
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
+                    return HTMLResponse("This page is outside the Accountant Portal permissions.",403)
+            elif role == "student":
+                if (method, path) != ("GET", "/app"):
+                    return HTMLResponse("The Student Portal is not yet available.",403)
             required = _central_route_permission(
                 request.url.path, request.method, request.session.get("role", "")
             )
