@@ -14412,9 +14412,11 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     stid=int(student_id) if student_id.isdigit() else None
     if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): con.close(); return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
     if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): con.close(); return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
-    if role=="teacher" and not tid: con.close(); return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
+    staff_roles=("teacher","accountant","librarian","ict_officer","support_staff")
+    if role in staff_roles and not tid: con.close(); return HTMLResponse("Staff portal accounts must be linked to a staff profile. <a href='/app/users'>Back</a>",400)
     if role in ("student","parent") and not stid: con.close(); return HTMLResponse("Student and parent accounts must be linked to a student profile. <a href='/app/users'>Back</a>",400)
-    if role not in ("teacher","student","parent") and (tid or stid): con.close(); return HTMLResponse("This role cannot be linked to a teacher or student profile. <a href='/app/users'>Back</a>",400)
+    if role in staff_roles and stid: con.close(); return HTMLResponse("Staff accounts cannot be linked to a learner profile.",400)
+    if role in ("student","parent") and tid: con.close(); return HTMLResponse("Parent and student accounts cannot be linked to a staff profile.",400)
     from app.main import hash_password
     if password and len(password)<8: con.close(); return HTMLResponse("Password must be at least 8 characters. <a href='/app/users'>Back</a>",400)
     if password and password != password_confirm: con.close(); return HTMLResponse("New password and confirmation do not match. <a href='/app/users'>Back</a>",400)
@@ -14422,6 +14424,10 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
         cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password),role,tid,stid,uid,sid))
     else:
         cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
+    if role in staff_roles and tid:
+        designation_for_role={"teacher":"Teacher","accountant":"Accountant / Bursar","librarian":"Librarian","ict_officer":"ICT / Systems Officer","support_staff":"Support Staff"}.get(role)
+        if designation_for_role:
+            cur.execute("UPDATE teachers SET role=? WHERE id=? AND school_id=?",(designation_for_role,tid,sid))
     if role=="teacher" and tid:
         _ensure_class_teacher_assignments_table(cur)
         cid=int(class_id) if class_id.isdigit() else None
@@ -16235,7 +16241,7 @@ async def operations_portal_action(request: Request):
         if not title:con.close();return HTMLResponse("Issue title is required.",400)
         priority=str(form.get("priority") or "Normal")
         if priority not in ("Normal","High","Urgent"):priority="Normal"
-        cur.execute("INSERT INTO ict_tickets(school_id,title,description,priority,status,created_at,created_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",(sid,title,str(form.get("description") or "").strip(),priority,"Open",now,actor,now));target="/app/ict"
+        cur.execute("INSERT INTO ict_tickets(school_id,title,description,priority,status,created_at,created_by,updated_at) VALUES(?,?,?,?,?,?,?,?)",(sid,title,str(form.get("description") or "").strip(),priority,"Open",now,actor,now));target="/app/ict"
     elif action=="ticket_status":
         status=str(form.get("status") or "")
         if status not in ("In Progress","Closed"):con.close();return HTMLResponse("Invalid ticket status.",400)
