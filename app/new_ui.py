@@ -14339,7 +14339,7 @@ def users_page(request: Request):
      cc.value=Array.from(cs.selectedOptions).map(o=>o.value).join(',');sc.value=Array.from(ss.selectedOptions).map(o=>o.value).join(',');renderAssignmentSummary(cs,classSummary,classCount,'classes or streams');renderAssignmentSummary(ss,subjectSummary,subjectCount,'subjects');if(typeDisplay)typeDisplay.textContent=({{subject_teacher:'Subject teacher',class_teacher:'Class teacher',both:'Class teacher + subject teacher'}}[data.teacher_type||type.value]||'Teaching assignment');
    }}catch(err){{console.error('Teacher allocation load failed',err);}}
  }}
- function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=({Teacher:'teacher',Registrar:'registrar',Accountant:'accountant',Bursar:'accountant'}[job]||'');}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
+ function syncRoleChoice(){{const selected=roleChoice.value||'staff|Teacher';if(selected.startsWith('staff|')){{const job=selected.slice(6);designation.value=job;role.value=({Teacher:'teacher',Registrar:'registrar',Accountant:'accountant',Bursar:'bursar'}[job]||'');}}else{{designation.value='';role.value=selected;}}teacher.value='';filterProfiles();updateRole();}}
  designation.addEventListener('change',()=>{{teacher.value='';filterProfiles();clearAllocations();}});
  teacher.addEventListener('change',()=>{{updateProfile();loadTeacherLinks();}});
  roleChoice.addEventListener('change',syncRoleChoice);
