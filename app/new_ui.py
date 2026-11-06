@@ -14059,7 +14059,7 @@ def users_page(request: Request):
         success_block=""
     class_options_html="".join(f"<option value='{x['id']}'>{escape(str(x['name']))}{(' — '+escape(str(x['stream'] or ''))) if x['stream'] else ''}</option>" for x in classes)
     subject_options_html="".join(f"<option value='{x['id']}'>{escape(str(x['name']))}</option>" for x in subjects)
-    body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div><div style='display:flex;gap:9px;flex-wrap:wrap;margin:14px 0'><a href='/app/parent-links' class='btn'>Manage Parent–Learner Links</a><a href='/app/parent-messages' class='btn'>Parent Messages Inbox</a></div>
+    body=f"""<div class='page'><h1>User Management</h1><div class='muted'>Create school accounts and link them to staff or students.</div>
 {success_block}
 {credential_modal}<div class='users-toolbar'><div><h2 style='margin:0;color:#173f32'>User Accounts</h2><div class='muted'>Manage sign-in access and linked school profiles.</div></div><button type='button' class='users-primary' id='openCreateUser'>＋ Create User</button></div><div id='createUserModal' class='users-modal' aria-hidden='true'><div class='users-modal-panel' role='dialog' aria-modal='true' aria-labelledby='createUserTitle'><div class='users-modal-head'><div><h2 id='createUserTitle' style='margin:0'>Create user account</h2><div class='muted'>Set up access and link the account to an existing school record.</div></div><button type='button' class='users-close' id='closeCreateUser' aria-label='Close'>×</button></div>
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
