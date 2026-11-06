@@ -21,6 +21,8 @@ def _central_route_permission(path, method, role):
                 "student": "student_portal.view", "accountant": "accountant_portal.view", "bursar": "bursar_portal.view"}.get(role)
     if path == "/app/accountant":
         return "accountant_portal.view"
+    if path == "/app/student":
+        return "student_portal.view"
     if path.startswith("/app/portals"):
         return "settings.manage"
     if path.startswith("/app/academics/marks-corrections") or path.endswith("/academics/marks/request-correction"):
@@ -74,8 +76,8 @@ class SchoolPermissionRoute(APIRoute):
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/bursar"), ("POST", "/app/bursar/expense")}:
                     return HTMLResponse("This page is outside the Bursar Portal permissions.",403)
             elif role == "student":
-                if (method, path) != ("GET", "/app"):
-                    return HTMLResponse("The Student Portal is not yet available.",403)
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/student")}:
+                    return HTMLResponse("This page is outside the Student Portal permissions.",403)
             required = _central_route_permission(
                 request.url.path, request.method, request.session.get("role", "")
             )
@@ -6504,6 +6506,80 @@ def registrar_portal_page(request: Request):
     return _school_page(request,"Registrar Portal",body)
 
 
+@router.get("/app/student", response_class=HTMLResponse)
+def student_portal_page(request: Request):
+    """Read-only learner workspace scoped to the learner linked to this login."""
+    if "email" not in request.session or str(request.session.get("role") or "") != "student":
+        return HTMLResponse("Student Portal access is restricted to Student accounts.",403)
+    sid=int(request.session.get("school_id") or 0)
+    student_id=int(request.session.get("student_id") or 0)
+    if not sid or not student_id:
+        return HTMLResponse("This student account is not linked to a learner record. Please contact the school.",403)
+    if not _require_permission(request,sid,"student_portal.view"):
+        return HTMLResponse("Student Portal access has been disabled for this account.",403)
+    con=_db()
+    try:
+        cur=con.cursor()
+        learner=cur.execute("""SELECT s.id,s.name,s.admission_no,s.class_id,s.status,
+                c.name class_name,c.stream class_stream
+            FROM students s LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
+            WHERE s.id=? AND s.school_id=? LIMIT 1""",(student_id,sid)).fetchone()
+        if not learner:
+            return HTMLResponse("The linked student record could not be found. Please contact the school.",404)
+        school=cur.execute("SELECT name,phone,email,logo_data,status FROM schools WHERE id=?",(sid,)).fetchone()
+        if not school or str(school["status"] or "active").strip().lower() not in ("active","enabled"):
+            request.session.clear()
+            return RedirectResponse("/login?suspended=1",303)
+        marks=[]
+        attendance=[]
+        fees=[]
+        notices=[]
+        if _require_permission(request,sid,"student_portal.academics"):
+            marks=cur.execute("""SELECT m.marks,m.term,m.year,e.name exam_name,sub.name subject_name
+                FROM marks m LEFT JOIN exams e ON e.id=m.exam_id AND e.school_id=m.school_id
+                LEFT JOIN subjects sub ON sub.id=m.subject_id AND sub.school_id=m.school_id
+                WHERE m.school_id=? AND m.student_id=? ORDER BY m.id DESC LIMIT 100""",(sid,student_id)).fetchall()
+        if _require_permission(request,sid,"student_portal.attendance"):
+            attendance=cur.execute("""SELECT date,status FROM attendance
+                WHERE school_id=? AND student_id=? ORDER BY date DESC LIMIT 30""",(sid,student_id)).fetchall()
+        if _require_permission(request,sid,"student_portal.fees"):
+            fees=cur.execute("""SELECT description,amount,paid,due_date,status FROM fees
+                WHERE school_id=? AND student_id=? ORDER BY id DESC LIMIT 30""",(sid,student_id)).fetchall()
+        if _require_permission(request,sid,"student_portal.notices"):
+            try:
+                notices=cur.execute("""SELECT title,message,created_at FROM announcements
+                    WHERE school_id=? AND lower(coalesce(audience,'all')) IN ('all','students','student')
+                    ORDER BY id DESC LIMIT 12""",(sid,)).fetchall()
+            except Exception:
+                notices=[]
+    finally:
+        con.close()
+    learner_name=escape(str(learner["name"] or "Student"))
+    school_name=escape(str(school["name"] or "School"))
+    class_label=escape(str(learner["class_name"] or "Unassigned"))
+    if learner["class_stream"]:
+        class_label += " · " + escape(str(learner["class_stream"]))
+    logo=str(school["logo_data"] or "") if school and "logo_data" in school.keys() else ""
+    logo_html="<img src='"+escape(logo,quote=True)+"' alt='School logo' style='max-height:48px;max-width:150px;object-fit:contain'>" if logo else "<span class='student-brand-mark'>D</span>"
+    mark_rows="".join("<tr><td>"+escape(str(x["exam_name"] or "Assessment"))+"</td><td>"+escape(str(x["subject_name"] or "Subject"))+"</td><td>"+escape(str(x["marks"] if x["marks"] is not None else "—"))+"</td><td>"+escape(" / ".join(y for y in [str(x["term"] or "").strip(),str(x["year"] or "").strip()] if y))+"</td></tr>" for x in marks)
+    attendance_rows="".join("<tr><td>"+escape(str(x["date"] or "—"))+"</td><td>"+escape(str(x["status"] or "Present"))+"</td></tr>" for x in attendance)
+    fee_rows="".join("<tr><td>"+escape(str(x["description"] or "School fee"))+"</td><td>KES "+format(float(x["amount"] or 0),",.2f")+"</td><td>KES "+format(float(x["paid"] or 0),",.2f")+"</td><td>KES "+format(max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),",.2f")+"</td></tr>" for x in fees)
+    notice_cards="".join("<article class='student-notice'><b>"+escape(str(x["title"] or "School notice"))+"</b><small>"+escape(str(x["created_at"] or ""))+"</small><p>"+escape(str(x["message"] or ""))+"</p></article>" for x in notices)
+    fee_balance=sum(max(0,float(x["amount"] or 0)-float(x["paid"] or 0)) for x in fees)
+    body=f"""<div class='page student-portal-page'>
+<style>
+.student-portal-page{{max-width:1180px;margin:0 auto}}.student-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:22px;border-radius:18px;background:linear-gradient(120deg,#e8f4eb,#f8fbf8);border:1px solid #d6e8da;margin-bottom:18px}}.student-brand{{display:flex;align-items:center;gap:14px}}.student-brand-mark{{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#17663c;color:#fff;font-weight:900;font-size:24px}}.student-hero h1{{margin:0;color:#174b30}}.student-hero p{{margin:5px 0 0;color:#557361}}.student-identity{{text-align:right;color:#315b42;font-weight:800}}.student-identity small{{display:block;font-weight:500;color:#668070;margin-top:4px}}.student-kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}}.student-kpi{{background:#fff;border:1px solid #dce9df;border-radius:14px;padding:16px}}.student-kpi small{{display:block;color:#67806f}}.student-kpi strong{{display:block;font-size:23px;color:#174b30;margin-top:5px}}.student-portal-section{{background:#fff;border:1px solid #e0e9e2;border-radius:14px;padding:18px;margin:14px 0;overflow-x:auto}}.student-portal-section h2{{margin:0 0 12px;color:#174b30;font-size:18px}}.student-portal-section table{{width:100%;border-collapse:collapse;min-width:460px}}.student-portal-section th,.student-portal-section td{{padding:10px;text-align:left;border-bottom:1px solid #edf1ed;font-size:13px}}.student-portal-section th{{color:#557361;background:#f6faf7}}.student-notice{{padding:13px 0;border-bottom:1px solid #edf1ed}}.student-notice:last-child{{border:0}}.student-notice small{{display:block;color:#829187;margin-top:3px}}.student-notice p{{margin:7px 0 0;color:#475c4d;white-space:pre-wrap}}.student-empty{{padding:14px;color:#718078;background:#f8faf8;border-radius:10px}}@media(max-width:640px){{.student-hero{{align-items:flex-start;flex-direction:column}}.student-identity{{text-align:left}}}}
+</style>
+<div class='student-hero'><div class='student-brand'>{logo_html}<div><h1>Student Portal</h1><p>{school_name}</p></div></div><div class='student-identity'>{learner_name}<small>{class_label} · Admission: {escape(str(learner["admission_no"] or "—"))}</small></div></div>
+<div class='student-kpis'><div class='student-kpi'><small>My class</small><strong style='font-size:18px'>{class_label}</strong></div><div class='student-kpi'><small>Recent assessments</small><strong>{len(marks)}</strong></div><div class='student-kpi'><small>Attendance records</small><strong>{len(attendance)}</strong></div><div class='student-kpi'><small>Outstanding fees</small><strong>KES {fee_balance:,.0f}</strong></div></div>
+<div class='student-portal-section'><h2>My Academic Results</h2><table><thead><tr><th>Assessment</th><th>Subject</th><th>Marks</th><th>Term / Year</th></tr></thead><tbody>{mark_rows or "<tr><td colspan='4'>No assessment results are available yet, or access is restricted.</td></tr>"}</tbody></table></div>
+<div class='student-portal-section'><h2>My Attendance</h2><table><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>{attendance_rows or "<tr><td colspan='2'>No attendance records are available yet, or access is restricted.</td></tr>"}</tbody></table></div>
+<div class='student-portal-section'><h2>My Fee Statement</h2><table><thead><tr><th>Description</th><th>Amount</th><th>Paid</th><th>Balance</th></tr></thead><tbody>{fee_rows or "<tr><td colspan='4'>No fee records are available yet, or access is restricted.</td></tr>"}</tbody></table></div>
+<div class='student-portal-section'><h2>School Notices</h2>{notice_cards or "<div class='student-empty'>There are no notices for students at the moment, or access is restricted.</div>"}</div>
+</div>"""
+    return _school_page(request,"Student Portal",body)
+
+
 @router.get("/app/parent", response_class=HTMLResponse)
 def parent_portal(request: Request):
     """Read-only parent workspace, restricted to the learner linked to this login."""
@@ -6977,9 +7053,7 @@ def app_home(request: Request):
     if str(request.session.get("role") or "") == "registrar":
         return RedirectResponse("/app/registrar", status_code=303)
     if str(request.session.get("role") or "") == "student":
-        if not _require_permission(request,int(request.session.get("school_id") or 0),"student_portal.view"):
-            return HTMLResponse("Student Portal access has been disabled for this account.",403)
-        return HTMLResponse("The Student Portal is not yet available. Please contact the school administrator.",501)
+        return RedirectResponse("/app/student", status_code=303)
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
@@ -14232,7 +14306,7 @@ def users_page(request: Request):
         safe_name=escape(str(u["full_name"] or "user")).replace("'","&#39;")
         current_role=str(request.session.get("role") or "")
         creator_role=str(u["created_by_role"] or "") if "created_by_role" in u.keys() else ""
-        portal_paths={"teacher":"/app/teacher","registrar":"/app/registrar","accountant":"/app/accountant","bursar":"/app/bursar"}
+        portal_paths={"teacher":"/app/teacher","registrar":"/app/registrar","accountant":"/app/accountant","bursar":"/app/bursar","student":"/app/student","parent":"/app/parent"}
         portal_path=portal_paths.get(role_name)
         portal_action=(f"<a href='{portal_path}' title='Portal opens only when signed in as this account' style='display:inline-block;padding:7px 11px;border-radius:8px;background:#edf5ef;color:#20543a;text-decoration:none;font-size:11px;font-weight:800;border:1px solid #c9dfce'>↗ Portal</a> " if portal_path else "")
         if role_name=="school_admin":
@@ -15697,7 +15771,11 @@ def roles_page(request: Request):
             ("Bursar workspace","Cashbook","bursar_portal.cashbook","Review cashbook records"),
         ],
         "student":[
-            ("Portal access","Student Portal","student_portal.view","Student Portal page is not yet implemented in this application"),
+            ("Student workspace","Overview","student_portal.overview","Student home and personal school summary"),
+            ("Student workspace","Academic Results","student_portal.academics","View the learner's own assessment results"),
+            ("Student workspace","Attendance","student_portal.attendance","View personal attendance records"),
+            ("Student workspace","Fee Statement","student_portal.fees","View personal fee statement and balance"),
+            ("Student workspace","School Notices","student_portal.notices","Read announcements addressed to students"),
         ],
     }
     permission_groups={}
@@ -15742,9 +15820,7 @@ def roles_page(request: Request):
             ("is-on" if portal_enabled else "is-off","Allowed" if portal_enabled else "Blocked",portal_role,portal_key,0 if portal_enabled else 1,"Disable portal" if portal_enabled else "Enable portal")
         )
         role_label={"teacher":"Teacher Portal","parent":"Parent Portal","student":"Student Portal","accountant":"Accountant Portal","bursar":"Bursar Portal"}[matrix_role]
-        role_note="No separate student portal page is currently implemented." if matrix_role=="student" else ""
-        if matrix_role=="student":
-            group_markup=["<section class='rp-matrix-group'><p class='rp-feature-note'>Student login accounts can be created, but this codebase does not currently provide a student-facing portal page or feature tabs. This entry controls only the portal-level permission until that portal is implemented.</p></section>"]
+        role_note=""
         role_matrix.append(
             "<details class='rp-matrix-role'><summary><span>%s</span><small>%s</small></summary><div class='rp-matrix-content'>%s%s%s</div></details>" %
             (escape(role_label),"Portal enabled" if portal_enabled else "Portal blocked",portal_toggle_html,"".join(group_markup),("<p class='rp-feature-note'>%s</p>"%escape(role_note)) if role_note else "")
