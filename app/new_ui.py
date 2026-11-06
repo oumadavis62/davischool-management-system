@@ -2813,6 +2813,15 @@ def _staff_manager_styles():
 @media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
 @media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
+/* Critical: the fixed sidebar is outside flex flow. Give the staff main
+   content a zero flex-basis so its width is the full remaining workspace,
+   rather than the min-content width of the register/table. */
+.main:has(>.staff-manager-page){display:block!important;flex:1 1 0%!important;width:0!important;min-width:0!important;max-width:none!important}
+.main:has(>.staff-manager-page)>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
+.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
+.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
+.staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+@media(max-width:600px){.main:has(>.staff-manager-page){flex:1 1 100%!important;width:100%!important;margin-left:0!important}.main:has(>.staff-manager-page)>.staff-manager-page{flex:0 0 100%!important;width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
