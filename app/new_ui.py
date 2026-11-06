@@ -14344,7 +14344,7 @@ def users_page(request: Request):
    if(!p){{if(fullName)fullName.value='';if(phone)phone.value='';previewName.textContent='Staff profile preview';previewDesignation.textContent='Name and details will appear here automatically.';previewContact.textContent='Choose a staff member to load their saved details.';initials.textContent='DS';status.textContent='Awaiting selection';email.value='';return;}}
    if(fullName)fullName.value=p.name||'';if(phone)phone.value=p.phone||'';previewName.textContent=p.name||'Name not recorded';previewDesignation.textContent=p.designation||'Designation not recorded';
    previewContact.textContent=(p.email||p.phone)?((p.email||'Email not recorded')+' · '+(p.phone||'Phone not recorded')):'Contact details are missing from the staff record.';
-   initials.textContent=(p.name||'DS').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+   initials.textContent=(p.name||'DS').split(/\\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
    status.textContent='Profile linked';email.value=p.email||'';
  }}
  function updateRole(){{
