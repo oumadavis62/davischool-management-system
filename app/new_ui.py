@@ -14281,7 +14281,7 @@ def users_page(request: Request):
 {credential_modal}<div class='users-toolbar'><div><div class='muted'>Manage sign-in access and linked school profiles.</div></div><button type='button' class='users-primary' id='openCreateUser'>＋ Create User</button></div><div id='createUserModal' class='users-modal' aria-hidden='true'><div class='users-modal-panel' role='dialog' aria-modal='true' aria-labelledby='createUserTitle'><div class='users-modal-head'><div><h2 id='createUserTitle' style='margin:0'>Create user account</h2><div class='muted'>Set up access and link the account to an existing school record.</div></div><button type='button' class='users-close' id='closeCreateUser' aria-label='Close'>×</button></div>
 <form method='post' action='/app/users/add' class='create-user-form' id='createUserForm'>
 <div class='create-user-section-title'><span class='create-user-step'>01</span><div><b>Account access</b><small>Choose which portal this person will use.</small></div></div>
-<label class='create-user-field create-user-role'>Role / designation<select id='userRoleChoice' class='field' required><optgroup label='Staff roles'>{''.join(f"<option value='staff|{escape(x,quote=True)}' {'selected' if x=='Teacher' else ''} {'disabled' if registrar_exists and x=='Registrar' else ''}>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS if x not in ('Parent','Student'))}</optgroup><optgroup label='Family & learner access'><option value='parent'>Parent</option><option value='student'>Student</option></optgroup></select><small class='role-choice-hint'>Choose the person's school role or job designation. Portal access and staff profile are selected automatically.</small></label><input type='hidden' name='role' id='newRole' value='teacher'><input type='hidden' name='teacher_designation' id='teacherDesignation' value='Teacher'>
+<label class='create-user-field create-user-role'>Role / designation<select id='userRoleChoice' class='field' required>{''.join((f"<option value='parent' {'selected' if x=='Parent' else ''}>{escape(x)}</option>" if x=='Parent' else f"<option value='student' {'selected' if x=='Student' else ''}>{escape(x)}</option>" if x=='Student' else f"<option value='staff|{escape(x,quote=True)}' {'selected' if x=='Teacher' else ''} {'disabled' if registrar_exists and x=='Registrar' else ''}>{escape(x)}</option>") for x in STAFF_DESIGNATION_OPTIONS)}</select><small class='role-choice-hint'>Choose one of the nine standard designations. Portal access and linked profile are selected automatically.</small></label><input type='hidden' name='role' id='newRole' value='teacher'><input type='hidden' name='teacher_designation' id='teacherDesignation' value='Teacher'>
 <div id='staffProfileFields' class='create-user-profile-block'>
 <div class='create-user-section-title'><span class='create-user-step'>02</span><div><b>Staff profile</b><small>Choose the matching staff record for this role.</small></div></div>
 <label class='create-user-field'>Staff member<select name='teacher_id' id='newTeacher' class='field'><option value=''>Select a designation first</option>{topts}</select></label>
@@ -14369,6 +14369,9 @@ def users_edit_page(request: Request, uid: int):
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    linked_teacher=cur.execute("SELECT role FROM teachers WHERE id=? AND school_id=?",(int(user["teacher_id"] or 0),sid)).fetchone() if user["teacher_id"] else None
+    current_designation=str(linked_teacher["role"] or "Teacher") if linked_teacher else "Teacher"
+    if current_designation not in STAFF_DESIGNATION_OPTIONS: current_designation="Support Staff"
     students=cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     _ensure_class_teacher_assignments_table(cur)
     classes=cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
@@ -14390,7 +14393,7 @@ def users_edit_page(request: Request, uid: int):
 <form method='post' action='/app/users/edit/{uid}' class='edit-user-form'>
 <input name='full_name' required value="{escape(str(user['full_name'] or ''))}" placeholder='Full name' class='field'><input name='email' type='email' required value="{escape(str(user['email'] or ''))}" placeholder='Email' class='field'>
 <input name='password' type='password' minlength='8' placeholder='New password (optional)' class='field'><input name='password_confirm' type='password' minlength='8' placeholder='Confirm new password' class='field'>
-<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent</option><option value='student' {'selected' if user['role']=='student' else ''}>Student</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar</option></select>
+<label class='edit-user-designation'>Designation<select name='teacher_designation' class='field'>{''.join(f"<option value='{escape(x,quote=True)}' {'selected' if current_designation==x else ''}>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select></label><label>Account portal<select name='role' class='field'><option value='teacher' {'selected' if user['role']=='teacher' else ''}>Teacher portal</option><option value='parent' {'selected' if user['role']=='parent' else ''}>Parent portal</option><option value='student' {'selected' if user['role']=='student' else ''}>Student portal</option><option value='accountant' {'selected' if user['role']=='accountant' else ''}>Accountant portal</option><option value='registrar' {'selected' if user['role']=='registrar' else ''}>Registrar portal</option></select></label>
 <select name='teacher_id' class='field'><option value=''>Link teacher (optional)</option>{topts}</select><select name='class_id' class='field'><option value=''>Link class (for Class Teacher)</option>{classopts}</select><select name='student_id' class='field'><option value=''>Link student (optional)</option>{sopts}</select>
 <div class='edit-user-actions'><a href='/app/users' class='edit-cancel'>Cancel</a><button class='edit-save' type='submit'>💾 Save Changes</button></div></form>
 <div class='edit-delete-zone'><div><strong>Delete this account</strong><div class='edit-note'>This permanently removes the user's sign-in account.</div></div>{delete_control}</div>
@@ -14399,7 +14402,7 @@ def users_edit_page(request: Request, uid: int):
     return _school_page(request,"Edit User",body)
 
 @router.post("/app/users/edit/{uid}")
-def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), password_confirm:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form("")):
+def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Form(...), password:str=Form(""), password_confirm:str=Form(""), role:str=Form(...), teacher_id:str=Form(""), class_id:str=Form(""), student_id:str=Form(""), teacher_designation:str=Form("Teacher")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -14418,6 +14421,8 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
     if duplicate: con.close(); return HTMLResponse("Email already exists. <a href='/app/users'>Back</a>",409)
     tid=int(teacher_id) if teacher_id.isdigit() else None
     stid=int(student_id) if student_id.isdigit() else None
+    designation_value=str(teacher_designation or "").strip()
+    if designation_value not in STAFF_DESIGNATION_OPTIONS: con.close(); return HTMLResponse("Invalid designation. Please choose one of the nine standard designations.",400)
     if tid and not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone(): con.close(); return HTMLResponse("Selected teacher does not belong to this school. <a href='/app/users'>Back</a>",400)
     if stid and not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(stid,sid)).fetchone(): con.close(); return HTMLResponse("Selected student does not belong to this school. <a href='/app/users'>Back</a>",400)
     if role=="teacher" and not tid: con.close(); return HTMLResponse("Teacher accounts must be linked to a teacher profile. <a href='/app/users'>Back</a>",400)
@@ -14430,6 +14435,8 @@ def users_edit(request: Request, uid: int, full_name:str=Form(...), email:str=Fo
         cur.execute("UPDATE users SET email=?,full_name=?,password=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),hash_password(password),role,tid,stid,uid,sid))
     else:
         cur.execute("UPDATE users SET email=?,full_name=?,role=?,teacher_id=?,student_id=? WHERE id=? AND school_id=?",(email_v,full_name.strip(),role,tid,stid,uid,sid))
+    if tid:
+        cur.execute("UPDATE teachers SET role=? WHERE id=? AND school_id=?",(designation_value,tid,sid))
     if role=="teacher" and tid:
         _ensure_class_teacher_assignments_table(cur)
         cid=int(class_id) if class_id.isdigit() else None
