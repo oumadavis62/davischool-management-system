@@ -6639,6 +6639,7 @@ def parent_portal(request: Request):
     parent_notices_html=f"""<button type='button' class='parent-tab' data-view='notices' onclick="parentShow('notices')">Notices</button>""" if _require_permission(request,sid,"parent_portal.notices") else ""
     parent_messages_html=f"""<button type='button' class='parent-tab' data-view='messages' onclick="parentShow('messages')">Messages</button>""" if _require_permission(request,sid,"parent_portal.message") else ""
     parent_contact_html=f"""<button type='button' class='parent-tab' data-view='contact' onclick="parentShow('contact')">School Contact</button>""" if _require_permission(request,sid,"parent_portal.contact") else ""
+    parent_default_view=next((view for key,view in (("parent_portal.overview","overview"),("parent_portal.academics","academics"),("parent_portal.attendance","attendance"),("parent_portal.fees","fees"),("parent_portal.notices","notices"),("parent_portal.message","messages"),("parent_portal.contact","contact")) if _require_permission(request,sid,key)),"")
     body = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'><meta name='robots' content='noindex,nofollow'>
 <title>Parent Portal · DaviSchool</title><style>
@@ -6694,7 +6695,7 @@ main{{width:min(1100px,92%);margin:28px auto 50px}}.welcome{{margin-bottom:20px}
 {("<section class='parent-view' id='parent-notices' hidden><section class='panel' style='margin-top:16px'><h2>School notices</h2>{notice_html or \"<div class='empty'>There are no parent announcements at the moment.</div>\"}</section></section>" if _require_permission(request,sid,"parent_portal.notices") else "")}
 {("<section class='parent-view' id='parent-messages' hidden><section class='panel' style='margin-top:16px'><h2>Messages to school</h2><form method='post' action='/app/parent/message' style='display:grid;gap:9px'><input type='hidden' name='student_id' value='{student_id}'><input name='subject' required maxlength='120' placeholder='Subject' class='child-select'><textarea name='message' required maxlength='4000' rows='4' placeholder='Write a message to the school' class='child-select'></textarea><button class='send-btn'>Send message</button></form><div style='margin-top:14px'>{message_html or \"<div class='empty'>Your messages and school replies will appear here.</div>\"}</div></section></section>" if _require_permission(request,sid,"parent_portal.message") else "")}
 {("<section class='parent-view' id='parent-contact' hidden><section class='panel' style='margin-top:16px'><h2>School contact details</h2><div class='muted'>For questions about your child's results, attendance or school activities, reach the school office using the details below.</div><div style='margin-top:8px;font-weight:800;color:#176b3a'>{escape(school_contact) if school_contact else 'Contact the school office for assistance.'}</div></section></section>" if _require_permission(request,sid,"parent_portal.contact") else "")}<p class='muted' style='text-align:center;margin-top:18px'>Your access is limited to the learner or learners explicitly linked to this parent account.</p><footer class='parent-platform-footer' aria-label='DaviSchool platform branding'><span class='parent-platform-logo' aria-hidden='true'><span class='davi-mark'></span></span><span>Powered by <strong>DaviSchool</strong></span></footer></main>
-<script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}</script></body></html>"""
+<script>function parentShow(view){{document.querySelectorAll('.parent-view').forEach(function(section){{section.hidden=section.id!=='parent-'+view;}});document.querySelectorAll('.parent-tab').forEach(function(tab){{tab.classList.toggle('active',tab.dataset.view===view);}});window.scrollTo({{top:0,behavior:'smooth'}});}}if({{parent_default_view|tojson}})parentShow({{parent_default_view|tojson}});</script></body></html>"""
     return HTMLResponse(body)
 
 
@@ -6830,6 +6831,10 @@ def app_home(request: Request):
         return RedirectResponse("/app/parent", status_code=303)
     if str(request.session.get("role") or "") == "accountant":
         return RedirectResponse("/app/accounting", status_code=303)
+    if str(request.session.get("role") or "") == "student":
+        if not _require_permission(request,int(request.session.get("school_id") or 0),"student_portal.view"):
+            return HTMLResponse("Student Portal access has been disabled for this account.",403)
+        return HTMLResponse("The Student Portal is not yet available. Please contact the school administrator.",501)
     role=request.session.get("role","")
     name=request.session.get("name","DaviSchool")
     con=_db(); cur=con.cursor()
