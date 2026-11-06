@@ -837,6 +837,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('book-open')}</span><b>Library Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/library/catalogue", "Book Catalogue")
+            + _nav_sub("/app/library/register", "Book Register")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
