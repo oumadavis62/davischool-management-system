@@ -2584,7 +2584,7 @@ function openStudentsPrintPreview(){
     </section>
     <button type='button' class='students-add-panel' id='open-student-add' onclick="document.getElementById('student-add-dialog').showModal()"><span><b>Add a student</b><small>Enter the learner's basic admission details</small></span><span class='students-add-chevron' aria-hidden='true'>＋</span></button>
     <dialog class='student-add-dialog' id='student-add-dialog' aria-labelledby='student-add-title'><div class='student-add-dialog-head'><div><div class='students-eyebrow'>NEW ENROLMENT</div><h2 id='student-add-title'>Add a student</h2><p>Enter the learner's basic admission details.</p></div><button type='button' class='student-add-close' aria-label='Close' onclick="document.getElementById('student-add-dialog').close()">×</button></div><form method='post' action='/app/students/add{tab_q}' class='students-add-form'>
-    <input name='admission_no' required placeholder='Admission number' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
+    <input name='admission_no' value='' readonly placeholder='Assigned automatically on save' aria-label='Admission number assigned automatically' class='field'><input name='name' required placeholder='Full name' class='field'><select name='class_id' class='field'><option value=''>Class</option>{opts}</select>
     <select name='gender' class='field'><option value=''>Gender</option><option>Male</option><option>Female</option><option>Other</option></select><input name='parent_name' placeholder='Parent name' class='field'><input name='parent_phone' placeholder='Parent phone' class='field'><input name='assessment_no' placeholder='Assessment number' class='field'>
     <div class='student-add-dialog-actions'><button type='button' class='student-add-cancel' onclick="document.getElementById('student-add-dialog').close()">Cancel</button><button class='btn students-primary-button'>Save Student</button></div></form></dialog>
     <section class='card section students-register-card'><div class='students-register-heading'><div><div class='students-eyebrow'>RECORDS</div><h2>Students <span>{int(total)} matching</span></h2><p>Search and filter the register to find a learner.</p></div><div class='student-register-actions'><button class='btn students-print-button' type='button' onclick='openStudentsPrintPreview()'>Print Register</button></div></div>
@@ -2605,7 +2605,7 @@ function openStudentsPrintPreview(){
         return _school_page(request,"Students List",body)
 
 @router.post("/app/students/add")
-def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form(""), guardian_name:str=Form("")):
+def students_add(request: Request, admission_no:str=Form(""), name:str=Form(...), class_id:str=Form(""), gender:str=Form(""), parent_name:str=Form(""), parent_phone:str=Form(""), assessment_no:str=Form(""), guardian_name:str=Form("")):
     # Diagnose production-only login redirects without logging credentials or
     # session-cookie contents. This distinguishes a missing tab ID from a
     # session that exists but lacks the school-role fields.
@@ -2626,9 +2626,20 @@ def students_add(request: Request, admission_no:str=Form(...), name:str=Form(...
     if not _require_permission(request, sid, "students.create"):
         return HTMLResponse("You do not have permission to create students.", 403)
     con=_db(); cur=con.cursor(); _ensure_student_history_table(cur); _ensure_student_parent_name_column(cur, con)
-    admission=admission_no.strip()
-    if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone():
-        con.close(); return HTMLResponse("Admission number already exists. <a href='/app/students'>Back</a>",400)
+    # Direct registration uses the same school-specific, atomic sequence as
+    # formal enrolment. Ignore client-supplied numbers so users cannot bypass
+    # the school's configured numbering policy.
+    _ensure_admissions_schema(cur)
+    year = _admission_academic_year(cur,sid)
+    admission = _next_admission_number(cur,sid,year)
+    for _ in range(100):
+        duplicate = cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)",(sid,admission)).fetchone()
+        if not duplicate:
+            break
+        admission = _next_admission_number(cur,sid,year)
+    else:
+        con.close()
+        return HTMLResponse("Could not issue a unique admission number. Review the school's numbering settings.",500)
     cid=int(class_id) if class_id.isdigit() else None
     class_stream = ""
     if cid:
