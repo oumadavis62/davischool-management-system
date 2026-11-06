@@ -14368,6 +14368,7 @@ def users_edit_page(request: Request, uid: int):
         return HTMLResponse("You do not have permission to manage users.",403)
     con=_db();cur=con.cursor()
     user=cur.execute("SELECT * FROM users WHERE id=? AND school_id=?",(uid,sid)).fetchone()
+    if not user: con.close(); return HTMLResponse("User account not found. <a href='/app/users'>Back</a>",404)
     teachers=cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
     linked_teacher=cur.execute("SELECT role FROM teachers WHERE id=? AND school_id=?",(int(user["teacher_id"] or 0),sid)).fetchone() if user["teacher_id"] else None
     current_designation=str(linked_teacher["role"] or "Teacher") if linked_teacher else "Teacher"
