@@ -2813,16 +2813,18 @@ def _staff_manager_styles():
 @media(max-width:900px){.staff-manager-page .staff-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.staff-manager-page .staff-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.staff-manager-page .page-heading{align-items:flex-start;flex-direction:column}.staff-manager-page .staff-filters{grid-template-columns:1fr}.staff-manager-page .card,.staff-manager-page .section{padding:14px;border-radius:13px}}
 @media print{.staff-manager-page .no-print,.staff-manager-page .staff-filters{display:none!important}.staff-manager-page .card{box-shadow:none;border:0}.staff-manager-page{max-width:none}}
-/* Staff workspace uses an explicit remaining-width calculation; avoid a zero-width
-   flex basis, which allowed the shell to collapse around intrinsic content. */
-.main.staff-workspace{display:block!important;flex:0 0 calc(100% - 250px)!important;width:calc(100% - 250px)!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
-.main.staff-workspace>.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
+/* The sidebar is fixed and outside flex flow. Give the main workspace a
+   zero flex basis so it receives all remaining horizontal space exactly once.
+   Do not subtract the sidebar width from both flex-basis and margin-left. */
+.main.staff-workspace{display:block!important;flex:1 1 0%!important;width:0!important;min-width:0!important;max-width:none!important;margin-left:250px!important;box-sizing:border-box!important}
+.main.staff-workspace>.staff-manager-page{display:block!important;flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;box-sizing:border-box!important}
 .main.staff-workspace>.staff-manager-page,.staff-manager-page,.staff-manager-page>.staff-register-card,.staff-manager-page .staff-add-panel,.staff-manager-page .staff-table-scroll{float:none!important;min-width:0!important;box-sizing:border-box!important}
-.staff-manager-page{display:block!important;width:100%!important;max-width:none!important}
-.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important}
-.staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
-@media(max-width:900px){.main.staff-workspace{flex:0 0 calc(100% - 72px)!important;width:calc(100% - 72px)!important;margin-left:72px!important}}
-@media(max-width:600px){.main.staff-workspace{flex:0 0 100%!important;width:100%!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
+.staff-manager-page{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
+.staff-manager-page>.staff-register-card{display:block!important;width:100%!important;max-width:none!important;min-width:0!important}
+.staff-manager-page .staff-add-panel{flex:0 0 100%!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
+.staff-manager-page .staff-table-scroll{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+@media(max-width:900px){.main.staff-workspace{flex:1 1 0%!important;width:0!important;margin-left:72px!important}}
+@media(max-width:600px){.main.staff-workspace{flex:1 1 0%!important;width:0!important;margin-left:0!important}.main.staff-workspace>.staff-manager-page{width:100%!important}.staff-manager-page{padding-left:14px!important;padding-right:14px!important}}
 </style>"""
 
 @router.get("/app/staff", response_class=HTMLResponse)
