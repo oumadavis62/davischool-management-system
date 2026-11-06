@@ -672,7 +672,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
     else:
         nav = [
             ("/app",_modern_icon("dashboard"),"Overview",None),
-            ("/app/admissions",_modern_icon("clipboard-check"),"Admissions & Enrolment","students.view"),
+            *([("/app/admissions",_modern_icon("clipboard-check"),"Admissions & Enrolment","students.view")] if role in ("school_admin","registrar") else []),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
