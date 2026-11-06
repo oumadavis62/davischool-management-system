@@ -120,6 +120,9 @@ def _pdf_route_error(request, route_name, exc):
 # Standard selection lists used across school data-entry screens. These keep
 # entry consistent while still allowing the database to store plain text.
 TERM_OPTIONS = ("Term 1", "Term 2", "Term 3")
+
+# One canonical designation list shared by staff records and account creation.
+STAFF_DESIGNATION_OPTIONS = ['Teacher','Deputy Teacher','Senior Teacher','Head of Department','Deputy Head Teacher','Head Teacher','Deputy Principal','Principal','Director','Registrar','Bursar','Accountant','School Secretary','Administrator','Librarian','Laboratory Technician','ICT Officer','Guidance & Counselling Officer','Nurse','Sports Coach','Security Officer','Driver','Cook','Cleaner','Support Staff','Other']
 YEAR_OPTIONS = tuple(str(y) for y in range(datetime.now(ZoneInfo("Africa/Nairobi")).year, datetime.now(ZoneInfo("Africa/Nairobi")).year + 5))
 
 def _parse_assessment_ids(exam_ids="", exam_id=""):
@@ -2849,14 +2852,14 @@ def staff_page(request: Request, staff: str="", department: str="", role: str=""
     support_count=max(0,len(staff_rows)-teaching_count)
     role_cards="".join(f"<div class='staff-kpi'><span>{escape(label)}</span><strong>{count}</strong><small>In current results</small></div>" for label,count in sorted(role_counts.items(),key=lambda item:(-item[1],item[0].lower())) if label.strip().lower() not in ("teacher","teachers"))[:3]
     dept_opts="<option value=''>All departments</option>"+"".join(f"<option value='{escape(str(d['department']),quote=True)}' {'selected' if str(d['department'])==dept else ''}>{escape(str(d['department']))}</option>" for d in departments)
-    roles=["Teacher","Deputy Teacher","Head of Department","Head Teacher","Principal","Bursar","Secretary","Support Staff"]
+    roles=list(STAFF_DESIGNATION_OPTIONS)
     role_opts="<option value=''>All designations</option>"+"".join(f"<option {'selected' if x==desig else ''}>{x}</option>" for x in roles)
     emp_opts="<option value=''>All employment types</option>"+"".join(f"<option {'selected' if x==emp else ''}>{x}</option>" for x in ["Permanent","Contract","Part-time"])
     state_opts="".join(f"<option value='{v}' {'selected' if state==v else ''}>{label}</option>" for v,label in [("","All statuses"),("active","Active"),("inactive","Inactive"),("on_leave","On Leave")])
     body=f"""<div class='page students-list-page staff-manager-page'><div class='page-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / DIRECTORY</div><h1>Staff List</h1><div class='muted'>A clear, organised directory for your teachers and support team.</div></div><div class='staff-page-actions'><button type='button' class='btn no-print' onclick="document.getElementById('find-staff-dialog').showModal()">Find Staff</button></div></div>
 <div class='staff-kpis staff-directory-kpis'><div class='staff-kpi'><span>Active staff</span><strong>{active_count}</strong><small>Currently active</small></div><div class='staff-kpi'><span>Teaching team</span><strong>{teaching_count}</strong><small>Teaching designations</small></div><div class='staff-kpi'><span>Support & administration</span><strong>{support_count}</strong><small>Other designations</small></div><div class='staff-kpi staff-gender-kpi'><span>Gender distribution</span><div class='staff-gender-counts'><div><strong>{gender_counts["Male"]}</strong><small>Male</small></div><div><strong>{gender_counts["Female"]}</strong><small>Female</small></div></div><div class='staff-gender-bar'><i style='width:{(gender_counts["Male"]*100/max(1,gender_counts["Male"]+gender_counts["Female"])):.1f}%'></i><i style='width:{(gender_counts["Female"]*100/max(1,gender_counts["Male"]+gender_counts["Female"])):.1f}%'></i></div></div>{role_cards}</div>
 <button type='button' class='staff-add-panel no-print' onclick="document.getElementById('add-staff-dialog').showModal()"><span><b>Add a staff member</b><small>Enter the staff member's details to create a new staff record</small></span><span class='staff-add-chevron' aria-hidden='true'>＋</span></button>
-<dialog id='add-staff-dialog' class='staff-add-dialog'><div class='staff-dialog-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / NEW RECORD</div><h2>Add a staff member</h2><p class='muted'>Enter the staff member's details below.</p></div><button type='button' class='staff-dialog-close' aria-label='Close' onclick="document.getElementById('add-staff-dialog').close()">×</button></div><form method='post' action='{staff_add_action}' class='staff-filters staff-add-form'><label>Full name<input name='name' required placeholder='Full name' class='field'></label><label>Email address<input name='email' type='email' placeholder='Email address' class='field'></label><label>Phone number<input name='phone' placeholder='Phone number' class='field'></label><label>TSC number<input name='tsc_no' placeholder='TSC number' class='field'></label><label>ID number<input name='id_no' placeholder='ID number' class='field'></label><label>Designation<select name='role' id='staffAddRole' class='field' onchange="filterStaffDepartment('staffAddRole','staffAddDepartment')"><option>Teacher</option><option>Deputy Teacher</option><option>Head of Department</option><option>Head Teacher</option><option>Principal</option><option>Bursar</option><option>Secretary</option><option>Support Staff</option></select></label><label>Gender<select name='gender' class='field'><option value=''>Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></label><label>Employment type<select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select></label><label>Status<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select></label><label>Department<select name='department' id='staffAddDepartment' class='field'><option value=''>Select department</option></select></label><div class='staff-dialog-actions'><button type='button' class='btn btn-light' onclick="document.getElementById('add-staff-dialog').close()">Cancel</button><button class='btn'>Save Staff Member</button></div></form></dialog><dialog id='edit-staff-dialog' class='staff-add-dialog staff-edit-dialog'><div id='staff-edit-content' class='staff-edit-content'></div></dialog><script>function openStaffEdit(url){{const dialog=document.getElementById('edit-staff-dialog'),content=document.getElementById('staff-edit-content');content.innerHTML='';fetch(url,{{credentials:'same-origin',headers:{{'X-Requested-With':'XMLHttpRequest'}}}}).then(async r=>{{const html=await r.text();if(!r.ok)throw new Error('Unable to load staff form (HTTP '+r.status+'). '+html.replace(/<[^>]*>/g,' ').trim().slice(0,500));const doc=new DOMParser().parseFromString(html,'text/html');content.innerHTML=doc.body.innerHTML||html;doc.querySelectorAll('script').forEach(old=>{{const s=document.createElement('script');s.textContent=old.textContent;content.appendChild(s);}});dialog.showModal();}}).catch(e=>{{content.innerHTML='<div class="edit-load-error">'+String(e.message).replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]))+'</div>';dialog.showModal();}});}}function filterStaffDepartment(roleId,departmentId,selectedValue){{
+<dialog id='add-staff-dialog' class='staff-add-dialog'><div class='staff-dialog-heading'><div><div class='staff-eyebrow'>STAFF MANAGER / NEW RECORD</div><h2>Add a staff member</h2><p class='muted'>Enter the staff member's details below.</p></div><button type='button' class='staff-dialog-close' aria-label='Close' onclick="document.getElementById('add-staff-dialog').close()">×</button></div><form method='post' action='{staff_add_action}' class='staff-filters staff-add-form'><label>Full name<input name='name' required placeholder='Full name' class='field'></label><label>Email address<input name='email' type='email' placeholder='Email address' class='field'></label><label>Phone number<input name='phone' placeholder='Phone number' class='field'></label><label>TSC number<input name='tsc_no' placeholder='TSC number' class='field'></label><label>ID number<input name='id_no' placeholder='ID number' class='field'></label><label>Designation<select name='role' id='staffAddRole' class='field' onchange="filterStaffDepartment('staffAddRole','staffAddDepartment')">{''.join(f"<option value='{escape(x,quote=True)}'>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select></label><label>Gender<select name='gender' class='field'><option value=''>Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></label><label>Employment type<select name='employment_type' class='field'><option>Permanent</option><option>Contract</option><option>Part-time</option></select></label><label>Status<select name='status' class='field'><option value='active'>Active</option><option value='inactive'>Inactive</option><option value='on_leave'>On Leave</option><option value='left'>Left School</option></select></label><label>Department<select name='department' id='staffAddDepartment' class='field'><option value=''>Select department</option></select></label><div class='staff-dialog-actions'><button type='button' class='btn btn-light' onclick="document.getElementById('add-staff-dialog').close()">Cancel</button><button class='btn'>Save Staff Member</button></div></form></dialog><dialog id='edit-staff-dialog' class='staff-add-dialog staff-edit-dialog'><div id='staff-edit-content' class='staff-edit-content'></div></dialog><script>function openStaffEdit(url){{const dialog=document.getElementById('edit-staff-dialog'),content=document.getElementById('staff-edit-content');content.innerHTML='';fetch(url,{{credentials:'same-origin',headers:{{'X-Requested-With':'XMLHttpRequest'}}}}).then(async r=>{{const html=await r.text();if(!r.ok)throw new Error('Unable to load staff form (HTTP '+r.status+'). '+html.replace(/<[^>]*>/g,' ').trim().slice(0,500));const doc=new DOMParser().parseFromString(html,'text/html');content.innerHTML=doc.body.innerHTML||html;doc.querySelectorAll('script').forEach(old=>{{const s=document.createElement('script');s.textContent=old.textContent;content.appendChild(s);}});dialog.showModal();}}).catch(e=>{{content.innerHTML='<div class="edit-load-error">'+String(e.message).replace(/[&<>]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]))+'</div>';dialog.showModal();}});}}function filterStaffDepartment(roleId,departmentId,selectedValue){{
  const role=(document.getElementById(roleId)?.value||'').trim().toLowerCase();
  const teachingRoles=['teacher','deputy teacher','head of department','head teacher','principal'];
  const teachingDepartments=['ECDE / Early Childhood Education','Lower Primary','Upper Primary','Junior School','Senior School','Languages','Mathematics','Sciences','Humanities & Social Sciences','Technical & Vocational Studies','Creative Arts & Sports','Religious Education','Special Needs Education','Academic Coordination'];
@@ -3124,7 +3127,7 @@ def staff_edit_page(request: Request,teacher_id:int,modal:int=0):
 <label>Phone number<input name='phone' value='{escape(val("phone"),quote=True)}' placeholder='Phone number' class='field'></label>
 <label>TSC number<input name='tsc_no' value='{escape(val("tsc_no"),quote=True)}' placeholder='TSC number' class='field'></label>
 <label>ID number<input name='id_no' value='{escape(val("id_no"),quote=True)}' placeholder='ID number' class='field'></label>
-<label>Designation<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')">{''.join(f"<option value='{escape(role,quote=True)}' {'selected' if val('role','Teacher')==role else ''}>{escape(role)}</option>" for role in ['Teacher','Registrar','Deputy Teacher','Head of Department','Head Teacher','Principal','Bursar','Secretary','Support Staff'])}</select></label>
+<label>Designation<select name='role' id='staffEditRole' class='field' onchange="filterStaffDepartment('staffEditRole','staffEditDepartment')">{''.join(f"<option value='{escape(role,quote=True)}' {'selected' if val('role','Teacher')==role else ''}>{escape(role)}</option>" for role in STAFF_DESIGNATION_OPTIONS)}</select></label>
 <label>Gender<select name='gender' class='field'><option value=''>Select gender</option><option value='Male' {'selected' if val('gender')=='Male' else ''}>Male</option><option value='Female' {'selected' if val('gender')=='Female' else ''}>Female</option><option value='Other' {'selected' if val('gender')=='Other' else ''}>Other</option></select></label>
 <label>Employment type<select name='employment_type' class='field'><option value='Permanent' {'selected' if val('employment_type','Permanent')=='Permanent' else ''}>Permanent</option><option value='Contract' {'selected' if val('employment_type')=='Contract' else ''}>Contract</option><option value='Part-time' {'selected' if val('employment_type')=='Part-time' else ''}>Part-time</option></select></label>
 <label>Status<select name='status' class='field'><option value='active' {'selected' if status=='active' else ''}>Active</option><option value='inactive' {'selected' if status=='inactive' else ''}>Inactive</option><option value='on_leave' {'selected' if status=='on_leave' else ''}>On Leave</option><option value='left' {'selected' if status=='left' else ''}>Left School</option></select></label>
@@ -14255,6 +14258,7 @@ def users_page(request: Request):
 <form method='post' action='/app/users/add' style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px' id='createUserForm'>
 <select name='role' id='newRole' class='field'><option value='teacher'>Teacher</option><option value='parent'>Parent</option><option value='student'>Student</option><option value='accountant'>Accountant</option><option value='registrar' {'disabled' if registrar_exists else ''}>Registrar</option></select>
 <select name='teacher_id' id='newTeacher' class='field'><option value=''>Select Teacher from Teachers Records</option>{topts}</select>
+<select name='teacher_designation' id='teacherDesignation' class='field'><option value=''>Select staff designation</option>{''.join(f"<option value='{escape(x,quote=True)}'>{escape(x)}</option>" for x in STAFF_DESIGNATION_OPTIONS)}</select>
 <input name='email' id='newTeacherEmail' type='email' placeholder='Email from teacher record (optional)' class='field'>
 <select name='teacher_type' id='teacherType' class='field'><option value='subject_teacher'>Subject Teacher</option><option value='class_teacher'>Class Teacher</option><option value='both'>Class Teacher + Subject Teacher</option></select>
 <div id='classFieldWrap' style='display:none;grid-column:1/-1'><label style='display:block;font-weight:800;color:#334155;margin:2px 0 6px'>Classes / Streams</label><select id='classIdsSelect' class='field' multiple size='4' title='Classes automatically linked to this teacher'>{class_options_html}</select><div class='muted' style='margin-top:5px'>Classes are filled automatically from the teacher's existing Subject Allocations / Class Teacher assignment.</div></div>
@@ -14266,7 +14270,7 @@ def users_page(request: Request):
 <script>
 (function(){{
  const role=document.getElementById('newRole'), teacher=document.getElementById('newTeacher'), email=document.getElementById('newTeacherEmail');
- const type=document.getElementById('teacherType'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
+ const type=document.getElementById('teacherType'), designation=document.getElementById('teacherDesignation'), cs=document.getElementById('classIdsSelect'), ss=document.getElementById('subjectIdsSelect');
  const cw=document.getElementById('classFieldWrap'), sw=document.getElementById('subjectFieldWrap');
  const cc=document.getElementById('classIdsCsv'), sc=document.getElementById('subjectIdsCsv');
  async function loadTeacherLinks(){{
@@ -14276,7 +14280,7 @@ def users_page(request: Request):
    cw.style.display='block'; sw.style.display='block';
    try{{
      if(!teacher.value){{
-       email.value=''; cc.value=''; sc.value='';
+       email.value=''; if(designation) designation.value=''; cc.value=''; sc.value='';
        Array.from(cs.options).forEach(o=>{{o.selected=false;o.hidden=true;o.disabled=true;}});
        Array.from(ss.options).forEach(o=>{{o.hidden=true;o.disabled=true;o.selected=false;}});
        return;
@@ -14285,6 +14289,7 @@ def users_page(request: Request):
      if(!response.ok) throw new Error('Teacher links request failed');
      const data=await response.json();
      if(data.teacher && data.teacher.email) email.value=data.teacher.email;
+     if(data.teacher && data.teacher.designation && designation) designation.value=data.teacher.designation;
      if(data.teacher_type) type.value=data.teacher_type;
      const wantedClasses=new Set((data.classes||[]).map(String));
      Array.from(cs.options).forEach(o=>{{
@@ -14469,7 +14474,7 @@ def users_teacher_links(request: Request, teacher_id: int = 0):
         ct=bool(class_teacher)
         st=bool(allocations)
         teacher_type="both" if ct and st else ("class_teacher" if ct else "subject_teacher")
-        return JSONResponse({"teacher":{"id":int(teacher["id"]),"name":str(teacher["name"] or ""),"email":str(teacher["email"] or "")},
+        return JSONResponse({"teacher":{"id":int(teacher["id"]),"name":str(teacher["name"] or ""),"email":str(teacher["email"] or ""),"designation":str(teacher["role"] or "Teacher")},
             "classes":classes,"subjects_by_class":subjects_by_class,
             "class_teacher_class":int(class_teacher["class_id"]) if class_teacher else None,
             "teacher_type":teacher_type})
@@ -14484,14 +14489,14 @@ def users_add_get(request: Request):
     return RedirectResponse("/app/users",303)
 
 @router.post("/app/users")
-def users_add_legacy(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
+def users_add_legacy(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form(""), teacher_designation:str=Form("")):
     # Compatibility for browsers or cached scripts that submit the User Management
     # account form to /app/users instead of its dedicated /app/users/add action.
     # Keep this path strictly delegated so there is only one account-creation flow.
-    return users_add(request, email, role, teacher_id, class_id, class_ids_csv, subject_ids_csv, teacher_type, student_id)
+    return users_add(request, email, role, teacher_id, class_id, class_ids_csv, subject_ids_csv, teacher_type, student_id, teacher_designation)
 
 @router.post("/app/users/add")
-def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form("")):
+def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), teacher_id:str=Form(""), class_id:str=Form(""), class_ids_csv:str=Form(""), subject_ids_csv:str=Form(""), teacher_type:str=Form("subject_teacher"), student_id:str=Form(""), teacher_designation:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request, sid, "users.manage"):
@@ -14530,6 +14535,11 @@ def users_add(request: Request, email:str=Form(""), role:str=Form("teacher"), te
             if parent_student:
                 full_name=str(parent_student["parent_name"] or "").strip() or ("Parent of " + str(parent_student["name"] or "Learner"))
         if role in ("teacher","registrar"):
+            designation_value=str(teacher_designation or "").strip()
+            if designation_value and designation_value not in STAFF_DESIGNATION_OPTIONS:
+                return HTMLResponse("Invalid staff designation. Please choose a designation from the list.",400)
+            if designation_value:
+                cur.execute("UPDATE teachers SET role=? WHERE id=? AND school_id=?",(designation_value,tid,sid))
             teacher_row=cur.execute("SELECT name,email FROM teachers WHERE id=? AND school_id=?",(tid,sid)).fetchone()
             if teacher_row:
                 # The selected Teachers record is authoritative. This also
