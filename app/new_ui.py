@@ -15038,10 +15038,10 @@ def exams_page(request: Request):
     con.close()
     class_picker="".join("<label class='exam-class-option'><input type='checkbox' name='class_ids' value='%s'><span><b>%s</b><small>%s</small></span></label>"%(c["id"],escape(str(c["name"] or "")),escape(str(c["stream"] or "No stream"))) for c in classes)
     cards="".join(
-        "<article class='exam-record' data-search='%s'><div class='exam-record-main'><div class='exam-record-icon'>▦</div><div class='exam-record-copy'><strong>%s</strong><div class='exam-record-meta'><span>%s</span><span>%s</span><span>%s</span></div></div></div><span class='exam-participation-avatar' title='Participating classes / streams' aria-label='%s participating classes / streams'>%s</span><div class='exam-actions'><button type='button' class='exam-edit' onclick=\"document.getElementById('examEditModal%s').showModal()\">Edit details</button></div></article>"
+        "<article class='exam-record' data-search='%s'><div class='exam-record-main'><div class='exam-record-icon'>▦</div><div class='exam-record-copy'><strong>%s</strong><div class='exam-record-meta'><span>%s</span><span>%s</span><span>%s</span></div></div></div><div class='exam-record-bottom'><span class='exam-participation'>%s participating classes / streams</span><div class='exam-actions'><button type='button' class='exam-edit' onclick=\\\"document.getElementById('examEditModal%s').showModal()\\\">Edit details</button></div></div></article>"
         %(escape(" ".join(str(x[k] or "") for k in ("name","exam_type","term","year")).lower(),quote=True),
           escape(str(x["name"] or "Untitled examination")),escape(str(x["exam_type"] or "Assessment")),
-          escape(str(x["term"] or "Term not set")),escape(str(x["year"] or "Year not set")),count,count,int(x["id"]))
+          escape(str(x["term"] or "Term not set")),escape(str(x["year"] or "Year not set")),count,int(x["id"]))
         for x,count,_selected in exam_cards
     )
     edit_modals="".join(
@@ -15141,6 +15141,14 @@ def exams_page(request: Request):
 .exam-record-list .exam-actions{{flex:0 0 auto!important;align-self:center!important}}
 .exam-record-list>.exam-empty{{width:100%!important;min-width:0!important}}
 @media(max-width:650px){{.exam-register-viewport{{height:55vh!important;min-height:220px!important;max-height:55vh!important;overflow:scroll!important;overflow-x:auto!important;overflow-y:auto!important;touch-action:pan-x pan-y!important}}.exam-record-list{{width:760px!important;min-width:760px!important}}}}
+/* Examination Register: preserve the original card layout; scroll only this bounded viewport on both axes. */
+.exam-list-panel{{display:block!important;min-width:0!important;max-width:100%!important;overflow:visible!important}}
+.exam-register-viewport{{display:block!important;box-sizing:border-box!important;width:100%!important;height:420px!important;min-height:220px!important;max-height:62vh!important;overflow:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;scrollbar-gutter:stable;position:relative!important;border:1px solid #e4eee5!important;border-radius:12px!important}}
+.exam-record-list{{display:grid!important;grid-template-columns:repeat(2,minmax(320px,1fr))!important;grid-auto-rows:max-content!important;align-content:start!important;gap:10px!important;box-sizing:border-box!important;width:660px!important;min-width:660px!important;max-width:none!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;padding:8px!important;position:relative!important}}
+.exam-record-list>.exam-record{{display:block!important;width:auto!important;min-width:0!important;box-sizing:border-box!important;margin:0!important}}
+.exam-record-bottom{{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin-top:13px!important;padding-top:10px!important;border-top:1px solid #edf2ed!important}}
+.exam-actions{{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important}}
+@media(max-width:650px){{.exam-register-viewport{{height:55vh!important;min-height:220px!important;max-height:55vh!important;overflow:auto!important;touch-action:pan-x pan-y!important}}.exam-record-list{{grid-template-columns:repeat(2,minmax(320px,1fr))!important;width:660px!important;min-width:660px!important}}}}
 </style>
 <script>
 function filterExaminationCards(value){{const q=String(value||'').toLowerCase();let visible=0;document.querySelectorAll('.exam-record').forEach(card=>{{const show=(card.dataset.search||'').includes(q);card.hidden=!show;if(show)visible++;}});const empty=document.getElementById('examNoMatches');if(empty)empty.hidden=visible>0;}}
