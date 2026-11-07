@@ -243,10 +243,7 @@ def parent_guardians(request: Request, q: str = ""):
         "</strong></div><div><small>Active learners</small><strong>" + str(learner_count) +
         "</strong></div><div><small>Displayed contacts</small><strong>" + str(len(directory)) +
         "</strong></div><div><small>Source</small><strong style='font-size:15px'>Student register</strong></div></div>"
-        "<section class='ps-card'><h2>Parent / Guardian Directory</h2>"
-        "<p>This directory is automatically populated from parent details entered in Students Manager, Admissions and Enrolment. "
-        "There is no second parent-registration step. Updating a learner's parent name or phone in Students Manager updates this directory. "
-        "Learners sharing the same phone number are grouped together; where no phone is recorded, matching parent names are grouped.</p>"
+        "<section class='ps-card'><h2>Parents / Guardian Register</h2>"
         "<form method='get' class='ps-toolbar'><label>Search parent or learner<input name='q' value='" +
         escape(q, quote=True) + "' placeholder='Name, phone or admission number'></label>"
         "<button class='ps-btn'>Search</button><a class='ps-btn light' href='/app/parent-services/guardians'>Clear</a></form>"
