@@ -262,6 +262,7 @@ _TABLES = (
         programme_id INTEGER,
         teaching_group_id INTEGER,
         weekly_occurrences INTEGER NOT NULL DEFAULT 1,
+        weekly_periods INTEGER NOT NULL DEFAULT 0,
         counts_toward_curriculum INTEGER NOT NULL DEFAULT 1,
         min_teacher_count INTEGER NOT NULL DEFAULT 1,
         room_type TEXT,
