@@ -335,3 +335,95 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
     except Exception:
         connection.rollback()
         raise
+
+
+def save_activity_type(connection: Any, school_id: int, code: str, name: str,
+                       requires_teacher: bool = False,
+                       requires_room: bool = False,
+                       tracks_attendance: bool = False) -> int:
+    code, name = (code or "").strip().upper(), (name or "").strip()
+    if not code or len(code) > 30 or not name:
+        raise TimetableSetupError("Activity code and name are required.")
+    cur = connection.cursor()
+    old = cur.execute(
+        "SELECT id FROM ds_timetable_activity_types WHERE school_id=? AND code=?",
+        (school_id, code),
+    ).fetchone()
+    flags = (name, int(bool(requires_teacher)), int(bool(requires_room)), int(bool(tracks_attendance)))
+    if old:
+        cur.execute(
+            """UPDATE ds_timetable_activity_types SET name=?,requires_teacher=?,
+               requires_room=?,tracks_attendance=? WHERE id=? AND school_id=?""",
+            flags + (old["id"], school_id),
+        )
+        activity_id = int(old["id"])
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_activity_types
+               (school_id,code,name,requires_teacher,requires_room,tracks_attendance)
+               VALUES(?,?,?,?,?,?)""",
+            (school_id, code) + flags,
+        )
+        row = cur.execute(
+            "SELECT id FROM ds_timetable_activity_types WHERE school_id=? AND code=?",
+            (school_id, code),
+        ).fetchone()
+        activity_id = int(row["id"])
+    connection.commit()
+    return activity_id
+
+
+def save_programme_session(connection: Any, school_id: int, profile_id: int,
+                            programme_id: int, start_time: str, end_time: str,
+                            duration_minutes: int,
+                            day_id: int | None = None, cycle_week: int = 0,
+                            subject_id: int | None = None,
+                            teaching_group_id: int | None = None,
+                            required_teacher_count: int = 1,
+                            room_type: str = "",
+                            recurrence: dict[str, Any] | None = None) -> int:
+    start, end, actual_duration = _time_range(start_time, end_time)
+    if int(duration_minutes) != actual_duration:
+        raise TimetableSetupError("Programme duration must match its configured start and end times.")
+    if not 1 <= int(required_teacher_count) <= 20 or not 0 <= int(cycle_week) <= 52:
+        raise TimetableSetupError("Teacher count must be 1–20 and cycle week must be 0–52.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    programme = cur.execute(
+        """SELECT id,rotation_cycle_id,recurrence_type FROM ds_timetable_learning_programmes
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (programme_id, school_id, profile_id),
+    ).fetchone()
+    if not programme:
+        raise TimetableSetupError("Select an active learning programme from this timetable profile.")
+    if programme["recurrence_type"] == "rotation" and int(cycle_week) == 0:
+        raise TimetableSetupError("A rotating programme session must specify its cycle week.")
+    if day_id is not None and not cur.execute(
+        "SELECT id FROM ds_timetable_days WHERE id=? AND school_id=? AND profile_id=?",
+        (day_id, school_id, profile_id),
+    ).fetchone():
+        raise TimetableSetupError("Select a day belonging to this timetable profile.")
+    if teaching_group_id is not None and not cur.execute(
+        "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+        (teaching_group_id, school_id, profile_id),
+    ).fetchone():
+        raise TimetableSetupError("Select a teaching group belonging to this timetable profile.")
+    if room_type and room_type not in {"classroom", "laboratory", "library", "hall", "workshop", "sports", "other"}:
+        raise TimetableSetupError("Choose a valid room type.")
+    cur.execute(
+        """INSERT INTO ds_timetable_programme_sessions
+           (school_id,profile_id,programme_id,subject_id,teaching_group_id,day_id,
+            cycle_week,start_time,end_time,duration_minutes,recurrence_json,
+            required_teacher_count,room_type)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (school_id, profile_id, programme_id, subject_id, teaching_group_id, day_id,
+         int(cycle_week), start, end, int(duration_minutes),
+         json.dumps(recurrence or {}, sort_keys=True), int(required_teacher_count), room_type or None),
+    )
+    row = cur.execute(
+        """SELECT id FROM ds_timetable_programme_sessions
+           WHERE school_id=? AND profile_id=? AND programme_id=? ORDER BY id DESC LIMIT 1""",
+        (school_id, profile_id, programme_id),
+    ).fetchone()
+    connection.commit()
+    return int(row["id"])
