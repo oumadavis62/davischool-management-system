@@ -81,7 +81,7 @@ class TimetablePublishingTests(unittest.TestCase):
         version = self.db.execute("SELECT snapshot_json FROM ds_timetable_versions WHERE id=?", (result["version_id"],)).fetchone()
         snapshot = json.loads(version["snapshot_json"])
         self.assertEqual(len(snapshot["lessons"]), 1)
-        self.assertEqual(snapshot["profile"]["status"], "draft")
+        self.assertEqual(snapshot["profile"]["status"], "pending_approval")
 
     def test_revision_clones_published_schedule_and_version_comparison_detects_change(self):
         submit_for_approval(self.db, 1, self.profile_id, "admin@test")
