@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.session_engine import _validate_constraints
 
 
 ENGINE_VERSION = "1.0"
@@ -263,6 +264,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     _overlap(span[0]["start_time"], span[-1]["end_time"], b["start_time"], b["end_time"])
                     for b in breaks
                 ):
+                    continue
+                try:
+                    _validate_constraints(
+                        cur, school_id, profile_id, "instructional", "lesson",
+                        task["subject_id"], [task["class_id"]], [task["teacher_id"]],
+                        None, day_id, int(period["id"]),
+                        str(span[0]["start_time"]), str(span[-1]["end_time"]), None,
+                    )
+                except TimetableSetupError:
                     continue
                 candidates.append({
                     "day_id": day_id,
