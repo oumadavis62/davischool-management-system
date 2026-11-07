@@ -93,6 +93,16 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
              AND l.id<>?""",
         (school_id, profile_id, day_id, exclude_lesson_id),
     ).fetchall()
+    max_per_day = int(requirement["max_lessons_per_day"]) if requirement["max_lessons_per_day"] is not None else 0
+    if max_per_day:
+        same_subject_day = sum(
+            1 for lesson in existing
+            if int(lesson["class_id"]) == int(class_id)
+            and int(lesson["subject_id"]) == int(subject_id)
+            and int(lesson["teacher_id"]) == int(teacher_id)
+        )
+        if same_subject_day >= max_per_day:
+            raise TimetableSetupError("The configured maximum lessons for this subject on the selected day has been reached.")
     for lesson in existing:
         existing_span = _period_span(
             cursor, school_id, profile_id, int(lesson["period_id"]), int(lesson["duration_periods"] or 1)
