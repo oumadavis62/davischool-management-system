@@ -128,6 +128,10 @@ def _ensure_tables(con):
         undone INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_snapshots(
+        id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, profile_id INTEGER NOT NULL,
+        label TEXT NOT NULL, snapshot_json TEXT NOT NULL, created_at TEXT NOT NULL
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_generation_runs(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -627,10 +631,13 @@ def _profiles(request, con, sid):
         rename=f"<form method='post' action='/app/timetable/profile/rename/{pid}' class='tt-profile-inline'><input class='tt-field' name='name' value='{escape(str(p['name']))}' required><button class='tt-btn alt'>Rename</button></form>"
         delete="" if pid==current or len(rows)<=1 else f"<form method='post' action='/app/timetable/profile/delete/{pid}' style='display:inline' onsubmit='return confirm(&quot;Delete this saved timetable profile? Lesson cards will remain.&quot;)'><button class='tt-btn danger'>Delete</button></form>"
         table.append(f"<tr><td><b>{escape(str(p['name']))}</b> {badge}<br><small>{escape(str(p['description'] or ''))}</small></td><td>{'Yes' if active else '—'}</td><td>{len(json.loads(str(p['periods_json'] or '[]')))}</td><td>{slots}</td><td>{switch} {duplicate} {delete}</td></tr>")
+    history_rows=con.execute("SELECT id,label,created_at FROM timetable_snapshots WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 20",(sid,current)).fetchall()
+    history_html="".join(f"<tr><td>{escape(str(x['label']))}</td><td>{escape(str(x['created_at']))}</td><td><form method='post' action='/app/timetable/snapshot/restore/{int(x['id'])}' onsubmit='return confirm(&quot;Restore this version? A safety copy will be saved first.&quot;)'><button class='tt-btn alt'>Restore</button></form></td></tr>" for x in history_rows) or "<tr><td colspan='3'>No saved versions yet.</td></tr>"
     return f"""<div class='tt-card'><h2>🗂️ Timetable Profiles</h2>
 <div class='tt-muted'>Create completely independent schedules such as Weekday, Saturday, Weekend, Exam or Special Activity. Each profile keeps its own days, period times, breaks and lesson placements. The existing timetable is preserved as the first profile.</div>
 <form method='post' action='/app/timetable/profile/create' class='tt-form' style='margin-top:12px'><label><span class='tt-label'>New timetable name</span><input class='tt-field' name='name' required placeholder='Saturday Timetable'></label><label class='wide'><span class='tt-label'>Description</span><input class='tt-field' name='description' placeholder='Different Saturday schedule'></label><div><button class='tt-btn'>➕ Create Timetable</button></div></form></div>
-<div class='tt-card'><h3>Saved Timetables</h3><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Name</th><th>Active</th><th>Periods</th><th>Placements</th><th>Actions</th></tr></thead><tbody>{''.join(table)}</tbody></table></div></div>"""
+<div class='tt-card'><h3>Saved Timetables</h3><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Name</th><th>Active</th><th>Periods</th><th>Placements</th><th>Actions</th></tr></thead><tbody>{''.join(table)}</tbody></table></div></div>
+<div class='tt-card'><h3>Version History & Recovery</h3><p class='tt-muted'>Save a named checkpoint before major edits. Restore replaces this profile's settings and placements only, after creating a safety copy of the current state.</p><form method='post' action='/app/timetable/snapshot/create' class='tt-form'><label class='wide'><span class='tt-label'>Version name</span><input class='tt-field' name='label' required maxlength='100' placeholder='Approved Term 1 timetable — 2027'></label><div><button class='tt-btn'>Save current version</button></div></form><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>Version</th><th>Created</th><th>Action</th></tr></thead><tbody>{history_html}</tbody></table></div></div>"""
 
 
 def _setup(request, con, sid):
@@ -1708,6 +1715,61 @@ def timetable_unpublish(request:Request):
             (sid,_active_profile_id(con,sid)))
         con.commit()
         return RedirectResponse("/app/timetable?tab=publish&msg=Publication+withdrawn",303)
+    finally:con.close()
+
+
+
+def _save_timetable_snapshot(con,sid,pid,label):
+    profile=con.execute("SELECT * FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid)).fetchone()
+    if not profile: raise ValueError("Timetable profile not found")
+    slots=con.execute("SELECT lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY day_name,period_no,id",(sid,pid)).fetchall()
+    fields=("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")
+    payload={"profile":{k:profile[k] for k in fields},"slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked","generated_run")} for r in slots]}
+    now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    con.execute("INSERT INTO timetable_snapshots(school_id,profile_id,label,snapshot_json,created_at) VALUES(?,?,?,?,?)",(sid,pid,str(label)[:100],json.dumps(payload),now))
+
+
+@router.post("/app/timetable/snapshot/create")
+def timetable_snapshot_create(request:Request,label:str=Form(...)):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        label=label.strip()
+        if not label:return RedirectResponse("/app/timetable?tab=profiles&error=Version+name+is+required",303)
+        _save_timetable_snapshot(con,sid,_active_profile_id(con,sid),label)
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+version+saved",303)
+    finally:con.close()
+
+
+@router.post("/app/timetable/snapshot/restore/{snapshot_id}")
+def timetable_snapshot_restore(request:Request,snapshot_id:int):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        snap=con.execute("SELECT * FROM timetable_snapshots WHERE id=? AND school_id=?",(snapshot_id,sid)).fetchone()
+        pid=_active_profile_id(con,sid)
+        if not snap or int(snap["profile_id"])!=pid:
+            return RedirectResponse("/app/timetable?tab=profiles&error=Version+does+not+belong+to+the+active+profile",303)
+        payload=json.loads(str(snap["snapshot_json"] or "{}"))
+        profile=payload.get("profile") or {}
+        slots=payload.get("slots") or []
+        for slot in slots:
+            if not con.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=?",(int(slot["lesson_id"]),sid)).fetchone():
+                return RedirectResponse("/app/timetable?tab=profiles&error=Version+references+a+missing+lesson.+Nothing+was+changed",303)
+        _save_timetable_snapshot(con,sid,pid,"Safety copy before restore")
+        for field in ("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation"):
+            if field in profile:
+                con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
+        con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
+        for slot in slots:
+            con.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,int(slot["lesson_id"]),slot["day_name"],int(slot["period_no"]),slot["start_time"],slot["end_time"],slot.get("room_id"),int(slot.get("locked") or 0),slot.get("generated_run"),pid))
+        con.execute("UPDATE timetable_profiles SET updated_at=? WHERE id=? AND school_id=?",(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Saved+version+restored.+Safety+copy+created",303)
+    except Exception:
+        con.rollback()
+        raise
     finally:con.close()
 
 
