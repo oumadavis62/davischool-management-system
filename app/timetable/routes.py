@@ -234,37 +234,37 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             """
         body = f"""
         <style>
-        .tt-wrap{max-width:1500px;margin:auto;padding:22px;color:#234638}
-        .tt-wrap *{box-sizing:border-box}
-        .tt-wrap{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}
-        .tt-hero{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;padding:28px 30px;border:1px solid #d1e3d4;border-radius:23px;background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);box-shadow:0 14px 32px rgba(39,91,57,.09)}
-        .tt-hero:after{content:'';position:absolute;width:260px;height:260px;right:8%;top:-175px;border:1px solid rgba(55,112,73,.16);border-radius:50%;box-shadow:0 0 0 28px rgba(55,112,73,.045),0 0 0 58px rgba(55,112,73,.03)}
-        .tt-hero>div{position:relative;z-index:1}.tt-hero h1{font-size:clamp(25px,3vw,34px);margin:5px 0 7px;color:#1e4934;letter-spacing:-.7px}.tt-hero p,.tt-section-title p,.tt-card p,.tt-profile p{color:#617a69;font-size:13px;margin:5px 0 0;line-height:1.6}
-        .tt-kicker{font-size:10px;font-weight:900;letter-spacing:.12em;color:#43845a}
-        .tt-card,.tt-section,.tt-profile,.tt-empty{background:rgba(255,255,255,.94);border:1px solid #dce9de;border-radius:19px;padding:20px;margin-bottom:16px;box-shadow:0 7px 22px rgba(36,83,52,.055)}
-        .tt-card h3,.tt-section h3{font-size:17px;margin:4px 0;color:#234c37}.tt-profile{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;border-left:4px solid #4d9564}.tt-profile h2{margin:4px 0;font-size:21px;color:#204a34}
-        .tt-stats{display:flex;gap:18px}.tt-stats span{font-size:11px;color:#647b6a;text-align:center}.tt-stats b{display:block;font-size:22px;color:#28734a}
-        .tt-status,.tt-pill{background:#e7f4e9;color:#23613b;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:800}
-        .tt-select{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.tt-select label{font-size:12px;font-weight:800;color:#42634e}.tt-select select{min-width:260px;max-width:100%;padding:11px 13px;border:1px solid #cfe0d1;border-radius:11px;background:white;color:#254a35}
-        .tt-section-title{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:15px}.tt-section-title>div{min-width:180px}
-        .tt-split{display:grid;grid-template-columns:minmax(190px,.48fr) minmax(0,1.7fr);gap:16px;align-items:start}
-        .tt-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end}.tt-form.compact{grid-template-columns:repeat(2,minmax(0,1fr))}
-        .tt-form label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800;color:#3b5946}.tt-form label.wide{grid-column:1/-1}
-        .tt-form input,.tt-form select{width:100%;min-width:0;padding:11px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font:13px Arial;color:#234638;outline:none}.tt-form input:focus,.tt-form select:focus{border-color:#78ad85;box-shadow:0 0 0 3px rgba(91,153,107,.13)}
-        .tt-form .tt-check{flex-direction:row;align-items:center;gap:7px;padding:9px 0}.tt-form .tt-check input{width:auto}
-        .tt-btn{border:0;border-radius:10px;padding:11px 15px;background:linear-gradient(135deg,#347c50,#246441);color:white;text-decoration:none!important;font-weight:800;font-size:12px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 5px 12px rgba(35,102,62,.13);transition:transform .16s,box-shadow .16s}
-        .tt-btn:hover{background:linear-gradient(135deg,#286b43,#1d5636);transform:translateY(-1px);box-shadow:0 8px 16px rgba(35,102,62,.18)}
-        .tt-btn.secondary{background:#edf6ee;color:#2a6a43;border:1px solid #cfe2d2;box-shadow:none}.tt-btn.secondary:hover{background:#e2f0e4}
-        .tt-add-card{min-height:100%;display:flex;align-items:center}.tt-add-card .tt-btn{width:100%;min-height:74px;white-space:normal;text-align:center}
-        .tt-table{overflow:auto;border:1px solid #e1ebe2;border-radius:13px;background:#fff}.tt-table table{width:100%;border-collapse:collapse;min-width:450px}.tt-table th{background:#edf5ee;color:#315b3e;text-align:left;font-size:10px;letter-spacing:.04em}.tt-table th,.tt-table td{padding:11px;border-bottom:1px solid #edf2ed;font-size:11px;white-space:nowrap}.tt-table tr:last-child td{border-bottom:0}.tt-muted{color:#94a39a;text-align:center;padding:18px!important}
-        .tt-alert{padding:12px 14px;border-radius:11px;margin-bottom:14px;font-size:12px;font-weight:700}.tt-alert.success{background:#eaf5ec;color:#17633b}.tt-alert.error{background:#fff1f0;color:#a12828}.tt-empty{text-align:center;padding:34px}.tt-empty b{font-size:18px}
-        .tt-modal{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(20,43,30,.48);backdrop-filter:blur(5px)}.tt-modal.is-open{display:flex;animation:ttFade .16s ease-out}
-        .tt-modal-dialog{position:relative;width:min(620px,100%);max-height:min(88vh,850px);overflow:auto;padding:25px;background:linear-gradient(145deg,#fff 0%,#f4faf4 100%);border:1px solid #d5e6d8;border-radius:22px;box-shadow:0 24px 70px rgba(18,52,31,.25);animation:ttPop .18s ease-out}
-        .tt-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:19px}.tt-modal-head h3{font-size:20px;margin:4px 0;color:#214a34}.tt-modal-head p{font-size:12px;color:#718477;margin:0}.tt-modal-close{border:0;width:35px;height:35px;border-radius:11px;background:#eaf4eb;color:#326a43;font-size:21px;cursor:pointer;flex:none}
-        .tt-modal .tt-form{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-modal .tt-form label.wide{grid-column:1/-1}.tt-modal .tt-form button{grid-column:1/-1;margin-top:4px}
-        @keyframes ttFade{from{opacity:0}to{opacity:1}}@keyframes ttPop{from{opacity:0;transform:translateY(9px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
-        @media(max-width:900px){.tt-split{grid-template-columns:1fr}.tt-add-card .tt-btn{min-height:48px}.tt-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
-        @media(max-width:600px){.tt-wrap{padding:12px;border-radius:17px}.tt-hero{padding:22px 18px}.tt-hero h1{font-size:24px}.tt-form,.tt-form.compact,.tt-modal .tt-form{grid-template-columns:1fr}.tt-form label.wide,.tt-modal .tt-form label.wide{grid-column:auto}.tt-stats{width:100%;justify-content:space-around}.tt-modal{padding:10px}.tt-modal-dialog{padding:20px 16px;border-radius:18px}.tt-hero>div:last-child{width:100%}.tt-hero>div:last-child a{flex:1}}
+        .tt-wrap{{max-width:1500px;margin:auto;padding:22px;color:#234638}}
+        .tt-wrap *{{box-sizing:border-box}}
+        .tt-wrap{{background:linear-gradient(145deg,#edf6ef 0%,#e4f0e6 42%,#f7faf7 100%);border-radius:26px;padding:24px}}
+        .tt-hero{{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;padding:28px 30px;border:1px solid #d1e3d4;border-radius:23px;background:linear-gradient(118deg,#dceede 0%,#c9e2ce 52%,#eaf4e9 100%);box-shadow:0 14px 32px rgba(39,91,57,.09)}}
+        .tt-hero:after{{content:'';position:absolute;width:260px;height:260px;right:8%;top:-175px;border:1px solid rgba(55,112,73,.16);border-radius:50%;box-shadow:0 0 0 28px rgba(55,112,73,.045),0 0 0 58px rgba(55,112,73,.03)}}
+        .tt-hero>div{{position:relative;z-index:1}}.tt-hero h1{{font-size:clamp(25px,3vw,34px);margin:5px 0 7px;color:#1e4934;letter-spacing:-.7px}}.tt-hero p,.tt-section-title p,.tt-card p,.tt-profile p{{color:#617a69;font-size:13px;margin:5px 0 0;line-height:1.6}}
+        .tt-kicker{{font-size:10px;font-weight:900;letter-spacing:.12em;color:#43845a}}
+        .tt-card,.tt-section,.tt-profile,.tt-empty{{background:rgba(255,255,255,.94);border:1px solid #dce9de;border-radius:19px;padding:20px;margin-bottom:16px;box-shadow:0 7px 22px rgba(36,83,52,.055)}}
+        .tt-card h3,.tt-section h3{{font-size:17px;margin:4px 0;color:#234c37}}.tt-profile{{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;border-left:4px solid #4d9564}}.tt-profile h2{{margin:4px 0;font-size:21px;color:#204a34}}
+        .tt-stats{{display:flex;gap:18px}}.tt-stats span{{font-size:11px;color:#647b6a;text-align:center}}.tt-stats b{{display:block;font-size:22px;color:#28734a}}
+        .tt-status,.tt-pill{{background:#e7f4e9;color:#23613b;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:800}}
+        .tt-select{{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}}.tt-select label{{font-size:12px;font-weight:800;color:#42634e}}.tt-select select{{min-width:260px;max-width:100%;padding:11px 13px;border:1px solid #cfe0d1;border-radius:11px;background:white;color:#254a35}}
+        .tt-section-title{{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:15px}}.tt-section-title>div{{min-width:180px}}
+        .tt-split{{display:grid;grid-template-columns:minmax(190px,.48fr) minmax(0,1.7fr);gap:16px;align-items:start}}
+        .tt-form{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end}}.tt-form.compact{{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        .tt-form label{{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800;color:#3b5946}}.tt-form label.wide{{grid-column:1/-1}}
+        .tt-form input,.tt-form select{{width:100%;min-width:0;padding:11px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font:13px Arial;color:#234638;outline:none}}.tt-form input:focus,.tt-form select:focus{{border-color:#78ad85;box-shadow:0 0 0 3px rgba(91,153,107,.13)}}
+        .tt-form .tt-check{{flex-direction:row;align-items:center;gap:7px;padding:9px 0}}.tt-form .tt-check input{{width:auto}}
+        .tt-btn{{border:0;border-radius:10px;padding:11px 15px;background:linear-gradient(135deg,#347c50,#246441);color:white;text-decoration:none!important;font-weight:800;font-size:12px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 5px 12px rgba(35,102,62,.13);transition:transform .16s,box-shadow .16s}}
+        .tt-btn:hover{{background:linear-gradient(135deg,#286b43,#1d5636);transform:translateY(-1px);box-shadow:0 8px 16px rgba(35,102,62,.18)}}
+        .tt-btn.secondary{{background:#edf6ee;color:#2a6a43;border:1px solid #cfe2d2;box-shadow:none}}.tt-btn.secondary:hover{{background:#e2f0e4}}
+        .tt-add-card{{min-height:100%;display:flex;align-items:center}}.tt-add-card .tt-btn{{width:100%;min-height:74px;white-space:normal;text-align:center}}
+        .tt-table{{overflow:auto;border:1px solid #e1ebe2;border-radius:13px;background:#fff}}.tt-table table{{width:100%;border-collapse:collapse;min-width:450px}}.tt-table th{{background:#edf5ee;color:#315b3e;text-align:left;font-size:10px;letter-spacing:.04em}}.tt-table th,.tt-table td{{padding:11px;border-bottom:1px solid #edf2ed;font-size:11px;white-space:nowrap}}.tt-table tr:last-child td{{border-bottom:0}}.tt-muted{{color:#94a39a;text-align:center;padding:18px!important}}
+        .tt-alert{{padding:12px 14px;border-radius:11px;margin-bottom:14px;font-size:12px;font-weight:700}}.tt-alert.success{{background:#eaf5ec;color:#17633b}}.tt-alert.error{{background:#fff1f0;color:#a12828}}.tt-empty{{text-align:center;padding:34px}}.tt-empty b{{font-size:18px}}
+        .tt-modal{{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(20,43,30,.48);backdrop-filter:blur(5px)}}.tt-modal.is-open{{display:flex;animation:ttFade .16s ease-out}}
+        .tt-modal-dialog{{position:relative;width:min(620px,100%);max-height:min(88vh,850px);overflow:auto;padding:25px;background:linear-gradient(145deg,#fff 0%,#f4faf4 100%);border:1px solid #d5e6d8;border-radius:22px;box-shadow:0 24px 70px rgba(18,52,31,.25);animation:ttPop .18s ease-out}}
+        .tt-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:19px}}.tt-modal-head h3{{font-size:20px;margin:4px 0;color:#214a34}}.tt-modal-head p{{font-size:12px;color:#718477;margin:0}}.tt-modal-close{{border:0;width:35px;height:35px;border-radius:11px;background:#eaf4eb;color:#326a43;font-size:21px;cursor:pointer;flex:none}}
+        .tt-modal .tt-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tt-modal .tt-form label.wide{{grid-column:1/-1}}.tt-modal .tt-form button{{grid-column:1/-1;margin-top:4px}}
+        @keyframes ttFade{{from{{opacity:0}}to{{opacity:1}}}}@keyframes ttPop{{from{{opacity:0;transform:translateY(9px) scale(.985)}}to{{opacity:1;transform:translateY(0) scale(1)}}}}
+        @media(max-width:900px){{.tt-split{{grid-template-columns:1fr}}.tt-add-card .tt-btn{{min-height:48px}}.tt-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
+        @media(max-width:600px){{.tt-wrap{{padding:12px;border-radius:17px}}.tt-hero{{padding:22px 18px}}.tt-hero h1{{font-size:24px}}.tt-form,.tt-form.compact,.tt-modal .tt-form{{grid-template-columns:1fr}}.tt-form label.wide,.tt-modal .tt-form label.wide{{grid-column:auto}}.tt-stats{{width:100%;justify-content:space-around}}.tt-modal{{padding:10px}}.tt-modal-dialog{{padding:20px 16px;border-radius:18px}}.tt-hero>div:last-child{{width:100%}}.tt-hero>div:last-child a{{flex:1}}}}
         </style>
         <div class='tt-wrap'><div class='tt-hero'><div><span class='tt-kicker'>DAVISCHOOL · SCHEDULING ENGINE</span><h1>Timetable Setup</h1><p>Set up your school week, teaching sessions, facilities and staffing rules in one guided workspace.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-btn' href='/app/timetable/builder?profile_id={pid}'>Open Manual Builder</a><a class='tt-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a></div></div>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not profiles else ""}{sections}</div>
         <script>
@@ -296,7 +296,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           }}
         }})();
         </script>
-        """<div class='tt-wrap'><div class='tt-hero'><div><span class='tt-kicker'>DAVISCHOOL · SCHEDULING ENGINE</span><h1>Timetable Setup</h1><p>Configure your academic calendar, school week, teaching periods, facilities and lesson requirements.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-btn' href='/app/timetable/builder?profile_id={pid}'>Open Manual Builder</a><a class='tt-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tt-btn secondary' href='/school/dashboard'>← School overview</a></div></div>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not profiles else ""}{sections}</div>
         """
         return module_page(request, "Timetable Setup", "timetable", body)
 
