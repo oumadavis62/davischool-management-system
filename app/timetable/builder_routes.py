@@ -8,7 +8,7 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
-from app.timetable.builder import place_lesson, move_lesson, delete_lesson
+from app.timetable.builder import place_lesson, move_lesson, delete_lesson, place_advanced_requirement_session
 
 
 def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
@@ -40,7 +40,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             (school_id,),
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
-        days = periods = rooms = allocations = requirements = lessons = calendar_events = []
+        days = periods = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute(
@@ -57,6 +57,13 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             ).fetchall()
             requirements = cur.execute(
                 "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=? ORDER BY class_id,subject_id",
+                (school_id,pid),
+            ).fetchall()
+            advanced_requirements = cur.execute(
+                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods
+                   FROM ds_timetable_scheduling_requirements r
+                   WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
+                     AND r.schedule_layer='instructional' ORDER BY r.name""",
                 (school_id,pid),
             ).fetchall()
             allocations = cur.execute(
@@ -168,6 +175,21 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             (f"<section class='tb-panel'><h3>Published timetable is read-only</h3><p>Create a new draft revision before making changes.</p><a class='tb-btn' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a></section>" if read_only else
              "<section class='tb-panel'><h3>Complete setup first</h3><p>Configure school days, teaching periods and weekly class-subject requirements before placing lessons.</p><a class='tb-btn' href='/app/timetable/setup'>Open Timetable Setup</a></section>")
         )
+        advanced_options = "".join(
+            f"<option value='{int(r['id'])}'>{esc(r['name'])} · {int(r['weekly_occurrences'])} sessions / {int(r['weekly_periods'])} periods weekly</option>"
+            for r in advanced_requirements
+        )
+        advanced_form = (
+            f"""<section class='tb-panel'><div><span class='tb-kicker'>ADVANCED MANUAL SCHEDULING</span><h3>Place a combined or team-taught session</h3><p>Uses the normalized requirement, configured session pattern and the same constraint/conflict engine as automatic generation.</p></div>
+            <form method='post' action='/app/timetable/builder/add-advanced' class='tb-add-form'>
+            <input type='hidden' name='profile_id' value='{pid}'>
+            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select advanced requirement</option>{advanced_options}</select></label>
+            <label>Weekly session number<input type='number' name='session_no' min='1' value='1' required></label>
+            <label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label>
+            <label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label>
+            <label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Place advanced session</button></form></section>"""
+            if not read_only and advanced_requirements and days and periods else ""
+        )
         body = f"""
         <style>
         .tb-wrap{{max-width:1700px;margin:auto;padding:24px;color:#234638;background:linear-gradient(145deg,#edf6ef 0%,#e3f0e5 45%,#f8fbf8 100%);border-radius:25px}}
@@ -228,6 +250,26 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         </script>
         """
         return module_page(request, "Timetable Builder", "timetable", body)
+
+    @app.post("/app/timetable/builder/add-advanced")
+    def add_advanced_builder_session(request: Request, profile_id: int = Form(...),
+        requirement_id: int = Form(...), session_no: int = Form(...),
+        day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            place_advanced_requirement_session(
+                con, int(school["id"]), profile_id, requirement_id, session_no,
+                day_id, period_id, int(room_id) if room_id else None,
+                request.session.get("email", ""),
+            )
+            return redirect_builder(profile_id, "Advanced session placed successfully.")
+        except (TimetableSetupError, ValueError) as exc:
+            return redirect_builder(profile_id, str(exc), True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/builder/add")
     def timetable_builder_add(request: Request, profile_id: int = Form(...), allocation: str = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):
