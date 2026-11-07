@@ -7,9 +7,12 @@ session can serve combined classes and be delivered by a teaching team.
 from __future__ import annotations
 
 from datetime import date, datetime
+import re
 from typing import Any, Iterable
 
 from app.timetable.setup import TimetableSetupError, _profile
+
+_TIME_RE = re.compile(r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
 
 
 def _unique_ids(values: Iterable[Any], field: str) -> list[int]:
@@ -49,10 +52,19 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
         ).fetchone()
         if not room or not int(room["is_active"] or 0):
             raise TimetableSetupError("Select an active room belonging to this school.")
-        if room["capacity"] is not None and learner_ids and len(learner_ids) > int(room["capacity"]):
-            raise TimetableSetupError(
-                f"The selected room holds {int(room['capacity'])}, but {len(learner_ids)} learners are assigned."
-            )
+        if room["capacity"] is not None:
+            enrolled = len(learner_ids)
+            if class_ids:
+                marks = ",".join("?" for _ in class_ids)
+                count = cur.execute(
+                    f"SELECT COUNT(*) AS n FROM students WHERE school_id=? AND class_id IN ({marks})",
+                    (school_id, *class_ids),
+                ).fetchone()
+                enrolled = max(enrolled, int(count["n"] or 0))
+            if enrolled > int(room["capacity"]):
+                raise TimetableSetupError(
+                    f"The selected room holds {int(room['capacity'])}, but the combined group has {enrolled} learners."
+                )
     if schedule_layer == "school_activity":
         activity = cur.execute(
             "SELECT id,requires_teacher,requires_room FROM ds_timetable_activity_types WHERE school_id=? AND code=?",
@@ -229,8 +241,8 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                              duration_periods: int = 0,
                              created_by: str = "") -> int:
     start_time, end_time = (start_time or "").strip(), (end_time or "").strip()
-    if not start_time or not end_time or len(start_time) != 5 or len(end_time) != 5 or start_time >= end_time:
-        raise TimetableSetupError("Enter a valid start and end time in HH:MM format.")
+    if not _TIME_RE.fullmatch(start_time) or not _TIME_RE.fullmatch(end_time) or start_time >= end_time:
+        raise TimetableSetupError("Enter a valid start and end time in 24-hour HH:MM format.")
     if schedule_layer not in {"instructional", "additional_learning", "school_activity"}:
         raise TimetableSetupError("Choose a valid timetable layer.")
     if not session_type or len(session_type) > 40:
