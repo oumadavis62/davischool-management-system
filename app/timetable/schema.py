@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SCHEMA_VERSION = "002"
+SCHEMA_VERSION = "003"
 
 
 _TABLES = (
