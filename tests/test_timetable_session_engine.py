@@ -11,6 +11,7 @@ from app.timetable.session_engine import (
     find_session_conflicts,
 )
 from app.timetable.generator import generate_advanced_instructional_sessions
+from app.timetable.builder import place_advanced_requirement_session
 
 
 class TimetableSessionEngineTests(unittest.TestCase):
@@ -157,6 +158,30 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_classes WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
+                            (session_id,)).fetchone()[0], 2)
+
+    def test_manual_builder_places_normalized_requirement_session(self):
+        group = create_teaching_group(
+            self.db, 8, self.profile_id, "Manual combined group", [1, 2],
+            subject_id=5,
+        )
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Manual shared Science",
+            class_ids=[1, 2], teacher_ids=[11, 12],
+            subject_id=5, teaching_group_id=group,
+            weekly_occurrences=1, weekly_periods=1, min_teacher_count=2,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        session_id = place_advanced_requirement_session(
+            self.db, 8, self.profile_id, requirement, 1,
+            self.day_id, self.period_id,
+        )
+        self.assertGreater(session_id, 0)
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
