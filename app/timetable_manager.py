@@ -683,7 +683,7 @@ def _profiles(request, con, sid):
         switch="" if active else f"<form method='post' action='/app/timetable/profile/switch/{pid}' style='display:inline'><input type='hidden' name='tab' value='profiles'><button class='tt-btn alt'>Use</button></form>"
         duplicate=f"<form method='post' action='/app/timetable/profile/duplicate/{pid}' style='display:inline'><button class='tt-btn'>Duplicate</button></form>"
         rename=f"<form method='post' action='/app/timetable/profile/rename/{pid}' class='tt-profile-inline'><input class='tt-field' name='name' value='{escape(str(p['name']))}' required><button class='tt-btn alt'>Rename</button></form>"
-        delete="" if pid==current or len(rows)<=1 else f"<form method='post' action='/app/timetable/profile/delete/{pid}' style='display:inline' onsubmit='return confirm(&quot;Delete this saved timetable profile? Lesson cards will remain.&quot;)'><button class='tt-btn danger'>Delete</button></form>"
+        delete="" if pid==current or len(rows)<=1 else f"<form method='post' action='/app/timetable/profile/delete/{pid}' style='display:inline' onsubmit='return confirm(&quot;Delete this saved timetable profile and all its lesson cards?&quot;)'><button class='tt-btn danger'>Delete</button></form>"
         table.append(f"<tr><td><b>{escape(str(p['name']))}</b> {badge}<br><small>{escape(str(p['description'] or ''))}</small></td><td>{'Yes' if active else '—'}</td><td>{len(json.loads(str(p['periods_json'] or '[]')))}</td><td>{slots}</td><td>{switch} {duplicate} {delete}</td></tr>")
     history_rows=con.execute("SELECT id,label,created_at FROM timetable_snapshots WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 20",(sid,current)).fetchall()
     history_html="".join(f"<tr><td>{escape(str(x['label']))}</td><td>{escape(str(x['created_at']))}</td><td><form method='post' action='/app/timetable/snapshot/restore/{int(x['id'])}' onsubmit='return confirm(&quot;Restore this version? A safety copy will be saved first.&quot;)'><button class='tt-btn alt'>Restore</button></form></td></tr>" for x in history_rows) or "<tr><td colspan='3'>No saved versions yet.</td></tr>"
@@ -1831,7 +1831,7 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
             if field in profile:
                 con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
-        if lessons:
+        if "lessons" in payload:
             con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
             con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
             con.execute("DELETE FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,pid))
@@ -1908,7 +1908,7 @@ def timetable_profile_create(request:Request,name:str=Form(...),description:str=
             int(current["periods_per_day"] or 7),int(current["period_minutes"] or 40),int(current["periods_per_week"] or 35),
             str(current["complexity"] or "normal"),str(current["relaxation"] or "relaxed"),now,now))
         con.commit()
-        return RedirectResponse("/app/timetable?tab=profiles&msg=New+timetable+created+from+the+current+schedule",303)
+        return RedirectResponse("/app/timetable?tab=profiles&msg=New+independent+timetable+profile+created",303)
     finally:con.close()
 
 @router.post("/app/timetable/profile/duplicate/{pid}")
@@ -1991,7 +1991,7 @@ def timetable_profile_delete(request:Request,pid:int):
         con.execute("DELETE FROM timetable_edit_history WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
-        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+deleted+without+deleting+lesson+cards",303)
+        return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+profile+and+its+lesson+cards+deleted",303)
     finally:con.close()
 
 @router.post("/app/timetable/setup/save")
