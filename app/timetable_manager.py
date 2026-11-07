@@ -1419,7 +1419,32 @@ def _timetable(request, con, sid):
 
     drag_script = """<script>
 (function(){
-  let dragged=null,draggedType=null;
+  let dragged=null,draggedType=null,touchMoveCard=null,touchMoved=false;
+  document.querySelectorAll('.tt-placed-card').forEach(function(card){
+    card.style.touchAction='none';
+    card.addEventListener('pointerdown',function(e){
+      if(e.pointerType==='mouse')return;
+      touchMoveCard=card;touchMoved=false;
+      card.classList.add('tt-dragging');
+    });
+  });
+  document.addEventListener('pointerup',function(e){
+    if(!touchMoveCard)return;
+    var card=touchMoveCard;touchMoveCard=null;
+    card.classList.remove('tt-dragging');
+    var target=document.elementFromPoint(e.clientX,e.clientY);
+    var slot=target&&target.closest('.tt-drop-slot');
+    if(!slot)return;
+    touchMoved=true;
+    var fd=new FormData();
+    fd.append('day_name',slot.dataset.day);
+    fd.append('period_no',slot.dataset.period);
+    fd.append('class_id',slot.dataset.classId||card.dataset.classId||'');
+    fetch('/app/timetable/placement/move/'+encodeURIComponent(card.dataset.slotId),{
+      method:'POST',body:fd,credentials:'same-origin'
+    }).then(function(response){window.location.href=response.url||'/app/timetable?tab=timetable';})
+      .catch(function(){alert('Unable to move this lesson. Please try again.');});
+  });
   document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
     card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;draggedType='placed';this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
     card.addEventListener('dragend',function(){this.classList.remove('tt-dragging');dragged=null;draggedType=null;});
@@ -1431,6 +1456,7 @@ def _timetable(request, con, sid):
   });
   document.querySelectorAll('.tt-placed-card').forEach(function(card){
     card.addEventListener('click',function(e){
+      if(touchMoved){touchMoved=false;e.preventDefault();e.stopPropagation();return;}
       if(e.target.closest('.tt-placed-menu'))return;
       e.preventDefault();
       e.stopPropagation();
