@@ -2299,7 +2299,65 @@ def school_system_settings(sub: str, request: Request):
     header = school_header(school_obj, name, f"system-settings/{sub}", is_impersonating=is_imp)
     base_path = "/school/system-settings"
     if sub=="school-profile":
-        panel = f"""<div style='display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3 style='margin:0 0 12px'>🏢 School Profile</h3><form method='post' action='{base_path}/update-profile' style='display:grid;gap:10px'><input name='name' value="{school['name']}" class='input-field'><input name='email' value="{school['email']}" class='input-field'><input name='location' value="{school['location']}" class='input-field'><input name='phone' value="{school['phone']}" class='input-field'><input name='principal' value="{school['principal']}" class='input-field'><input name='school_type' value="{school['school_type']}" class='input-field'><button class='add-btn'>💾 Update Profile</button></form></div><div style='background:white;border:1px solid #e2e8f0;border-radius:16px;padding:18px'><h3>📊 Info</h3><div style='font-size:13px;line-height:1.8'><div>🔑 Code: <b>{school['code']}</b></div><div>📧 {school['email']}</div><div>👥 Users: <b>{len(users)}</b></div></div></div></div>"""
+        profile_name=escape(str(school["name"] or ""))
+        profile_email=escape(str(school["email"] or ""))
+        profile_location=escape(str(school["location"] or ""))
+        profile_phone=escape(str(school["phone"] or ""))
+        profile_principal=escape(str(school["principal"] or ""))
+        profile_type=str(school["school_type"] or "")
+        profile_code=escape(str(school["code"] or "—"))
+        type_options="".join(f"<option value='{escape(t)}' {'selected' if profile_type==t else ''}>{escape(t)}</option>" for t in ("Primary","Junior School","Primary & Junior School","Senior School","Tertiary/College","University"))
+        panel=f"""
+        <style>
+        .sp-wrap{{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(250px,.75fr);gap:18px;align-items:start}}
+        .sp-card{{background:#fff;border:1px solid #dce9de;border-radius:18px;box-shadow:0 8px 26px rgba(30,75,43,.055);overflow:hidden}}
+        .sp-card-head{{padding:19px 21px;border-bottom:1px solid #e8f0e9;background:linear-gradient(120deg,#edf7ef,#fff)}}
+        .sp-kicker{{font-size:10px;font-weight:900;letter-spacing:1.2px;color:#63866a;text-transform:uppercase}}
+        .sp-card-head h2{{font-size:18px;color:#1d5734;margin:5px 0 4px}}
+        .sp-card-head p{{font-size:12px;color:#718078;margin:0;line-height:1.55}}
+        .sp-form{{padding:21px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}}
+        .sp-field{{display:grid;gap:7px;min-width:0}}
+        .sp-field label{{font-size:11px;font-weight:800;color:#49634f}}
+        .sp-field input,.sp-field select{{width:100%;min-height:43px;border:1px solid #d5e3d7;border-radius:10px;background:#fbfdfb;padding:10px 12px;color:#26372d;font-size:13px;outline:none}}
+        .sp-field input:focus,.sp-field select:focus{{border-color:#6fa77c;box-shadow:0 0 0 3px #6fa77c20;background:#fff}}
+        .sp-span{{grid-column:1/-1}}
+        .sp-actions{{grid-column:1/-1;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding-top:5px}}
+        .sp-save{{border:0;border-radius:10px;padding:12px 18px;background:linear-gradient(130deg,#287b49,#145b34);color:white;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 5px 14px #145b3425}}
+        .sp-aside{{padding:19px}}
+        .sp-code{{padding:17px;border-radius:14px;background:linear-gradient(135deg,#185b36,#2e8050);color:#fff}}
+        .sp-code small{{display:block;color:#d8ecdd;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase}}
+        .sp-code strong{{display:block;margin-top:7px;font-size:25px;letter-spacing:1px}}
+        .sp-stat{{display:flex;justify-content:space-between;gap:10px;padding:13px 2px;border-bottom:1px solid #edf2ed;font-size:12px;color:#708075}}
+        .sp-stat b{{color:#285b39}}
+        .sp-note{{margin-top:14px;padding:13px;border:1px solid #dceade;border-radius:12px;background:#f4faf5;color:#617568;font-size:11px;line-height:1.6}}
+        @media(max-width:850px){{.sp-wrap{{grid-template-columns:1fr}}}}
+        @media(max-width:560px){{.sp-form{{grid-template-columns:1fr;padding:16px}}.sp-span{{grid-column:auto}}.sp-actions{{grid-column:auto;justify-content:stretch}}.sp-save{{width:100%}}.sp-card-head{{padding:16px}}}}
+        </style>
+        <div class='sp-wrap'>
+          <section class='sp-card'>
+            <div class='sp-card-head'><span class='sp-kicker'>Institution identity</span><h2>School profile</h2><p>Keep your school's official details accurate. These details identify your institution across DaviSchool.</p></div>
+            <form class='sp-form' method='post' action='{base_path}/update-profile'>
+              <div class='sp-field sp-span'><label for='sp-name'>School name</label><input id='sp-name' name='name' value="{profile_name}" required maxlength='160' placeholder='Enter registered school name'></div>
+              <div class='sp-field'><label for='sp-email'>Official email address</label><input id='sp-email' name='email' type='email' value="{profile_email}" placeholder='school@example.com'></div>
+              <div class='sp-field'><label for='sp-phone'>Telephone / mobile</label><input id='sp-phone' name='phone' type='tel' value="{profile_phone}" placeholder='School contact number'></div>
+              <div class='sp-field sp-span'><label for='sp-location'>Physical location / address</label><input id='sp-location' name='location' value="{profile_location}" placeholder='Town, county or physical address'></div>
+              <div class='sp-field'><label for='sp-principal'>Head of institution</label><input id='sp-principal' name='principal' value="{profile_principal}" placeholder='Name of head of institution'></div>
+              <div class='sp-field'><label for='sp-type'>Institution type</label><select id='sp-type' name='school_type' required>{type_options}</select></div>
+              <div class='sp-actions'><button class='sp-save' type='submit'>Save School Profile&nbsp; →</button></div>
+            </form>
+          </section>
+          <aside class='sp-card'>
+            <div class='sp-card-head'><span class='sp-kicker'>Account overview</span><h2>School identity</h2><p>Quick reference for this registered institution.</p></div>
+            <div class='sp-aside'>
+              <div class='sp-code'><small>Unique school code</small><strong>{profile_code}</strong></div>
+              <div class='sp-stat'><span>Registered school users</span><b>{len(users)}</b></div>
+              <div class='sp-stat'><span>Institution type</span><b>{escape(profile_type or "Not set")}</b></div>
+              <div class='sp-stat'><span>Account status</span><b>{escape(str(school["status"] or "Active")).title()}</b></div>
+              <div class='sp-note'>Use the official school name, email and contact details. Saved profile information remains linked to this school's records.</div>
+            </div>
+          </aside>
+        </div>"""
+
     elif sub=="classes":
         rows = "".join([f"<tr><td style='padding:10px'>{c['name']}</td><td>{c['stream'] or ''}</td><td><a href='{base_path}/delete-class/{c[0]}' style='background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:6px;text-decoration:none'>🗑️</a></td></tr>" for c in classes]) or "<tr><td colspan='3' style='padding:30px;text-align:center'>No classes</td></tr>"
         panel = f"""<div style='display:grid;grid-template-columns:1.7fr 0.7fr;gap:16px'><div style='background:white;border:1px solid #e2e8f0;border-radius:14px'><div style='padding:14px'><b>🏫 Classes ({len(classes)})</b></div><table style='width:100%'><tbody>{rows}</tbody></table></div><div style='background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px'><b>➕ Add Class</b><form method='post' action='{base_path}/add-class'><input name='class_name' required placeholder='Class' class='input-field'><input name='stream' required placeholder='Stream' class='input-field'><button class='add-btn'>Add</button></form></div></div>"""
