@@ -35,6 +35,23 @@ class TimetableSchemaTests(unittest.TestCase):
             "ds_timetable_generation_runs",
             "ds_timetable_change_log",
         }
+        expected.update({
+            "ds_timetable_schedule_templates",
+            "ds_timetable_schedule_slots",
+            "ds_timetable_day_templates",
+            "ds_timetable_rotation_cycles",
+            "ds_timetable_rotation_weeks",
+            "ds_timetable_learning_programmes",
+            "ds_timetable_teaching_groups",
+            "ds_timetable_teaching_group_classes",
+            "ds_timetable_requirement_patterns",
+            "ds_timetable_programme_sessions",
+            "ds_timetable_sessions",
+            "ds_timetable_session_classes",
+            "ds_timetable_session_teachers",
+            "ds_timetable_session_learners",
+            "ds_timetable_activity_types",
+        })
         self.assertTrue(expected.issubset(tables))
 
     def test_existing_profile_schema_gets_academic_date_columns_additively(self):
