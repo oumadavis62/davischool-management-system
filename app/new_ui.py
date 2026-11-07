@@ -6578,20 +6578,20 @@ def school_settings_page(request: Request):
         <div class='ss-savebar'><div><b>Ready to update?</b><small>Save once after editing any of the sections above.</small></div><button type='submit' class='ss-save'>Save school settings <span>→</span></button></div>
 
         <section class='ss-pop' id='ss-profile' aria-label='Edit institution details'>
-          <a class='ss-pop-backdrop' href='/app/school-settings' aria-label='Close'></a>
-          <div class='ss-pop-panel'><header class='ss-pop-head'><div><span>SECTION 01</span><h2>Institution details</h2><p>Official name and classification</p></div><a class='ss-pop-x' href='/app/school-settings' aria-label='Close'>×</a></header>
+          <a class='ss-pop-backdrop' href='#' aria-label='Close'></a>
+          <div class='ss-pop-panel'><header class='ss-pop-head'><div><span>SECTION 01</span><h2>Institution details</h2><p>Official name and classification</p></div><a class='ss-pop-x' href='#' aria-label='Close'>×</a></header>
             <div class='ss-pop-fields'>
               <label class='ss-field ss-full'>School name<input name='school_name' maxlength='160' value='{val("name")}' placeholder='Registered school name'></label>
               <label class='ss-field'>School type<select name='school_type'>{type_options}</select></label>
               <label class='ss-field'>Head of institution<input name='principal' value='{val("principal")}' placeholder='Principal / Headteacher'></label>
             </div>
-            <footer class='ss-pop-footer'><a href='/app/school-settings'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
+            <footer class='ss-pop-footer'><a href='#'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
           </div>
         </section>
 
         <section class='ss-pop' id='ss-contact' aria-label='Edit contact and address'>
-          <a class='ss-pop-backdrop' href='/app/school-settings' aria-label='Close'></a>
-          <div class='ss-pop-panel'><header class='ss-pop-head'><div><span>SECTION 02</span><h2>Contact & address</h2><p>Official communication and postal details</p></div><a class='ss-pop-x' href='/app/school-settings' aria-label='Close'>×</a></header>
+          <a class='ss-pop-backdrop' href='#' aria-label='Close'></a>
+          <div class='ss-pop-panel'><header class='ss-pop-head'><div><span>SECTION 02</span><h2>Contact & address</h2><p>Official communication and postal details</p></div><a class='ss-pop-x' href='#' aria-label='Close'>×</a></header>
             <div class='ss-pop-fields'>
               <label class='ss-field'>Official email<input name='school_email' type='email' value='{val("email")}' placeholder='school@example.com'></label>
               <label class='ss-field'>Telephone / mobile<input name='phone' type='tel' value='{val("phone")}' placeholder='+254 7XX XXX XXX'></label>
@@ -6599,15 +6599,15 @@ def school_settings_page(request: Request):
               <label class='ss-field'>Postal address<input name='postal_address' value='{val("postal_address")}' placeholder='P.O. Box 123'></label>
               <label class='ss-field'>Postal code<input name='postal_code' value='{val("postal_code")}' placeholder='00100'></label>
             </div>
-            <footer class='ss-pop-footer'><a href='/app/school-settings'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
+            <footer class='ss-pop-footer'><a href='#'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
           </div>
         </section>
 
         <section class='ss-pop' id='ss-brand' aria-label='Edit school branding'>
-          <a class='ss-pop-backdrop' href='/app/school-settings' aria-label='Close'></a>
-          <div class='ss-pop-panel ss-brand-panel'><header class='ss-pop-head'><div><span>SECTION 03</span><h2>School branding</h2><p>Logo shown on supported reports and printouts</p></div><a class='ss-pop-x' href='/app/school-settings' aria-label='Close'>×</a></header>
+          <a class='ss-pop-backdrop' href='#' aria-label='Close'></a>
+          <div class='ss-pop-panel ss-brand-panel'><header class='ss-pop-head'><div><span>SECTION 03</span><h2>School branding</h2><p>Logo shown on supported reports and printouts</p></div><a class='ss-pop-x' href='#' aria-label='Close'>×</a></header>
             <div class='ss-brand-upload'><div class='ss-brand-preview'>{logo_preview}</div><div><b>Institution logo</b><p>Choose a clear PNG, JPG, WEBP or GIF image. Maximum file size: 2 MB.</p><label class='ss-file-label'>Choose image<input name='school_logo' type='file' accept='image/png,image/jpeg,image/webp,image/gif'></label><small>Leave empty to keep the current logo.</small></div></div>
-            <footer class='ss-pop-footer'><a href='/app/school-settings'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
+            <footer class='ss-pop-footer'><a href='#'>Cancel</a><a class='ss-done' href='#'>Done</a></footer>
           </div>
         </section>
       </form>
