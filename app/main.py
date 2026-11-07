@@ -2890,9 +2890,131 @@ def add_fee(request:Request,student_id:int=Form(...),amount:float=Form(...),paid
 
 @app.get("/school/communication", response_class=HTMLResponse)
 def school_communication(request:Request):
-    con=get_db(); cur=con.cursor(); cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid(request),)); rows=cur.fetchall(); con.close()
-    tr=''.join([f"<tr><td>{r['created_at']}</td><td>{r['title']}</td><td>{r['audience']}</td><td>{r['message']}</td></tr>" for r in rows]) or "<tr><td colspan='4'>No announcements yet.</td></tr>"
-    body=f"<div class='card'><form method='post' action='/school/modules/announcements/add'><input name='title' required placeholder='Announcement title' class='input-field'><textarea name='message' required placeholder='Message' class='input-field' style='min-height:100px'></textarea><select name='audience' class='input-field'><option>All</option><option>Students</option><option>Parents</option><option>Staff</option></select><button class='btn'>Publish Announcement</button></form><table style='margin-top:16px'><tr><th>Date</th><th>Title</th><th>Audience</th><th>Message</th></tr>{tr}</table></div>"
+    con=get_db(); cur=con.cursor()
+    cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid(request),))
+    rows=cur.fetchall(); con.close()
+    total=len(rows)
+    audience_counts={}
+    for row in rows:
+        key=str(row["audience"] or "All")
+        audience_counts[key]=audience_counts.get(key,0)+1
+    audience_summary=" · ".join(f"{escape(k)}: {v}" for k,v in sorted(audience_counts.items())) or "No audience groups yet"
+    cards=[]
+    for r in rows:
+        rid=int(r["id"])
+        title=escape(str(r["title"] or "Untitled announcement"))
+        message=escape(str(r["message"] or ""))
+        audience=escape(str(r["audience"] or "All"))
+        created=escape(str(r["created_at"] or ""))
+        excerpt=message if len(message)<=150 else message[:147]+"…"
+        cards.append(
+            f"<tr><td><div class='ann-date'>{created}</div></td>"
+            f"<td><b class='ann-title'>{title}</b><small class='ann-sub'>School announcement</small></td>"
+            f"<td><span class='ann-audience'>{audience}</span></td>"
+            f"<td class='ann-message'>{excerpt}</td>"
+            f"<td><button type='button' class='ann-view' popovertarget='ann-view-{rid}'>View details</button></td></tr>"
+            f"<div id='ann-view-{rid}' class='ann-pop ann-detail' popover='manual'>"
+            f"<div class='ann-pop-head'><div><span class='ann-eyebrow'>ANNOUNCEMENT DETAILS</span><h2>{title}</h2></div>"
+            f"<button type='button' class='ann-close' popovertarget='ann-view-{rid}' popovertargetaction='hide' aria-label='Close'>×</button></div>"
+            f"<div class='ann-detail-meta'><span>{audience}</span><span>{created}</span></div>"
+            f"<div class='ann-full-message'>{message}</div>"
+            f"<div class='ann-pop-actions'><button type='button' class='ann-secondary' popovertarget='ann-view-{rid}' popovertargetaction='hide'>Close</button></div></div>"
+        )
+    tr="".join(cards) or "<tr><td colspan='5' class='ann-empty'><b>No announcements yet</b><small>Create your first announcement to keep the school community informed.</small></td></tr>"
+    body=f"""
+    <style>
+    .ann-page{{display:grid;gap:16px;color:#26372d}}
+    .ann-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}
+    .ann-kpi{{padding:17px;border:1px solid #dce9de;border-radius:15px;background:linear-gradient(145deg,#fff,#f1f8f2);box-shadow:0 5px 18px #214b2e0a}}
+    .ann-kpi small{{display:block;color:#718078;font-size:12px;font-weight:700}}
+    .ann-kpi strong{{display:block;margin-top:5px;color:#185633;font-size:27px}}
+    .ann-kpi em{{display:block;margin-top:3px;color:#849188;font-size:11px;font-style:normal}}
+    .ann-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:22px;border:1px solid #cfe2d2;border-radius:18px;background:linear-gradient(125deg,#e4f2e6,#f7fbf7 58%,#d8eadb)}}
+    .ann-eyebrow{{color:#5e8b69;font-size:10px;font-weight:900;letter-spacing:1.25px}}
+    .ann-hero h2{{margin:5px 0;color:#1d5734;font-size:21px}}
+    .ann-hero p{{margin:0;max-width:620px;color:#6c7d70;font-size:13px;line-height:1.55}}
+    .ann-hero-icon{{display:grid;place-items:center;width:56px;height:56px;flex:0 0 56px;border-radius:17px;background:linear-gradient(145deg,#d4e9d8,#bddcc4);color:#23633c;font-size:29px}}
+    .ann-primary,.ann-view,.ann-secondary{{border:0;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:800;cursor:pointer}}
+    .ann-primary{{background:linear-gradient(135deg,#267849,#145b34);color:#fff;box-shadow:0 4px 12px #176b3a20}}
+    .ann-primary:hover,.ann-view:hover{{filter:brightness(1.07);transform:translateY(-1px)}}
+    .ann-toolbar{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:13px}}
+    .ann-toolbar h2{{margin:0;color:#245638;font-size:18px}}
+    .ann-toolbar p{{margin:4px 0 0;color:#7a887e;font-size:12px}}
+    .ann-search{{width:min(310px,100%);min-height:40px;padding:9px 12px;border:1px solid #dce6df;border-radius:10px;background:#fff;color:#26372d}}
+    .ann-table-wrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #e4ede5;border-radius:13px}}
+    .ann-table{{width:100%;min-width:760px;border-collapse:separate;border-spacing:0}}
+    .ann-table th{{padding:12px;text-align:left;background:#edf5ef;color:#637568;font-size:10px;letter-spacing:.7px;text-transform:uppercase;white-space:nowrap}}
+    .ann-table td{{padding:12px;border-bottom:1px solid #edf1ee;vertical-align:middle;font-size:12px;color:#44564a}}
+    .ann-table tr:last-child td{{border-bottom:0}}
+    .ann-table tbody tr:hover td{{background:#f8fbf8}}
+    .ann-date{{color:#728176;font-size:11px;white-space:nowrap}}
+    .ann-title{{display:block;color:#28583a;font-size:12px}}
+    .ann-sub{{display:block;margin-top:4px;color:#929d94;font-size:10px}}
+    .ann-audience{{display:inline-flex;padding:5px 9px;border-radius:20px;background:#edf5ef;color:#28613d;font-size:10px;font-weight:800;white-space:nowrap}}
+    .ann-message{{max-width:330px;line-height:1.5;color:#6e7d72!important}}
+    .ann-view{{background:#f0f7f1;border:1px solid #d7e7da;color:#28613d;white-space:nowrap}}
+    .ann-empty{{padding:30px!important;text-align:center!important;color:#42634c!important}}
+    .ann-empty small{{display:block;margin-top:6px;color:#839087}}
+    .ann-pop{{position:fixed;inset:0;margin:auto;width:min(680px,calc(100vw - 28px));max-height:min(88vh,820px);overflow:auto;padding:23px;border:1px solid #cfe1d1;border-radius:20px;background:linear-gradient(145deg,#edf6ee 0%,#fff 52%,#f4faf5 100%);color:#26372d;box-shadow:0 24px 80px #142f1e45}}
+    .ann-pop:popover-open{{display:block}}
+    .ann-pop::backdrop{{background:#14281dcc;backdrop-filter:blur(4px)}}
+    .ann-pop-head{{position:relative;display:flex;justify-content:space-between;gap:14px;padding:4px 48px 15px 0;border-bottom:1px solid #d8e7da;margin-bottom:17px}}
+    .ann-pop-head h2{{margin:5px 0 0;color:#205a38;font-size:20px}}
+    .ann-close{{position:absolute;right:0;top:0;width:38px;height:38px;border:1px solid #c8ddcb;border-radius:50%;background:#fff;color:#245b39;font-size:25px;line-height:1;cursor:pointer}}
+    .ann-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+    .ann-form label{{display:grid;gap:6px;color:#46604c;font-size:12px;font-weight:800}}
+    .ann-form input,.ann-form select,.ann-form textarea{{width:100%;min-height:42px;padding:10px 11px;border:1px solid #cbdccd;border-radius:10px;background:#fff;color:#26372d;font:inherit}}
+    .ann-form textarea{{min-height:150px;resize:vertical}}
+    .ann-wide{{grid-column:1/-1}}
+    .ann-form input:focus,.ann-form select:focus,.ann-form textarea:focus{{outline:2px solid #8fbd9a;outline-offset:1px;border-color:#57966b}}
+    .ann-pop-actions{{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:17px;padding-top:14px;border-top:1px solid #dceade}}
+    .ann-secondary{{background:#edf5ef;border:1px solid #d7e8da;color:#245638}}
+    .ann-detail-meta{{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}}
+    .ann-detail-meta span{{padding:6px 10px;border-radius:20px;background:#eaf4eb;color:#28613d;font-size:11px;font-weight:800}}
+    .ann-full-message{{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;border:1px solid #e0ebe2;border-radius:12px;background:#fff;color:#43564a;font-size:13px;line-height:1.7}}
+    @media(max-width:760px){{.ann-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ann-hero{{align-items:flex-start;flex-wrap:wrap}}}}
+    @media(max-width:560px){{.ann-hero{{padding:16px}}.ann-form{{grid-template-columns:1fr}}.ann-wide{{grid-column:auto}}.ann-pop{{padding:16px}}.ann-kpi{{padding:13px}}.ann-kpi strong{{font-size:23px}}}}
+    @media(prefers-reduced-motion:reduce){{.ann-primary,.ann-view{{transition:none}}}}
+    @media print{{.ann-primary,.ann-view,.ann-search,.ann-pop{{display:none!important}}.ann-table{{min-width:0}}}}
+    </style>
+    <div class='ann-page'>
+      <div class='ann-kpis'>
+        <div class='ann-kpi'><small>Total announcements</small><strong>{total}</strong><em>All recorded notices</em></div>
+        <div class='ann-kpi'><small>Audience groups</small><strong>{len(audience_counts)}</strong><em>Groups reached</em></div>
+        <div class='ann-kpi'><small>Latest announcement</small><strong style='font-size:17px'>{escape(str(rows[0]["created_at"] or "—"))[:10] if rows else "—"}</strong><em>Most recent record</em></div>
+        <div class='ann-kpi'><small>All-audience notices</small><strong>{audience_counts.get("All",0)}</strong><em>Shared with the whole community</em></div>
+      </div>
+      <section class='ann-hero'>
+        <div><span class='ann-eyebrow'>SCHOOL COMMUNITY • COMMUNICATIONS</span><h2>Keep everyone informed</h2><p>Create and share important school updates, reminders and notices with the right audience. Review previous announcements in the register below.</p></div>
+        <div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'><span class='ann-hero-icon'>✉</span><button type='button' class='ann-primary' popovertarget='ann-create-pop'>＋ Create Announcement</button></div>
+      </section>
+      <section class='card' style='padding:18px;border:1px solid #dce9de;border-radius:16px'>
+        <div class='ann-toolbar'><div><h2>Announcement register</h2><p>{total} records · {audience_summary}</p></div><input id='ann-search' class='ann-search' type='search' placeholder='Search title, audience or message…' aria-label='Search announcements'></div>
+        <div class='ann-table-wrap'><table class='ann-table'><thead><tr><th>Date</th><th>Announcement</th><th>Audience</th><th>Message preview</th><th>Action</th></tr></thead><tbody id='ann-table-body'>{tr}</tbody></table></div>
+      </section>
+    </div>
+    <div id='ann-create-pop' class='ann-pop' popover='manual'>
+      <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><button type='button' class='ann-close' popovertarget='ann-create-pop' popovertargetaction='hide' aria-label='Close popup' title='Close'>×</button></div>
+      <form method='post' action='/school/modules/announcements/add' class='ann-form'>
+        <label class='ann-wide'>Announcement title *<input name='title' required maxlength='180' placeholder='Enter a clear announcement title'></label>
+        <label>Audience<select name='audience' required><option value='All'>All</option><option value='Students'>Students</option><option value='Parents'>Parents</option><option value='Staff'>Staff</option></select></label>
+        <label>Publication date<input type='text' value='{datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %b %Y")}' readonly></label>
+        <label class='ann-wide'>Message *<textarea name='message' required maxlength='10000' placeholder='Write the announcement details…'></textarea></label>
+        <div class='ann-pop-actions ann-wide'><button type='submit' class='ann-primary'>Publish Announcement</button><button type='button' class='ann-secondary' popovertarget='ann-create-pop' popovertargetaction='hide'>Cancel</button></div>
+      </form>
+    </div>
+    <script>
+    (function(){{
+      var search=document.getElementById('ann-search');
+      if(search)search.addEventListener('input',function(){{
+        var q=this.value.toLowerCase();
+        document.querySelectorAll('#ann-table-body tr').forEach(function(row){{
+          row.style.display=row.innerText.toLowerCase().includes(q)?'':'none';
+        }});
+      }});
+    }})();
+    </script>
+    """
     return module_page(request,'📢 Announcements','communication',body)
 @app.post("/school/modules/announcements/add")
 def add_announcement(request:Request,title:str=Form(...),message:str=Form(...),audience:str=Form(...)):
