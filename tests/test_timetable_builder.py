@@ -34,7 +34,7 @@ class TimetableBuilderTests(unittest.TestCase):
         self.db.executemany("INSERT INTO subjects VALUES(?,?,?)", [(30,1,"Mathematics"),(31,1,"English")])
         self.db.executemany(
             "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
-            [(1,1,10,30,20),(2,1,11,31,20),(3,1,10,31,21)],
+            [(1,1,10,30,20),(2,1,11,31,20),(3,1,10,31,21),(4,1,11,31,21)],
         )
         self.db.commit()
         self.profile_id = create_profile(self.db, 1, "2027 Term 1", "2027", "Term 1")
@@ -55,6 +55,7 @@ class TimetableBuilderTests(unittest.TestCase):
         save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 2, 2, 1, True)
         save_class_requirement(self.db, 1, self.profile_id, 20, 31, 11, 2, 1, 2, False)
         save_class_requirement(self.db, 1, self.profile_id, 21, 31, 10, 2, 1, 2, False)
+        save_class_requirement(self.db, 1, self.profile_id, 21, 31, 11, 2, 1, 2, False)
 
     def tearDown(self):
         self.db.close()
@@ -79,7 +80,7 @@ class TimetableBuilderTests(unittest.TestCase):
         with self.assertRaises(TimetableSetupError):
             place_lesson(self.db, 1, self.profile_id, 20, 31, 11, self.day_mon, self.p2)
         with self.assertRaises(TimetableSetupError):
-            place_lesson(self.db, 1, self.profile_id, 21, 31, 10, self.day_mon, self.p1, self.room_id)
+            place_lesson(self.db, 1, self.profile_id, 21, 31, 11, self.day_mon, self.p1, self.room_id)
 
     def test_teacher_double_booking_across_classes_is_rejected(self):
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1, self.room_id)
