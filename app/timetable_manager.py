@@ -2261,6 +2261,21 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             for row in occupied:
                 index_row(row)
 
+            def gap_delta(slot_set,resource_ids,day,pno,duration):
+                """Change in internal free-period gaps if this lesson is placed."""
+                delta=0
+                new_periods=set(range(int(pno),int(pno)+max(1,int(duration))))
+                for resource_id in resource_ids:
+                    before=sorted({
+                        period for slot_day,period,rid in slot_set
+                        if slot_day==day and rid==resource_id
+                    })
+                    after=sorted(set(before)|new_periods)
+                    before_gaps=sum(max(0,b-a-1) for a,b in zip(before,before[1:]))
+                    after_gaps=sum(max(0,b-a-1) for a,b in zip(after,after[1:]))
+                    delta += after_gaps-before_gaps
+                return delta
+
             def placeable(lesson,day,pno):
                 lid=int(lesson["id"])
                 duration=max(1,int(lesson.get("duration") or 1))
@@ -2279,14 +2294,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                         return None
                     if any((day,xp,tid) in teacher_slot for tid in teachers):
                         return None
-                    # A teacher must not teach two different subjects in
-                    # immediately consecutive slots. The same double/triple
-                    # lesson may occupy its own consecutive periods.
-                    for tid in teachers:
-                        if xp == int(pno) and (day,xp-1,tid) in teacher_slot:
-                            return None
-                        if xp == int(pno)+duration-1 and (day,xp+1,tid) in teacher_slot:
-                            return None
+                    # Consecutive teaching periods are valid. The optimiser
+                    # scores adjacent lessons positively and minimises gaps
+                    # instead of incorrectly forbidding teachers from teaching
+                    # back-to-back periods.
                     if enforce_availability:
                         if any((day,xp,tid) in blocked_teacher for tid in teachers):
                             return None
@@ -2345,22 +2356,34 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     load=sum(class_day_load.get((day,c),0) for c in classes)
                     load+=sum(teacher_day_load.get((day,t),0) for t in teachers)
                     adjacent_class=0
+                    adjacent_teacher=0
                     for existing in occupied:
                         if str(existing["day_name"]) != day:
-                            continue
-                        existing_classes=lesson_classes.get(int(existing["lesson_id"]),{int(existing["class_id"])})
-                        if not classes.intersection(existing_classes):
-                            continue
-                        existing_subject=int(existing.get("subject_id") or lesson_by_id[int(existing["lesson_id"])]["subject_id"])
-                        if existing_subject == int(lesson["subject_id"]):
                             continue
                         ep=int(existing["period_no"])
                         ed=max(1,int(existing.get("duration") or 1))
                         nd=max(1,int(lesson.get("duration") or 1))
-                        if ep+ed == int(pno) or int(pno)+nd == ep:
-                            adjacent_class += 1
-                    adjacency_bonus=-25*adjacent_class
-                    choices.append((load+adjacency_bonus+int(pno)*0.01+rng.random(),day,int(pno),room))
+                        if ep+ed != int(pno) and int(pno)+nd != ep:
+                            continue
+                        existing_lid=int(existing["lesson_id"])
+                        existing_classes=lesson_classes.get(existing_lid,{int(existing["class_id"])})
+                        existing_teachers=lesson_teachers.get(
+                            existing_lid,({int(existing["teacher_id"])} if existing.get("teacher_id") else set())
+                        )
+                        if classes.intersection(existing_classes):
+                            existing_subject=int(existing.get("subject_id") or lesson_by_id[existing_lid]["subject_id"])
+                            if existing_subject != int(lesson["subject_id"]):
+                                adjacent_class += 1
+                        if teachers.intersection(existing_teachers):
+                            adjacent_teacher += 1
+                    class_gap_change=gap_delta(class_slot,classes,day,pno,lesson.get("duration") or 1)
+                    teacher_gap_change=gap_delta(teacher_slot,teachers,day,pno,lesson.get("duration") or 1)
+                    # Balance daily workloads, avoid splitting a resource's
+                    # day with idle periods, and prefer useful back-to-back
+                    # teaching blocks for both classes and teachers.
+                    gap_penalty=45*class_gap_change+35*teacher_gap_change
+                    adjacency_bonus=-18*adjacent_class-24*adjacent_teacher
+                    choices.append((load+gap_penalty+adjacency_bonus+int(pno)*0.01+rng.random(),day,int(pno),room))
 
                 if not choices:
                     continue
