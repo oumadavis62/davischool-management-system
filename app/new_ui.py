@@ -21468,7 +21468,7 @@ def finance_workspace_section(request: Request, section: str):
         title = {
             "billing":"Fees & Billing","collections":"Collections & Receipting",
             "payables":"Accounts Payable","ledger":"General Accounting",
-            "banking":"Cash & Banking","budgets":"Budgets & Financial Planning",
+            "banking":"Cash & Banking","budgets":"Budgets & Planning",
             "reports":"Financial Reports"
         }[section]
         content = ""
