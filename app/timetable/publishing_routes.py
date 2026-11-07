@@ -95,15 +95,15 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         action_html = ""
         if status == "draft":
             action_html = (
-                f"<form method='post' action='/school/timetable/publishing/submit' onsubmit='return confirm("Submit this timetable for approval? Editing will be locked until a revision is created.")'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Submit for approval</button></form>"
+                f"""<form method='post' action='/school/timetable/publishing/submit' onsubmit="return confirm('Submit this timetable for approval? Editing will be locked until a revision is created.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Submit for approval</button></form>"""
             )
         elif status == "pending_approval":
             action_html = (
-                f"<form method='post' action='/school/timetable/publishing/publish' onsubmit='return confirm("Approve and publish this timetable? The previously published revision will be archived.")'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Approve & Publish</button></form>"
+                f"""<form method='post' action='/school/timetable/publishing/publish' onsubmit="return confirm('Approve and publish this timetable? The previously published revision will be archived.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Approve & Publish</button></form>"""
             )
         elif status in ("published","archived"):
             action_html = (
-                f"<form method='post' action='/school/timetable/publishing/revision' onsubmit='return confirm("Create an editable draft revision from this published timetable?")'><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>＋ Create new revision</button></form>"
+                f"""<form method='post' action='/school/timetable/publishing/revision' onsubmit="return confirm('Create an editable draft revision from this published timetable?')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>＋ Create new revision</button></form>"""
             )
         version_rows = "".join(
             f"<tr><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>R{int(v['revision_no'] or 1)}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
