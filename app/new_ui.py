@@ -6543,22 +6543,113 @@ def school_settings_page(request: Request):
     con.close()
     if not school:return RedirectResponse("/app")
     def val(key):
-        return escape(str(school[key] or ""))
+        return escape(str(school[key] or "")) if key in school.keys() else ""
     logo=str(school["logo_data"] or "") if "logo_data" in school.keys() else ""
-    logo_preview=f"<img src='{escape(logo)}' alt='School logo' style='max-width:140px;max-height:100px;object-fit:contain;border:1px solid #dbe2ea;border-radius:10px;padding:6px;background:white'>" if logo else "<div style='width:140px;height:100px;border:1px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px'>No logo uploaded</div>"
-    body=f"""<div class='page'><h1>School Settings</h1><div class='muted'>Manage the registered profile, contact details and document identity for this school.</div><div class='card section'><h2>School Profile</h2><form method='post' action='/app/school-settings' enctype='multipart/form-data' style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px'>
-<label>School Name<input name='school_name' required value='{val("name")}' class='field'></label>
-<label>School Email<input name='school_email' type='email' required value='{val("email")}' class='field'></label>
-<label>Location<input name='location' required value='{val("location")}' class='field'></label>
-<label>Phone<input name='phone' required value='{val("phone")}' class='field'></label>
-<label>Postal Address<input name='postal_address' placeholder='P.O. Box 123' value='{val("postal_address")}' class='field'></label>
-<label>Postal Code<input name='postal_code' placeholder='00100' value='{val("postal_code")}' class='field'></label>
-<label>Principal / Administrator<input name='principal' required value='{val("principal")}' class='field'></label>
-<label>School Type<select name='school_type' class='field'><option {'selected' if school["school_type"]=="Primary" else ''}>Primary</option><option {'selected' if school["school_type"]=="Junior School" else ''}>Junior School</option><option {'selected' if school["school_type"] in ("Primary & Junior Secondary", "Primary & Junior School") else ''}>Primary & Junior School</option><option {'selected' if school["school_type"] in ("Secondary", "Senior School") else ''}>Senior School</option><option {'selected' if school["school_type"] in ("Tertiary", "Tertiary/College") else ''}>Tertiary/College</option><option {'selected' if school["school_type"]=="University" else ''}>University</option></select></label>
-<div style='grid-column:1/-1'><div style='font-size:12px;font-weight:800;color:#475569;margin-bottom:7px'>School Logo</div>{logo_preview}<input name='school_logo' type='file' accept='image/png,image/jpeg,image/webp,image/gif' class='field' style='margin-top:8px'><div class='muted' style='margin-top:5px'>Upload PNG, JPG, WEBP or GIF. The logo will appear on school printouts, including report cards and marksheets.</div></div>
-<div style='grid-column:1/-1'><button class='btn'>Save School Settings</button></div></form></div></div>
-<style>label{{display:block;font-size:12px;font-weight:800;color:#475569}}.field{{width:100%;margin-top:6px;padding:11px;border:1px solid #dbe2ea;border-radius:9px;background:white}}.btn{{padding:11px 16px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800;cursor:pointer}}</style>"""
+    logo_preview=(f"<img class='ss-logo-image' src='{escape(logo)}' alt='Current school logo'>"
+                  if logo else "<div class='ss-logo-empty'><span>＋</span><b>No logo uploaded</b><small>Add your institution logo below</small></div>")
+    school_code=val("code") or "Not assigned"
+    account_status=val("status") or "Active"
+    current_type=str(school["school_type"] or "")
+    type_values=("Primary","Junior School","Primary & Junior School","Senior School","Tertiary/College","University")
+    type_options="".join(
+        f"<option value='{escape(item,quote=True)}' {'selected' if current_type==item or (item=='Primary & Junior School' and current_type=='Primary & Junior Secondary') or (item=='Senior School' and current_type=='Secondary') or (item=='Tertiary/College' and current_type=='Tertiary') else ''}>{escape(item)}</option>"
+        for item in type_values
+    )
+    saved_notice="<div class='ss-saved' role='status'><b>✓ Settings saved</b><span>Your school profile has been updated successfully.</span></div>" if request.query_params.get("saved")=="1" else ""
+    body=f"""<main class='page ss-page'>
+      <section class='ss-hero'>
+        <div class='ss-hero-copy'><span class='ss-eyebrow'>ADMINISTRATION · INSTITUTION IDENTITY</span><h1>School Settings</h1>
+          <p>Manage your school's official identity, contact information and document branding from one place.</p>
+          <div class='ss-hero-meta'><span><i></i> School-specific settings</span><span>Changes apply to this institution only</span></div>
+        </div>
+        <div class='ss-hero-mark'><span class='ss-mark-icon'>DS</span><b>Institution profile</b><small>Official school record</small></div>
+      </section>
+      {saved_notice}
+      <div class='ss-layout'>
+        <section class='ss-main-card'>
+          <div class='ss-card-heading'><div><span class='ss-step'>01 · PROFILE DETAILS</span><h2>School profile</h2><p>Keep the details used across official school documents accurate.</p></div><span class='ss-required'>* Required fields</span></div>
+          <form class='ss-form' method='post' action='/app/school-settings' enctype='multipart/form-data'>
+            <div class='ss-section-label'><span>01</span><div><b>Institution information</b><small>Registered name and classification</small></div></div>
+            <div class='ss-fields'>
+              <label class='ss-field ss-wide'>School name <em>*</em><input name='school_name' required maxlength='160' value='{val("name")}' placeholder='Enter registered school name'></label>
+              <label class='ss-field'>School type <em>*</em><select name='school_type' required>{type_options}</select></label>
+              <label class='ss-field'>Head of institution <em>*</em><input name='principal' required value='{val("principal")}' placeholder='Principal / Headteacher'></label>
+            </div>
+            <div class='ss-divider'></div>
+            <div class='ss-section-label'><span>02</span><div><b>Contact information</b><small>How families and official offices can reach your school</small></div></div>
+            <div class='ss-fields'>
+              <label class='ss-field'>Official email <em>*</em><input name='school_email' type='email' required value='{val("email")}' placeholder='school@example.com'></label>
+              <label class='ss-field'>Telephone / mobile <em>*</em><input name='phone' type='tel' required value='{val("phone")}' placeholder='+254 7XX XXX XXX'></label>
+              <label class='ss-field ss-wide'>Physical location / address <em>*</em><input name='location' required value='{val("location")}' placeholder='Town, county or physical address'></label>
+              <label class='ss-field'>Postal address<input name='postal_address' value='{val("postal_address")}' placeholder='P.O. Box 123'></label>
+              <label class='ss-field'>Postal code<input name='postal_code' value='{val("postal_code")}' placeholder='00100'></label>
+            </div>
+            <div class='ss-divider'></div>
+            <div class='ss-section-label'><span>03</span><div><b>School branding</b><small>Logo displayed on report cards, marksheets and school printouts</small></div></div>
+            <div class='ss-logo-upload'>
+              <div class='ss-logo-preview'>{logo_preview}</div>
+              <div class='ss-logo-copy'><b>School logo</b><p>Upload a clear PNG, JPG, WEBP or GIF image. Maximum file size: 2 MB.</p>
+                <label class='ss-file-label'>Choose logo<input name='school_logo' type='file' accept='image/png,image/jpeg,image/webp,image/gif'></label>
+                <small>Leave this blank to keep the current logo.</small>
+              </div>
+            </div>
+            <div class='ss-form-footer'><span>Review your details before saving.</span><button type='submit' class='ss-save'><span>Save school settings</span><b>→</b></button></div>
+          </form>
+        </section>
+        <aside class='ss-side'>
+          <section class='ss-identity-card'><span class='ss-side-kicker'>SCHOOL IDENTITY</span><div class='ss-side-logo'>{logo_preview}</div><h3>{val("name") or "School name not set"}</h3><p>{val("school_type") or "Institution type not set"}</p>
+            <div class='ss-identity-row'><span>School code</span><b>{school_code}</b></div><div class='ss-identity-row'><span>Account status</span><b class='ss-status'>{account_status}</b></div>
+          </section>
+          <section class='ss-info-card'><div class='ss-info-icon'>✓</div><div><b>One school identity</b><p>Saved contact details and branding are used by supported school documents and printouts.</p></div></section>
+          <section class='ss-info-card'><div class='ss-info-icon'>⌑</div><div><b>School-scoped updates</b><p>These settings update this school's record without changing another institution's profile.</p></div></section>
+        </aside>
+      </div>
+    </main>
+    <style>
+    .ss-page{{max-width:1480px;margin:0 auto;padding:22px 20px 34px;color:#203b2b}}
+    .ss-hero{{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 28px;border:1px solid #cfe2d3;border-radius:18px;background:linear-gradient(118deg,#e1f0e4 0%,#f8fbf8 58%,#d7eadb 100%);box-shadow:0 8px 24px rgba(31,82,48,.055)}}
+    .ss-eyebrow,.ss-step,.ss-side-kicker{{font-size:10px;font-weight:900;letter-spacing:1.25px;color:#39734d}}
+    .ss-hero h1{{font-size:28px;line-height:1.15;margin:8px 0;color:#19472d;font-weight:900}}
+    .ss-hero p{{font-size:13px;color:#607668;line-height:1.6;max-width:650px;margin:0}}
+    .ss-hero-meta{{display:flex;gap:15px;flex-wrap:wrap;margin-top:15px;color:#5e7867;font-size:10px;font-weight:750}}
+    .ss-hero-meta span{{display:flex;align-items:center;gap:6px}}.ss-hero-meta i{{width:7px;height:7px;border-radius:50%;background:#2d9254;display:inline-block}}
+    .ss-hero-mark{{min-width:155px;padding:15px 17px;border:1px solid #c9dfce;border-radius:14px;background:rgba(255,255,255,.75);display:grid;justify-items:start;gap:5px}}
+    .ss-mark-icon{{width:35px;height:35px;border-radius:10px;background:#17663b;color:white;display:grid;place-items:center;font-size:12px;font-weight:950}}
+    .ss-hero-mark b{{font-size:12px;color:#28543a}}.ss-hero-mark small{{font-size:10px;color:#7a8d80}}
+    .ss-saved{{display:flex;align-items:center;gap:12px;margin:14px 0;padding:12px 15px;border:1px solid #b9ddc2;border-radius:11px;background:#edf8ef;color:#21633a;font-size:12px}}.ss-saved span{{color:#5e7966}}
+    .ss-layout{{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:15px;margin-top:16px;align-items:start}}
+    .ss-main-card,.ss-identity-card,.ss-info-card{{background:#fff;border:1px solid #deeadf;border-radius:15px;box-shadow:0 5px 18px rgba(31,70,43,.045)}}
+    .ss-main-card{{padding:21px 22px;min-width:0}}.ss-card-heading{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:19px}}
+    .ss-card-heading h2{{font-size:19px;color:#204b31;margin:5px 0 4px;font-weight:900}}.ss-card-heading p{{font-size:11px;color:#819087;margin:0;line-height:1.5}}
+    .ss-required{{font-size:10px;color:#8b988f;white-space:nowrap;padding:6px 9px;background:#f4f8f4;border-radius:7px}}
+    .ss-section-label{{display:flex;align-items:center;gap:10px;margin:0 0 13px}}.ss-section-label>span{{width:29px;height:29px;flex:0 0 29px;border-radius:9px;background:#e8f3e9;color:#24613b;display:grid;place-items:center;font-size:10px;font-weight:900}}
+    .ss-section-label b{{display:block;font-size:12px;color:#315640}}.ss-section-label small{{display:block;margin-top:3px;font-size:10px;color:#87948b}}
+    .ss-fields{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 14px}}
+    .ss-field{{display:block;min-width:0;font-size:11px;font-weight:800;color:#496252}}.ss-field em{{font-style:normal;color:#b35a4c}}
+    .ss-field input,.ss-field select{{display:block;width:100%;height:42px;margin-top:6px;padding:0 12px;border:1px solid #d9e5db;border-radius:9px;background:#fbfdfb;color:#294b35;font:500 12px Arial,sans-serif;outline:none;transition:border-color .15s,box-shadow .15s}}
+    .ss-field input:focus,.ss-field select:focus{{border-color:#5c9a6e;box-shadow:0 0 0 3px rgba(74,139,91,.12);background:#fff}}
+    .ss-field input::placeholder{{color:#a0aca3}}.ss-wide{{grid-column:1/-1}}
+    .ss-divider{{height:1px;background:#edf2ed;margin:20px 0}}
+    .ss-logo-upload{{display:flex;align-items:center;gap:17px;padding:14px;border:1px dashed #cbded0;border-radius:12px;background:#f9fcf9}}
+    .ss-logo-preview{{width:132px;height:96px;flex:0 0 132px;display:grid;place-items:center;background:#fff;border:1px solid #e1eae2;border-radius:10px;overflow:hidden}}
+    .ss-logo-image{{max-width:118px;max-height:82px;object-fit:contain}}.ss-logo-empty{{display:grid;justify-items:center;gap:4px;color:#8a9b8e}}.ss-logo-empty span{{font-size:22px;color:#6b9b77}}.ss-logo-empty b{{font-size:10px}}.ss-logo-empty small{{font-size:9px}}
+    .ss-logo-copy{{min-width:0}}.ss-logo-copy>b{{font-size:12px;color:#345840}}.ss-logo-copy p{{font-size:10px;color:#819087;line-height:1.5;margin:5px 0 9px}}
+    .ss-file-label{{display:inline-flex;align-items:center;padding:8px 11px;border:1px solid #c9ddcd;border-radius:8px;background:#fff;color:#28623d;font-size:10px;font-weight:850;cursor:pointer}}.ss-file-label:hover{{background:#edf6ef;border-color:#8db99a}}.ss-file-label input{{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}}
+    .ss-logo-copy>small{{display:block;margin-top:7px;font-size:9px;color:#93a096}}
+    .ss-form-footer{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid #edf2ed}}.ss-form-footer>span{{font-size:10px;color:#8a978e}}
+    .ss-save{{display:inline-flex;align-items:center;gap:17px;padding:11px 15px;border:0;border-radius:9px;background:linear-gradient(120deg,#17623a,#287b49);color:#fff;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 5px 12px rgba(28,100,57,.16)}}.ss-save:hover{{background:linear-gradient(120deg,#124c2d,#20683d);transform:translateY(-1px)}}.ss-save b{{font-size:16px}}
+    .ss-side{{display:grid;gap:12px;min-width:0}}.ss-identity-card{{padding:17px}}.ss-side-kicker{{font-size:9px}}
+    .ss-side-logo{{display:grid;place-items:center;height:105px;margin:13px 0 10px;border:1px solid #e7eee7;border-radius:11px;background:#f9fcf9;overflow:hidden}}.ss-side-logo .ss-logo-image{{max-width:145px;max-height:90px}}.ss-side-logo .ss-logo-empty{{transform:scale(.9)}}
+    .ss-identity-card h3{{font-size:14px;line-height:1.4;color:#244c32;margin:8px 0 4px;overflow-wrap:anywhere}}.ss-identity-card>p{{font-size:10px;color:#7d8d81;margin:0 0 13px}}
+    .ss-identity-row{{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid #edf2ed;font-size:10px}}.ss-identity-row span{{color:#819087}}.ss-identity-row b{{color:#3c5945;text-align:right;overflow-wrap:anywhere}}.ss-identity-row .ss-status{{color:#247044}}
+    .ss-info-card{{display:flex;gap:10px;padding:13px}}.ss-info-icon{{width:27px;height:27px;flex:0 0 27px;border-radius:8px;background:#e9f4eb;color:#277144;display:grid;place-items:center;font-size:13px;font-weight:900}}
+    .ss-info-card b{{display:block;font-size:10px;color:#345840;margin:1px 0 4px}}.ss-info-card p{{font-size:9px;line-height:1.5;color:#819087;margin:0}}
+    @media(max-width:980px){{.ss-layout{{grid-template-columns:minmax(0,1fr) 245px}}.ss-main-card{{padding:18px}}}}
+    @media(max-width:760px){{.ss-page{{padding:13px 11px 25px}}.ss-hero{{padding:19px;align-items:flex-start}}.ss-hero h1{{font-size:23px}}.ss-hero-mark{{min-width:115px;padding:11px}}.ss-layout{{grid-template-columns:1fr}}.ss-side{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ss-identity-card{{grid-row:span 2}}}}
+    @media(max-width:540px){{.ss-hero{{display:block}}.ss-hero-mark{{display:none}}.ss-main-card{{padding:15px 13px}}.ss-card-heading{{display:block}}.ss-required{{display:inline-block;margin-top:9px}}.ss-fields{{grid-template-columns:1fr}}.ss-wide{{grid-column:auto}}.ss-side{{grid-template-columns:1fr}}.ss-identity-card{{grid-row:auto}}.ss-logo-upload{{align-items:flex-start;flex-direction:column}}.ss-form-footer{{align-items:flex-start;flex-direction:column}}.ss-save{{width:100%;justify-content:center}}.ss-saved{{align-items:flex-start;flex-direction:column;gap:3px}}}}
+    </style>"""
     return _school_page(request,"School Settings",body)
+
 
 @router.post("/app/school-settings")
 async def school_settings_save(request: Request, school_name:str=Form(...), school_email:str=Form(...), location:str=Form(...), phone:str=Form(...), principal:str=Form(...), school_type:str=Form(...), postal_address:str=Form(""), postal_code:str=Form(""), school_logo:UploadFile|None=File(None)):
