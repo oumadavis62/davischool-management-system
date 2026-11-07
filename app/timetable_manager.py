@@ -105,6 +105,21 @@ def _ensure_tables(con):
         locked INTEGER NOT NULL DEFAULT 0,
         generated_run TEXT
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_edit_history(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        slot_id INTEGER NOT NULL,
+        action TEXT NOT NULL DEFAULT 'move',
+        before_day TEXT NOT NULL,
+        before_period INTEGER NOT NULL,
+        before_room INTEGER,
+        after_day TEXT NOT NULL,
+        after_period INTEGER NOT NULL,
+        after_room INTEGER,
+        undone INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_generation_runs(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -1486,8 +1501,11 @@ def _timetable(request, con, sid):
 <div><button class='tt-btn'>🔎 View</button></div>
 </form>
 <div class='tt-card tt-manual-editor'><h3>🖱️ Manual Placement</h3>
-<div class='tt-muted'>Drag lessons directly across the whole-school sheet. Classes stay on the left, days run across the top, and every day contains its periods. A move is rejected if it creates a teacher, class, room, break or double-period clash.</div>
-</div>
+<div class='tt-muted'>Drag lessons directly across the whole-school sheet. Classes stay on the left, days run across the top, and every day contains its periods. A move is rejected if it creates a teacher, class, room, break or double-period clash. Use Undo / Redo to reverse recent manual moves.</div>
+<div class='tt-editor-actions' style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px'>
+<form method='post' action='/app/timetable/placement/history/undo'><button class='tt-btn alt' type='submit'>↶ Undo last move</button></form>
+<form method='post' action='/app/timetable/placement/history/redo'><button class='tt-btn alt' type='submit'>↷ Redo move</button></form>
+</div></div>
 <div style='margin-top:14px'>{master_sheet}</div>
 <div class='tt-placard-platform'><div class='tt-placard-platform-head'><b>📌 Lesson Placard Platform</b><span>Drag unplaced lesson cards into empty timetable cells above. Rebalance them manually as needed.</span></div><div class='tt-placard-tray'>{_lesson_placard_platform(con, sid)}</div></div>
 {drag_script}
@@ -2757,6 +2775,17 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
                 return RedirectResponse("/app/timetable?tab=timetable&error=Subject+already+scheduled+for+this+class+that+day",303)
         duration=max(1,int(moving["duration"] or 1))
         end_time=pmap[int(period_no)+duration-1]["end_time"]
+        profile_id=_active_profile_id(con,sid)
+        cur.execute("""DELETE FROM timetable_edit_history
+            WHERE school_id=? AND profile_id=? AND undone=1""",(sid,profile_id))
+        cur.execute("""INSERT INTO timetable_edit_history(
+            school_id,profile_id,slot_id,action,before_day,before_period,before_room,
+            after_day,after_period,after_room,undone,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,0,?)""",(
+            sid,profile_id,rid,"move",str(moving["day_name"]),int(moving["period_no"]),
+            moving["room_id"],day_name,int(period_no),room,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
         cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
                     (day_name,period_no,period["start_time"],end_time,room,rid,sid))
         if len(linked_class_ids)<=1 and target_class_id != int(moving["class_id"]):
@@ -2767,6 +2796,90 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
     finally:
         con.close()
+def _restore_timetable_move(request:Request, direction:str):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        cur=con.cursor()
+        profile_id=_active_profile_id(con,sid)
+        history=cur.execute("""SELECT * FROM timetable_edit_history
+            WHERE school_id=? AND profile_id=? AND action='move' AND undone=?
+            ORDER BY id DESC LIMIT 1""",
+            (sid,profile_id,1 if direction=="redo" else 0)
+        ).fetchone()
+        if not history:
+            return RedirectResponse("/app/timetable?tab=timetable&error=No+move+available+to+"+direction,303)
+        slot=cur.execute("""SELECT s.*,l.duration,l.class_id,l.teacher_id,l.subject_id
+            FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.id=? AND s.school_id=? AND s.profile_id=?""",
+            (int(history["slot_id"]),sid,profile_id)
+        ).fetchone()
+        if not slot or int(slot["locked"] or 0):
+            return RedirectResponse("/app/timetable?tab=timetable&error=That+lesson+is+missing+or+locked",303)
+        expected_day=str(history["after_day"] if direction=="undo" else history["before_day"])
+        expected_period=int(history["after_period"] if direction=="undo" else history["before_period"])
+        target_day=str(history["before_day"] if direction=="undo" else history["after_day"])
+        target_period=int(history["before_period"] if direction=="undo" else history["after_period"])
+        target_room=history["before_room"] if direction=="undo" else history["after_room"]
+        if str(slot["day_name"])!=expected_day or int(slot["period_no"])!=expected_period:
+            return RedirectResponse("/app/timetable?tab=timetable&error=This+move+has+changed+since+the+history+entry",303)
+        duration=max(1,int(slot["duration"] or 1))
+        pmap={int(p["period_no"]):p for p in _profile_periods(cur,sid)}
+        if any(pno not in pmap for pno in range(target_period,target_period+duration)):
+            return RedirectResponse("/app/timetable?tab=timetable&error=The+original+periods+are+no+longer+available",303)
+        breaks=_profile_breaks(cur,sid)
+        for pno in range(target_period,target_period+duration):
+            st=str(pmap[pno]["start_time"]);et=str(pmap[pno]["end_time"])
+            if any(_time_to_min(st)<_time_to_min(str(br["end_time"])) and _time_to_min(et)>_time_to_min(str(br["start_time"])) for br in breaks):
+                return RedirectResponse("/app/timetable?tab=timetable&error=The+target+overlaps+a+configured+break",303)
+        lesson_id=int(slot["lesson_id"])
+        classes={int(x["class_id"]) for x in cur.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
+        ).fetchall()} or {int(slot["class_id"])}
+        teachers={int(x["teacher_id"]) for x in cur.execute(
+            "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
+        ).fetchall()} or ({int(slot["teacher_id"])} if slot["teacher_id"] else set())
+        for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration
+            FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.school_id=? AND s.profile_id=? AND s.day_name=? AND s.id<>?""",
+            (sid,profile_id,target_day,int(slot["id"]))
+        ).fetchall():
+            if not _overlaps({"period_no":target_period,"duration":duration},other):continue
+            other_id=int(other["lesson_id"])
+            other_classes={int(x["class_id"]) for x in cur.execute(
+                "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,other_id)
+            ).fetchall()} or {int(other["class_id"])}
+            other_teachers={int(x["teacher_id"]) for x in cur.execute(
+                "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,other_id)
+            ).fetchall()} or ({int(other["teacher_id"])} if other["teacher_id"] else set())
+            if classes.intersection(other_classes) or teachers.intersection(other_teachers):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Undo+or+redo+would+cause+a+class+or+teacher+clash",303)
+            if target_room and other["room_id"] and int(target_room)==int(other["room_id"]):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Undo+or+redo+would+cause+a+room+clash",303)
+        target_start=pmap[target_period]["start_time"]
+        target_end=pmap[target_period+duration-1]["end_time"]
+        cur.execute("""UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=?
+            WHERE id=? AND school_id=? AND profile_id=? AND locked=0""",
+            (target_day,target_period,target_start,target_end,target_room,int(slot["id"]),sid,profile_id)
+        )
+        cur.execute("UPDATE timetable_edit_history SET undone=? WHERE id=? AND school_id=?",
+            (1 if direction=="undo" else 0,int(history["id"]),sid))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=timetable&msg=Last+manual+move+"+("undone" if direction=="undo" else "redone"),303)
+    finally:
+        con.close()
+
+
+@router.post("/app/timetable/placement/history/undo")
+def timetable_placement_undo(request:Request):
+    return _restore_timetable_move(request,"undo")
+
+
+@router.post("/app/timetable/placement/history/redo")
+def timetable_placement_redo(request:Request):
+    return _restore_timetable_move(request,"redo")
+
+
 @router.post("/app/timetable/placement/platform/{rid}")
 def timetable_placement_platform(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
