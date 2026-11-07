@@ -21024,7 +21024,7 @@ def admission_letter_print(request: Request, application_id: int):
           <div class='letter-rule'></div>
           <div class='letter-meta'><span>OFFICIAL SCHOOL COMMUNICATION</span><span>DATE: {escape(letter_date)}</span></div>
         </header>
-        <h2>ADMISSION LETTER</h2>
+        <h2>NOTICE OF ADMISSION</h2>
         <p class='letter-reference'>Admission confirmation · Ref: {escape(admission_no or str(application_id))}</p>
         <p>Dear <strong>{escape(parent_name)}</strong>,</p>
         <p>We are pleased to confirm the admission and registration of <strong>{escape(learner_name)}</strong> to <strong>{escape(class_name)}{(' - ' + escape(class_stream)) if class_stream else ''}</strong>. The learner's details captured during application and enrolment are recorded below for your reference.</p>
