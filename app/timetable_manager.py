@@ -1179,14 +1179,18 @@ def _publication_fingerprint(con, sid):
     lesson_teachers=con.execute("""SELECT lt.lesson_id,lt.teacher_id FROM timetable_lesson_teachers lt
         JOIN timetable_lessons l ON l.id=lt.lesson_id
         WHERE lt.school_id=? AND l.profile_id=? ORDER BY lt.lesson_id,lt.teacher_id""",(sid,int(profile["id"]))).fetchall()
+    constraints=con.execute("""SELECT scope,constraint_type,target_id,value,priority,enabled,notes
+        FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY scope,constraint_type,target_id,id""",
+        (sid,int(profile["id"]))).fetchall()
     availability=con.execute("""SELECT resource_type,resource_id,day_name,period_no,allowed
         FROM timetable_profile_availability WHERE school_id=? AND profile_id=? ORDER BY resource_type,resource_id,day_name,period_no""",(sid,int(profile["id"]))).fetchall()
     payload={
-        "profile":{k:profile[k] for k in ("id","days_json","periods_json","breaks_json")},
+        "profile":{k:profile[k] for k in ("id","name","days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")},
         "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked")} for r in slots],
-        "lessons":[{k:r[k] for k in ("id","class_id","subject_id","teacher_id","room_id","lessons_per_week","duration","locked","preferred_room")} for r in lessons],
+        "lessons":[{k:r[k] for k in ("id","class_id","subject_id","teacher_id","room_id","group_name","lessons_per_week","duration","cycle","locked","preferred_room","notes")} for r in lessons],
         "lesson_classes":[{k:r[k] for k in ("lesson_id","class_id")} for r in lesson_classes],
         "lesson_teachers":[{k:r[k] for k in ("lesson_id","teacher_id")} for r in lesson_teachers],
+        "constraints":[{k:r[k] for k in ("scope","constraint_type","target_id","value","priority","enabled","notes")} for r in constraints],
         "availability":[{k:r[k] for k in ("resource_type","resource_id","day_name","period_no","allowed")} for r in availability]
     }
     import hashlib
