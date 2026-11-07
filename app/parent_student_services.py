@@ -110,7 +110,7 @@ def parent_guardians(request: Request, q: str = ""):
             where += " AND (s.parent_name LIKE ? OR s.parent_phone LIKE ? OR s.name LIKE ? OR s.admission_no LIKE ?)"
             params.extend([term,term,term,term])
         rows = cur.execute("""SELECT s.parent_name,s.parent_phone,COUNT(*) children,
-            GROUP_CONCAT(s.name, ', ') learner_names
+            STRING_AGG(s.name, ', ') AS learner_names
             FROM students s WHERE """ + where + """
             GROUP BY s.parent_name,s.parent_phone ORDER BY s.parent_name""", tuple(params)).fetchall()
         learners = len(_students(cur,sid)); parents = cur.execute("""SELECT COUNT(*) n FROM (
