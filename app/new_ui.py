@@ -20998,9 +20998,9 @@ def finance_workspace_section(request: Request, section: str):
     .fx-card{background:#fff;border:1px solid #e2eae3;border-radius:13px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #193d2610}
     .fx-card h2{font-size:17px;margin:0 0 8px;color:#254d36}.fx-card p{font-size:12px;color:#718078;margin:0 0 12px}
     .fx-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin:10px 0 14px}
-    .fx-form input,.fx-form select{min-width:0;width:100%;padding:11px;border:1px solid #d7e2d9;border-radius:8px;background:#fff;color:#243b2c}
+    .fx-form input,.fx-form select{min-width:0;width:100%%;padding:11px;border:1px solid #d7e2d9;border-radius:8px;background:#fff;color:#243b2c}
     .fx-form button,.fx-table-wrap button{border:0;border-radius:8px;padding:10px 13px;background:#236b45;color:#fff;font-weight:800;cursor:pointer}
-    .fx-table-wrap{overflow:auto;width:100%}.fx-table-wrap table{width:100%;border-collapse:collapse;font-size:12px;min-width:650px}
+    .fx-table-wrap{overflow:auto;width:100%%}.fx-table-wrap table{width:100%%;border-collapse:collapse;font-size:12px;min-width:650px}
     .fx-table-wrap th,.fx-table-wrap td{padding:10px;border-bottom:1px solid #edf1ed;text-align:left;white-space:nowrap}
     .fx-table-wrap th{color:#315342;background:#f6faf6;font-weight:800}.fx-empty{text-align:center;color:#829087;padding:20px!important}
     .fx-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
