@@ -30,7 +30,8 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
                          learner_ids: list[int], room_id: int | None,
                          start: str, end: str, day_id: int | None,
                          session_date: str | None, period_id: int | None,
-                         schedule_layer: str, session_type: str) -> None:
+                         schedule_layer: str, session_type: str,
+                         duration_periods: int = 0) -> None:
     if not class_ids and not learner_ids and schedule_layer == "instructional":
         raise TimetableSetupError("An instructional session must include at least one class or learner.")
     for class_id in class_ids:
@@ -349,7 +350,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     _validate_resources(
         cur, school_id, profile_id, classes, teachers, learners, room_id,
         start_time, end_time, day_id, session_date, period_id,
-        schedule_layer, session_type,
+        schedule_layer, session_type, duration_periods,
     )
     if programme_id is not None:
         programme = cur.execute(
