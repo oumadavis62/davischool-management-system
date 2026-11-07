@@ -2396,7 +2396,21 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     # teaching blocks for both classes and teachers.
                     gap_penalty=45*class_gap_change+35*teacher_gap_change
                     adjacency_bonus=-18*adjacent_class-24*adjacent_teacher
-                    choices.append((load+gap_penalty+adjacency_bonus+int(pno)*0.01+rng.random(),day,int(pno),room))
+                    same_subject_period=sum(
+                        1 for existing in occupied
+                        if str(existing["day_name"])!=day
+                        and int(existing["period_no"])==int(pno)
+                        and int(existing.get("subject_id") or lesson_by_id[int(existing["lesson_id"])]["subject_id"])==int(lesson["subject_id"])
+                        and classes.intersection(lesson_classes.get(
+                            int(existing["lesson_id"]),{int(existing["class_id"])}
+                        ))
+                    )
+                    period_variety_penalty=8*same_subject_period
+                    choices.append((
+                        load+gap_penalty+adjacency_bonus+period_variety_penalty
+                        +int(pno)*0.01+rng.random(),
+                        day,int(pno),room
+                    ))
 
                 if not choices:
                     continue
