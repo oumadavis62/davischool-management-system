@@ -161,7 +161,7 @@ def place_lesson(connection: Any, school_id: int, profile_id: int, class_id: int
     return lesson_id
 
 
-def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int, day_id: int, period_id: int, room_id: int | None = None, changed_by: str = "") -> None:
+def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int, day_id: int, period_id: int, changed_by: str = "", room_id: int | None = None) -> None:
     cur = connection.cursor()
     existing = cur.execute(
         "SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=? AND profile_id=? AND status='scheduled'",
