@@ -20222,7 +20222,7 @@ def _admission_ui_enhancements():
       backdrop.innerHTML="<section class='adm-popup' role='dialog' aria-modal='true'><h3></h3><p></p><div class='adm-popup-fields'></div><div class='adm-popup-actions'><button type='button' class='adm-popup-cancel'>Cancel</button><button type='button' class='adm-popup-apply'>Apply</button></div></section>";
       document.body.appendChild(backdrop);
       const title=backdrop.querySelector('h3'), desc=backdrop.querySelector('p'), fields=backdrop.querySelector('.adm-popup-fields'), cancel=backdrop.querySelector('.adm-popup-cancel'), apply=backdrop.querySelector('.adm-popup-apply');
-      let mode='filter', activeForm=null, filterState={status:'',klass:''}, applyFilter=()=>{};
+      let mode='filter', activeForm=null, activeSubmitter=null, filterState={status:'',klass:''}, applyFilter=()=>{};
       function close(){backdrop.classList.remove('is-open');activeForm=null;}
       cancel.addEventListener('click',close);
       backdrop.addEventListener('click',e=>{if(e.target===backdrop)close();});
@@ -20242,7 +20242,7 @@ def _admission_ui_enhancements():
         apply.textContent='Apply filters';backdrop.classList.add('is-open');
       }
       apply.addEventListener('click',()=>{
-        if(mode==='confirm'&&activeForm){const f=activeForm;close();f.dataset.popupConfirmed='1';f.submit();return;}
+        if(mode==='confirm'&&activeForm){const f=activeForm,submitter=activeSubmitter;close();f.dataset.popupConfirmed='1';if(submitter&&f.requestSubmit)f.requestSubmit(submitter);else f.submit();return;}
         if(mode==='report'){const f=fields.querySelector('form');if(f)f.submit();return;}
         if(mode==='print'){close();window.print();return;}
         filterState.status=fields.querySelector('#adm-popup-status')?.value||'';
@@ -20282,7 +20282,7 @@ def _admission_ui_enhancements():
       page.querySelectorAll("form[method='post']").forEach(form=>{
         form.addEventListener('submit',e=>{
           if(form.dataset.popupConfirmed==='1')return;
-          e.preventDefault();mode='confirm';activeForm=form;
+          e.preventDefault();mode='confirm';activeForm=form;activeSubmitter=e.submitter||null;
           const action=(form.getAttribute('action')||'').toLowerCase();
           title.textContent=action.includes('/decision')?'Confirm admission decision':action.includes('/reopen')?'Reopen application':action.includes('/enrolment')?'Confirm learner enrolment':'Confirm changes';
           desc.textContent=action.includes('/decision')?'You are about to update this applicant’s admission status. Continue only after checking the applicant details.':action.includes('/reopen')?'This application will return to Admission Review with Pending status.':action.includes('/enrolment')?'Completing enrolment will register the learner and issue an admission number.':'Please confirm that you want to save these changes.';
