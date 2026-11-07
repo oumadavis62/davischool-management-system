@@ -625,7 +625,7 @@ def init_extended_db():
     cur.execute("CREATE TABLE IF NOT EXISTS sms_logs (id INTEGER PRIMARY KEY, school_id INTEGER, recipient TEXT, message TEXT, status TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS roles_permissions (id INTEGER PRIMARY KEY, school_id INTEGER, role TEXT, permission TEXT, enabled INTEGER DEFAULT 1)")
     # One-time destructive retirement migration. The marker prevents this
-    # legacy cleanup from ever touching tables introduced by the new timetable.
+    # legacy timetable cleanup is isolated from all non-timetable school data.
     cur.execute("CREATE TABLE IF NOT EXISTS davischool_schema_migrations (migration_key TEXT PRIMARY KEY, applied_at TEXT)")
     cur.execute("SELECT 1 FROM davischool_schema_migrations WHERE migration_key=?", ("retire_all_legacy_timetable_v2",))
     if not cur.fetchone():
@@ -650,7 +650,7 @@ def init_extended_db():
         cur.execute("DELETE FROM roles_permissions WHERE lower(COALESCE(permission,'')) LIKE '%timetable%'")
         cur.execute("DELETE FROM system_audit WHERE lower(COALESCE(action,'')) LIKE '%timetable%' OR lower(COALESCE(details,'')) LIKE '%timetable%'")
         cur.execute("DELETE FROM activity_log WHERE lower(COALESCE(action,'')) LIKE '%timetable%' OR lower(COALESCE(details,'')) LIKE '%timetable%'")
-        cur.execute("INSERT INTO davischool_schema_migrations (migration_key, applied_at) VALUES (?, ?)", ("retire_legacy_timetable_v1", datetime.now().isoformat()))
+        cur.execute("INSERT INTO davischool_schema_migrations (migration_key, applied_at) VALUES (?, ?)", ("retire_all_legacy_timetable_v2", datetime.now().isoformat()))
     cur.execute("CREATE TABLE IF NOT EXISTS integrations (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, status TEXT, config TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS report_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER, exam_id INTEGER, comment TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER, date TEXT, status TEXT)")
