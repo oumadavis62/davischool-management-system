@@ -114,12 +114,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <style>
           .tt-home{{color:#173b31;max-width:1500px;margin:0 auto;padding:8px 0 34px}}
           .tt-home *{{box-sizing:border-box}}
-          .tt-home-hero{{position:relative;overflow:hidden;border-radius:22px;padding:30px 34px;background:linear-gradient(115deg,#123f32 0%,#17634a 62%,#23815d 100%);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;box-shadow:0 12px 30px rgba(17,70,51,.14)}}
-          .tt-home-hero:after{{content:'';position:absolute;width:260px;height:260px;border:1px solid rgba(255,255,255,.13);border-radius:50%;right:8%;top:-155px;box-shadow:0 0 0 28px rgba(255,255,255,.035),0 0 0 58px rgba(255,255,255,.025)}}
-          .tt-home-hero-copy{{position:relative;z-index:1}}.tt-home-eyebrow{{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#638b79;display:block}}
-          .tt-home-hero .tt-home-eyebrow{{color:#b6ddc8}}.tt-home-hero h1{{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:9px 0 8px;color:#fff;font-weight:800;letter-spacing:-.7px}}
-          .tt-home-hero p{{margin:0;color:rgba(255,255,255,.8);font-size:13px;max-width:560px;line-height:1.65}}
-          .tt-home-hero-mark{{position:relative;z-index:1;width:94px;height:94px;border-radius:25px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:grid;place-items:center;font-size:42px;flex:none}}
+          .tt-home-hero{{position:relative;overflow:hidden;border:1px solid #e2eaf2;border-radius:22px;padding:30px 34px;background:linear-gradient(110deg,#f7f9fc 0%,#f1f6fa 58%,#edf5f4 100%);color:#18324b;display:flex;align-items:center;justify-content:space-between;gap:24px;box-shadow:0 10px 28px rgba(36,62,86,.055)}}
+          .tt-home-hero:after{{content:'';position:absolute;width:250px;height:250px;border:1px solid rgba(89,132,164,.13);border-radius:50%;right:8%;top:-155px;box-shadow:0 0 0 28px rgba(89,132,164,.035),0 0 0 58px rgba(89,132,164,.025)}}
+          .tt-home-hero-copy{{position:relative;z-index:1}}.tt-home-eyebrow{{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#66839a;display:block}}
+          .tt-home-hero .tt-home-eyebrow{{color:#68879d}}.tt-home-hero h1{{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:9px 0 8px;color:#1d354d;font-weight:800;letter-spacing:-.7px}}
+          .tt-home-hero p{{margin:0;color:#64788a;font-size:13px;max-width:560px;line-height:1.65}}
+          .tt-home-hero-mark{{position:relative;z-index:1;width:94px;height:94px;border-radius:25px;background:#fff;border:1px solid #dce8f0;color:#3d7895;display:grid;place-items:center;font-size:42px;flex:none;box-shadow:0 8px 22px rgba(47,91,120,.08)}}
           .tt-home-profile{{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:18px 2px 14px}}.tt-home-profile label{{font-size:12px;color:#61766d;font-weight:700}}.tt-home-profile select{{min-width:250px;max-width:100%;padding:10px 13px;border:1px solid #dce7e0;border-radius:10px;background:#fff;color:#234b3b;font-weight:650}}
           .tt-home-profile-card,.tt-home-panel,.tt-home-empty{{background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}
           .tt-home-profile-card{{padding:23px 25px;margin-bottom:18px}}.tt-home-profile-top{{display:flex;align-items:center;justify-content:space-between;gap:16px}}.tt-home-profile-top h2{{font-size:22px;margin:6px 0;color:#183e30}}.tt-home-profile-top p{{font-size:12px;color:#72857a;margin:0}}.tt-home-profile-top p i{{display:inline-block;width:4px;height:4px;border-radius:50%;background:#a6b7ad;margin:0 8px 2px}}
