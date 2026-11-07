@@ -579,6 +579,36 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 return None
         return span
 
+    def preference_penalty(task, option):
+        rules = cur.execute(
+            """SELECT * FROM ds_timetable_constraints
+               WHERE school_id=? AND profile_id=? AND is_active=1
+                 AND constraint_type='prefer'
+                 AND (schedule_layer='all' OR schedule_layer='instructional')
+                 AND (applies_to='all' OR applies_to='lesson')""",
+            (school_id, profile_id),
+        ).fetchall()
+        penalty = 0
+        for rule in rules:
+            if rule["subject_id"] is not None and int(rule["subject_id"]) != int(task["subject_id"] or 0):
+                continue
+            if rule["teacher_id"] is not None and int(rule["teacher_id"]) not in task["teachers"]:
+                continue
+            if rule["class_id"] is not None and int(rule["class_id"]) not in task["classes"]:
+                continue
+            if rule["room_id"] is not None and int(rule["room_id"]) != int(option["room_id"] or 0):
+                continue
+            matches = True
+            if rule["day_id"] is not None:
+                matches = matches and int(rule["day_id"]) == int(option["day_id"])
+            if rule["period_id"] is not None:
+                matches = matches and int(rule["period_id"]) == int(option["period_id"])
+            if rule["start_time"] and rule["end_time"]:
+                matches = matches and option["start"] < str(rule["end_time"]) and option["end"] > str(rule["start_time"])
+            if matches:
+                penalty -= 10
+        return penalty
+
     candidates = []
     for task in tasks:
         options = []
@@ -632,7 +662,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         "duration": task["duration"], "period_no": int(period["period_no"])})
         if not options:
             raise TimetableSetupError("No valid slot is available for normalized requirement '" + task["name"] + "'. Check constraints, teacher availability, rooms and period patterns.")
-        options.sort(key=lambda option: (0 if task["preferred_day_id"] == option["day_id"] else 1,
+        options.sort(key=lambda option: (preference_penalty(task, option),
+                                          0 if task["preferred_day_id"] == option["day_id"] else 1,
                                           option["period_no"], option["day_id"]))
         candidates.append(options)
 
