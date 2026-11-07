@@ -20328,7 +20328,7 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
         elif show_action and status == "accepted" and not enrolled:
             action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
         elif admission_no:
-            action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>Print Letter</a>"
+            action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}?print=1'>Print Letter</a>"
         if show_action and allow_edit_delete and not enrolled:
             action += (
                 f"<a class='admit-btn' href='/app/admissions/{applicant_id}/edit'>Edit</a>"
@@ -21018,7 +21018,7 @@ def admission_letter_print(request: Request, application_id: int):
 
     letter_date = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %B %Y")
     body = f"""<div class='page letter-page'>
-      <div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button onclick='window.print()'>Print Letter</button></div>
+      <div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button type='button' onclick='openAdmissionPrintPreview()'>Open Print Preview / Save PDF</button></div>
       <article class='letter-paper'>
         <header class='letter-header'>
           <div class='letter-brand'>{logo_html}<div><h1>{escape(school_name)}</h1><p>{escape(school_contacts)}</p></div></div>
@@ -21091,8 +21091,23 @@ def admission_letter_print(request: Request, application_id: int):
         *{{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
       }}
     </style>"""
-    body += _admission_ui_enhancements()
-    return _school_page(request, "Admission Letter", body)
+    # Return a clean, standalone print document rather than embedding it in the
+    # application shell. This prevents dashboard overlays/layout scripts from
+    # interfering with the browser's native print preview.
+    auto_print = str(request.query_params.get("print", "")).strip() == "1"
+    print_script = (
+        "<script>\n"
+        "function openAdmissionPrintPreview(){try{window.focus();window.print();}catch(e){console.error('Unable to open print preview',e);}}\n"
+        + ("window.addEventListener('load',function(){setTimeout(openAdmissionPrintPreview,700);});" if auto_print else "")
+        + "\n</script>"
+    )
+    document = (
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<meta name='color-scheme' content='light'><title>Notice of Admission</title>"
+        "</head><body>" + body + print_script + "</body></html>"
+    )
+    return HTMLResponse(document)
 
 
 @router.get("/app/admission-reports", response_class=HTMLResponse)
