@@ -280,8 +280,11 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const head=document.createElement('div'); head.className='tt-modal-head';
             const copy=document.createElement('div'); copy.innerHTML='<span class="tt-kicker">TIMETABLE CONFIGURATION</span><h3></h3><p>Complete the details below, then save your changes.</p>'; copy.querySelector('h3').textContent=title;
             const close=document.createElement('button'); close.type='button'; close.className='tt-modal-close'; close.setAttribute('aria-label','Close'); close.innerHTML='&times;';
-            head.append(copy,close); dialog.append(head,form); host.append(dialog); document.body.append(host);
-            const card=document.createElement('div'); card.className='tt-add-card'; const open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open); form.parentNode.insertBefore(card,form); form.remove();
+            head.append(copy,close);
+            const originalParent=form.parentNode;
+            const card=document.createElement('div'); card.className='tt-add-card'; const open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open);
+            originalParent.replaceChild(card,form);
+            dialog.append(head,form); host.append(dialog); document.body.append(host);
             const closeModal=()=>{{host.classList.remove('is-open');document.body.style.overflow='';open.focus();}};
             open.addEventListener('click',()=>{{host.classList.add('is-open');document.body.style.overflow='hidden';close.focus();}});
             close.addEventListener('click',closeModal); host.addEventListener('click',e=>{{if(e.target===host)closeModal();}});
@@ -290,8 +293,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           const createForm=root.querySelector("form[action='/app/timetable/setup/profile']");
           if(createForm){{
             const host=document.createElement('div');host.className='tt-modal';host.id='tt-profile-create-modal';host.setAttribute('role','dialog');host.setAttribute('aria-modal','true');
-            const dialog=document.createElement('div');dialog.className='tt-modal-dialog';const head=document.createElement('div');head.className='tt-modal-head';head.innerHTML='<div><span class="tt-kicker">FIRST STEP</span><h3>Create timetable profile</h3><p>Choose the academic year and term for this schedule.</p></div><button type="button" class="tt-modal-close" aria-label="Close">&times;</button>';dialog.append(head,createForm);host.append(dialog);document.body.append(host);
-            const launch=document.createElement('button');launch.type='button';launch.className='tt-btn';launch.textContent='＋ Create timetable profile';createForm.parentNode.insertBefore(launch,createForm);createForm.remove();
+            const dialog=document.createElement('div');dialog.className='tt-modal-dialog';const head=document.createElement('div');head.className='tt-modal-head';head.innerHTML='<div><span class="tt-kicker">FIRST STEP</span><h3>Create timetable profile</h3><p>Choose the academic year and term for this schedule.</p></div><button type="button" class="tt-modal-close" aria-label="Close">&times;</button>';
+            const originalParent=createForm.parentNode;const launch=document.createElement('button');launch.type='button';launch.className='tt-btn';launch.textContent='＋ Create timetable profile';originalParent.replaceChild(launch,createForm);
+            dialog.append(head,createForm);host.append(dialog);document.body.append(host);
             const close=()=>{{host.classList.remove('is-open');document.body.style.overflow='';launch.focus();}};launch.addEventListener('click',()=>{{host.classList.add('is-open');document.body.style.overflow='hidden';}});head.querySelector('button').addEventListener('click',close);host.addEventListener('click',e=>{{if(e.target===host)close();}});host.addEventListener('keydown',e=>{{if(e.key==='Escape')close();}});
           }}
         }})();
