@@ -20579,6 +20579,22 @@ def _finance_workspace_schema(cur, sid):
         id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, budget_year TEXT NOT NULL,
         department TEXT NOT NULL, account_code TEXT, amount REAL NOT NULL,
         created_at TEXT NOT NULL)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_periods(
+        school_id INTEGER NOT NULL, period_start TEXT NOT NULL, period_end TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Open', closed_by TEXT, closed_at TEXT,
+        PRIMARY KEY(school_id,period_start,period_end))""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_source_posts(
+        school_id INTEGER NOT NULL, source_type TEXT NOT NULL, source_id TEXT NOT NULL,
+        journal_id TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY(school_id,source_type,source_id))""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_reversals(
+        school_id INTEGER NOT NULL, original_journal_id TEXT NOT NULL,
+        reversal_journal_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY(school_id,original_journal_id))""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_bank_imports(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, account_id TEXT NOT NULL,
+        filename TEXT, imported_rows INTEGER NOT NULL DEFAULT 0,
+        duplicate_rows INTEGER NOT NULL DEFAULT 0, imported_by TEXT, imported_at TEXT NOT NULL)""")
     seed = [
         ("1000","Cash on Hand","Asset"),("1010","Bank Accounts","Asset"),
         ("1020","Mobile Money Clearing","Asset"),("1100","Fee Receivables","Asset"),
@@ -20616,6 +20632,47 @@ def _finance_access(request):
 
 def _finance_prepare(cur, sid):
     _finance_workspace_schema(cur, sid)
+
+def _finance_period_open(cur, sid, day):
+    day = str(day or _finance_now())[:10]
+    row = cur.execute("SELECT 1 FROM ds_fin_periods WHERE school_id=? AND status='Closed' AND ? BETWEEN period_start AND period_end LIMIT 1",(sid,day)).fetchone()
+    return row is None
+
+
+def _finance_post_source(cur, sid, day, reference, description, debit_code, credit_code, amount, actor, source_type, source_id):
+    amount = round(float(amount or 0),2)
+    if amount <= 0:
+        return None
+    existing = cur.execute("SELECT journal_id FROM ds_fin_source_posts WHERE school_id=? AND source_type=? AND source_id=?",(sid,source_type,str(source_id))).fetchone()
+    if existing:
+        return str(existing["journal_id"])
+    if not _finance_period_open(cur,sid,day):
+        raise ValueError("The accounting period is closed for this transaction date.")
+    codes = cur.execute("SELECT code FROM ds_fin_accounts WHERE school_id=? AND active=1 AND code IN (?,?)",(sid,debit_code,credit_code)).fetchall()
+    if len(codes) != 2:
+        raise ValueError("Posting accounts are not available in this school's chart of accounts.")
+    jid = _finance_uid()
+    stamp = _finance_now()
+    cur.execute("INSERT INTO ds_fin_journals(id,school_id,journal_date,reference,description,status,created_by,created_at,approved_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (jid,sid,day,reference or "",description,"Posted",actor,stamp,actor,stamp))
+    cur.execute("INSERT INTO ds_fin_journal_lines(id,school_id,journal_id,account_code,debit,credit,memo) VALUES(?,?,?,?,?,?,?)",
+        (_finance_uid(),sid,jid,debit_code,amount,0,description))
+    cur.execute("INSERT INTO ds_fin_journal_lines(id,school_id,journal_id,account_code,debit,credit,memo) VALUES(?,?,?,?,?,?,?)",
+        (_finance_uid(),sid,jid,credit_code,0,amount,description))
+    cur.execute("INSERT INTO ds_fin_source_posts(school_id,source_type,source_id,journal_id,created_at) VALUES(?,?,?,?,?) RETURNING source_id",
+        (sid,source_type,str(source_id),jid,stamp))
+    return jid
+
+
+def _finance_expense_account(category):
+    value = str(category or "").lower()
+    if any(x in value for x in ("staff","salary","payroll","wage")): return "5000"
+    if any(x in value for x in ("utilit","electric","water","internet")): return "5100"
+    if any(x in value for x in ("learning","book","stationery","material")): return "5200"
+    if any(x in value for x in ("repair","maintenance")): return "5300"
+    if any(x in value for x in ("transport","fuel","travel")): return "5400"
+    return "5900"
+
 
 
 def _finance_tabs(active):
