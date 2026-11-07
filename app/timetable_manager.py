@@ -2824,6 +2824,9 @@ def _restore_timetable_move(request:Request, direction:str):
         if str(slot["day_name"])!=expected_day or int(slot["period_no"])!=expected_period:
             return RedirectResponse("/app/timetable?tab=timetable&error=This+move+has+changed+since+the+history+entry",303)
         duration=max(1,int(slot["duration"] or 1))
+        enabled_days={str(x["name"]) for x in _profile_days(cur,sid) if int(x["enabled"] or 0)}
+        if target_day not in enabled_days:
+            return RedirectResponse("/app/timetable?tab=timetable&error=The+target+day+is+disabled",303)
         pmap={int(p["period_no"]):p for p in _profile_periods(cur,sid)}
         if any(pno not in pmap for pno in range(target_period,target_period+duration)):
             return RedirectResponse("/app/timetable?tab=timetable&error=The+original+periods+are+no+longer+available",303)
@@ -2833,13 +2836,20 @@ def _restore_timetable_move(request:Request, direction:str):
             if any(_time_to_min(st)<_time_to_min(str(br["end_time"])) and _time_to_min(et)>_time_to_min(str(br["start_time"])) for br in breaks):
                 return RedirectResponse("/app/timetable?tab=timetable&error=The+target+overlaps+a+configured+break",303)
         lesson_id=int(slot["lesson_id"])
+        subject_id=int(slot["subject_id"])
+        for pno in range(target_period,target_period+duration):
+            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,subject_id,target_day,pno)).fetchone():
+                return RedirectResponse("/app/timetable?tab=timetable&error=The+subject+is+unavailable+in+the+original+slot",303)
         classes={int(x["class_id"]) for x in cur.execute(
             "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
         ).fetchall()} or {int(slot["class_id"])}
         teachers={int(x["teacher_id"]) for x in cur.execute(
             "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
         ).fetchall()} or ({int(slot["teacher_id"])} if slot["teacher_id"] else set())
-        for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration
+        for pno in range(target_period,target_period+duration):
+            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,target_day,pno)).fetchone() for tid in teachers):
+                return RedirectResponse("/app/timetable?tab=timetable&error=A+teacher+is+unavailable+in+the+original+slot",303)
+        for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
             FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
             WHERE s.school_id=? AND s.profile_id=? AND s.day_name=? AND s.id<>?""",
             (sid,profile_id,target_day,int(slot["id"]))
@@ -2854,6 +2864,8 @@ def _restore_timetable_move(request:Request, direction:str):
             ).fetchall()} or ({int(other["teacher_id"])} if other["teacher_id"] else set())
             if classes.intersection(other_classes) or teachers.intersection(other_teachers):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Undo+or+redo+would+cause+a+class+or+teacher+clash",303)
+            if int(other["subject_id"])==subject_id and classes.intersection(other_classes):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Undo+or+redo+would+repeat+a+subject+for+the+class+that+day",303)
             if target_room and other["room_id"] and int(target_room)==int(other["room_id"]):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Undo+or+redo+would+cause+a+room+clash",303)
         target_start=pmap[target_period]["start_time"]
