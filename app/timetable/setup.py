@@ -137,6 +137,10 @@ def save_break(connection: Any, school_id: int, profile_id: int, break_no: int, 
         raise TimetableSetupError("Break number and name are required.")
     if applies_to not in ("all", "selected"):
         raise TimetableSetupError("Choose a valid break scope.")
+    existing = cur.execute(
+        "SELECT id FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? AND break_no=?",
+        (school_id, profile_id, number),
+    ).fetchone()
     overlap = cur.execute(
         """SELECT id FROM ds_timetable_periods
            WHERE school_id=? AND profile_id=? AND start_time < ? AND end_time > ? LIMIT 1""",
@@ -144,10 +148,14 @@ def save_break(connection: Any, school_id: int, profile_id: int, break_no: int, 
     ).fetchone()
     if overlap:
         raise TimetableSetupError("A break cannot overlap a teaching period.")
-    existing = cur.execute(
-        "SELECT id FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? AND break_no=?",
-        (school_id, profile_id, number),
+    break_overlap = cur.execute(
+        """SELECT id FROM ds_timetable_breaks
+           WHERE school_id=? AND profile_id=? AND break_no<>?
+             AND start_time < ? AND end_time > ? LIMIT 1""",
+        (school_id, profile_id, number, end, start),
     ).fetchone()
+    if break_overlap:
+        raise TimetableSetupError("This break overlaps another configured break.")
     if existing:
         cur.execute(
             """UPDATE ds_timetable_breaks SET label=?,start_time=?,end_time=?,applies_to=?
