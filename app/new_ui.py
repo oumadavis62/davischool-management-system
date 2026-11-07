@@ -16203,8 +16203,20 @@ def accounting_page(request: Request):
 def accounting_expense(request: Request,category:str=Form(...),description:str=Form(...),amount:float=Form(...),paid_to:str=Form(""),voucher_no:str=Form(""),date:str=Form("")):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/",303)
-    if not _require_permission(request,sid,"accountant_portal.expense_create"):
+    if not (_require_permission(request,sid,"finance.edit") or _require_permission(request,sid,"accountant_portal.expense_create")):
         return HTMLResponse("Recording expenses has been disabled for this account.",403)
+    if amount<=0 or not category.strip() or not description.strip():
+        return HTMLResponse("Enter an expense category, description and positive amount.",400)
+    day=date.strip() or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    voucher=voucher_no.strip() or ("EXP-"+datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S"))
+    con=_db();cur=con.cursor()
+    cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)",
+                (sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher,day,"Paid"))
+    cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",
+                (sid,day,voucher,description.strip(),amount,0,category.strip()))
+    _audit(cur,sid,request,"EXPENSE_CREATE",voucher+" KES %.2f"%amount)
+    con.commit();con.close()
+    return RedirectResponse("/app/accounting",303)
 
 # ---------------------------------------------------------------------------
 # Class MarkSheet Analysis
@@ -20870,8 +20882,14 @@ def finance_supplier_bill_pay(request: Request,bill_id:str=Form(...)):
     if not bill:con.close();return HTMLResponse("Bill not found.",404)
     if bill["status"]!="Approved":con.close();return HTMLResponse("Only approved bills can be paid.",409)
     day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    voucher_no="PV-"+day.replace("-","")+"-"+str(bill_id)[:8].upper()
+    description="Supplier payment: "+str(bill["supplier"])+" · "+str(bill["description"] or bill["invoice_no"])
+    cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)",
+                (sid,"Supplier Payment",description,float(bill["amount"]),str(bill["supplier"]),voucher_no,day,"Paid"))
+    cur.execute("INSERT INTO payment_vouchers(school_id,voucher_no,payee,description,amount,date,status) VALUES(?,?,?,?,?,?,?)",
+                (sid,voucher_no,str(bill["supplier"]),description,float(bill["amount"]),day,"Paid"))
     cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",
-                (sid,day,bill["invoice_no"],"Supplier payment: "+str(bill["supplier"]),float(bill["amount"]),0,"Accounts Payable"))
+                (sid,day,bill["invoice_no"],description,float(bill["amount"]),0,"Accounts Payable"))
     cur.execute("UPDATE ds_fin_bills SET status='Paid',paid_at=? WHERE id=? AND school_id=?",(_finance_now(),bill_id,sid))
     _audit(cur,sid,request,"SUPPLIER_BILL_PAY",bill["invoice_no"]);con.commit();con.close()
     return RedirectResponse("/app/finance/payables",303)
