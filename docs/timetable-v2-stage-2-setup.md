@@ -8,6 +8,7 @@ Stage 2 adds an administrator-facing configuration workspace at `/school/timetab
 - Configure ordered instructional/non-instructional school days, including a Monday–Friday starter.
 - Define teaching periods with 24-hour start/end times and period type.
 - Define breaks and lunch; prevent breaks from overlapping lessons or other breaks.
+- Record term holidays, closures, school events and special instructional dates, bounded by the profile's academic date range.
 - Register school-owned classrooms and specialist rooms with type and capacity.
 - Record teacher availability as available, unavailable or preferred for a specific day/period.
 - Define weekly class/subject lesson requirements from existing teacher allocations, including lesson duration, maximum daily frequency and double-lesson permission.
@@ -27,6 +28,7 @@ Stage 2 adds an administrator-facing configuration workspace at `/school/timetab
 - Times must be valid 24-hour values and end after start.
 - Teaching periods cannot overlap one another.
 - Breaks cannot overlap a teaching period or another break.
+- Calendar exceptions must fall within the configured academic start/end dates when those dates are set.
 - Room codes are unique per school and updates reuse the existing room record.
 - Weekly lesson frequency is 1–30; lesson duration is 1–4 periods.
 
