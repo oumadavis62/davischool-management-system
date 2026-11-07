@@ -307,7 +307,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const originalParent=form.parentNode;
             const card=document.createElement('div'); card.className='tt-add-card'; const open=document.createElement('button'); open.type='button'; open.className='tt-btn secondary'; open.innerHTML='<span aria-hidden="true">＋</span> Add '+title.toLowerCase(); card.append(open);
             originalParent.replaceChild(card,form);
-            dialog.append(head,form); host.append(dialog); document.body.append(host);
+            dialog.append(head,form); host.append(dialog); root.append(host);
             const closeModal=()=>{{host.classList.remove('is-open');document.body.style.overflow='';open.focus();}};
             open.addEventListener('click',()=>{{host.classList.add('is-open');document.body.style.overflow='hidden';close.focus();}});
             close.addEventListener('click',closeModal); host.addEventListener('click',e=>{{if(e.target===host)closeModal();}});
