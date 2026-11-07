@@ -822,14 +822,14 @@ def _constraints(con, sid):
 
 
 def _weekly_period_capacity(con, sid):
-    """Physical teaching periods in one school week; breaks are not periods."""
-    day_count=con.execute("SELECT COUNT(*) c FROM timetable_days WHERE school_id=? AND enabled=1",(sid,)).fetchone()["c"]
-    period_count=con.execute("SELECT COUNT(*) c FROM timetable_periods WHERE school_id=?",(sid,)).fetchone()["c"]
-    return int(day_count or 0) * int(period_count or 0)
+    """Physical teaching capacity from the active timetable profile."""
+    day_count=sum(1 for day in _profile_days(con,sid) if int(day["enabled"] or 0))
+    period_count=len(_profile_periods(con,sid))
+    return int(day_count) * int(period_count)
 
 
 def _generate(con, sid):
-    settings=con.execute("SELECT * FROM timetable_manager_settings WHERE school_id=?", (sid,)).fetchone()
+    settings=_profile_settings(con,sid)
     classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
     lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?", (sid,)).fetchone()["c"]
     slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)", (sid,)).fetchone()["c"]
@@ -837,8 +837,8 @@ def _generate(con, sid):
     latest_run=con.execute("""SELECT status,placed,requested,message,created_at
         FROM timetable_generation_runs WHERE school_id=? ORDER BY id DESC LIMIT 1""",(sid,)).fetchone()
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
-    complexity=str(settings["complexity"] if settings else "normal")
-    relaxation=str(settings["relaxation"] if settings else "relaxed")
+    complexity=str(settings["complexity"] or "normal")
+    relaxation=str(settings["relaxation"] or "relaxed")
     run_notice=""
     if latest_run:
         run_notice=f"<div class='tt-notice {'ok' if str(latest_run['status']) in ('complete','relaxed') else ('bad' if str(latest_run['status'])=='failed' else 'ok')}'>📌 Last generation: {escape(str(latest_run['status']).title())} — {int(latest_run['placed'] or 0)} of {int(latest_run['requested'] or 0)} periods. {escape(str(latest_run['message'] or ''))}</div>"
@@ -1818,15 +1818,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     A lesson occurrence occupies its full duration, so double/triple lessons
     consume 2/3 physical periods while remaining one occurrence.
     """
-    days=[str(r["name"]) for r in cur.execute(
-        "SELECT name FROM timetable_days WHERE school_id=? AND enabled=1 ORDER BY day_no",(sid,)
-    ).fetchall()]
-    if not days:
-        days=list(DEFAULT_DAYS)
-
-    periods=[dict(r) for r in cur.execute(
-        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY period_no",(sid,)
-    ).fetchall()]
+    # The active profile is the single source of truth. Never mix its displayed
+    # schedule with legacy school-wide days/periods during generation.
+    days=[str(r["name"]) for r in _profile_days(cur,sid) if int(r["enabled"] or 0)]
+    periods=[dict(r) for r in _profile_periods(cur,sid)]
     rooms=[dict(r) for r in cur.execute(
         "SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)
     ).fetchall()]
@@ -1843,13 +1838,14 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         lesson_sql+" ORDER BY duration DESC,lessons_per_week DESC,id",params
     ).fetchall()]
 
-    if not periods or not lessons:
+    if not days or not periods:
+        reason="No enabled teaching days or valid periods are configured in the active timetable profile."
+        return datetime.now().strftime("%Y%m%d%H%M%S%f"),0,0,[(0,reason)],"incomplete"
+    if not lessons:
         return datetime.now().strftime("%Y%m%d%H%M%S%f"),0,0,[],"complete"
 
     pmap={int(p["period_no"]):p for p in periods}
-    breaks=[dict(r) for r in cur.execute(
-        "SELECT * FROM timetable_breaks WHERE school_id=? ORDER BY start_time,id",(sid,)
-    ).fetchall()]
+    breaks=[dict(r) for r in _profile_breaks(cur,sid)]
 
     lesson_classes={}
     lesson_teachers={}
@@ -1877,7 +1873,9 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             cur.execute("""DELETE FROM timetable_slots
                 WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
                     SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
-                )""",(sid,sid,class_filter))
+                    UNION
+                    SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?
+                )""",(sid,sid,class_filter,sid,class_filter))
         else:
             cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(sid,))
 
@@ -2378,15 +2376,8 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
 
     complete,placements,av_ok,pref_ok,nodes=best_solution or (True,[],True,True,0)
 
-    # Persist only the best unlocked generated placements.
-    if class_filter:
-        cur.execute("""DELETE FROM timetable_slots
-            WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
-                SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
-            )""",(sid,sid,class_filter))
-    else:
-        cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(sid,))
-
+    # Persist only newly solved placements. Existing slots (including locked
+    # placements and those retained when replace_existing=False) stay untouched.
     run=datetime.now().strftime("%Y%m%d%H%M%S%f")
     for row in placements:
         # Store one placement at the start of the lesson, but also reserve
@@ -2410,17 +2401,29 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         int(l.get("lessons_per_week") or 0)*max(1,int(l.get("duration") or 1))
         for l in lessons
     )
-    placed=sum(max(1,int(row.get("duration") or 1)) for row in placements)
+    existing_by={}
+    for row in base:
+        lid=int(row["lesson_id"])
+        existing_by[lid]=existing_by.get(lid,0)+1
+    new_by={}
+    for row in placements:
+        lid=int(row["lesson_id"])
+        new_by[lid]=new_by.get(lid,0)+1
+    placed=sum(
+        (existing_by.get(int(l["id"]),0)+new_by.get(int(l["id"]),0))
+        * max(1,int(l.get("duration") or 1))
+        for l in lessons
+    )
 
     unplaced=[]
     if not complete:
-        placed_by={int(x["lesson_id"]) for x in placements}
         for l in lessons:
+            lid=int(l["id"])
             need=int(l.get("lessons_per_week") or 0)
-            got=sum(1 for x in placements if int(x["lesson_id"])==int(l["id"]))
+            got=existing_by.get(lid,0)+new_by.get(lid,0)
             if got<need:
                 unplaced.append((
-                    int(l["id"]),
+                    lid,
                     f"{got}/{need} occurrences placed; automatic solver exhausted its search"
                 ))
 
@@ -2507,14 +2510,17 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
         linked=cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()
         linked_ids={int(x["class_id"]) for x in linked} or {int(lesson["class_id"])}
         if target not in linked_ids:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+is+not+assigned+to+this+class",303)
-        if day_name not in DAYS:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        enabled_days={str(x["name"]) for x in _profile_days(cur,sid) if int(x["enabled"] or 0)}
+        if day_name not in enabled_days:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+teaching+day",303)
         duration=max(1,int(lesson["duration"] or 1))
         if duration==2 and int(period_no)%2==0:return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+start+at+1,+3,+5+or+7",303)
         pmap={int(p["period_no"]):p for p in _profile_periods(cur,sid)}
         if int(period_no) not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
+        breaks=_profile_breaks(cur,sid)
         for pno in range(int(period_no),int(period_no)+duration):
             if pno not in pmap:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+duration+does+not+fit",303)
-            if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
+            st=str(pmap[pno]["start_time"]);et=str(pmap[pno]["end_time"])
+            if any(_time_to_min(st)<_time_to_min(str(b["end_time"])) and _time_to_min(et)>_time_to_min(str(b["start_time"])) for b in breaks):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
         count=int(cur.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND lesson_id=?",(sid,lesson_id)).fetchone()["c"] or 0)
         if count>=max(0,int(lesson["lessons_per_week"] or 0)):return RedirectResponse("/app/timetable?tab=timetable&error=All+weekly+occurrences+are+already+placed",303)
@@ -2551,8 +2557,9 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.id=? AND s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(rid,sid)).fetchone()
         if not moving or int(moving["locked"] or 0):
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
-        if day_name not in DAYS:
-            return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+day",303)
+        enabled_days={str(x["name"]) for x in _profile_days(cur,sid) if int(x["enabled"] or 0)}
+        if day_name not in enabled_days:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+teaching+day",303)
         target_class_id = int(class_id) if str(class_id).isdigit() else int(moving["class_id"])
         target_class = cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?",(target_class_id,sid)).fetchone()
         if not target_class:
@@ -2562,15 +2569,17 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             return RedirectResponse("/app/timetable?tab=timetable&error=Combined+lessons+must+be+moved+as+a+group",303)
         if int(moving["duration"] or 1) == 2 and int(period_no) % 2 == 0:
             return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+occupy+periods+1-2,+3-4,+5-6,+7-8",303)
-        period=cur.execute("SELECT * FROM timetable_periods WHERE school_id=? AND period_no=?",(sid,period_no)).fetchone()
+        pmap={int(p["period_no"]):p for p in _profile_periods(cur,sid)}
+        period=pmap.get(int(period_no))
         if not period:
             return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+period",303)
         room=int(room_id) if str(room_id).isdigit() else moving["room_id"]
-        pmap={int(p["period_no"]):p for p in cur.execute("SELECT * FROM timetable_periods WHERE school_id=?",(sid,)).fetchall()}
-        for pno in range(period_no,period_no+int(moving["duration"] or 1)):
+        breaks=_profile_breaks(cur,sid)
+        for pno in range(int(period_no),int(period_no)+int(moving["duration"] or 1)):
             if pno not in pmap:
                 return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+duration+does+not+fit",303)
-            if cur.execute("SELECT id FROM timetable_breaks WHERE school_id=? AND start_time<? AND end_time>? LIMIT 1",(sid,pmap[pno]["end_time"],pmap[pno]["start_time"])).fetchone():
+            st=str(pmap[pno]["start_time"]);et=str(pmap[pno]["end_time"])
+            if any(_time_to_min(st)<_time_to_min(str(b["end_time"])) and _time_to_min(et)>_time_to_min(str(b["start_time"])) for b in breaks):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
         others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.room_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
             WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
