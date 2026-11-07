@@ -2913,15 +2913,15 @@ def school_communication(request:Request):
             f"<td><b class='ann-title'>{title}</b><small class='ann-sub'>School announcement</small></td>"
             f"<td><span class='ann-audience'>{audience}</span></td>"
             f"<td class='ann-message'>{excerpt}</td>"
-            f"<td><button type='button' class='ann-view' data-ann-open='ann-view-{rid}'>View details</button></td></tr>"
+            f"<td><label class='ann-view' for='ann-toggle-{rid}'>View details</label></td></tr>"
         )
         details.append(
-            f"<div id='ann-view-{rid}' class='ann-pop ann-detail'>"
+            f"<input class='ann-toggle' type='checkbox' id='ann-toggle-{rid}'><label class='ann-overlay' for='ann-toggle-{rid}' aria-label='Close details'></label><div id='ann-view-{rid}' class='ann-pop ann-detail'>"
             f"<div class='ann-pop-head'><div><span class='ann-eyebrow'>ANNOUNCEMENT DETAILS</span><h2>{title}</h2></div>"
-            f"<button type='button' class='ann-close' data-ann-close aria-label='Close'>×</button></div>"
+            f"<label class='ann-close' for='ann-toggle-{rid}' aria-label='Close'>×</label></div>"
             f"<div class='ann-detail-meta'><span>{audience}</span><span>{created}</span></div>"
             f"<div class='ann-full-message'>{message}</div>"
-            f"<div class='ann-pop-actions'><button type='button' class='ann-secondary' data-ann-close>Close</button></div></div>"
+            f"<div class='ann-pop-actions'><label class='ann-secondary' for='ann-toggle-{rid}'>Close</label></div></div>"
         )
     tr="".join(cards) or "<tr><td colspan='5' class='ann-empty'><b>No announcements yet</b><small>Create your first announcement to keep the school community informed.</small></td></tr>"
     body=f"""
@@ -2958,10 +2958,11 @@ def school_communication(request:Request):
     .ann-view{{background:#f0f7f1;border:1px solid #d7e7da;color:#28613d;white-space:nowrap}}
     .ann-empty{{padding:30px!important;text-align:center!important;color:#42634c!important}}
     .ann-empty small{{display:block;margin-top:6px;color:#839087}}
-    .ann-overlay{{display:none;position:fixed;inset:0;z-index:9998;background:#14281dcc;backdrop-filter:blur(4px)}}
-    .ann-overlay.is-open{{display:block}}
+    .ann-toggle{{position:fixed;left:-10000px;opacity:0}}
+    .ann-overlay{{display:none;position:fixed;inset:0;z-index:9998;background:#14281dcc;backdrop-filter:blur(4px);cursor:pointer}}
     .ann-pop{{display:none;position:fixed;z-index:9999;inset:0;margin:auto;width:min(680px,calc(100vw - 28px));max-height:min(88vh,820px);overflow:auto;padding:23px;border:1px solid #cfe1d1;border-radius:20px;background:linear-gradient(145deg,#edf6ee 0%,#fff 52%,#f4faf5 100%);color:#26372d;box-shadow:0 24px 80px #142f1e45}}
-    .ann-pop.is-open{{display:block}}
+    .ann-toggle:checked+.ann-overlay{{display:block}}
+    .ann-toggle:checked~.ann-pop{{display:block}}
     .ann-pop-head{{position:relative;display:flex;justify-content:space-between;gap:14px;padding:4px 48px 15px 0;border-bottom:1px solid #d8e7da;margin-bottom:17px}}
     .ann-pop-head h2{{margin:5px 0 0;color:#205a38;font-size:20px}}
     .ann-close{{position:absolute;right:0;top:0;width:38px;height:38px;border:1px solid #c8ddcb;border-radius:50%;background:#fff;color:#245b39;font-size:25px;line-height:1;cursor:pointer}}
@@ -2990,44 +2991,26 @@ def school_communication(request:Request):
       </div>
       <section class='ann-hero'>
         <div><span class='ann-eyebrow'>SCHOOL COMMUNITY • COMMUNICATIONS</span><h2>Keep everyone informed</h2><p>Create and share important school updates, reminders and notices with the right audience. Review previous announcements in the register below.</p></div>
-        <div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'><span class='ann-hero-icon'>✉</span><button type='button' class='ann-primary' data-ann-open='ann-create-pop'>＋ Create Announcement</button></div>
+        <div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'><span class='ann-hero-icon'>✉</span><label class='ann-primary' for='ann-create-toggle'>＋ Create Announcement</label></div>
       </section>
       <section class='card' style='padding:18px;border:1px solid #dce9de;border-radius:16px'>
         <div class='ann-toolbar'><div><h2>Announcement register</h2><p>{total} records · {audience_summary}</p></div><input id='ann-search' class='ann-search' type='search' placeholder='Search title, audience or message…' aria-label='Search announcements'></div>
         <div class='ann-table-wrap'><table class='ann-table'><thead><tr><th>Date</th><th>Announcement</th><th>Audience</th><th>Message preview</th><th>Action</th></tr></thead><tbody id='ann-table-body'>{tr}</tbody></table></div>
       </section>
     </div>
-    <div id='ann-overlay' class='ann-overlay' aria-hidden='true'></div>\n    {''.join(details)}\n    <div id='ann-create-pop' class='ann-pop'>
-      <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><button type='button' class='ann-close' data-ann-close aria-label='Close popup' title='Close'>×</button></div>
+    {''.join(details)}\n    <input class='ann-toggle' type='checkbox' id='ann-create-toggle'><label class='ann-overlay' for='ann-create-toggle' aria-label='Close announcement form'></label>\n    <div id='ann-create-pop' class='ann-pop'>
+      <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><label class='ann-close' for='ann-create-toggle' aria-label='Close popup' title='Close'>×</label></div>
       <form method='post' action='/school/modules/announcements/add' class='ann-form'>
         <label class='ann-wide'>Announcement title *<input name='title' required maxlength='180' placeholder='Enter a clear announcement title'></label>
         <label>Audience<select name='audience' required><option value='All'>All</option><option value='Students'>Students</option><option value='Parents'>Parents</option><option value='Staff'>Staff</option></select></label>
         <label>Publication date<input type='text' value='{datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %b %Y")}' readonly></label>
         <label class='ann-wide'>Message *<textarea name='message' required maxlength='10000' placeholder='Write the announcement details…'></textarea></label>
-        <div class='ann-pop-actions ann-wide'><button type='submit' class='ann-primary'>Publish Announcement</button><button type='button' class='ann-secondary' data-ann-close>Cancel</button></div>
+        <div class='ann-pop-actions ann-wide'><button type='submit' class='ann-primary'>Publish Announcement</button><label class='ann-secondary' for='ann-create-toggle'>Cancel</label></div>
       </form>
     </div>
     <script>
     (function(){{
       var search=document.getElementById('ann-search');
-      var overlay=document.getElementById('ann-overlay');
-      function closeAll(){{
-        document.querySelectorAll('.ann-pop.is-open').forEach(function(pop){{pop.classList.remove('is-open');}});
-        if(overlay)overlay.classList.remove('is-open');
-        document.body.style.overflow='';
-      }}
-      document.querySelectorAll('[data-ann-open]').forEach(function(btn){{
-        btn.addEventListener('click',function(){{
-          var pop=document.getElementById(btn.getAttribute('data-ann-open'));
-          if(!pop)return;
-          closeAll();pop.classList.add('is-open');
-          if(overlay)overlay.classList.add('is-open');
-          document.body.style.overflow='hidden';
-        }});
-      }});
-      document.querySelectorAll('[data-ann-close]').forEach(function(btn){{btn.addEventListener('click',closeAll);}});
-      if(overlay)overlay.addEventListener('click',closeAll);
-      document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeAll();}});
       if(search)search.addEventListener('input',function(){{
         var q=this.value.toLowerCase();
         document.querySelectorAll('#ann-table-body tr').forEach(function(row){{row.style.display=row.innerText.toLowerCase().includes(q)?'':'none';}});
