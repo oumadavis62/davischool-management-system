@@ -255,6 +255,21 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     period_id = int(period_id) if period_id is not None else None
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
+    if teaching_group_id is not None:
+        group = cur.execute(
+            "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+            (int(teaching_group_id), school_id, profile_id),
+        ).fetchone()
+        if not group:
+            raise TimetableSetupError("Select an active teaching group from this timetable profile.")
+        group_classes = [int(r["class_id"]) for r in cur.execute(
+            "SELECT class_id FROM ds_timetable_teaching_group_classes WHERE teaching_group_id=? AND school_id=?",
+            (int(teaching_group_id), school_id),
+        ).fetchall()]
+        if classes and set(classes) != set(group_classes):
+            raise TimetableSetupError("Session classes must match all classes in the selected combined group.")
+        classes = group_classes
+
     _validate_resources(
         cur, school_id, profile_id, classes, teachers, learners, room_id,
         start_time, end_time, day_id, session_date, period_id,
@@ -292,20 +307,6 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                     raise TimetableSetupError(
                         "This programme session requires a venue of type " + " or ".join(sorted(required_room_types)) + "."
                     )
-    if teaching_group_id is not None:
-        group = cur.execute(
-            "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
-            (int(teaching_group_id), school_id, profile_id),
-        ).fetchone()
-        if not group:
-            raise TimetableSetupError("Select an active teaching group from this timetable profile.")
-        group_classes = [int(r["class_id"]) for r in cur.execute(
-            "SELECT class_id FROM ds_timetable_teaching_group_classes WHERE teaching_group_id=? AND school_id=?",
-            (int(teaching_group_id), school_id),
-        ).fetchall()]
-        if classes and set(classes) != set(group_classes):
-            raise TimetableSetupError("Session classes must match all classes in the selected combined group.")
-        classes = group_classes
     conflicts = find_session_conflicts(
         connection, school_id, profile_id, start_time, end_time,
         classes, teachers, learners, room_id, day_id, session_date,
