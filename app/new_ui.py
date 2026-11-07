@@ -21185,7 +21185,7 @@ async def finance_bank_statement_import(request: Request, account_id:str=Form(..
 def finance_period_close(request: Request, period_start:str=Form(...), period_end:str=Form(...)):
     sid=_finance_access(request)
     if not sid:return RedirectResponse("/",303)
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",period_start) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",period_end) or period_start>period_end:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}",period_start) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",period_end) or period_start>period_end:
         return HTMLResponse("Enter a valid accounting period date range.",400)
     con=_db();cur=con.cursor();_finance_prepare(cur,sid)
     drafts=cur.execute("SELECT COUNT(*) n FROM ds_fin_journals WHERE school_id=? AND status='Draft' AND journal_date BETWEEN ? AND ?",(sid,period_start,period_end)).fetchone()["n"]
