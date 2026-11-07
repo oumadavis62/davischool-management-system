@@ -21345,7 +21345,8 @@ def _finance_interaction_enhancements():
         root.appendChild(modalLayer);
         var modalBody=modalLayer.querySelector('.fx-modal-body');
         var modalTitle=modalLayer.querySelector('#fxModalTitle');
-        function closeModal(){modalLayer.classList.remove('is-open');modalBody.innerHTML='';}
+        var activeForm=null;var activePlaceholder=null;
+        function closeModal(){modalLayer.classList.remove('is-open');if(activeForm&&activePlaceholder&&activePlaceholder.parentNode){activePlaceholder.parentNode.insertBefore(activeForm,activePlaceholder.nextSibling);}modalBody.innerHTML='';activeForm=null;activePlaceholder=null;}
         modalLayer.querySelector('.fx-modal-close').addEventListener('click',closeModal);
         modalLayer.addEventListener('click',function(e){if(e.target===modalLayer)closeModal();});
         document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
@@ -21355,19 +21356,23 @@ def _finance_interaction_enhancements():
           var submit=form.querySelector("button[type='submit'],button:not([type])");
           var action=(submit&&submit.textContent.trim())||'Save';
           var title=(heading&&heading.textContent.trim())||'Finance entry';
+          var placeholder=document.createComment('finance-form-location');
+          form.parentNode.insertBefore(placeholder,form);
           var trigger=document.createElement('button');
           trigger.type='button';trigger.className='fx-open-modal';
           trigger.textContent=action;
           trigger.addEventListener('click',function(){
+            if(activeForm)closeModal();
             modalTitle.textContent=title;
             modalBody.innerHTML='';
+            activeForm=form;activePlaceholder=placeholder;
             modalBody.appendChild(form);
             modalLayer.classList.add('is-open');
             var first=modalBody.querySelector('input:not([type=hidden]),select,textarea');
             if(first)first.focus();
           });
           var slot=document.createElement('div');slot.className='fx-action-row';slot.appendChild(trigger);
-          form.parentNode.insertBefore(slot,form);
+          form.parentNode.insertBefore(slot,placeholder);
           form.remove();
         });
         root.querySelectorAll('.fx-table-wrap').forEach(function(wrap){
