@@ -85,9 +85,61 @@ def _page(request, title, description, body):
 .ps-page th{background:#f5f9f6;color:#607267;white-space:nowrap}.ps-page td small{display:block;color:#718078;margin-top:3px}
 .ps-pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#edf5ef;color:#245638;font-size:11px;font-weight:800}
 .ps-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}.ps-toolbar label{flex:1;min-width:160px}
+.ps-page>div:first-child{padding:22px 24px;border:1px solid #cfe2d2;border-radius:18px;background:linear-gradient(125deg,#e5f2e7 0%,#f5faf5 55%,#d9ebdc 100%);box-shadow:0 8px 24px #1d57300b}
+.ps-page>div:first-child h1{font-size:clamp(22px,3vw,30px);letter-spacing:-.4px}
+.ps-card,.ps-kpis>div{box-shadow:0 5px 18px #214b2e0a;transition:box-shadow .18s,border-color .18s,transform .18s}
+.ps-card:hover,.ps-kpis>div:hover{border-color:#b8d4be;box-shadow:0 9px 24px #214b2e12}
+.ps-btn{background:linear-gradient(135deg,#247847,#145b34);box-shadow:0 3px 8px #176b3a20;transition:transform .16s,filter .16s}
+.ps-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.ps-btn.light{background:#edf5ef;box-shadow:none;border:1px solid #d7e8da}
+.ps-page table{border-collapse:separate;border-spacing:0}
+.ps-page thead th{position:sticky;top:0;background:#edf5ef;border-bottom:1px solid #d9e7dc}
+.ps-page tbody tr:hover td{background:#f8fbf8}
+.ps-page input:focus,.ps-page select:focus,.ps-page textarea:focus{outline:2px solid #8fbd9a;outline-offset:1px;border-color:#57966b}
+.ps-dialog{width:min(760px,calc(100vw - 28px));max-height:86vh;overflow:auto;border:1px solid #cfe0d2;border-radius:18px;padding:22px;background:linear-gradient(145deg,#f1f8f2,#fff 45%);color:#26372d;box-shadow:0 24px 80px #102b1c40}
+.ps-dialog::backdrop{background:#14271c80;backdrop-filter:blur(3px)}
+.ps-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.ps-dialog-head h2{margin:0;color:#245638;font-size:18px}
+.ps-dialog-close{border:0;border-radius:9px;background:#e6f1e8;color:#245638;padding:8px 12px;font-weight:800;cursor:pointer}
+.ps-dialog .ps-actions{position:sticky;bottom:-22px;padding:12px 0 2px;background:linear-gradient(0deg,#f1f8f2 75%,transparent)}
+.ps-filter-trigger{margin:0 0 12px}
 @media(max-width:760px){.ps-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.ps-form{grid-template-columns:1fr}.ps-page .wide{grid-column:auto}.ps-card{padding:12px}}
-</style>"""
+@media(max-width:560px){.ps-form{grid-template-columns:1fr}.ps-page .wide{grid-column:auto}.ps-card{padding:12px}.ps-dialog{padding:16px}.ps-page>div:first-child{padding:17px}}
+@media(prefers-reduced-motion:reduce){.ps-card,.ps-kpis>div,.ps-btn{transition:none}}
+@media print{.ps-btn,.ps-toolbar,.ps-dialog{display:none!important}.ps-card{box-shadow:none;break-inside:avoid}.ps-table-wrap{overflow:visible}.ps-page table{min-width:0}}
+</style>
+<script>
+(function(){
+ function init(){
+  document.querySelectorAll('.ps-page .ps-card').forEach(function(card){
+   var form=card.querySelector(':scope > form.ps-form');
+   if(form){
+    var heading=card.querySelector('h2'),label=heading?heading.textContent.trim():'Open form';
+    var trigger=document.createElement('button');trigger.type='button';trigger.className='ps-btn ps-entry-trigger';trigger.textContent=label;
+    var dialog=document.createElement('dialog');dialog.className='ps-dialog';
+    var head=document.createElement('div');head.className='ps-dialog-head';
+    var title=document.createElement('h2');title.textContent=label;
+    var close=document.createElement('button');close.type='button';close.className='ps-dialog-close';close.textContent='Close';close.addEventListener('click',function(){dialog.close()});
+    head.append(title,close);dialog.append(head,form);card.insertBefore(trigger,form);card.insertBefore(dialog,form);
+    trigger.addEventListener('click',function(){dialog.showModal()});
+    dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()});
+   }
+   var filter=card.querySelector(':scope > form.ps-toolbar');
+   if(filter){
+    var trigger=document.createElement('button');trigger.type='button';trigger.className='ps-btn light ps-filter-trigger';trigger.textContent='Open filters';
+    var dialog=document.createElement('dialog');dialog.className='ps-dialog';
+    var head=document.createElement('div');head.className='ps-dialog-head';
+    var title=document.createElement('h2');title.textContent='Search & filters';
+    var close=document.createElement('button');close.type='button';close.className='ps-dialog-close';close.textContent='Close';close.addEventListener('click',function(){dialog.close()});
+    head.append(title,close);dialog.append(head,filter);card.insertBefore(trigger,filter);card.insertBefore(dialog,filter);
+    trigger.addEventListener('click',function(){dialog.showModal()});
+   }
+  });
+  document.querySelectorAll('.ps-page .ps-table-wrap').forEach(function(w){w.setAttribute('tabindex','0');w.setAttribute('aria-label','Scrollable data table')});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""
     html = "<div class='page ps-page'><div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div>" + body + "</div>" + css
     return _school_page(request, title, html)
 
