@@ -424,18 +424,25 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
         raise TimetableSetupError("Only versions from the same academic year and term can be compared.")
     first_snapshot = json.loads(first["snapshot_json"] or "{}")
     second_snapshot = json.loads(second["snapshot_json"] or "{}")
-    def lesson_key(snapshot, lesson):
+    def lesson_map(snapshot):
         day_codes = {int(d["id"]):str(d["day_code"]) for d in snapshot.get("days",[])}
-        period_numbers = {int(p["id"]):int(p["period_no"]) for p in snapshot.get("periods",[])}
-        return (
-            int(lesson["class_id"]),int(lesson["subject_id"]),int(lesson["teacher_id"]),
-            day_codes.get(int(lesson["day_id"]),str(lesson["day_id"])),
-            period_numbers.get(int(lesson["period_id"]),str(lesson["period_id"])),
-            int(lesson["duration_periods"] or 1),
-            int(lesson["room_id"]) if lesson.get("room_id") is not None else None,
-        )
-    first_lessons = {lesson_key(first_snapshot,l):l for l in first_snapshot.get("lessons",[])}
-    second_lessons = {lesson_key(second_snapshot,l):l for l in second_snapshot.get("lessons",[])}
+        period_details = {
+            int(p["id"]):(int(p["period_no"]),str(p["start_time"]),str(p["end_time"]))
+            for p in snapshot.get("periods",[])
+        }
+        result = {}
+        for lesson in snapshot.get("lessons",[]):
+            period = period_details.get(int(lesson["period_id"]), (str(lesson["period_id"]),"",""))
+            key = (
+                int(lesson["class_id"]),int(lesson["subject_id"]),int(lesson["teacher_id"]),
+                day_codes.get(int(lesson["day_id"]),str(lesson["day_id"])),
+                period,int(lesson["duration_periods"] or 1),
+                int(lesson["room_id"]) if lesson.get("room_id") is not None else None,
+            )
+            result[key] = lesson
+        return result
+    first_lessons = lesson_map(first_snapshot)
+    second_lessons = lesson_map(second_snapshot)
     added = [second_lessons[k] for k in second_lessons.keys()-first_lessons.keys()]
     removed = [first_lessons[k] for k in first_lessons.keys()-second_lessons.keys()]
     return {
