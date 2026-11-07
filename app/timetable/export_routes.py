@@ -82,10 +82,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         story = [Paragraph(school_name, school_style)]
         if address:
             story.append(Paragraph(address, styles["Normal"]))
+        profile_meta = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"])
         story.extend([
             Spacer(1,5),
             Paragraph(xml_escape(result["title"]).upper(), title_style),
-            Paragraph(xml_escape(str(result["days"][0]["day_name"] if result["days"] else "")) + " · " + xml_escape(str(result["periods"][0]["label"] if result["periods"] else "")) + " — " + xml_escape(str(result["lessons"][0]["day_name"] if result["lessons"] else "")), styles["Normal"]),
+            Paragraph(xml_escape(profile_meta), styles["Normal"]),
             Spacer(1,10),
         ])
         starts, continued = cell_map(result)
@@ -105,7 +106,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         lines.append(line)
                     cell = "<br/><br/>".join(lines)
                 elif key in continued:
-                    cell = "↳ " + xml_escape(str(continued[key]["subject_name"])) + " continues"
+                    cell = "Continues: " + xml_escape(str(continued[key]["subject_name"]))
                 else:
                     cell = "—"
                 row.append(Paragraph(cell, cell_style))
@@ -161,7 +162,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(2,1).font = Font(bold=True,size=12,color="315B3E")
         sheet.cell(2,1).alignment = Alignment(horizontal="center")
         sheet.merge_cells(start_row=3,start_column=1,end_row=3,end_column=last_col)
-        profile_text = str(result["days"][0]["day_name"] if result["days"] else "") + " · " + str(len(result["lessons"])) + " scheduled lessons"
+        profile_text = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"]) + " · " + str(len(result["lessons"])) + " scheduled lessons"
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
