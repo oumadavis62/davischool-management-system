@@ -751,7 +751,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 "Parent & Guardian Register":"users", "Parent–Learner Linking":"allocation", "Parent Portal Access":"key",
                 "School Notices":"announcement", "Parent Meetings":"calendar", "Service Requests":"clipboard-check",
                 "Parent & Student Reports":"chart", "Announcements":"announcement", "Users":"users",
-                "Roles & Permissions":"shield", "School Settings":"settings", "Audit Trail":"audit"
+                "Roles & Permissions":"shield", "School Settings":"settings", "Smart Timetable":"calendar", "Audit Trail":"audit"
             }
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
