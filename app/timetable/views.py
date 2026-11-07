@@ -16,6 +16,10 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     ).fetchone()
     if not profile:
         raise TimetableSetupError("Select a timetable profile belonging to this school.")
+    profile = cur.execute(
+        "SELECT id,name,academic_year,term,status,revision_no,current_version_id FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
     days = cur.execute(
         """SELECT * FROM ds_timetable_days
            WHERE school_id=? AND profile_id=? AND is_instructional=1 ORDER BY day_order,id""",
@@ -80,6 +84,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     ).fetchall()
     return {
         "title": title,
+        "profile": profile,
         "view_type": view_type,
         "target": target,
         "days": days,
