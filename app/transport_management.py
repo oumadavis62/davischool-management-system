@@ -74,6 +74,125 @@ var stopForm=page.querySelector('form[action="/app/transport/routes/stops/save"]
 dialog:has(.ds-modal-close){position:relative}
 dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
 @media(max-width:560px){.ds-modal-close{top:10px!important;right:10px!important;width:34px!important;height:34px!important}}
+/* Unified premium popup system for learner allocation, route setup and trip events */
+.tr-allocation-dialog,.tr-route-dialog,.tr-event-dialog{
+ box-sizing:border-box!important;width:min(820px,calc(100% - 28px))!important;max-width:820px!important;
+ max-height:88dvh!important;overflow:auto!important;overscroll-behavior:contain!important;
+ padding:0!important;border:1px solid #b8d1bb!important;border-radius:24px!important;
+ background:linear-gradient(145deg,#f7fbf6 0%,#edf5eb 52%,#f9fcf8 100%)!important;
+ box-shadow:0 30px 90px #102d1c66,0 8px 26px #173d281f!important;
+ scrollbar-width:thin;scrollbar-color:#a8c7aa #edf5eb
+}
+.tr-allocation-dialog::backdrop,.tr-route-dialog::backdrop,.tr-event-dialog::backdrop{
+ background:rgba(10,29,18,.70)!important;backdrop-filter:blur(6px)
+}
+.tr-allocation-dialog>form,.tr-route-dialog>form,.tr-event-dialog>form{
+ display:block!important;width:100%!important;margin:0!important;padding:0!important;
+ background:transparent!important
+}
+.tr-allocation-dialog .tr-allocation-head,.tr-route-dialog .tr-route-head,.tr-event-dialog .tr-event-head{
+ position:sticky!important;top:0!important;z-index:6!important;isolation:isolate;
+ padding:27px 34px 24px!important;
+ background:radial-gradient(circle at 90% 0%,#ffffffbd 0,transparent 28%),
+ linear-gradient(118deg,#c3ddc1 0%,#dcebd8 54%,#eff7ec 100%)!important;
+ border-bottom:1px solid #bfd5bf!important;box-shadow:0 5px 16px #234c2b0b
+}
+.tr-allocation-dialog .tr-allocation-head:after,.tr-route-dialog .tr-route-head:after,.tr-event-dialog .tr-event-head:after{
+ right:56px!important;top:-76px!important;width:170px!important;height:170px!important;z-index:-1
+}
+.tr-allocation-dialog .tr-allocation-eyebrow,.tr-route-dialog .tr-route-eyebrow,.tr-event-dialog .tr-event-eyebrow{
+ margin-bottom:11px!important;padding:6px 10px!important;border:1px solid #a9c8aa!important;
+ border-radius:999px!important;background:#ffffffc9!important;color:#326744!important;
+ font-size:9px!important;font-weight:850!important;letter-spacing:1.25px!important
+}
+.tr-allocation-dialog .tr-allocation-head h2,.tr-route-dialog .tr-route-head h2,.tr-event-dialog .tr-event-head h2{
+ margin:0 54px 7px 0!important;color:#174b32!important;font-size:25px!important;
+ font-weight:850!important;line-height:1.18!important;letter-spacing:-.55px!important
+}
+.tr-allocation-dialog .tr-allocation-head p,.tr-route-dialog .tr-route-head p,.tr-event-dialog .tr-event-head p{
+ max-width:560px!important;margin:0!important;color:#49684f!important;font-size:12px!important;line-height:1.6!important
+}
+.tr-allocation-dialog .tr-allocation-close,.tr-route-dialog .tr-route-close,.tr-event-dialog .tr-event-close{
+ top:17px!important;right:19px!important;width:38px!important;height:38px!important;
+ border:1px solid #a8c7aa!important;border-radius:12px!important;background:#ffffffdf!important;
+ color:#245b39!important;font-size:23px!important;box-shadow:0 3px 10px #1c482616!important
+}
+.tr-allocation-dialog .tr-allocation-section,.tr-route-dialog .tr-route-section,.tr-event-dialog .tr-event-section{
+ margin:15px 20px 0!important;padding:18px 20px 20px!important;
+ border:1px solid #d6e5d4!important;border-radius:16px!important;
+ background:linear-gradient(140deg,#fff 0%,#f7fbf5 100%)!important;
+ box-shadow:0 5px 16px #1d49270a,inset 0 1px #fff!important
+}
+.tr-allocation-dialog .tr-allocation-section:before,.tr-route-dialog .tr-route-section:before,.tr-event-dialog .tr-event-section:before{
+ top:16px!important;bottom:16px!important;width:3px!important;background:linear-gradient(#79ad80,#c4ddc2)!important
+}
+.tr-allocation-dialog .tr-allocation-section h3,.tr-route-dialog .tr-route-section h3,.tr-event-dialog .tr-event-section h3{
+ gap:10px!important;margin:0 0 15px!important;padding:0 0 11px!important;
+ border-bottom:1px solid #e6eee4!important;color:#315d3e!important;
+ font-size:10px!important;font-weight:850!important;letter-spacing:.8px!important
+}
+.tr-allocation-dialog .tr-allocation-section h3 span,.tr-route-dialog .tr-route-section h3 span,.tr-event-dialog .tr-event-section h3 span{
+ flex:0 0 29px!important;width:29px!important;height:29px!important;
+ border:1px solid #c1d9be!important;border-radius:9px!important;
+ background:linear-gradient(145deg,#e9f4e6,#cde3c9)!important;color:#28603b!important
+}
+.tr-allocation-dialog .tr-form,.tr-route-dialog .tr-form,.tr-event-dialog .tr-form{
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px 16px!important
+}
+.tr-allocation-dialog .tr-form label,.tr-route-dialog .tr-form label,.tr-event-dialog .tr-form label{
+ display:grid!important;align-content:start!important;gap:7px!important;min-width:0!important;
+ color:#3c6046!important;font-size:10px!important;font-weight:800!important;letter-spacing:.2px!important
+}
+.tr-allocation-dialog .tr-form input,.tr-allocation-dialog .tr-form select,.tr-allocation-dialog .tr-form textarea,
+.tr-route-dialog .tr-form input,.tr-route-dialog .tr-form select,.tr-route-dialog .tr-form textarea,
+.tr-event-dialog .tr-form input,.tr-event-dialog .tr-form select,.tr-event-dialog .tr-form textarea{
+ box-sizing:border-box!important;width:100%!important;min-width:0!important;min-height:44px!important;
+ padding:10px 12px!important;border:1px solid #d6e4d4!important;border-radius:10px!important;
+ background:#fff!important;color:#294b34!important;font:500 13px/1.35 inherit!important;
+ box-shadow:inset 0 1px 2px #1e4a2908!important
+}
+.tr-allocation-dialog .tr-form input:focus,.tr-allocation-dialog .tr-form select:focus,.tr-allocation-dialog .tr-form textarea:focus,
+.tr-route-dialog .tr-form input:focus,.tr-route-dialog .tr-form select:focus,.tr-route-dialog .tr-form textarea:focus,
+.tr-event-dialog .tr-form input:focus,.tr-event-dialog .tr-form select:focus,.tr-event-dialog .tr-form textarea:focus{
+ outline:0!important;border-color:#7eae83!important;box-shadow:0 0 0 3px #8fbd9433!important
+}
+.tr-allocation-dialog .tr-check-options{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+.tr-allocation-dialog .tr-check-options label{
+ min-height:42px!important;padding:10px 12px!important;border:1px solid #d6e5d3!important;
+ border-radius:11px!important;background:#f8fcf7!important;color:#365d40!important
+}
+.tr-allocation-dialog .tr-check-options input{
+ appearance:auto!important;-webkit-appearance:checkbox!important;flex:0 0 14px!important;
+ width:14px!important;height:14px!important;min-height:14px!important;margin:0!important;
+ accent-color:#287b46!important
+}
+.tr-route-dialog .tr-form textarea,.tr-event-dialog .tr-form textarea{min-height:82px!important;resize:vertical!important}
+.tr-allocation-dialog .tr-actions,.tr-route-dialog .tr-actions,.tr-event-dialog .tr-event-actions{
+ position:sticky!important;bottom:0!important;z-index:5!important;display:flex!important;
+ justify-content:flex-end!important;gap:9px!important;padding:15px 20px 17px!important;
+ margin:17px 0 0!important;border-top:1px solid #d1e1d0!important;
+ background:linear-gradient(110deg,#e8f2e6f5,#f8fbf7f7 55%,#e2eee0f5)!important;
+ backdrop-filter:blur(10px)!important
+}
+.tr-allocation-dialog .tr-actions .btn,.tr-route-dialog .tr-actions .btn,.tr-event-dialog .tr-event-actions .btn{
+ min-height:43px!important;min-width:140px!important;padding:0 17px!important;
+ border:1px solid #286c40!important;border-radius:10px!important;
+ background:linear-gradient(135deg,#347c4b,#205d37)!important;color:#fff!important;
+ font-size:11px!important;font-weight:850!important;box-shadow:0 4px 11px #28683b20!important
+}
+.tr-allocation-dialog .tr-actions .btn-light,.tr-route-dialog .tr-actions .btn-light,.tr-event-dialog .tr-event-actions .btn-light{
+ border:1px solid #c9dbc8!important;background:#fff!important;color:#426149!important;box-shadow:none!important
+}
+@media(max-width:650px){
+ .tr-allocation-dialog,.tr-route-dialog,.tr-event-dialog{width:calc(100% - 12px)!important;max-height:92dvh!important;border-radius:18px!important}
+ .tr-allocation-dialog .tr-allocation-head,.tr-route-dialog .tr-route-head,.tr-event-dialog .tr-event-head{padding:23px 17px 19px!important}
+ .tr-allocation-dialog .tr-allocation-head h2,.tr-route-dialog .tr-route-head h2,.tr-event-dialog .tr-event-head h2{font-size:22px!important}
+ .tr-allocation-dialog .tr-allocation-close,.tr-route-dialog .tr-route-close,.tr-event-dialog .tr-event-close{top:12px!important;right:12px!important;width:35px!important;height:35px!important}
+ .tr-allocation-dialog .tr-allocation-section,.tr-route-dialog .tr-route-section,.tr-event-dialog .tr-event-section{margin:10px 9px 0!important;padding:14px 13px 15px!important;border-radius:13px!important}
+ .tr-allocation-dialog .tr-form,.tr-route-dialog .tr-form,.tr-event-dialog .tr-form,.tr-allocation-dialog .tr-check-options{grid-template-columns:1fr!important;gap:11px!important}
+ .tr-allocation-dialog .tr-actions,.tr-route-dialog .tr-actions,.tr-event-dialog .tr-event-actions{padding:12px 9px 13px!important;gap:7px!important}
+ .tr-allocation-dialog .tr-actions .btn,.tr-route-dialog .tr-actions .btn,.tr-event-dialog .tr-event-actions .btn{flex:1!important;min-width:0!important;padding:0 9px!important}
+}
 </style><script>
 (function(){
  function addClose(dialog){
