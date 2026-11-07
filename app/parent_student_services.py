@@ -141,7 +141,7 @@ def _page(request, title, description, body):
 })();
 </script>"""
     html = "<div class='page ps-page'><div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div>" + body + "</div>" + css
-\n    dialog_close_support = """<style>
+    dialog_close_support = """<style>
 .ds-modal-close{position:absolute!important;top:12px!important;right:12px!important;z-index:5;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;border:1px solid #cfe0d2!important;border-radius:50%!important;background:#eaf4ec!important;color:#205a38!important;font:700 24px/1 Arial,sans-serif!important;cursor:pointer!important;box-shadow:0 2px 8px #163b2418!important}
 .ds-modal-close:hover{background:#d9ecdd!important;transform:scale(1.04)}
 dialog:has(.ds-modal-close){position:relative}
