@@ -20536,7 +20536,7 @@ def admissions_accepted_page(request: Request):
 
 @router.get("/app/admissions/status/rejected", response_class=HTMLResponse)
 def admissions_rejected_page(request: Request):
-    return _admission_filtered_page(request,"Rejected Applicants","Applications declined during admission review.","lower(a.status)='rejected'",[])
+    return _admission_filtered_page(request,"Rejected Applicants","Applications declined during admission review.","lower(a.status)='rejected'",[],allow_edit_delete=False)
 
 
 @router.get("/app/enrolment", response_class=HTMLResponse)
