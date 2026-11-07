@@ -4,7 +4,7 @@ import unittest
 
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, TimetableSetupError
-from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type
+from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
@@ -159,6 +159,68 @@ class TimetableSessionEngineTests(unittest.TestCase):
                 schedule_layer="school_activity", session_type="ASSEMBLY",
                 day_id=self.day_id,
             )
+
+
+    def test_generic_requirement_supports_combined_classes_team_and_exact_pattern(self):
+        group = create_teaching_group(
+            self.db, 8, self.profile_id, "Shared Grade 7 science", [1, 2],
+            subject_id=5,
+        )
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Shared science weekly allocation",
+            teacher_ids=[11, 12], teaching_group_id=group, subject_id=5,
+            weekly_occurrences=4, weekly_periods=5, min_teacher_count=2,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [
+                {"duration_periods": 2, "preferred_day_id": self.day_id, "session_label": "Double"},
+                {"duration_periods": 1, "session_label": "Single 1"},
+                {"duration_periods": 1, "session_label": "Single 2"},
+                {"duration_periods": 1, "session_label": "Single 3"},
+            ],
+        )
+        rows = self.db.execute(
+            """SELECT duration_periods FROM ds_timetable_scheduling_patterns
+               WHERE requirement_id=? ORDER BY session_no""",
+            (requirement,),
+        ).fetchall()
+        self.assertEqual([row["duration_periods"] for row in rows], [2, 1, 1, 1])
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_scheduling_requirement_classes WHERE requirement_id=?",
+                (requirement,),
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_scheduling_requirement_teachers WHERE requirement_id=?",
+                (requirement,),
+            ).fetchone()[0],
+            2,
+        )
+
+    def test_generic_requirement_rejects_unbalanced_patterns_without_erasing_old_one(self):
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Grade 8 mathematics",
+            class_ids=[3], teacher_ids=[11], subject_id=9,
+            weekly_occurrences=2, weekly_periods=3,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 2}, {"duration_periods": 1}],
+        )
+        with self.assertRaises(TimetableSetupError):
+            save_scheduling_pattern(
+                self.db, 8, self.profile_id, requirement,
+                [{"duration_periods": 2}, {"duration_periods": 2}],
+            )
+        count = self.db.execute(
+            "SELECT COUNT(*) FROM ds_timetable_scheduling_patterns WHERE requirement_id=?",
+            (requirement,),
+        ).fetchone()[0]
+        self.assertEqual(count, 2)
 
     def test_activity_type_can_require_teacher_and_venue(self):
         self.db.execute(
