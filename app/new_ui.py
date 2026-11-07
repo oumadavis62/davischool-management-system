@@ -20948,7 +20948,7 @@ def admission_letter_print(request: Request, application_id: int):
         if school_logo else "<div class='logo-placeholder'>" + escape(school_name[:2].upper()) + "</div>"
     )
     school_contacts = " · ".join(value for value in (
-        school_location, school_postal,
+        school_postal,
         ("Tel: " + school_phone) if school_phone else "",
         ("Email: " + school_email) if school_email else ""
     ) if value)
