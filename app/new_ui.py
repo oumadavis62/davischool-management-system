@@ -20518,7 +20518,7 @@ def admission_reports_page(request: Request):
 # Finance & Accounts: integrated billing, collections, payables, ledger,
 # banking, budgets and reporting. Additive tables preserve legacy records.
 # ---------------------------------------------------------------------------
-def _finance_workspace_schema(cur):
+def _finance_workspace_schema(cur, sid):
     cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_accounts(
         school_id INTEGER NOT NULL, code TEXT NOT NULL, name TEXT NOT NULL,
         account_type TEXT NOT NULL, opening_balance REAL NOT NULL DEFAULT 0,
@@ -20562,7 +20562,7 @@ def _finance_workspace_schema(cur):
     ]
     for code,name,kind in seed:
         cur.execute("INSERT INTO ds_fin_accounts(school_id,code,name,account_type) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM ds_fin_accounts WHERE school_id=? AND code=?)",
-                    (sid_placeholder if False else 0,code,name,kind,0,code))
+                    (sid,code,name,kind,sid,code))
 
 
 def _finance_now():
@@ -20674,7 +20674,7 @@ def finance_workspace_section(request: Request, section: str):
             _finance_cell(x["supplier_name"]),_finance_cell(x["invoice_no"]),_finance_cell(x["due_date"]),
             float(x["amount"] or 0),_finance_cell(x["status"]),(
                 "<form method='post' action='/app/finance/payables/pay'><input type='hidden' name='bill_id' value='%s'><button>Mark paid</button></form>"%x["id"]
-                if x["status"]=="Approved" else "")) for x in bills)
+                if x["status"]=="Approved" else ("<form method='post' action='/app/finance/payables/approve'><input type='hidden' name='bill_id' value='%s'><button>Approve</button></form>"%x["id"] if x["status"]=="Draft" else ""))) for x in bills)
         content = """<div class='fx-two'><div class='fx-card'><h2>Supplier register</h2><form method='post' action='/app/finance/payables/supplier' class='fx-form'>
         <input name='name' required placeholder='Supplier name'><input name='phone' placeholder='Phone'><input name='email' type='email' placeholder='Email'><input name='tax_pin' placeholder='KRA PIN'><button>Add supplier</button></form>%s</div>
         <div class='fx-card'><h2>Supplier invoice / bill</h2><form method='post' action='/app/finance/payables/bill' class='fx-form'>
