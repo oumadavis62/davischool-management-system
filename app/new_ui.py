@@ -1111,6 +1111,18 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
   document.addEventListener('click',function(event){{
     if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
+    if(!link)return;
+    // Force a clean document request for Timetable; bypass competing
+    // capture-phase history/filter handlers that can strand the loading state.
+    try{{
+      var destination=new URL(link.href,window.location.href);
+      if(destination.origin===window.location.origin && destination.pathname.replace(/\\/+$/,'')==='/app/timetable'){{
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.location.assign(destination.toString());
+        return;
+      }}
+    }}catch(e){{}}
     if(!eligible(link))return;
     link.setAttribute('aria-busy','true');
     link.classList.add('ds-navigating');
