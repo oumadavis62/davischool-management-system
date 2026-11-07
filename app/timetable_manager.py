@@ -1724,8 +1724,11 @@ def _timetable(request, con, sid):
       :'/app/timetable/placement/move/'+encodeURIComponent(card.dataset.slotId);
     if(occupiedId&&occupiedId!==card.dataset.slotId)fd.append('other_slot_id',occupiedId);
     fetch(endpoint,{method:'POST',body:fd,credentials:'same-origin'})
-      .then(function(response){window.location.href=response.url||'/app/timetable?tab=timetable';})
-      .catch(function(){alert('Unable to move this lesson. Please try again.');});
+      .then(function(response){
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        window.location.href=response.url||'/app/timetable?tab=timetable';
+      })
+      .catch(function(){alert('The lesson could not be moved because the server or database is busy. Your timetable has not been changed. Please try again.');});
   });
   document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
     card.addEventListener('dragstart',function(e){dragged=this.dataset.slotId;draggedType='placed';this.classList.add('tt-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',dragged);});
@@ -1788,8 +1791,8 @@ def _timetable(request, con, sid):
       const endpoint=type==='tray'?'/app/timetable/placement/place/'+encodeURIComponent(id)
         :(occupiedId&&occupiedId!==id?'/app/timetable/placement/swap/'+encodeURIComponent(id):'/app/timetable/placement/move/'+encodeURIComponent(id));
       if(type==='placed'&&occupiedId&&occupiedId!==id)fd.append('other_slot_id',occupiedId);
-      try{const res=await fetch(endpoint,{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
-      catch(err){alert('Unable to place this lesson.');}
+      try{const res=await fetch(endpoint,{method:'POST',body:fd,credentials:'same-origin'});if(!res.ok)throw new Error('HTTP '+res.status);window.location.href=res.url||'/app/timetable?tab=timetable';}
+      catch(err){alert('The lesson could not be placed because the server or database is busy. Your timetable has not been changed. Please try again.');}
     });
   });
 })();
