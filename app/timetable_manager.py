@@ -2587,6 +2587,11 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
         if count>=max(0,int(lesson["lessons_per_week"] or 0)):return RedirectResponse("/app/timetable?tab=timetable&error=All+weekly+occurrences+are+already+placed",303)
         teacher_ids={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()}
         if not teacher_ids and lesson["teacher_id"]:teacher_ids={int(lesson["teacher_id"])}
+        for pno in range(int(period_no),int(period_no)+duration):
+            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,day_name,pno)).fetchone() for tid in teacher_ids):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+unavailable+for+this+slot",303)
+            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(lesson["subject_id"]),day_name,pno)).fetchone():
+                return RedirectResponse("/app/timetable?tab=timetable&error=Subject+unavailable+for+this+slot",303)
         room_id=int(lesson["room_id"]) if lesson["room_id"] else None
         others=cur.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.day_name=?",(sid,day_name)).fetchall()
         for other in others:
@@ -2614,7 +2619,7 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
     if response:return response
     try:
         cur=con.cursor()
-        moving=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration FROM timetable_slots s
+        moving=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id FROM timetable_slots s
             JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.id=? AND s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(rid,sid)).fetchone()
         if not moving or int(moving["locked"] or 0):
             return RedirectResponse("/app/timetable?tab=timetable&error=Locked+or+missing+placement",303)
@@ -2644,6 +2649,11 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
         moving_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or {int(target_class_id)}
         moving_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or ({int(moving["teacher_id"])} if moving["teacher_id"] else set())
+        for pno in range(int(period_no),int(period_no)+max(1,int(moving["duration"] or 1))):
+            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,day_name,pno)).fetchone() for tid in moving_teachers):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+unavailable+for+this+slot",303)
+            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(moving["subject_id"]),day_name,pno)).fetchone():
+                return RedirectResponse("/app/timetable?tab=timetable&error=Subject+unavailable+for+this+slot",303)
         others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
             WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
         probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
