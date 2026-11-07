@@ -492,3 +492,193 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     )
     connection.commit()
     return {"run_id": run_id, **summary}
+
+
+
+def generate_advanced_instructional_sessions(connection: Any, school_id: int,
+                                             profile_id: int, created_by: str = "",
+                                             node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+    """Place normalized multi-class/team-teaching requirements using the shared engine.
+
+    This deliberately writes to ds_timetable_sessions; legacy single-class rows
+    remain untouched until the new generator is fully integrated and reconciled.
+    """
+    from app.timetable.session_engine import create_scheduled_session, find_session_conflicts
+
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirements = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE school_id=? AND profile_id=? AND is_active=1
+             AND schedule_layer='instructional'
+           ORDER BY id""",
+        (school_id, profile_id),
+    ).fetchall()
+    if not requirements:
+        raise TimetableSetupError("No active normalized instructional requirements are configured.")
+    days = cur.execute(
+        """SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=?
+           AND is_instructional=1 ORDER BY day_order,id""",
+        (school_id, profile_id),
+    ).fetchall()
+    periods = cur.execute(
+        """SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=?
+           ORDER BY period_no,id""",
+        (school_id, profile_id),
+    ).fetchall()
+    if not days or not periods:
+        raise TimetableSetupError("Configure instructional days and periods before generating advanced sessions.")
+
+    tasks = []
+    for req in requirements:
+        rid = int(req["id"])
+        classes = [int(x["class_id"]) for x in cur.execute(
+            "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY class_id",
+            (school_id, profile_id, rid)).fetchall()]
+        teachers = [int(x["teacher_id"]) for x in cur.execute(
+            "SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY role,teacher_id",
+            (school_id, profile_id, rid)).fetchall()]
+        learners = [int(x["student_id"]) for x in cur.execute(
+            "SELECT student_id FROM ds_timetable_scheduling_requirement_learners WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY student_id",
+            (school_id, profile_id, rid)).fetchall()]
+        patterns = cur.execute(
+            """SELECT * FROM ds_timetable_scheduling_patterns
+               WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
+            (school_id, profile_id, rid),
+        ).fetchall()
+        if len(patterns) != int(req["weekly_occurrences"]):
+            raise TimetableSetupError("Requirement '" + str(req["name"]) + "' needs a complete configured weekly session pattern.")
+        if not classes and not learners:
+            raise TimetableSetupError("Requirement '" + str(req["name"]) + "' has no assigned classes or learners.")
+        if len(teachers) < int(req["min_teacher_count"] or 1):
+            raise TimetableSetupError("Requirement '" + str(req["name"]) + "' does not have enough assigned teachers.")
+        for pattern in patterns:
+            duration = int(pattern["duration_periods"] or 1)
+            if duration < 1 or duration > 4:
+                raise TimetableSetupError("Advanced instructional sessions must span one to four consecutive periods.")
+            tasks.append({
+                "requirement_id": rid, "session_no": int(pattern["session_no"]),
+                "duration": duration, "classes": classes, "teachers": teachers,
+                "learners": learners, "subject_id": int(req["subject_id"]) if req["subject_id"] is not None else None,
+                "programme_id": int(req["programme_id"]) if req["programme_id"] is not None else None,
+                "group_id": int(req["teaching_group_id"]) if req["teaching_group_id"] is not None else None,
+                "session_type": str(req["session_type"]), "room_type": req["room_type"],
+                "preferred_day_id": int(pattern["preferred_day_id"]) if pattern["preferred_day_id"] is not None else None,
+                "name": str(req["name"]),
+            })
+
+    def span_for(start_index, duration):
+        span = periods[start_index:start_index + duration]
+        if len(span) != duration:
+            return None
+        for index, period in enumerate(span):
+            if str(period["period_type"] or "lesson") != "lesson":
+                return None
+            if index and (int(period["period_no"]) != int(span[index-1]["period_no"]) + 1
+                          or str(span[index-1]["end_time"]) != str(period["start_time"])):
+                return None
+        return span
+
+    candidates = []
+    for task in tasks:
+        options = []
+        for day in days:
+            day_id = int(day["id"])
+            if task["preferred_day_id"] and day_id != task["preferred_day_id"]:
+                continue
+            for index, period in enumerate(periods):
+                span = span_for(index, task["duration"])
+                if not span:
+                    continue
+                start, end = str(span[0]["start_time"]), str(span[-1]["end_time"])
+                try:
+                    _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
+                        task["subject_id"], task["classes"], task["teachers"], None,
+                        day_id, int(period["id"]), start, end, None)
+                except TimetableSetupError:
+                    continue
+                rooms = cur.execute(
+                    """SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1
+                       AND (? IS NULL OR room_type=?) ORDER BY capacity DESC,id""",
+                    (school_id, task["room_type"], task["room_type"]),
+                ).fetchall()
+                room_ids = [int(r["id"]) for r in rooms] if rooms else ([None] if not task["room_type"] else [])
+                for room_id in room_ids:
+                    if find_session_conflicts(connection, school_id, profile_id, start, end,
+                        task["classes"], task["teachers"], task["learners"], room_id, day_id):
+                        continue
+                    options.append({"day_id": day_id, "period_id": int(period["id"]),
+                        "start": start, "end": end, "room_id": room_id,
+                        "duration": task["duration"], "period_no": int(period["period_no"])})
+        if not options:
+            raise TimetableSetupError("No valid slot is available for normalized requirement '" + task["name"] + "'. Check constraints, teacher availability, rooms and period patterns.")
+        candidates.append(options)
+
+    order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -tasks[i]["duration"], tasks[i]["requirement_id"], tasks[i]["session_no"]))
+    planned = []
+    nodes = 0
+
+    def overlaps(a, b):
+        return a["day_id"] == b["day_id"] and a["start"] < b["end"] and a["end"] > b["start"]
+
+    def compatible(task, option):
+        for placed in planned:
+            if not overlaps(option, placed["option"]):
+                continue
+            other = placed["task"]
+            if (set(task["classes"]) & set(other["classes"])
+                or set(task["teachers"]) & set(other["teachers"])
+                or set(task["learners"]) & set(other["learners"])
+                or (option["room_id"] is not None and option["room_id"] == placed["option"]["room_id"])):
+                return False
+        return True
+
+    def search(position):
+        nonlocal nodes
+        if position == len(order):
+            return True
+        index = order[position]
+        task = tasks[index]
+        for option in candidates[index]:
+            nodes += 1
+            if nodes > int(node_limit):
+                return False
+            if not compatible(task, option):
+                continue
+            planned.append({"task": task, "option": option})
+            if search(position + 1):
+                return True
+            planned.pop()
+        return False
+
+    if not search(0):
+        raise TimetableSetupError("The normalized requirements cannot all fit without clashes under the configured constraints.")
+
+    created = []
+    try:
+        for item in planned:
+            task, option = item["task"], item["option"]
+            created.append(create_scheduled_session(
+                connection, school_id, profile_id, option["start"], option["end"],
+                schedule_layer="instructional", session_type=task["session_type"],
+                class_ids=task["classes"], teacher_ids=task["teachers"],
+                learner_ids=task["learners"], room_id=option["room_id"],
+                day_id=option["day_id"], period_id=option["period_id"],
+                subject_id=task["subject_id"], programme_id=task["programme_id"],
+                teaching_group_id=task["group_id"], duration_periods=option["duration"],
+                scheduling_requirement_id=task["requirement_id"],
+                pattern_session_no=task["session_no"], created_by=created_by,
+            ))
+    except Exception:
+        if created:
+            marks = ",".join("?" for _ in created)
+            cur.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(created))
+            cur.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(created))
+            cur.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created))
+            cur.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                        (school_id, profile_id, *created))
+            connection.commit()
+        raise
+    return {"status": "completed", "generated_sessions": len(created),
+            "session_ids": created, "search_nodes": nodes,
+            "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation."}
