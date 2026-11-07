@@ -9,6 +9,7 @@ from app.timetable.setup import (
     save_day,
     save_period,
     save_break,
+    save_calendar_exception,
     save_room,
     save_teacher_availability,
     save_class_requirement,
@@ -74,6 +75,27 @@ class TimetableSetupTests(unittest.TestCase):
         save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:00", "08:40")
         with self.assertRaises(TimetableSetupError):
             save_break(self.db, 1, self.profile_id, 1, "Tea", "08:30", "08:50")
+
+    def test_calendar_exceptions_must_fall_within_term_dates(self):
+        pid = create_profile(
+            self.db, 1, "2027 Term 2", "2027", "Term 2",
+            academic_start_date="2027-05-03",
+            academic_end_date="2027-08-06",
+        )
+        save_calendar_exception(
+            self.db, 1, pid, "2027-06-01", "Public holiday", "holiday"
+        )
+        with self.assertRaises(TimetableSetupError):
+            save_calendar_exception(
+                self.db, 1, pid, "2027-09-01", "Outside term", "holiday"
+            )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_calendar_exceptions WHERE profile_id=?",
+                (pid,),
+            ).fetchone()[0],
+            1,
+        )
 
     def test_room_is_school_scoped_and_upserted(self):
         save_room(self.db, 1, "LAB1", "Science Lab", "laboratory", 32)
