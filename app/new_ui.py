@@ -7662,7 +7662,7 @@ def app_home(request: Request):
             # Reuse the overview request's connection. Opening a second pooled
             # connection here doubled the dashboard's demand and could consume
             # the entire small per-process pool while another page (for example
-            # Timetable Manager) was waiting to load.
+            # another page was waiting to load.
             #
             # Earlier optional overview queries may fail on older schemas. A
             # caught PostgreSQL error still aborts its transaction, so reset
