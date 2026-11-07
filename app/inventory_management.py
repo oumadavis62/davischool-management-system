@@ -7,6 +7,63 @@ from app.new_ui import _db, _require_permission, _school_page, _school_session
 
 router = APIRouter()
 
+def _inventory_page(request, title, body):
+    shared = """
+<style>
+.inv-workspace{--inv-forest:#174b32;--inv-green:#26734a;--inv-line:#dce9de;color:#233b2d;width:100%;max-width:none!important;padding-bottom:28px}
+.inv-workspace:before{content:"";display:block;height:5px;margin:-2px 0 16px;border-radius:99px;background:linear-gradient(90deg,#174b32,#39845a 48%,#b8d8bd);box-shadow:0 2px 8px #174b321c}
+.inv-workspace .page-heading{position:relative;overflow:hidden;isolation:isolate;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:22px 24px 21px;margin:0 0 17px;border:1px solid #dce9de;border-radius:19px;background:linear-gradient(115deg,#f5faf5 0%,#fff 58%,#edf6ee 100%);box-shadow:0 8px 24px #214c2d0b}
+.inv-workspace .page-heading h1{font-size:clamp(25px,3vw,33px);font-weight:800;letter-spacing:-.8px;line-height:1.15;color:#174b32;margin:7px 0 8px}
+.inv-workspace .page-heading>div>div:last-child{color:#718278;font-size:12px;line-height:1.55}
+.inv-workspace .lib-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#397653;font-size:10px;font-weight:800;letter-spacing:1.7px}
+.inv-workspace .lib-eyebrow:before{content:"";width:7px;height:7px;border-radius:2px;background:#4c9665;box-shadow:0 0 0 4px #e2f0e4}
+.inv-workspace .stats{grid-template-columns:repeat(auto-fit,minmax(175px,1fr))!important;gap:13px!important;margin:0 0 17px!important}
+.inv-workspace .stats>div{position:relative;overflow:hidden;min-height:100px;padding:17px 18px 15px 20px!important;border:1px solid #e0ebe1!important;border-radius:16px!important;background:linear-gradient(145deg,#fff,#f8fbf8)!important;box-shadow:0 5px 17px #183d2609!important}
+.inv-workspace .stats>div:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#367c50,#a6c9a9)}
+.inv-workspace .stats span{color:#718176!important;font-size:11px!important;font-weight:750}
+.inv-workspace .stats strong{color:#1e5b3a!important;font-size:27px!important;letter-spacing:-.6px}
+.inv-workspace .panel{padding:18px!important;margin:0 0 14px!important;border:1px solid #e1ebe2!important;border-radius:17px!important;background:#fff!important;box-shadow:0 6px 22px #193d2609!important}
+.inv-workspace .panel h2{margin:0 0 14px;color:#214d34;font-size:15px;font-weight:800}
+.inv-workspace .scroll{max-width:100%;border:1px solid #e5ede6;border-radius:13px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.inv-workspace table{border-collapse:separate!important;border-spacing:0!important;width:100%;min-width:760px}
+.inv-workspace th{padding:13px 14px!important;background:linear-gradient(180deg,#f2f8f2,#eaf3eb)!important;color:#42634c!important;font-size:10px!important;font-weight:800;letter-spacing:.7px;text-transform:uppercase;white-space:nowrap}
+.inv-workspace td{padding:12px 14px!important;border-bottom:1px solid #edf2ed!important;color:#3c5143;font-size:12px!important;vertical-align:middle}
+.inv-workspace tbody tr:nth-child(even){background:#fbfdfb}
+.inv-workspace tbody tr:hover{background:#f0f7f1}
+.inv-workspace small{color:#718278!important;font-size:11px!important;line-height:1.45}
+.inv-workspace label{color:#3d5946;font-size:11px!important;font-weight:750;line-height:1.35}
+.inv-workspace input,.inv-workspace select,.inv-workspace textarea{min-height:42px!important;padding:10px 11px!important;border:1px solid #dce7de!important;border-radius:10px!important;background:#fcfefc!important;color:#294534}
+.inv-workspace input:focus,.inv-workspace select:focus,.inv-workspace textarea:focus{outline:0;border-color:#78a985!important;box-shadow:0 0 0 3px #e4f1e6}
+.inv-workspace .btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #1f5b3b;border-radius:10px;background:linear-gradient(135deg,#205f3e,#317b4d);color:#fff!important;font-size:12px;font-weight:800;box-shadow:none;transition:all .16s ease}
+.inv-workspace .btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
+.inv-workspace .btn.btn-light{border-color:#dce8de;background:#f4f8f4;color:#3f6249!important}
+.inv-workspace .inv-filter-trigger{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid #cfe0d1;border-radius:11px;background:#fff;color:#245b39;font-size:12px;font-weight:800;box-shadow:0 3px 10px #214c2d0b}
+.inv-workspace .inv-filter-trigger:before{content:"";width:7px;height:7px;border-radius:50%;background:#4b9562;box-shadow:0 0 0 4px #e7f2e8}
+.inv-filter-dialog{width:min(760px,calc(100% - 18px));max-height:88vh;overflow:auto;border:1px solid #dce8de;border-radius:21px;padding:0;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.inv-filter-dialog::backdrop,.inv-form-dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.inv-filter-dialog .inv-dialog-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:17px 20px;background:linear-gradient(110deg,#f0f7f1,#fff);border-bottom:1px solid #e4ede5}
+.inv-filter-dialog .inv-dialog-head strong{font-size:16px;color:#1d5033}
+.inv-filter-dialog .inv-dialog-head button{width:36px;height:36px;border:0;border-radius:50%;background:#e5efe6;color:#315b3e;font-size:22px}
+.inv-filter-dialog .inv-dialog-content{padding:20px}
+.inv-filter-dialog form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;align-items:end}
+.inv-filter-dialog form label{display:grid;grid-template-columns:1fr;gap:7px;min-width:0}
+.inv-filter-dialog form button,.inv-filter-dialog form a{min-height:42px}
+.inv-filter-dialog form a.inv-clear{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border:1px solid #b9d4bf;border-radius:10px;background:#f0f7f1;color:#174b32!important;font-size:12px;font-weight:850;text-decoration:none!important;text-align:center}
+.inv-form-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:20px;padding:22px;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.inv-form-dialog h2{color:#1d5033;font-size:20px}
+.inv-form-dialog .fields,.inv-form-dialog .form-grid,.inv-form-dialog .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.inv-form-dialog .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+@media(max-width:700px){.inv-workspace .page-heading{align-items:flex-start;flex-direction:column;padding:18px 16px;border-radius:16px}.inv-workspace .page-heading>.btn,.inv-workspace .page-heading>a.btn{width:100%}.inv-workspace .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.inv-workspace .stats>div{min-height:88px;padding:13px 12px 12px 15px!important}.inv-workspace .stats strong{font-size:23px!important}.inv-workspace .panel{padding:12px!important;border-radius:14px!important}.inv-workspace .scroll{border-radius:10px}.inv-workspace table{min-width:760px}.inv-filter-dialog{border-radius:17px}.inv-filter-dialog .inv-dialog-content{padding:15px}.inv-filter-dialog form,.inv-form-dialog .fields,.inv-form-dialog .form-grid,.inv-form-dialog .grid{grid-template-columns:1fr}.inv-form-dialog{padding:17px;border-radius:17px}}
+@media(prefers-reduced-motion:reduce){.inv-workspace *,.inv-filter-dialog *{transition:none!important;scroll-behavior:auto!important}}
+@media print{.inv-filter-trigger,.inv-filter-dialog,.no-print{display:none!important}}
+</style>
+<script>
+(function(){function setup(){document.querySelectorAll('.inventory-page,.inv-movements,.inv-req,.inv-report').forEach(function(page){page.classList.add('inv-workspace');var heading=page.querySelector('.page-heading');if(!heading)return;var form=page.querySelector('form[method="get"]');if(form&&!form.dataset.popupReady){form.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='inv-filter-dialog';var head=document.createElement('div');head.className='inv-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='inv-dialog-content';form.parentNode.insertBefore(dialog,form);content.appendChild(form);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);form.querySelectorAll('a.btn-light').forEach(function(a){a.classList.add('inv-clear');if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='inv-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})(); 
+</script>
+"""
+    return _school_page(request, title, body + shared)
+
+
 def _guard(request, permission="inventory.view"):
     sid = _school_session(request)
     if not sid:
@@ -81,7 +138,7 @@ function openInv(){{document.getElementById('invForm').reset();document.getEleme
 function editInv(b){{let d=b.dataset;[['ivId','id'],['ivCode','code'],['ivName','name'],['ivCategory','category'],['ivUnit','unit'],['ivQty','qty'],['ivReorder','reorder'],['ivLocation','location'],['ivStatus','status'],['ivDescription','description']].forEach(x=>document.getElementById(x[0]).value=d[x[1]]);document.getElementById('invTitle').textContent='Edit inventory item';document.getElementById('invDialog').showModal();}}
 </script>
 """
-        return _school_page(request, "Inventory Register", body)
+        return _inventory_page(request, "Inventory Register", body)
     finally:
         con.close()
 
@@ -173,7 +230,7 @@ def inventory_transactions(request: Request, q: str = "", movement: str = "All")
 <section class="panel" style="margin-top:16px"><form method="get" class="toolbar"><label>Search<input name="q" value="{escape(q,quote=True)}" placeholder="Item, code or reference"></label><label>Movement<select name="movement"><option value="All">All movements</option><option value="Receive" {'selected' if movement=='Receive' else ''}>Receive</option><option value="Issue" {'selected' if movement=='Issue' else ''}>Issue</option><option value="Adjustment In" {'selected' if movement=='Adjustment In' else ''}>Adjustment In</option><option value="Adjustment Out" {'selected' if movement=='Adjustment Out' else ''}>Adjustment Out</option></select></label><button class="btn">Filter</button><a class="btn btn-light" href="/app/inventory/transactions">Clear</a></form>
 <div class="scroll"><table><thead><tr><th>Date</th><th>Item / Code</th><th>Movement</th><th>Quantity</th><th>Balance after</th><th>Reference</th><th>Recorded by</th></tr></thead><tbody>{table_rows}</tbody></table></div><small>Showing the latest 300 stock movements for this school.</small></section></div>
 """
-        return _school_page(request, "Stock Receipts & Issues", body)
+        return _inventory_page(request, "Stock Receipts & Issues", body)
     finally:
         con.close()
 
@@ -264,7 +321,7 @@ def inventory_requisitions(request: Request, status: str = "All", q: str = ""):
 <section class="panel"><h2>New stock requisition</h2><form method="post" action="/app/inventory/requisitions/create" class="grid"><label class="wide">Item *<select name="item_id" required><option value="">Select item</option>{opts}</select></label><label>Quantity *<input type="number" name="quantity" min="0.01" step="0.01" required></label><label>Requested by<input name="requested_by" value="{escape(str(request.session.get('name') or request.session.get('email') or ''),quote=True)}" readonly></label><label class="wide">Purpose *<textarea name="purpose" required maxlength="1000"></textarea></label><div class="wide"><button class="btn">Submit request</button></div></form></section>
 <section class="panel" style="margin-top:16px"><form method="get" class="grid"><label>Search<input name="q" value="{escape(q,quote=True)}" placeholder="Item, requester or purpose"></label><label>Status<select name="status"><option value="All">All</option><option value="Pending" {'selected' if status=='Pending' else ''}>Pending</option><option value="Approved" {'selected' if status=='Approved' else ''}>Approved</option><option value="Rejected" {'selected' if status=='Rejected' else ''}>Rejected</option><option value="Issued" {'selected' if status=='Issued' else ''}>Issued</option></select></label><div class="wide"><button class="btn">Filter</button> <a class="btn btn-light" href="/app/inventory/requisitions">Clear</a></div></form><div class="scroll"><table><thead><tr><th>Request</th><th>Item</th><th>Quantity</th><th>Purpose</th><th>Requester</th><th>Status / decision</th><th>Actions</th></tr></thead><tbody>{trs}</tbody></table></div></section></div>
 """
-        return _school_page(request, "Stock Requisitions & Approvals", body)
+        return _inventory_page(request, "Stock Requisitions & Approvals", body)
     finally:
         con.close()
 
@@ -375,6 +432,6 @@ def inventory_reports(request: Request, start_date: str = "", end_date: str = ""
 <section class="panel" style="margin-top:14px"><h2>Stock by category</h2><div class="scroll"><table><thead><tr><th>Category</th><th>Active items</th></tr></thead><tbody>{cat_html}</tbody></table></div></section>
 <section class="panel" style="margin-top:14px"><h2>Stock movement ledger</h2><div class="scroll"><table><thead><tr><th>Date</th><th>Item</th><th>Movement</th><th>Quantity</th><th>Balance after</th><th>Reference</th></tr></thead><tbody>{move_html}</tbody></table></div></section></div>
 """
-        return _school_page(request, "Stock Reports", body)
+        return _inventory_page(request, "Stock Reports", body)
     finally:
         con.close()
