@@ -22,6 +22,8 @@ _TABLES = (
         status TEXT NOT NULL DEFAULT 'draft',
         week_start TEXT,
         week_end TEXT,
+        academic_start_date TEXT,
+        academic_end_date TEXT,
         settings_json TEXT NOT NULL DEFAULT '{}',
         created_by TEXT,
         created_at TEXT NOT NULL,
@@ -174,6 +176,16 @@ def ensure_timetable_schema(connection: Any) -> None:
     cursor = connection.cursor()
     for statement in _TABLES:
         cursor.execute(statement)
+    # Additive compatibility for profiles created by the first foundation
+    # release before term date fields were introduced.
+    cursor.execute("SELECT * FROM ds_timetable_profiles LIMIT 0")
+    columns = {
+        str(col.name if hasattr(col, "name") else col[0]).lower()
+        for col in (cursor.description or [])
+    }
+    for column in ("academic_start_date", "academic_end_date"):
+        if column not in columns:
+            cursor.execute("ALTER TABLE ds_timetable_profiles ADD COLUMN " + column + " TEXT")
     for statement in _INDEXES:
         cursor.execute(statement)
     connection.commit()
