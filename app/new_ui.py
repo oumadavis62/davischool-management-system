@@ -20882,25 +20882,215 @@ def admission_letter_print(request: Request, application_id: int):
     if denied: return denied
     con = _db()
     try:
-        row = con.execute("""SELECT a.*,s.admission_no issued_no,c.name class_name,c.stream class_stream,sch.name school_name,
-            sch.location school_location,sch.phone school_phone FROM admission_applications a
-            JOIN students s ON s.id=a.enrolled_student_id AND s.school_id=a.school_id
-            LEFT JOIN classes c ON c.id=s.class_id
-            LEFT JOIN schools sch ON sch.id=a.school_id
-            WHERE a.id=? AND a.school_id=?""",(application_id,sid)).fetchone()
+        app_row = con.execute(
+            "SELECT * FROM admission_applications WHERE id=? AND school_id=?",
+            (application_id, sid)
+        ).fetchone()
+        if not app_row:
+            return HTMLResponse("Admission letter not found.", 404)
+        student = None
+        if app_row["enrolled_student_id"]:
+            student = con.execute(
+                "SELECT * FROM students WHERE id=? AND school_id=?",
+                (app_row["enrolled_student_id"], sid)
+            ).fetchone()
+        if not student:
+            return HTMLResponse("The enrolled learner record could not be found.", 404)
+        class_row = con.execute(
+            "SELECT name,stream FROM classes WHERE id=? AND school_id=?",
+            (student["class_id"], sid)
+        ).fetchone() if student["class_id"] else None
+        school = con.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
     finally:
         con.close()
-    if not row: return HTMLResponse("Admission letter not found.",404)
-    body = f"""<div class='page letter-page'><div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button onclick='window.print()'>Print Letter</button></div>
-      <article class='letter-paper'><header><h1>{escape(str(row['school_name'] or ''))}</h1><p>{escape(str(row['school_location'] or ''))} · {escape(str(row['school_phone'] or ''))}</p></header>
-      <h2>ADMISSION LETTER</h2><p>Date: {escape(str(row['application_date'] or ''))}</p>
-      <p>Dear {escape(str(row['parent_name'] or 'Parent / Guardian'))},</p>
-      <p>We are pleased to confirm the admission of <strong>{escape(str(row['applicant_name'] or ''))}</strong> to {escape(str(row['class_name'] or 'the selected class'))}{(' - ' + escape(str(row['class_stream']))) if row['class_stream'] else ''}.</p>
-      <p>Admission Number: <strong>{escape(str(row['issued_no'] or row['admission_no'] or ''))}</strong></p>
-      <p>Please retain this number for all future school records and communication.</p><p>Yours faithfully,<br><strong>School Administration</strong></p></article></div>
-      <style>.letter-page{{max-width:900px}}.letter-tools{{display:flex;justify-content:space-between;margin-bottom:15px}}.letter-tools a,.letter-tools button{{border:0;border-radius:8px;padding:10px 14px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-weight:800;cursor:pointer}}.letter-tools button{{background:#176b3a;color:#fff}}.letter-paper{{background:#fff;border:1px solid #dbe7dc;border-radius:12px;padding:45px;min-height:650px;color:#263d2b;line-height:1.8}}.letter-paper header{{text-align:center;border-bottom:2px solid #176b3a;padding-bottom:18px}}.letter-paper h1{{margin:0;color:#176b3a}}.letter-paper header p{{margin:4px 0;color:#718276;font-size:12px}}.letter-paper h2{{text-align:center;margin:35px 0}}@media print{{.letter-tools{{display:none}}.letter-paper{{border:0;border-radius:0;padding:20px;min-height:0}}}}</style>"""
+
+    def _letter_get(record, key, fallback=""):
+        try:
+            value = record[key] if record is not None and key in record.keys() else None
+        except Exception:
+            value = None
+        return str(value).strip() if value is not None and str(value).strip() else fallback
+
+    def _letter_cell(label, value, wide=False):
+        value = str(value or "").strip()
+        if not value:
+            return ""
+        return (
+            "<div class='letter-field" + (" wide" if wide else "") + "'>"
+            "<span>" + escape(str(label)) + "</span><strong>" + escape(value) + "</strong></div>"
+        )
+
+    learner_name = _letter_get(student, "name", _letter_get(app_row, "applicant_name", "Learner"))
+    admission_no = _letter_get(student, "admission_no", _letter_get(app_row, "admission_no"))
+    assessment_no = _letter_get(student, "assessment_no")
+    class_name = _letter_get(class_row, "name", "—")
+    class_stream = _letter_get(class_row, "stream", _letter_get(student, "stream"))
+    parent_name = _letter_get(student, "parent_name",
+        _letter_get(student, "guardian_name", _letter_get(app_row, "parent_name", "Parent / Guardian")))
+    parent_phone = _letter_get(student, "parent_phone",
+        _letter_get(student, "guardian_phone", _letter_get(app_row, "parent_phone")))
+    parent_email = _letter_get(student, "parent_email",
+        _letter_get(student, "guardian_email", _letter_get(app_row, "parent_email")))
+    school_name = _letter_get(school, "name", "DaviSchool")
+    school_location = _letter_get(school, "location")
+    school_phone = _letter_get(school, "phone")
+    school_email = _letter_get(school, "email")
+    school_postal = " ".join(part for part in (
+        ("P.O. Box " + _letter_get(school, "postal_address")) if _letter_get(school, "postal_address") else "",
+        _letter_get(school, "postal_code")
+    ) if part)
+    school_logo = _letter_get(school, "logo_data")
+    if school_logo and not school_logo.startswith(("data:", "http://", "https://", "/")):
+        school_logo = "data:image/png;base64," + school_logo
+    logo_html = (
+        "<img class='school-logo' src='" + escape(school_logo, quote=True) + "' alt='School logo'>"
+        if school_logo else "<div class='logo-placeholder'>" + escape(school_name[:2].upper()) + "</div>"
+    )
+    school_contacts = " · ".join(value for value in (
+        school_location, school_postal,
+        ("Tel: " + school_phone) if school_phone else "",
+        ("Email: " + school_email) if school_email else ""
+    ) if value)
+
+    # Include all learner/guardian details actually stored on the enrolled student
+    # record, while omitting database identifiers and system-maintained metadata.
+    student_labels = {
+        "name": "Full name", "admission_no": "Admission number",
+        "assessment_no": "Assessment number", "gender": "Gender",
+        "date_of_birth": "Date of birth", "dob": "Date of birth",
+        "birth_date": "Date of birth", "birth_certificate_no": "Birth certificate number",
+        "upi": "UPI number", "parent_name": "Parent / Guardian",
+        "guardian_name": "Parent / Guardian", "parent_phone": "Parent / Guardian phone",
+        "guardian_phone": "Alternative guardian phone", "parent_email": "Parent / Guardian email",
+        "guardian_email": "Alternative guardian email", "relationship": "Relationship to learner",
+        "parent_relationship": "Relationship to learner", "address": "Residential address",
+        "home_address": "Residential address", "residence": "Residence",
+        "county": "County", "sub_county": "Sub-county", "village": "Village / Estate",
+        "emergency_contact": "Emergency contact", "emergency_phone": "Emergency phone",
+        "category": "Student category", "student_category": "Student category",
+        "status": "Learner status"
+    }
+    excluded_student_columns = {
+        "id", "school_id", "class_id", "created_at", "updated_at",
+        "password", "password_hash", "session_token", "deleted_at"
+    }
+    ordered_student_keys = [
+        "name", "admission_no", "assessment_no", "gender", "date_of_birth", "dob",
+        "birth_date", "birth_certificate_no", "upi", "parent_name", "guardian_name",
+        "parent_phone", "guardian_phone", "parent_email", "guardian_email",
+        "relationship", "parent_relationship", "address", "home_address", "residence",
+        "county", "sub_county", "village", "emergency_contact", "emergency_phone",
+        "category", "student_category", "status"
+    ]
+    student_keys = list(student.keys())
+    ordered_student_keys = [key for key in ordered_student_keys if key in student_keys]
+    extra_student_keys = [
+        key for key in student_keys
+        if key not in ordered_student_keys and key not in excluded_student_columns
+        and not key.endswith("_id") and not key.endswith("_at")
+        and not key.lower().startswith(("password", "token", "secret"))
+    ]
+    student_fields = []
+    seen_student_labels = set()
+    for key in ordered_student_keys + extra_student_keys:
+        value = _letter_get(student, key)
+        if not value:
+            continue
+        label = student_labels.get(key, key.replace("_", " ").strip().title())
+        if label in seen_student_labels:
+            continue
+        seen_student_labels.add(label)
+        if key in ("address", "home_address", "residence"):
+            student_fields.append(_letter_cell(label, value, True))
+        else:
+            student_fields.append(_letter_cell(label, value))
+
+    application_fields = []
+    application_items = [
+        ("Application date", _letter_get(app_row, "application_date")),
+        ("Previous school", _letter_get(app_row, "previous_school")),
+        ("Application notes / additional information", _letter_get(app_row, "notes"))
+    ]
+    for label, value in application_items:
+        if value:
+            application_fields.append(_letter_cell(label, value, label.endswith("information")))
+
+    letter_date = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %B %Y")
+    body = f"""<div class='page letter-page'>
+      <div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button onclick='window.print()'>Print Letter</button></div>
+      <article class='letter-paper'>
+        <header class='letter-header'>
+          <div class='letter-brand'>{logo_html}<div><h1>{escape(school_name)}</h1><p>{escape(school_contacts)}</p></div></div>
+          <div class='letter-rule'></div>
+          <div class='letter-meta'><span>OFFICIAL SCHOOL COMMUNICATION</span><span>DATE: {escape(letter_date)}</span></div>
+        </header>
+        <h2>ADMISSION LETTER</h2>
+        <p class='letter-reference'>Admission confirmation · Ref: {escape(admission_no or str(application_id))}</p>
+        <p>Dear <strong>{escape(parent_name)}</strong>,</p>
+        <p>We are pleased to confirm the admission and registration of <strong>{escape(learner_name)}</strong> to <strong>{escape(class_name)}{(' - ' + escape(class_stream)) if class_stream else ''}</strong>. The learner's details captured during application and enrolment are recorded below for your reference.</p>
+        <section class='letter-section'><h3>LEARNER PARTICULARS</h3><div class='letter-grid'>{''.join(student_fields)}</div></section>
+        <section class='letter-section'><h3>PARENT / GUARDIAN CONTACT</h3><div class='letter-grid'>
+          {_letter_cell("Parent / Guardian name", parent_name)}
+          {_letter_cell("Phone number", parent_phone)}
+          {_letter_cell("Email address", parent_email, True)}
+        </div></section>
+        <section class='letter-section'><h3>ADMISSION RECORD</h3><div class='letter-grid'>
+          {_letter_cell("Admission number", admission_no)}
+          {_letter_cell("Assessment number", assessment_no)}
+          {_letter_cell("Admitted class", class_name)}
+          {_letter_cell("Stream", class_stream)}
+          {''.join(application_fields)}
+        </div></section>
+        <p class='letter-instructions'>Please quote the learner's admission number in all future school correspondence and retain this letter for your records. The school will communicate any further reporting instructions through the parent / guardian contact details provided above.</p>
+        <div class='letter-signoff'><div><p>Yours faithfully,</p><div class='signature-space'></div><strong>School Administration</strong><span>For and on behalf of {escape(school_name)}</span></div><div class='stamp-space'>OFFICIAL<br> SCHOOL STAMP</div></div>
+        <footer class='letter-footer'>This is an official admission record generated from the learner's saved registration details.</footer>
+      </article>
+    </div>
+    <style>
+      .letter-page{{max-width:100%;padding:0 10px 24px;box-sizing:border-box}}
+      .letter-tools{{display:flex;justify-content:space-between;gap:10px;margin:0 auto 14px;max-width:210mm}}
+      .letter-tools a,.letter-tools button{{border:0;border-radius:8px;padding:10px 14px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-weight:800;cursor:pointer}}
+      .letter-tools button{{background:#176b3a;color:#fff}}
+      .letter-paper{{box-sizing:border-box;background:#fff;color:#263d2b;width:210mm;min-height:297mm;margin:0 auto;padding:17mm 18mm 15mm;border:1px solid #dbe7dc;box-shadow:0 5px 24px rgba(20,65,35,.10);font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.48;display:flex;flex-direction:column}}
+      .letter-header{{border-bottom:2px solid #176b3a;padding-bottom:7mm}}
+      .letter-brand{{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}}
+      .school-logo{{width:22mm;height:22mm;object-fit:contain}}
+      .logo-placeholder{{width:22mm;height:22mm;border-radius:50%;background:#e7f1e7;color:#176b3a;display:flex;align-items:center;justify-content:center;font-size:18pt;font-weight:900}}
+      .letter-brand h1{{font-size:20pt;color:#176b3a;margin:0 0 3px;line-height:1.15}}
+      .letter-brand p{{font-size:8.5pt;color:#65786a;margin:0;line-height:1.4}}
+      .letter-rule{{height:3px;background:#b5d7bc;margin-top:5mm}}
+      .letter-meta{{display:flex;justify-content:space-between;gap:10px;margin-top:3mm;font-size:8pt;font-weight:800;color:#54715b;letter-spacing:.5px}}
+      .letter-paper h2{{text-align:center;color:#174b2b;font-size:16pt;letter-spacing:1px;margin:8mm 0 2mm}}
+      .letter-reference{{text-align:center;color:#647768;font-size:8.5pt;margin:0 0 6mm}}
+      .letter-paper>p{{margin:0 0 4mm}}
+      .letter-section{{margin-top:5mm;break-inside:avoid}}
+      .letter-section h3{{font-size:9pt;letter-spacing:.7px;color:#176b3a;border-bottom:1px solid #c9ddcc;padding:0 0 2mm;margin:0 0 3mm}}
+      .letter-grid{{display:grid;grid-template-columns:1fr 1fr;gap:2.5mm 8mm}}
+      .letter-field{{display:flex;flex-direction:column;gap:1px;min-width:0;padding:1mm 0 2mm;border-bottom:1px solid #edf2ed;overflow-wrap:anywhere}}
+      .letter-field.wide{{grid-column:1/-1}}
+      .letter-field span{{font-size:7.5pt;text-transform:uppercase;letter-spacing:.35px;color:#718276;font-weight:700}}
+      .letter-field strong{{font-size:9.5pt;font-weight:700;color:#263d2b}}
+      .letter-instructions{{margin-top:6mm!important;text-align:justify}}
+      .letter-signoff{{display:flex;justify-content:space-between;align-items:flex-end;gap:12mm;margin-top:auto;padding-top:8mm;break-inside:avoid}}
+      .letter-signoff p{{margin:0 0 2mm}}
+      .signature-space{{height:13mm;border-bottom:1px solid #718276;width:58mm;margin-bottom:2mm}}
+      .letter-signoff strong,.letter-signoff span{{display:block;font-size:9pt}}
+      .letter-signoff span{{font-size:8pt;color:#687c6d;margin-top:1mm}}
+      .stamp-space{{width:34mm;height:27mm;border:1px dashed #9eb5a2;border-radius:4px;display:flex;align-items:center;justify-content:center;text-align:center;color:#8a9c8e;font-size:8pt;font-weight:800;letter-spacing:1px}}
+      .letter-footer{{border-top:1px solid #cbdccc;margin-top:7mm;padding-top:3mm;text-align:center;color:#718276;font-size:7.5pt}}
+      @page{{size:A4 portrait;margin:0}}
+      @media(max-width:760px){{.letter-paper{{width:100%;min-height:0;padding:24px 20px}}.letter-brand h1{{font-size:17pt}}.letter-grid{{gap:8px 12px}}}}
+      @media print{{
+        html,body{{margin:0!important;padding:0!important;background:#fff!important}}
+        .letter-page{{margin:0!important;padding:0!important;max-width:none!important}}
+        .letter-tools{{display:none!important}}
+        .letter-paper{{width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;padding:17mm 18mm 15mm!important;border:0!important;border-radius:0!important;box-shadow:none!important;page-break-after:avoid;break-after:avoid;overflow:hidden}}
+        .letter-section,.letter-signoff{{break-inside:avoid;page-break-inside:avoid}}
+        *{{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+      }}
+    </style>"""
     body += _admission_ui_enhancements()
-    return _school_page(request,"Admission Letter",body)
+    return _school_page(request, "Admission Letter", body)
 
 
 @router.get("/app/admission-reports", response_class=HTMLResponse)
