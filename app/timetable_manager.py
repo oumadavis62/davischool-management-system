@@ -82,6 +82,17 @@ def _ensure_tables(con):
         allowed INTEGER NOT NULL DEFAULT 1,
         UNIQUE(school_id,resource_type,resource_id,day_name,period_no)
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_profile_availability(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id INTEGER NOT NULL,
+        day_name TEXT NOT NULL,
+        period_no INTEGER NOT NULL,
+        allowed INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(school_id,profile_id,resource_type,resource_id,day_name,period_no)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_constraints(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -314,6 +325,16 @@ def _seed(con, sid):
     cur.execute("UPDATE timetable_lessons SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     cur.execute("UPDATE timetable_constraints SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     cur.execute("UPDATE timetable_generation_runs SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
+    # Legacy availability had no profile dimension. Preserve it on the
+    # original profile only; future edits are isolated in the new table.
+    cur.execute("""INSERT INTO timetable_profile_availability(
+        school_id,profile_id,resource_type,resource_id,day_name,period_no,allowed
+    ) SELECT a.school_id,?,a.resource_type,a.resource_id,a.day_name,a.period_no,a.allowed
+      FROM timetable_availability a WHERE a.school_id=?
+      AND NOT EXISTS (SELECT 1 FROM timetable_profile_availability p
+        WHERE p.school_id=a.school_id AND p.profile_id=?
+        AND p.resource_type=a.resource_type AND p.resource_id=a.resource_id
+        AND p.day_name=a.day_name AND p.period_no=a.period_no)""",(pid,sid,pid))
     # Upgrade profiles duplicated by older releases, where slots had their
     # own profile_id but still referenced the original shared lesson rows.
     # The original/oldest profile remains the source; each populated profile
@@ -874,7 +895,7 @@ def _availability(request, con, sid):
     periods=_profile_periods(con,sid)
     saved={}
     if selected:
-        for r in con.execute("SELECT day_name,period_no,allowed FROM timetable_availability WHERE school_id=? AND resource_type=? AND resource_id=?",(sid,kind,selected)).fetchall():
+        for r in con.execute("SELECT day_name,period_no,allowed FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type=? AND resource_id=?",(sid,_active_profile_id(con,sid),kind,selected)).fetchall():
             saved[(str(r["day_name"]),int(r["period_no"]))]=bool(int(r["allowed"] or 0))
     resource_options="".join(f"<option value='{r['id']}' {'selected' if int(r['id'])==selected else ''}>{escape(str(r['name'] or ''))}</option>" for r in resources)
     head="".join(f"<th>{escape(d)}</th>" for d in days)
@@ -975,10 +996,10 @@ def _verify(con, sid):
     teacher_map={}
     subject_day=set()
     blocked_teacher={(str(x["day_name"]),int(x["period_no"]),int(x["resource_id"])) for x in con.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='teacher' AND allowed=0",(sid,_active_profile_id(con,sid))
     ).fetchall()}
     blocked_subject={(str(x["day_name"]),int(x["period_no"]),int(x["resource_id"])) for x in con.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='subject' AND allowed=0",(sid,_active_profile_id(con,sid))
     ).fetchall()}
 
     for lesson in lessons:
@@ -1132,7 +1153,7 @@ def _publication_fingerprint(con, sid):
         JOIN timetable_lessons l ON l.id=lt.lesson_id
         WHERE lt.school_id=? AND l.profile_id=? ORDER BY lt.lesson_id,lt.teacher_id""",(sid,int(profile["id"]))).fetchall()
     availability=con.execute("""SELECT resource_type,resource_id,day_name,period_no,allowed
-        FROM timetable_availability WHERE school_id=? ORDER BY resource_type,resource_id,day_name,period_no""",(sid,)).fetchall()
+        FROM timetable_profile_availability WHERE school_id=? AND profile_id=? ORDER BY resource_type,resource_id,day_name,period_no""",(sid,int(profile["id"]))).fetchall()
     payload={
         "profile":{k:profile[k] for k in ("id","days_json","periods_json","breaks_json")},
         "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked")} for r in slots],
@@ -2218,10 +2239,10 @@ async def timetable_availability_save(request:Request,kind:str=Form(...),resourc
             if len(parts)==2 and parts[0] in days and parts[1].isdigit() and (parts[0],int(parts[1])) in allowed:
                 selected.add((parts[0],int(parts[1])))
         cur=con.cursor()
-        cur.execute("DELETE FROM timetable_availability WHERE school_id=? AND resource_type=? AND resource_id=?",(sid,kind,resource_id))
+        cur.execute("DELETE FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type=? AND resource_id=?",(sid,_active_profile_id(con,sid),kind,resource_id))
         for d,p in allowed:
             if (d,p) not in selected:
-                cur.execute("INSERT INTO timetable_availability(school_id,resource_type,resource_id,day_name,period_no,allowed) VALUES(?,?,?,?,?,0)",(sid,kind,resource_id,d,p))
+                cur.execute("INSERT INTO timetable_profile_availability(school_id,profile_id,resource_type,resource_id,day_name,period_no,allowed) VALUES(?,?,?,?,?,?,0)",(sid,_active_profile_id(con,sid),kind,resource_id,d,p))
         con.commit()
         return RedirectResponse(f"/app/timetable?tab=availability&kind={kind}&resource_id={resource_id}&msg=Availability+saved",303)
     finally: con.close()
@@ -2345,10 +2366,10 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         lesson_teachers[lid]=tea
 
     blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='teacher' AND allowed=0",(sid,_active_profile_id(cur,sid))
     ).fetchall()}
     blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='subject' AND allowed=0",(sid,_active_profile_id(cur,sid))
     ).fetchall()}
     constraints=_constraint_maps(cur,sid,_active_profile_id(cur,sid))
 
