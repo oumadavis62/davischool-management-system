@@ -88,23 +88,38 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
         ).fetchone():
             raise TimetableSetupError("A selected learner does not belong to this school.")
     if period_id is not None:
-        period = cur.execute(
-            "SELECT id,start_time,end_time FROM ds_timetable_periods WHERE id=? AND school_id=? AND profile_id=?",
-            (period_id, school_id, profile_id),
-        ).fetchone()
-        if not period:
+        periods = cur.execute(
+            """SELECT id,period_no,start_time,end_time,period_type
+               FROM ds_timetable_periods
+               WHERE school_id=? AND profile_id=? ORDER BY period_no,id""",
+            (school_id, profile_id),
+        ).fetchall()
+        start_index = next((i for i, row in enumerate(periods) if int(row["id"]) == period_id), None)
+        if start_index is None:
             raise TimetableSetupError("The selected period is outside this timetable profile.")
-        if (start, end) != (str(period["start_time"]), str(period["end_time"])):
-            raise TimetableSetupError("Session times must match the selected configured period.")
+        duration = max(1, int(duration_periods or 1))
+        span = periods[start_index:start_index + duration]
+        if len(span) != duration or str(span[0]["start_time"]) != start or str(span[-1]["end_time"]) != end:
+            raise TimetableSetupError("Session times must match the selected configured period span.")
+        for index, slot in enumerate(span):
+            if str(slot["period_type"] or "lesson") != "lesson":
+                raise TimetableSetupError("Instructional sessions can only occupy teaching periods.")
+            if index:
+                previous = span[index - 1]
+                if int(slot["period_no"]) != int(previous["period_no"]) + 1 or str(previous["end_time"]) != str(slot["start_time"]):
+                    raise TimetableSetupError("An extended lesson must occupy consecutive periods without a break.")
         if day_id is not None:
+            span_ids = [int(slot["id"]) for slot in span]
+            marks = ",".join("?" for _ in span_ids)
             for teacher_id in teacher_ids:
-                availability = cur.execute(
-                    """SELECT availability FROM ds_timetable_teacher_availability
-                       WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=? AND period_id=?""",
-                    (school_id, profile_id, teacher_id, day_id, period_id),
+                unavailable = cur.execute(
+                    f"""SELECT period_id FROM ds_timetable_teacher_availability
+                        WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=?
+                          AND availability='unavailable' AND period_id IN ({marks}) LIMIT 1""",
+                    (school_id, profile_id, teacher_id, day_id, *span_ids),
                 ).fetchone()
-                if availability and str(availability["availability"]).lower() == "unavailable":
-                    raise TimetableSetupError(f"Teacher {teacher_id} is marked unavailable for this day and period.")
+                if unavailable:
+                    raise TimetableSetupError(f"Teacher {teacher_id} is marked unavailable during this session span.")
     if session_date:
         try:
             parsed = date.fromisoformat(session_date)
