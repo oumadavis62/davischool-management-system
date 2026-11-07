@@ -684,7 +684,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
-            ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
             ("/app/finance",_modern_icon("finance"),"Finance & Accounts","fees.view"),
             ("/app/announcements",_modern_icon("announcement"),"Announcements","communications.view"),
             ("/app/users",_modern_icon("users"),"Users","users.manage"),
@@ -1112,17 +1111,6 @@ table{{width:100%;border-collapse:collapse;background:white;border:1px solid #e5
     if(event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)return;
     var link=event.target&&event.target.closest?event.target.closest('a'):null;
     if(!link)return;
-    // Force a clean document request for Timetable; bypass competing
-    // capture-phase history/filter handlers that can strand the loading state.
-    try{{
-      var destination=new URL(link.href,window.location.href);
-      if(destination.origin===window.location.origin && destination.pathname.replace(/\\/+$/,'')==='/app/timetable'){{
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        window.location.assign(destination.toString());
-        return;
-      }}
-    }}catch(e){{}}
     if(!eligible(link))return;
     link.setAttribute('aria-busy','true');
     link.classList.add('ds-navigating');
@@ -1289,7 +1277,7 @@ else setupDaviActionCells();
     addTarget(document.referrer);
     // The two-step workspace is also warmed so the second Back is immediate.
     var path=window.location.pathname;
-    var roots=['/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/app'];
+    var roots=['/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/app'];
     var root='/app';
     roots.forEach(function(r){{if(path===r || (r!=='/app' && path.indexOf(r+'/')===0) || (r==='/app' && path.indexOf('/app/')===0)){{if(r.length>root.length)root=r;}}}});
     var u=new URL(window.location.href);
@@ -1323,7 +1311,7 @@ function isSystemPath(path){{
 // Two-step browser history rule for the school workspace.
 (function(){{
   try{{
-    var WORKSPACES=['/app','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/timetable','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/schools/manage','/super/global-control/dashboard','/account/change-password'];
+    var WORKSPACES=['/app','/app/students','/app/staff','/app/classes','/app/subjects','/app/exams','/app/academics/marks-corrections','/app/academics/allocations','/app/academics/assessments','/app/academics/analysis','/app/academics','/app/report-cards','/app/report-card-settings','/app/attendance','/app/finance','/app/accounting','/app/announcements','/app/users','/app/roles','/app/school-settings','/app/audit','/app/account','/app/teacher','/schools/manage','/super/global-control/dashboard','/account/change-password'];
     function cleanPath(path){{path=String(path||'/').split('#')[0];if(path.length>1)path=path.replace(/\\/+$/,'');return path;}}
     function workspace(path){{path=cleanPath(path);var best='/';WORKSPACES.forEach(function(root){{if(path===root || (root!=='/app' && path.indexOf(root+'/')===0) || (root==='/app' && path.indexOf('/app/')===0)){{if(root.length>best.length)best=root;}}}});return best;}}
     function isFiltered(url){{var u=url instanceof URL?url:new URL(url,window.location.href);return Array.from(u.searchParams.keys()).some(function(k){{return k!=='ds_tab';}});}}
@@ -15892,12 +15880,6 @@ def fee_payment(request: Request,student_id:int=Form(...),amount:float=Form(...)
 def _simple_rows(rows, cols):
     return "".join("<tr>"+"".join(f"<td>{escape(str(row[c] if row[c] is not None else ''))}</td>" for c in cols)+"</tr>" for row in rows)
 
-# The timetable workspace is implemented in the isolated aSc-style manager module.
-# Keeping it in its own router prevents timetable changes from touching the other
-# DaviSchool school-side modules.
-from app.timetable_manager import router as timetable_manager_router
-router.include_router(timetable_manager_router)
-
 @router.get("/app/announcements", response_class=HTMLResponse)
 def announcements_page(request: Request):
     sid=_school_session(request)
@@ -15991,7 +15973,7 @@ def roles_page(request: Request):
             if feature_key not in permission_groups[group_name]:
                 permission_groups[group_name].append(feature_key)
     permission_groups.update({
-        "School administration":["students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","users.manage","audit.view","settings.view","settings.edit","settings.manage"],
+        "School administration":["students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","attendance.view","attendance.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","users.manage","audit.view","settings.view","settings.edit","settings.manage"],
         "Marks management":["marks.edit"],
     })
     permission_labels={p:p.replace("."," · ").replace("_"," ").title() for values in permission_groups.values() for p in values}
@@ -16248,7 +16230,7 @@ def roles_user_override(request: Request, user_id: int=Form(...), permission: st
     if not sid:return RedirectResponse("/",303)
     if not _require_permission(request,sid,"settings.manage"):
         return HTMLResponse("You do not have permission to manage account access.",403)
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
     permission_v=str(permission or "").strip()
     if permission_v not in allowed_permissions:
         return HTMLResponse("Invalid feature permission.",400)
@@ -16293,7 +16275,7 @@ def roles_add(request: Request,role:str=Form(...),permission:str=Form(...),enabl
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.", 403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
     role_v=role.strip(); perm_v=permission.strip(); enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission. <a href='/app/roles'>Back</a>",400)
@@ -16313,7 +16295,7 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
     if not _require_permission(request, sid, "settings.manage"):
         return HTMLResponse("You do not have permission to manage roles and permissions.",403)
     allowed_roles={"school_admin","teacher","parent","student","accountant","registrar"}
-    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","timetable.view","timetable.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
+    allowed_permissions={"students.view","students.create","students.edit","classes.view","classes.create","subjects.view","subjects.create","exams.view","exams.create","marks.view","marks.edit","attendance.view","attendance.edit","fees.view","fees.edit","finance.view","finance.edit","reports.view","reports.edit","staff.view","staff.create","staff.edit","communications.view","communications.edit","settings.view","settings.edit","audit.view","users.manage","class_teacher.view","class_teacher.edit","settings.manage","teacher_portal.view","teacher_portal.overview","teacher_portal.classes","teacher_portal.subjects","teacher_portal.submission","teacher_portal.class_monitoring","teacher_portal.performance","class_teacher.view","parent_portal.view","parent_portal.overview","parent_portal.academics","parent_portal.attendance","parent_portal.fees","parent_portal.notices","parent_portal.message","parent_portal.contact","student_portal.view","accountant_portal.view","accountant_portal.overview","accountant_portal.expense_create","accountant_portal.expenses","accountant_portal.vouchers","accountant_portal.lpos","accountant_portal.cashbook"}
     role_v=role.strip();perm_v=permission.strip();enabled_v=1 if int(enabled) else 0
     if role_v not in allowed_roles or perm_v not in allowed_permissions:
         return HTMLResponse("Invalid role or permission.",400)
