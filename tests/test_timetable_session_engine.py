@@ -201,6 +201,27 @@ class TimetableSessionEngineTests(unittest.TestCase):
             2,
         )
 
+        session = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:20",
+            class_ids=[], teacher_ids=[], day_id=self.day_id,
+            duration_periods=2, scheduling_requirement_id=requirement,
+            pattern_session_no=1,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_session_classes WHERE session_id=?",
+                (session,),
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
+                (session,),
+            ).fetchone()[0],
+            2,
+        )
+
     def test_generic_requirement_rejects_unbalanced_patterns_without_erasing_old_one(self):
         requirement = create_scheduling_requirement(
             self.db, 8, self.profile_id, "Grade 8 mathematics",
