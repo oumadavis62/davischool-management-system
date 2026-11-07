@@ -20328,7 +20328,7 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
         elif show_action and status == "accepted" and not enrolled:
             action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
         elif admission_no:
-            action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>View letter</a>"
+            action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>Print Letter</a>"
         if show_action and allow_edit_delete and not enrolled:
             action += (
                 f"<a class='admit-btn' href='/app/admissions/{applicant_id}/edit'>Edit</a>"
