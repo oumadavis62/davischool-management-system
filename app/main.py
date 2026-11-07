@@ -4123,13 +4123,20 @@ def exit_super_admin_portal_preview(request: Request):
         request.session.pop(key, None)
     return RedirectResponse("/super/portal-management", 303)
 
-# Register the isolated timetable configuration workspace after shared helpers exist.
-register_timetable_setup_routes(app, get_db, get_school_obj, module_page)
-register_timetable_builder_routes(app, get_db, get_school_obj, module_page)
-register_timetable_generator_routes(app, get_db, get_school_obj, module_page)
-register_timetable_view_routes(app, get_db, get_school_obj, module_page)
+# Render every administrator timetable page inside the active DaviSchool
+# application shell. The legacy module_page wrapper belongs to the retired
+# blue /school interface and must not be used by the new /app/timetable routes.
+def timetable_module_page(request, title, active, body, global_mode=False):
+    from app.new_ui import _school_page
+    return _school_page(request, title, body)
+
+# Register the isolated timetable workspace after shared helpers exist.
+register_timetable_setup_routes(app, get_db, get_school_obj, timetable_module_page)
+register_timetable_builder_routes(app, get_db, get_school_obj, timetable_module_page)
+register_timetable_generator_routes(app, get_db, get_school_obj, timetable_module_page)
+register_timetable_view_routes(app, get_db, get_school_obj, timetable_module_page)
 register_timetable_export_routes(app, get_db, get_school_obj)
-register_timetable_publishing_routes(app, get_db, get_school_obj, module_page)
+register_timetable_publishing_routes(app, get_db, get_school_obj, timetable_module_page)
 register_timetable_portal_routes(app, get_db)
 
 # Install tab-scoped signed sessions around the fully configured ASGI app.
