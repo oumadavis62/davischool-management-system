@@ -52,7 +52,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                         continued[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
         return starts, continued
 
-    @app.get("/school/timetable/export/pdf")
+    @app.get("/app/timetable/export/pdf")
     def timetable_export_pdf(
         request: Request,
         profile_id: int,
@@ -135,7 +135,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         filename = filename_prefix(school,result) + ".pdf"
         return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=" + filename})
 
-    @app.get("/school/timetable/export/xlsx")
+    @app.get("/app/timetable/export/xlsx")
     def timetable_export_xlsx(
         request: Request,
         profile_id: int,
