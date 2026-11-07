@@ -554,6 +554,33 @@ def get_db():
 
 def init_db():
     con = get_db(); cur = con.cursor()
+    # Permanent retirement of the previous timetable implementation.
+    # These tables are exclusively owned by the legacy timetable module;
+    # remove them in dependency order so the replacement starts with no
+    # inherited timetable configuration, placements, drafts, or history.
+    for _table in (
+        "timetable_edit_history",
+        "timetable_snapshots",
+        "timetable_publications",
+        "timetable_generation_runs",
+        "timetable_profile_availability",
+        "timetable_availability",
+        "timetable_lesson_classes",
+        "timetable_lesson_teachers",
+        "timetable_slots",
+        "timetable_lessons",
+        "timetable_constraints",
+        "timetable_rooms",
+        "timetable_days",
+        "timetable_periods",
+        "timetable_breaks",
+        "timetable_profiles",
+        "timetable_profile_migrations",
+        "timetable_manager_settings",
+        "timetable_settings",
+        "timetable",
+    ):
+        cur.execute("DROP TABLE IF EXISTS " + _table)
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, status TEXT DEFAULT 'active')")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
     # Additive account fields used by the current login and teacher-account
@@ -624,6 +651,10 @@ def init_extended_db():
     cur.execute("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY, school_id INTEGER, title TEXT, message TEXT, audience TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS sms_logs (id INTEGER PRIMARY KEY, school_id INTEGER, recipient TEXT, message TEXT, status TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS roles_permissions (id INTEGER PRIMARY KEY, school_id INTEGER, role TEXT, permission TEXT, enabled INTEGER DEFAULT 1)")
+    # Remove only legacy timetable authorization and audit artifacts.
+    cur.execute("DELETE FROM roles_permissions WHERE lower(COALESCE(permission,'')) LIKE '%timetable%'")
+    cur.execute("DELETE FROM system_audit WHERE lower(COALESCE(action,'')) LIKE '%timetable%' OR lower(COALESCE(details,'')) LIKE '%timetable%'")
+    cur.execute("DELETE FROM activity_log WHERE lower(COALESCE(action,'')) LIKE '%timetable%' OR lower(COALESCE(details,'')) LIKE '%timetable%'")
     cur.execute("CREATE TABLE IF NOT EXISTS integrations (id INTEGER PRIMARY KEY, school_id INTEGER, name TEXT, status TEXT, config TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS report_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER, exam_id INTEGER, comment TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER, student_id INTEGER, date TEXT, status TEXT)")
