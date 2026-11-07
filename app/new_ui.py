@@ -20932,6 +20932,7 @@ def admission_letter_print(request: Request, application_id: int):
     parent_email = _letter_get(student, "parent_email",
         _letter_get(student, "guardian_email", _letter_get(app_row, "parent_email")))
     school_name = _letter_get(school, "name", "DaviSchool")
+    school_level = _letter_get(school, "school_type")
     school_location = _letter_get(school, "location")
     school_phone = _letter_get(school, "phone")
     school_email = _letter_get(school, "email")
@@ -21027,7 +21028,7 @@ def admission_letter_print(request: Request, application_id: int):
         <h2>NOTICE OF ADMISSION</h2>
         <p class='letter-reference'>Admission confirmation · Ref: {escape(admission_no or str(application_id))}</p>
         <p>Dear <strong>{escape(parent_name)}</strong>,</p>
-        <p>We are pleased to formally notify you that <strong>{escape(learner_name)}</strong> has been admitted to <strong>{escape(class_name)}{(' - ' + escape(class_stream)) if class_stream else ''}</strong> at <strong>{escape(school_name)}</strong>. We warmly welcome the learner to our school community and look forward to supporting their academic growth, personal development and overall success.</p>
+        <p>We are pleased to formally notify you that <strong>{escape(learner_name)}</strong> has been admitted to <strong>{escape(class_name)}{(' - ' + escape(class_stream)) if class_stream else ''}</strong> at <strong>{escape(school_name)}</strong>{(', a ' + escape(school_level) + ' institution') if school_level else ''}. We warmly welcome the learner to our school community and look forward to supporting their academic growth, personal development and overall success.</p>
         <p>This notice confirms the learner's admission and provides the registration particulars for your reference. Kindly review the details below and retain this document for future correspondence with the school.</p>
         <section class='letter-section'><h3>LEARNER PARTICULARS</h3><div class='letter-grid'>{''.join(student_fields)}</div></section>
         <section class='letter-section'><h3>PARENT / GUARDIAN CONTACT</h3><div class='letter-grid'>
