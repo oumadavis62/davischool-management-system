@@ -1,5 +1,6 @@
 from datetime import datetime
 from html import escape
+import re
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -78,8 +79,8 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
  function addClose(dialog){
   if(!dialog||dialog.dataset.dsCloseReady==='1')return;
   dialog.dataset.dsCloseReady='1';
-  var existing=dialog.querySelector('button[aria-label*="close" i],button[title*="close" i],.lib-close,.inv-dialog-head button,.ps-dialog-close,.fac-dialog-close,.health-dialog-close,.tr-dialog-close,.ds-modal-close');
-  if(existing){existing.classList.add('ds-modal-close');if(!existing.getAttribute('aria-label'))existing.setAttribute('aria-label','Close dialog');if(!existing.getAttribute('title'))existing.setAttribute('title','Close');return;}
+  var existing=dialog.querySelector('button[aria-label*="close" i],button[title*="close" i],.lib-close,.inv-dialog-head button,.ps-dialog-close,.fac-dialog-close,.health-dialog-close,.tr-dialog-close,.tr-event-close,.tr-allocation-close,.tr-route-close,.ds-modal-close');
+  if(existing){if(!existing.getAttribute('aria-label'))existing.setAttribute('aria-label','Close dialog');if(!existing.getAttribute('title'))existing.setAttribute('title','Close');return;}
   var close=document.createElement('button');close.type='button';close.className='ds-modal-close';close.textContent='×';close.setAttribute('aria-label','Close dialog');close.title='Close';close.addEventListener('click',function(){dialog.close()});
   dialog.insertBefore(close,dialog.firstChild);
  }
@@ -88,7 +89,24 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>"""
-    return _school_page(request, title, body + shared + dialog_close_support)
+    response = _school_page(request, title, body + shared + dialog_close_support)
+    if isinstance(response, HTMLResponse):
+        # Keep transport page styles in the document head. Browsers can recover
+        # styles in the body, but moving them avoids inconsistent popup styling
+        # when dialogs are promoted into the browser top layer.
+        html = response.body.decode("utf-8")
+        style_blocks = re.findall(r"<style\\b[^>]*>.*?</style>", html, flags=re.IGNORECASE | re.DOTALL)
+        if style_blocks:
+            html = re.sub(r"<style\\b[^>]*>.*?</style>", "", html, flags=re.IGNORECASE | re.DOTALL)
+            html = html.replace("</head>", "\\n".join(style_blocks) + "</head>", 1)
+            response.body = html.encode("utf-8")
+            response.headers["content-length"] = str(len(response.body))
+        # Transport registers are operational pages; always serve their current
+        # markup and styles instead of allowing a stale browser/proxy response.
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 
