@@ -6433,7 +6433,7 @@ def finance_page(request: Request):
     expected=float(fee["expected"] or 0); collected=float(fee["paid"] or 0); outstanding=expected-collected
     rows="".join(f"<tr><td>{escape(str(p['student_name'] or ''))}</td><td>KES {float(p['amount'] or 0):,.2f}</td><td>{escape(str(p['date'] or ''))}</td><td>{escape(str(p['reference'] or ''))}</td><td>{escape(str(p['method'] or ''))}</td></tr>" for p in payments)
     body=f"""<div class='page finance-hub'><div class='fin-heading'><div><div class='eyebrow'>SCHOOL FINANCIAL CONTROL</div><h1>Finance & Accounts</h1><div class='muted'>One connected workspace for learner billing, collections, expenditure and accounting.</div></div><div class='fin-currency'>KES · Kenya Shilling</div></div>
-<div class='fin-tabs'><a class='fin-tab' href='/app/finance'><b>Overview</b><small>Financial position and activity</small></a><a class='fin-tab' href='/app/finance/fees'><b>Fees & Billing</b><small>Learner charges and balances</small></a><a class='fin-tab' href='/app/finance/fees'><b>Collections & Receipting</b><small>Payments and receipt register</small></a><a class='fin-tab' href='/app/accounting'><b>Accounts Payable</b><small>Expenses, vouchers and LPOs</small></a><a class='fin-tab' href='/app/accounting'><b>General Accounting</b><small>Accounting records and trial balance</small></a><a class='fin-tab' href='/app/accounting'><b>Cash & Banking</b><small>Cashbook and cash movement</small></a><a class='fin-tab' href='/app/accounting'><b>Financial Reports</b><small>Current finance summaries</small></a></div>
+<div class='fin-tabs'><a class='fin-tab' href='/app/finance'><b>Overview</b><small>Financial position and activity</small></a><a class='fin-tab' href='/app/finance/billing'><b>Fees & Billing</b><small>Learner charges and balances</small></a><a class='fin-tab' href='/app/finance/collections'><b>Collections & Receipting</b><small>Payments and receipt register</small></a><a class='fin-tab' href='/app/finance/payables'><b>Accounts Payable</b><small>Expenses, vouchers and LPOs</small></a><a class='fin-tab' href='/app/finance/ledger'><b>General Accounting</b><small>Accounting records and trial balance</small></a><a class='fin-tab' href='/app/finance/banking'><b>Cash & Banking</b><small>Cashbook and cash movement</small></a><a class='fin-tab' href='/app/finance/reports'><b>Financial Reports</b><small>Current finance summaries</small></a></div>
 <div class='grid'><div class='card'><div class='label'>Fees billed</div><div class='kpi'>KES {expected:,.2f}</div></div><div class='card'><div class='label'>Fees collected</div><div class='kpi'>KES {collected:,.2f}</div></div><div class='card'><div class='label'>Fee receivables</div><div class='kpi'>KES {outstanding:,.2f}</div></div><div class='card'><div class='label'>Recorded expenditure</div><div class='kpi'>KES {float(exp or 0):,.2f}</div></div></div>
 <div class='fin-columns'><div class='card section'><div class='fin-card-head'><div><h2>Income & collections</h2><p>Recent learner fee receipts</p></div><a class='fin-link' href='/app/finance/fees'>Open fee register →</a></div><div class='table-scroll'><table><thead><tr><th>Learner</th><th>Amount</th><th>Date</th><th>Receipt / Ref</th><th>Method</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No fee payments recorded.</td></tr>'}</tbody></table></div></div>
 <div class='card section'><h2>Accounting activity</h2><div class='fin-stat'><span>Payment vouchers</span><b>{int(voucher_count)}</b></div><div class='fin-stat'><span>Purchase orders / LPOs</span><b>{int(lpo_count)}</b></div><div class='fin-stat'><span>Cashbook debits</span><b>KES {float(cash['debit'] or 0):,.2f}</b></div><div class='fin-stat'><span>Cashbook credits</span><b>KES {float(cash['credit'] or 0):,.2f}</b></div><a class='fin-link' href='/app/accounting'>Open accounting workspace →</a></div></div>
@@ -20512,3 +20512,478 @@ def admission_reports_page(request: Request):
       <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div></div></div>
       <style>.adm-page{{max-width:1200px}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{color:#687c6d}}.adm-report-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}.adm-report-grid>div{{background:#fff;border:1px solid #dce9de;border-radius:13px;padding:18px;display:grid;gap:8px}}.adm-report-grid small{{font-size:11px;color:#6b7e6d;font-weight:800}}.adm-report-grid strong{{font-size:25px;color:#176b3a}}@media(max-width:800px){{.adm-report-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}</style>"""
     return _school_page(request,"Admission Reports",body)
+
+
+# ---------------------------------------------------------------------------
+# Finance & Accounts: integrated billing, collections, payables, ledger,
+# banking, budgets and reporting. Additive tables preserve legacy records.
+# ---------------------------------------------------------------------------
+def _finance_workspace_schema(cur):
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_accounts(
+        school_id INTEGER NOT NULL, code TEXT NOT NULL, name TEXT NOT NULL,
+        account_type TEXT NOT NULL, opening_balance REAL NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(school_id,code))""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_journals(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, journal_date TEXT NOT NULL,
+        reference TEXT, description TEXT NOT NULL, status TEXT NOT NULL,
+        created_by TEXT, created_at TEXT NOT NULL, approved_by TEXT, posted_at TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_journal_lines(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, journal_id TEXT NOT NULL,
+        account_code TEXT NOT NULL, debit REAL NOT NULL DEFAULT 0,
+        credit REAL NOT NULL DEFAULT 0, memo TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_suppliers(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT NOT NULL,
+        phone TEXT, email TEXT, tax_pin TEXT, created_at TEXT NOT NULL)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_bills(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, supplier_id TEXT NOT NULL,
+        invoice_no TEXT NOT NULL, bill_date TEXT NOT NULL, due_date TEXT,
+        description TEXT, amount REAL NOT NULL, status TEXT NOT NULL,
+        created_at TEXT NOT NULL, paid_at TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_bank_accounts(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, bank_name TEXT NOT NULL,
+        account_name TEXT NOT NULL, account_number TEXT, opening_balance REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_bank_lines(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, account_id TEXT NOT NULL,
+        line_date TEXT NOT NULL, reference TEXT, description TEXT, amount REAL NOT NULL,
+        direction TEXT NOT NULL, reconciled INTEGER NOT NULL DEFAULT 0, cashbook_id TEXT)""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS ds_fin_budgets(
+        id TEXT PRIMARY KEY, school_id INTEGER NOT NULL, budget_year TEXT NOT NULL,
+        department TEXT NOT NULL, account_code TEXT, amount REAL NOT NULL,
+        created_at TEXT NOT NULL)""")
+    seed = [
+        ("1000","Cash on Hand","Asset"),("1010","Bank Accounts","Asset"),
+        ("1020","Mobile Money Clearing","Asset"),("1100","Fee Receivables","Asset"),
+        ("2000","Accounts Payable","Liability"),("3000","Accumulated Funds","Equity"),
+        ("4000","School Income","Income"),("4100","Other Income","Income"),
+        ("5000","Staff Costs","Expense"),("5100","Utilities","Expense"),
+        ("5200","Learning Materials","Expense"),("5300","Repairs & Maintenance","Expense"),
+        ("5400","Transport & Operations","Expense"),("5900","Other Expenses","Expense")
+    ]
+    for code,name,kind in seed:
+        cur.execute("INSERT INTO ds_fin_accounts(school_id,code,name,account_type) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM ds_fin_accounts WHERE school_id=? AND code=?)",
+                    (sid_placeholder if False else 0,code,name,kind,0,code))
+
+
+def _finance_now():
+    return datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _finance_uid():
+    import uuid
+    return uuid.uuid4().hex
+
+
+def _finance_access(request):
+    sid = _school_session(request)
+    if not sid:
+        return None
+    role = str(request.session.get("role") or "")
+    if role not in ("school_admin","registrar"):
+        return None
+    if not (_require_permission(request,sid,"finance.view") or _require_permission(request,sid,"fees.view")):
+        return None
+    return sid
+
+
+def _finance_prepare(cur, sid):
+    _finance_workspace_schema(cur, sid)
+
+
+def _finance_tabs(active):
+    items = [
+        ("overview","Overview"),("billing","Fees & Billing"),("collections","Collections & Receipting"),
+        ("payables","Accounts Payable"),("ledger","General Accounting"),("banking","Cash & Banking"),
+        ("budgets","Budgets & Planning"),("reports","Financial Reports")
+    ]
+    return "<nav class='fx-tabs'>" + "".join(
+        "<a class='%s' href='/app/finance/%s'>%s</a>" % ("active" if key==active else "",key,label)
+        for key,label in items
+    ) + "</nav>"
+
+
+def _finance_table(headers, rows, empty):
+    head = "".join("<th>%s</th>" % escape(str(h)) for h in headers)
+    body = rows or "<tr><td colspan='%s' class='fx-empty'>%s</td></tr>" % (max(1,len(headers)),escape(empty))
+    return "<div class='fx-table-wrap'><table><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>" % (head,body)
+
+
+def _finance_cell(value):
+    return escape(str(value if value is not None else ""))
+
+
+@router.get("/app/finance/{section}", response_class=HTMLResponse)
+def finance_workspace_section(request: Request, section: str):
+    sid = _finance_access(request)
+    if not sid:
+        return RedirectResponse("/",303)
+    allowed = {"billing","collections","payables","ledger","banking","budgets","reports"}
+    if section not in allowed:
+        return RedirectResponse("/app/finance",303)
+    con = _db()
+    cur = con.cursor()
+    _finance_prepare(cur,sid)
+    title = {
+        "billing":"Fees & Billing","collections":"Collections & Receipting",
+        "payables":"Accounts Payable","ledger":"General Accounting",
+        "banking":"Cash & Banking","budgets":"Budgets & Financial Planning",
+        "reports":"Financial Reports"
+    }[section]
+    content = ""
+    if section == "billing":
+        charges = cur.execute("""SELECT f.id,f.amount,f.paid,f.status,f.description,f.due_date,
+            s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
+            AND s.school_id=f.school_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 250""",(sid,)).fetchall()
+        students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
+        opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
+        rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            _finance_cell(x["student_name"]),_finance_cell(x["admission_no"]),float(x["amount"] or 0),
+            float(x["paid"] or 0),max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),
+            _finance_cell(x["status"] or "Pending"),_finance_cell(x["due_date"] or "")) for x in charges)
+        content = """<div class='fx-card'><h2>Create learner charge</h2><p>Charges are attached to the learner record and appear in their running fee balance.</p>
+        <form method='post' action='/app/finance/billing/charge' class='fx-form'>
+        <select name='student_id' required><option value=''>Select learner</option>%s</select>
+        <input name='description' required placeholder='Charge description / fee item'>
+        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
+        <input name='due_date' type='date'><button type='submit'>Create charge</button></form></div>
+        <div class='fx-card'><h2>Fee accounts</h2>%s</div>""" % (opts,_finance_table(["Learner","Admission No.","Billed","Paid","Balance","Status","Due date"],rows,"No fee charges recorded."))
+    elif section == "collections":
+        payments = cur.execute("""SELECT p.id,p.amount,p.reference,p.method,p.date,p.received_by,s.name learner
+            FROM fee_payments p LEFT JOIN students s ON s.id=p.student_id AND s.school_id=p.school_id
+            WHERE p.school_id=? ORDER BY p.id DESC LIMIT 300""",(sid,)).fetchall()
+        students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
+        opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
+        rows = "".join("<tr><td>RCP-%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
+            int(x["id"]),_finance_cell(x["learner"]),float(x["amount"] or 0),_finance_cell(x["method"]),
+            _finance_cell(x["reference"]),_finance_cell(x["date"]),_finance_cell(x["received_by"])) for x in payments)
+        content = """<div class='fx-card'><h2>Receive payment</h2><p>Payments are allocated against the learner's oldest outstanding charges. Overpayments are rejected.</p>
+        <form method='post' action='/app/finance/collections/receive' class='fx-form'>
+        <select name='student_id' required><option value=''>Select learner</option>%s</select>
+        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
+        <select name='method'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option><option>Card</option><option>Other</option></select>
+        <input name='reference' placeholder='M-Pesa / bank / receipt reference'><button type='submit'>Record & issue receipt</button></form></div>
+        <div class='fx-card'><h2>Receipt register</h2>%s</div>"""%(opts,_finance_table(["Receipt No.","Learner","Amount","Method","Reference","Date","Received by"],rows,"No payments recorded."))
+    elif section == "payables":
+        suppliers = cur.execute("SELECT * FROM ds_fin_suppliers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+        bills = cur.execute("""SELECT b.*,s.name supplier_name FROM ds_fin_bills b
+            JOIN ds_fin_suppliers s ON s.id=b.supplier_id AND s.school_id=b.school_id
+            WHERE b.school_id=? ORDER BY b.id DESC LIMIT 200""",(sid,)).fetchall()
+        sopts = "".join("<option value='%s'>%s</option>"%(x["id"],_finance_cell(x["name"])) for x in suppliers)
+        sr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["name"]),_finance_cell(x["phone"]),_finance_cell(x["email"]),_finance_cell(x["tax_pin"])) for x in suppliers)
+        br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            _finance_cell(x["supplier_name"]),_finance_cell(x["invoice_no"]),_finance_cell(x["due_date"]),
+            float(x["amount"] or 0),_finance_cell(x["status"]),(
+                "<form method='post' action='/app/finance/payables/pay'><input type='hidden' name='bill_id' value='%s'><button>Mark paid</button></form>"%x["id"]
+                if x["status"]=="Approved" else "")) for x in bills)
+        content = """<div class='fx-two'><div class='fx-card'><h2>Supplier register</h2><form method='post' action='/app/finance/payables/supplier' class='fx-form'>
+        <input name='name' required placeholder='Supplier name'><input name='phone' placeholder='Phone'><input name='email' type='email' placeholder='Email'><input name='tax_pin' placeholder='KRA PIN'><button>Add supplier</button></form>%s</div>
+        <div class='fx-card'><h2>Supplier invoice / bill</h2><form method='post' action='/app/finance/payables/bill' class='fx-form'>
+        <select name='supplier_id' required><option value=''>Select supplier</option>%s</select><input name='invoice_no' required placeholder='Supplier invoice no.'>
+        <input name='bill_date' type='date' required><input name='due_date' type='date'><input name='description' placeholder='Description'>
+        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Create draft bill</button></form></div></div>
+        <div class='fx-card'><h2>Supplier directory</h2>%s</div><div class='fx-card'><h2>Payables register</h2><p>Draft bills must be approved before payment. Payment is recorded in the cashbook and expense register.</p>%s</div>"""%(
+            _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),sopts,
+            _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),
+            _finance_table(["Supplier","Invoice","Due date","Amount","Status","Action"],br,"No supplier bills yet."))
+    elif section == "ledger":
+        accounts = cur.execute("SELECT * FROM ds_fin_accounts WHERE school_id=? AND active=1 ORDER BY code",(sid,)).fetchall()
+        journals = cur.execute("SELECT * FROM ds_fin_journals WHERE school_id=? ORDER BY created_at DESC LIMIT 100",(sid,)).fetchall()
+        ar = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td></tr>"%(
+            _finance_cell(x["code"]),_finance_cell(x["name"]),_finance_cell(x["account_type"]),
+            "Active" if x["active"] else "Inactive",float(x["opening_balance"] or 0)) for x in accounts)
+        jr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
+            _finance_cell(x["journal_date"]),_finance_cell(x["reference"]),_finance_cell(x["description"]),
+            _finance_cell(x["status"]),(
+                "<form method='post' action='/app/finance/ledger/post'><input type='hidden' name='journal_id' value='%s'><button>Post</button></form>"%x["id"]
+                if x["status"]=="Draft" else _finance_cell(x["posted_at"])),
+            _finance_cell(x["created_by"])) for x in journals)
+        opts = "".join("<option value='%s'>%s · %s</option>"%(_finance_cell(x["code"]),_finance_cell(x["code"]),_finance_cell(x["name"])) for x in accounts)
+        content = """<div class='fx-card'><h2>Chart of accounts</h2><p>Starter school chart. Additions are school-specific and do not change existing records.</p>%s
+        <form method='post' action='/app/finance/ledger/account' class='fx-form'><input name='code' required placeholder='Account code'><input name='name' required placeholder='Account name'>
+        <select name='account_type'><option>Asset</option><option>Liability</option><option>Equity</option><option>Income</option><option>Expense</option></select><input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
+        <div class='fx-card'><h2>New balanced journal</h2><p>Enter equal debit and credit values. Journals remain drafts until explicitly posted.</p>
+        <form method='post' action='/app/finance/ledger/journal' class='fx-form'><input name='journal_date' type='date' required><input name='reference' placeholder='Reference'>
+        <input name='description' required placeholder='Journal description'><select name='debit_account' required><option value=''>Debit account</option>%s</select>
+        <select name='credit_account' required><option value=''>Credit account</option>%s</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Save draft journal</button></form></div>
+        <div class='fx-card'><h2>Journal register</h2>%s</div>"""%(_finance_table(["Code","Account","Type","Status","Opening balance"],ar,"No accounts."),
+            opts,opts,_finance_table(["Date","Reference","Description","Status","Posted at","Created by"],jr,"No journals yet."))
+    elif section == "banking":
+        banks = cur.execute("SELECT * FROM ds_fin_bank_accounts WHERE school_id=? ORDER BY bank_name",(sid,)).fetchall()
+        lines = cur.execute("""SELECT l.*,b.bank_name,b.account_name FROM ds_fin_bank_lines l
+            JOIN ds_fin_bank_accounts b ON b.id=l.account_id AND b.school_id=l.school_id
+            WHERE l.school_id=? ORDER BY l.line_date DESC LIMIT 250""",(sid,)).fetchall()
+        opts = "".join("<option value='%s'>%s · %s</option>"%(x["id"],_finance_cell(x["bank_name"]),_finance_cell(x["account_name"])) for x in banks)
+        br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            _finance_cell(x["bank_name"]),_finance_cell(x["line_date"]),_finance_cell(x["reference"]),
+            _finance_cell(x["description"]),float(x["amount"] or 0),_finance_cell(x["direction"]),
+            "Reconciled" if x["reconciled"] else "<form method='post' action='/app/finance/banking/reconcile'><input type='hidden' name='line_id' value='%s'><button>Match cashbook</button></form>"%x["id"]) for x in lines)
+        content = """<div class='fx-two'><div class='fx-card'><h2>Bank / cash account</h2><form method='post' action='/app/finance/banking/account' class='fx-form'>
+        <input name='bank_name' required placeholder='Bank / M-Pesa / Cash'><input name='account_name' required placeholder='Account name'><input name='account_number' placeholder='Account number (optional)'>
+        <input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
+        <div class='fx-card'><h2>Statement line entry</h2><p>Enter or import statement lines, then match them to recorded cashbook transactions.</p>
+        <form method='post' action='/app/finance/banking/line' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select>
+        <input name='line_date' type='date' required><input name='reference' placeholder='Bank reference'><input name='description' placeholder='Description'>
+        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount'><select name='direction'><option>Credit</option><option>Debit</option></select><button>Add statement line</button></form></div></div>
+        <div class='fx-card'><h2>Reconciliation register</h2>%s</div>"""%(opts,_finance_table(["Account","Date","Reference","Description","Amount","Direction","Match"],br,"No statement lines."))
+    elif section == "budgets":
+        budgets = cur.execute("SELECT * FROM ds_fin_budgets WHERE school_id=? ORDER BY budget_year DESC,department",(sid,)).fetchall()
+        actuals = cur.execute("SELECT category,COALESCE(SUM(amount),0) actual FROM expenses WHERE school_id=? GROUP BY category",(sid,)).fetchall()
+        actual_map = {str(x["category"] or "").strip().lower():float(x["actual"] or 0) for x in actuals}
+        rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(
+            _finance_cell(x["budget_year"]),_finance_cell(x["department"]),float(x["amount"] or 0),
+            actual_map.get(str(x["department"] or "").strip().lower(),0),
+            float(x["amount"] or 0)-actual_map.get(str(x["department"] or "").strip().lower(),0)) for x in budgets)
+        content = """<div class='fx-card'><h2>Annual / departmental budget</h2><form method='post' action='/app/finance/budgets/add' class='fx-form'>
+        <input name='budget_year' required placeholder='Financial year e.g. 2027'><input name='department' required placeholder='Department / expense category'>
+        <input name='account_code' placeholder='Account code (optional)'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Budget amount (KES)'><button>Save budget</button></form></div>
+        <div class='fx-card'><h2>Budget vs recorded expenditure</h2><p>Actuals are matched to the existing expense category field.</p>%s</div>"""%_finance_table(["Year","Department","Budget","Recorded actual","Variance"],rows,"No budgets created.")
+    else:
+        fee = cur.execute("SELECT COALESCE(SUM(amount),0) billed,COALESCE(SUM(paid),0) collected FROM fees WHERE school_id=?",(sid,)).fetchone()
+        exp = cur.execute("SELECT COALESCE(SUM(amount),0) amount FROM expenses WHERE school_id=?",(sid,)).fetchone()
+        cash = cur.execute("SELECT COALESCE(SUM(debit),0) debits,COALESCE(SUM(credit),0) credits FROM cashbook WHERE school_id=?",(sid,)).fetchone()
+        supplier_due = cur.execute("SELECT COALESCE(SUM(amount),0) amount FROM ds_fin_bills WHERE school_id=? AND status IN ('Draft','Approved')",(sid,)).fetchone()
+        content = """<div class='fx-kpis'><div><small>Fees billed</small><b>KES %,.2f</b></div><div><small>Fees collected</small><b>KES %,.2f</b></div><div><small>Fee balance</small><b>KES %,.2f</b></div><div><small>Recorded expenses</small><b>KES %,.2f</b></div><div><small>Open supplier bills</small><b>KES %,.2f</b></div></div>
+        <div class='fx-card'><h2>Cashbook movement</h2><p>These are recorded cashbook totals, not a substitute for a balanced trial balance.</p>
+        <div class='fx-kpis'><div><small>Debits</small><b>KES %,.2f</b></div><div><small>Credits</small><b>KES %,.2f</b></div></div></div>
+        <div class='fx-card'><h2>Accounting report scope</h2><p>Use General Accounting for posted double-entry journals and the chart of accounts. Use Cash & Banking to reconcile statement lines. Existing historical fees, receipts and expenses remain in their original registers.</p></div>"""%(
+            float(fee["billed"] or 0),float(fee["collected"] or 0),float(fee["billed"] or 0)-float(fee["collected"] or 0),
+            float(exp["amount"] or 0),float(supplier_due["amount"] or 0),float(cash["debits"] or 0),float(cash["credits"] or 0))
+    con.commit()
+    con.close()
+    body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
+    <style>
+    .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .fx-eyebrow{font-size:11px;letter-spacing:1.2px;color:#27734c;font-weight:800}
+    .fx-heading h1{margin:5px 0;font-size:26px}.fx-heading p{margin:0;color:#718078;font-size:13px}
+    .fx-back{color:#246b45;font-weight:800;text-decoration:none}
+    .fx-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 20px}
+    .fx-tabs a{padding:10px 13px;border:1px solid #dce8df;border-radius:9px;background:#fff;color:#315342;text-decoration:none;font-size:12px;font-weight:750}
+    .fx-tabs a.active,.fx-tabs a:hover{background:#e8f3eb;border-color:#74a88a;color:#185333}
+    .fx-card{background:#fff;border:1px solid #e2eae3;border-radius:13px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #193d2610}
+    .fx-card h2{font-size:17px;margin:0 0 8px;color:#254d36}.fx-card p{font-size:12px;color:#718078;margin:0 0 12px}
+    .fx-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin:10px 0 14px}
+    .fx-form input,.fx-form select{min-width:0;width:100%;padding:11px;border:1px solid #d7e2d9;border-radius:8px;background:#fff;color:#243b2c}
+    .fx-form button,.fx-table-wrap button{border:0;border-radius:8px;padding:10px 13px;background:#236b45;color:#fff;font-weight:800;cursor:pointer}
+    .fx-table-wrap{overflow:auto;width:100%}.fx-table-wrap table{width:100%;border-collapse:collapse;font-size:12px;min-width:650px}
+    .fx-table-wrap th,.fx-table-wrap td{padding:10px;border-bottom:1px solid #edf1ed;text-align:left;white-space:nowrap}
+    .fx-table-wrap th{color:#315342;background:#f6faf6;font-weight:800}.fx-empty{text-align:center;color:#829087;padding:20px!important}
+    .fx-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .fx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}
+    .fx-kpis>div{background:#fff;border:1px solid #e2eae3;border-radius:12px;padding:14px;display:grid;gap:7px}
+    .fx-kpis small{color:#718078;font-size:12px}.fx-kpis b{font-size:19px;color:#214d34}
+    @media(max-width:700px){.fx-two{grid-template-columns:1fr}.fx-heading h1{font-size:22px}.fx-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+    </style>""" % (escape(title),_finance_tabs(section),content)
+    return _school_page(request,title,body)
+
+
+@router.post("/app/finance/billing/charge")
+def finance_billing_charge(request: Request, student_id:int=Form(...), description:str=Form(...), amount:float=Form(...), due_date:str=Form("")):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if amount<=0 or not description.strip():return HTMLResponse("Enter a valid description and positive amount.",400)
+    con=_db();cur=con.cursor()
+    student=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
+    if not student:con.close();return HTMLResponse("Learner not found in this school.",404)
+    cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",
+                (sid,student_id,amount,0,description.strip(),due_date or None,"Pending"))
+    _audit(cur,sid,request,"FEE_CHARGE", "Created fee charge %s for learner %s"%(amount,student_id))
+    con.commit();con.close()
+    return RedirectResponse("/app/finance/billing",303)
+
+
+@router.post("/app/finance/collections/receive")
+def finance_collections_receive(request: Request, student_id:int=Form(...), amount:float=Form(...), method:str=Form("Cash"), reference:str=Form("")):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if amount<=0:return HTMLResponse("Payment must be greater than zero.",400)
+    con=_db();cur=con.cursor()
+    if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
+        con.close();return HTMLResponse("Learner not found in this school.",404)
+    charges=cur.execute("SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND COALESCE(amount,0)>COALESCE(paid,0) ORDER BY id",(sid,student_id)).fetchall()
+    outstanding=sum(max(0,float(x["amount"] or 0)-float(x["paid"] or 0)) for x in charges)
+    if outstanding<=0 or amount>outstanding:
+        con.close();return HTMLResponse("Payment must not exceed the learner's outstanding balance (KES %.2f)."%outstanding,400)
+    day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    cur.execute("INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)",
+                (sid,student_id,amount,reference.strip(),method.strip() or "Cash",day,str(request.session.get("email",""))))
+    remaining=amount
+    for item in charges:
+        if remaining<=0:break
+        balance=max(0,float(item["amount"] or 0)-float(item["paid"] or 0))
+        applied=min(remaining,balance);new_paid=float(item["paid"] or 0)+applied;remaining-=applied
+        cur.execute("UPDATE fees SET paid=?,status=? WHERE id=? AND school_id=?",
+                    (new_paid,"Paid" if new_paid>=float(item["amount"] or 0) else "Partial",item["id"],sid))
+    cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",
+                (sid,day,reference.strip(),"School fee receipt",0,amount,"Fees"))
+    _audit(cur,sid,request,"FEE_PAYMENT","Received KES %.2f for learner %s"%(amount,student_id))
+    con.commit();con.close()
+    return RedirectResponse("/app/finance/collections",303)
+
+
+@router.post("/app/finance/payables/supplier")
+def finance_supplier_add(request: Request,name:str=Form(...),phone:str=Form(""),email:str=Form(""),tax_pin:str=Form("")):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not name.strip():return HTMLResponse("Supplier name is required.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    cur.execute("INSERT INTO ds_fin_suppliers(id,school_id,name,phone,email,tax_pin,created_at) VALUES(?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,name.strip(),phone.strip(),email.strip(),tax_pin.strip(),_finance_now()))
+    _audit(cur,sid,request,"SUPPLIER_CREATE",name.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/payables",303)
+
+
+@router.post("/app/finance/payables/bill")
+def finance_supplier_bill(request: Request,supplier_id:str=Form(...),invoice_no:str=Form(...),bill_date:str=Form(...),due_date:str=Form(""),description:str=Form(""),amount:float=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if amount<=0 or not invoice_no.strip():return HTMLResponse("Enter a valid invoice number and positive amount.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    supplier=cur.execute("SELECT id FROM ds_fin_suppliers WHERE id=? AND school_id=?",(supplier_id,sid)).fetchone()
+    if not supplier:con.close();return HTMLResponse("Supplier not found.",404)
+    duplicate=cur.execute("SELECT id FROM ds_fin_bills WHERE school_id=? AND supplier_id=? AND invoice_no=?",(sid,supplier_id,invoice_no.strip())).fetchone()
+    if duplicate:con.close();return HTMLResponse("That supplier invoice is already recorded.",409)
+    cur.execute("INSERT INTO ds_fin_bills(id,school_id,supplier_id,invoice_no,bill_date,due_date,description,amount,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,supplier_id,invoice_no.strip(),bill_date,due_date or None,description.strip(),amount,"Draft",_finance_now()))
+    _audit(cur,sid,request,"SUPPLIER_BILL_CREATE",invoice_no.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/payables",303)
+
+
+@router.post("/app/finance/payables/approve")
+def finance_supplier_bill_approve(request: Request,bill_id:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor();bill=cur.execute("SELECT id,invoice_no,status FROM ds_fin_bills WHERE id=? AND school_id=?",(bill_id,sid)).fetchone()
+    if not bill:con.close();return HTMLResponse("Bill not found.",404)
+    if bill["status"]!="Draft":con.close();return HTMLResponse("Only draft bills can be approved.",409)
+    cur.execute("UPDATE ds_fin_bills SET status='Approved' WHERE id=? AND school_id=?",(bill_id,sid))
+    _audit(cur,sid,request,"SUPPLIER_BILL_APPROVE",bill["invoice_no"]);con.commit();con.close()
+    return RedirectResponse("/app/finance/payables",303)
+
+
+@router.post("/app/finance/payables/pay")
+def finance_supplier_bill_pay(request: Request,bill_id:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    bill=cur.execute("""SELECT b.*,s.name supplier FROM ds_fin_bills b JOIN ds_fin_suppliers s
+        ON s.id=b.supplier_id AND s.school_id=b.school_id WHERE b.id=? AND b.school_id=?""",(bill_id,sid)).fetchone()
+    if not bill:con.close();return HTMLResponse("Bill not found.",404)
+    if bill["status"]!="Approved":con.close();return HTMLResponse("Only approved bills can be paid.",409)
+    day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",
+                (sid,day,bill["invoice_no"],"Supplier payment: "+str(bill["supplier"]),float(bill["amount"]),0,"Accounts Payable"))
+    cur.execute("UPDATE ds_fin_bills SET status='Paid',paid_at=? WHERE id=? AND school_id=?",(_finance_now(),bill_id,sid))
+    _audit(cur,sid,request,"SUPPLIER_BILL_PAY",bill["invoice_no"]);con.commit();con.close()
+    return RedirectResponse("/app/finance/payables",303)
+
+
+@router.post("/app/finance/ledger/account")
+def finance_account_add(request: Request,code:str=Form(...),name:str=Form(...),account_type:str=Form(...),opening_balance:float=Form(0)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{2,16}",code.strip()) or not name.strip() or account_type not in ("Asset","Liability","Equity","Income","Expense"):
+        return HTMLResponse("Enter a valid account code, name and account type.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    try:
+        cur.execute("INSERT INTO ds_fin_accounts(school_id,code,name,account_type,opening_balance) VALUES(?,?,?,?,?)",
+                    (sid,code.strip(),name.strip(),account_type,opening_balance))
+    except Exception:
+        con.close();return HTMLResponse("That account code already exists.",409)
+    _audit(cur,sid,request,"FINANCE_ACCOUNT_CREATE",code.strip()+" "+name.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/ledger",303)
+
+
+@router.post("/app/finance/ledger/journal")
+def finance_journal_add(request: Request,journal_date:str=Form(...),reference:str=Form(""),description:str=Form(...),debit_account:str=Form(...),credit_account:str=Form(...),amount:float=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if amount<=0 or debit_account==credit_account or not description.strip():return HTMLResponse("Enter a description, two different accounts and a positive amount.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    valid=cur.execute("SELECT code FROM ds_fin_accounts WHERE school_id=? AND active=1 AND code IN (?,?)",(sid,debit_account,credit_account)).fetchall()
+    if len(valid)!=2:con.close();return HTMLResponse("Select two active accounts belonging to this school.",400)
+    jid=_finance_uid()
+    cur.execute("INSERT INTO ds_fin_journals(id,school_id,journal_date,reference,description,status,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (jid,sid,journal_date,reference.strip(),description.strip(),"Draft",str(request.session.get("email","")),_finance_now()))
+    cur.execute("INSERT INTO ds_fin_journal_lines(id,school_id,journal_id,account_code,debit,credit,memo) VALUES(?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,jid,debit_account,amount,0,description.strip()))
+    cur.execute("INSERT INTO ds_fin_journal_lines(id,school_id,journal_id,account_code,debit,credit,memo) VALUES(?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,jid,credit_account,0,amount,description.strip()))
+    _audit(cur,sid,request,"FINANCE_JOURNAL_DRAFT",reference.strip() or jid);con.commit();con.close()
+    return RedirectResponse("/app/finance/ledger",303)
+
+
+@router.post("/app/finance/ledger/post")
+def finance_journal_post(request: Request,journal_id:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    journal=cur.execute("SELECT * FROM ds_fin_journals WHERE id=? AND school_id=?",(journal_id,sid)).fetchone()
+    if not journal:con.close();return HTMLResponse("Journal not found.",404)
+    if journal["status"]!="Draft":con.close();return HTMLResponse("Only draft journals can be posted.",409)
+    sums=cur.execute("SELECT COALESCE(SUM(debit),0) debit,COALESCE(SUM(credit),0) credit,COUNT(*) n FROM ds_fin_journal_lines WHERE journal_id=? AND school_id=?",(journal_id,sid)).fetchone()
+    debit=float(sums["debit"] or 0);credit=float(sums["credit"] or 0)
+    if int(sums["n"] or 0)<2 or abs(debit-credit)>0.005 or debit<=0:
+        con.close();return HTMLResponse("Journal is not balanced and cannot be posted.",409)
+    cur.execute("UPDATE ds_fin_journals SET status='Posted',approved_by=?,posted_at=? WHERE id=? AND school_id=?",
+                (str(request.session.get("email","")),_finance_now(),journal_id,sid))
+    _audit(cur,sid,request,"FINANCE_JOURNAL_POST",journal["reference"] or journal_id);con.commit();con.close()
+    return RedirectResponse("/app/finance/ledger",303)
+
+
+@router.post("/app/finance/banking/account")
+def finance_bank_account_add(request: Request,bank_name:str=Form(...),account_name:str=Form(...),account_number:str=Form(""),opening_balance:float=Form(0)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not bank_name.strip() or not account_name.strip():return HTMLResponse("Bank and account name are required.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    cur.execute("INSERT INTO ds_fin_bank_accounts(id,school_id,bank_name,account_name,account_number,opening_balance,created_at) VALUES(?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,bank_name.strip(),account_name.strip(),account_number.strip(),opening_balance,_finance_now()))
+    _audit(cur,sid,request,"BANK_ACCOUNT_CREATE",bank_name.strip()+" "+account_name.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/banking",303)
+
+
+@router.post("/app/finance/banking/line")
+def finance_bank_line_add(request: Request,account_id:str=Form(...),line_date:str=Form(...),reference:str=Form(""),description:str=Form(""),amount:float=Form(...),direction:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if amount<=0 or direction not in ("Debit","Credit"):return HTMLResponse("Enter a positive amount and valid direction.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    if not cur.execute("SELECT id FROM ds_fin_bank_accounts WHERE id=? AND school_id=?",(account_id,sid)).fetchone():
+        con.close();return HTMLResponse("Bank account not found.",404)
+    cur.execute("INSERT INTO ds_fin_bank_lines(id,school_id,account_id,line_date,reference,description,amount,direction) VALUES(?,?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,account_id,line_date,reference.strip(),description.strip(),amount,direction))
+    _audit(cur,sid,request,"BANK_STATEMENT_LINE",reference.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/banking",303)
+
+
+@router.post("/app/finance/banking/reconcile")
+def finance_bank_line_reconcile(request: Request,line_id:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    con=_db();cur=con.cursor()
+    line=cur.execute("SELECT * FROM ds_fin_bank_lines WHERE id=? AND school_id=?",(line_id,sid)).fetchone()
+    if not line:con.close();return HTMLResponse("Statement line not found.",404)
+    if line["reconciled"]:con.close();return HTMLResponse("This statement line is already reconciled.",409)
+    candidates=cur.execute("""SELECT id,debit,credit FROM cashbook WHERE school_id=? AND COALESCE(reference,'')=?
+        AND ABS(COALESCE(debit,0)-?)<0.01 AND ABS(COALESCE(credit,0)-?)<0.01 ORDER BY id DESC LIMIT 2""",
+        (sid,str(line["reference"] or ""),float(line["amount"]) if line["direction"]=="Debit" else 0,
+         float(line["amount"]) if line["direction"]=="Credit" else 0)).fetchall()
+    if len(candidates)!=1:
+        con.close();return HTMLResponse("A unique matching cashbook entry was not found. Check the reference and amount before reconciling.",409)
+    cur.execute("UPDATE ds_fin_bank_lines SET reconciled=1,cashbook_id=? WHERE id=? AND school_id=?",
+                (str(candidates[0]["id"]),line_id,sid))
+    _audit(cur,sid,request,"BANK_RECONCILE",str(line["reference"] or line_id));con.commit();con.close()
+    return RedirectResponse("/app/finance/banking",303)
+
+
+@router.post("/app/finance/budgets/add")
+def finance_budget_add(request: Request,budget_year:str=Form(...),department:str=Form(...),account_code:str=Form(""),amount:float=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not re.fullmatch(r"\d{4}",budget_year.strip()) or not department.strip() or amount<=0:
+        return HTMLResponse("Enter a valid four-digit year, department and positive budget amount.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    cur.execute("INSERT INTO ds_fin_budgets(id,school_id,budget_year,department,account_code,amount,created_at) VALUES(?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,budget_year.strip(),department.strip(),account_code.strip(),amount,_finance_now()))
+    _audit(cur,sid,request,"FINANCE_BUDGET_CREATE",budget_year.strip()+" "+department.strip());con.commit();con.close()
+    return RedirectResponse("/app/finance/budgets",303)
