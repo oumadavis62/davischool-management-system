@@ -20252,7 +20252,7 @@ def _admission_ui_enhancements():
       const reportTrigger=page.querySelector('.adm-report-filter-trigger');
       if(reportTrigger)reportTrigger.addEventListener('click',()=>{
         mode='report';activeForm=null;title.textContent='Filter admission report';desc.textContent='Choose an application year and class to update the summary.';
-        fields.innerHTML='';const form=page.querySelector('.adm-report-filter-form');if(form)fields.appendChild(form);
+        fields.innerHTML='';const form=page.querySelector('.adm-report-filter-form');if(form){form.style.display='grid';fields.appendChild(form);}
         apply.textContent='Apply report filters';backdrop.classList.add('is-open');
       });
       page.querySelectorAll('.letter-tools button').forEach(btn=>{
