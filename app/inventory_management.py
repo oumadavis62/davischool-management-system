@@ -233,7 +233,7 @@ def inventory_transactions(request: Request, q: str = "", movement: str = "All")
 .inv-movements .form-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.inv-movements .form-grid .wide{{grid-column:1/-1}}
 @media(max-width:650px){{.inv-movements .stats,.inv-movements .form-grid{{grid-template-columns:1fr}}.inv-movements .form-grid .wide{{grid-column:auto}}}}
 </style>
-<div class="page-heading"><div><div class="lib-eyebrow">INVENTORY &amp; STORES / STOCK CONTROL</div><h1>Stock Receipts &amp; Issues</h1><div>Record incoming supplies, issued stock and authorised quantity adjustments. Every movement updates the item balance and is retained in the ledger.</div></div><a class="btn btn-light" href="/app/inventory/items">Inventory Register</a></div>
+<div class="page-heading"><div><div class="lib-eyebrow">INVENTORY &amp; STORES / STOCK CONTROL</div><h1>Stock Receipts &amp; Issues</h1><div>Record incoming supplies, issued stock and authorised quantity adjustments. Every movement updates the item balance and is retained in the ledger.</div></div></div>
 <div class="stats"><div><span>Movement entries</span><strong>{int(totals['entries'] or 0)}</strong></div><div><span>Total received</span><strong>{float(totals['received'] or 0):g}</strong></div><div><span>Total issued</span><strong>{float(totals['issued'] or 0):g}</strong></div></div>
 <section class="panel"><h2>Record stock movement</h2><form method="post" action="/app/inventory/transactions/save" class="form-grid">
 <label class="wide">Inventory item *<select name="item_id" required><option value="">Select an active inventory item</option>{item_options}</select></label>
