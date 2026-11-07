@@ -224,8 +224,8 @@ def _migrate_legacy(con, sid):
         teacher=cur.execute("SELECT id FROM teachers WHERE school_id=? AND name=? LIMIT 1",(sid,row["teacher"])).fetchone() if row["teacher"] else None
         if not cls or not sub:
             continue
-        cur.execute("INSERT INTO timetable_lessons(school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,duration,cycle,locked,preferred_room,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (sid,cls["id"],sub["id"],teacher["id"] if teacher else None,None,"Entire class",1,1,"Every week",0,None,"Imported from previous timetable workspace"))
+        cur.execute("INSERT INTO timetable_lessons(school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,duration,cycle,locked,preferred_room,notes,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (sid,cls["id"],sub["id"],teacher["id"] if teacher else None,None,"Entire class",1,1,"Every week",0,None,"Imported from previous timetable workspace",_active_profile_id(con,sid)))
         lesson_id=cur.lastrowid
         p=next((x for x in periods if str(x["start_time"])==str(row["start_time"]) and str(x["end_time"])==str(row["end_time"])),None)
         if p:
@@ -1893,6 +1893,12 @@ def timetable_profile_delete(request:Request,pid:int):
         if pid==current:return RedirectResponse("/app/timetable?tab=profiles&error=Switch+to+another+timetable+before+deleting+this+one",303)
         if total<=1:return RedirectResponse("/app/timetable?tab=profiles&error=The+last+timetable+cannot+be+deleted",303)
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+        con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+        con.execute("DELETE FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_publications WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_snapshots WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_edit_history WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+deleted+without+deleting+lesson+cards",303)
@@ -3073,10 +3079,10 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             moving["room_id"],day_name,int(period_no),room,
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ))
-        cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
+        cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",
                     (day_name,period_no,period["start_time"],end_time,room,rid,sid))
         if len(linked_class_ids)<=1 and target_class_id != int(moving["class_id"]):
-            cur.execute("UPDATE timetable_lessons SET class_id=? WHERE id=? AND school_id=?",(target_class_id,int(moving["lesson_id"]),sid))
+            cur.execute("UPDATE timetable_lessons SET class_id=? WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(target_class_id,int(moving["lesson_id"]),sid))
             cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"])))
             cur.execute("INSERT OR IGNORE INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,int(moving["lesson_id"]),target_class_id))
         con.commit()
