@@ -991,9 +991,19 @@ def _publication_fingerprint(con, sid):
     slots=con.execute("""SELECT lesson_id,day_name,period_no,start_time,end_time,room_id,locked
         FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY lesson_id,day_name,period_no,id""",
         (sid,int(profile["id"]))).fetchall()
+    lessons=con.execute("""SELECT id,class_id,subject_id,teacher_id,room_id,lessons_per_week,duration,locked,preferred_room
+        FROM timetable_lessons WHERE school_id=? ORDER BY id""",(sid,)).fetchall()
+    lesson_classes=con.execute("SELECT lesson_id,class_id FROM timetable_lesson_classes WHERE school_id=? ORDER BY lesson_id,class_id",(sid,)).fetchall()
+    lesson_teachers=con.execute("SELECT lesson_id,teacher_id FROM timetable_lesson_teachers WHERE school_id=? ORDER BY lesson_id,teacher_id",(sid,)).fetchall()
+    availability=con.execute("""SELECT resource_type,resource_id,day_name,period_no,allowed
+        FROM timetable_availability WHERE school_id=? ORDER BY resource_type,resource_id,day_name,period_no""",(sid,)).fetchall()
     payload={
         "profile":{k:profile[k] for k in ("id","days_json","periods_json","breaks_json")},
-        "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked")} for r in slots]
+        "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked")} for r in slots],
+        "lessons":[{k:r[k] for k in ("id","class_id","subject_id","teacher_id","room_id","lessons_per_week","duration","locked","preferred_room")} for r in lessons],
+        "lesson_classes":[{k:r[k] for k in ("lesson_id","class_id")} for r in lesson_classes],
+        "lesson_teachers":[{k:r[k] for k in ("lesson_id","teacher_id")} for r in lesson_teachers],
+        "availability":[{k:r[k] for k in ("resource_type","resource_id","day_name","period_no","allowed")} for r in availability]
     }
     import hashlib
     return hashlib.sha256(json.dumps(payload,sort_keys=True,default=str).encode("utf-8")).hexdigest()
