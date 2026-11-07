@@ -40,12 +40,14 @@ class TimetableBuilderTests(unittest.TestCase):
         self.profile_id = create_profile(self.db, 1, "2027 Term 1", "2027", "Term 1")
         save_day(self.db, 1, self.profile_id, "MON", "Monday", 1)
         save_day(self.db, 1, self.profile_id, "TUE", "Tuesday", 2)
+        save_day(self.db, 1, self.profile_id, "WED", "Wednesday", 3)
         save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:00", "08:40")
         save_period(self.db, 1, self.profile_id, 2, "Period 2", "08:40", "09:20")
         save_period(self.db, 1, self.profile_id, 3, "Period 3", "09:20", "10:00")
         save_period(self.db, 1, self.profile_id, 4, "Period 4", "10:20", "11:00")
         self.day_mon = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='MON'").fetchone()[0]
         self.day_tue = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='TUE'").fetchone()[0]
+        self.day_wed = self.db.execute("SELECT id FROM ds_timetable_days WHERE day_code='WED'").fetchone()[0]
         self.p1 = self.db.execute("SELECT id FROM ds_timetable_periods WHERE period_no=1").fetchone()[0]
         self.p2 = self.db.execute("SELECT id FROM ds_timetable_periods WHERE period_no=2").fetchone()[0]
         self.p3 = self.db.execute("SELECT id FROM ds_timetable_periods WHERE period_no=3").fetchone()[0]
@@ -86,6 +88,12 @@ class TimetableBuilderTests(unittest.TestCase):
         place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1, self.room_id)
         with self.assertRaises(TimetableSetupError):
             place_lesson(self.db, 1, self.profile_id, 21, 31, 10, self.day_mon, self.p1)
+
+    def test_weekly_lesson_frequency_cannot_be_exceeded(self):
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_tue, self.p1)
+        with self.assertRaises(TimetableSetupError):
+            place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_wed, self.p1)
 
     def test_unavailable_teacher_cannot_be_scheduled(self):
         save_teacher_availability(self.db, 1, self.profile_id, 10, self.day_mon, self.p1, "unavailable", "Meeting")
