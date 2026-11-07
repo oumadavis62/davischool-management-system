@@ -1781,11 +1781,8 @@ def _save_timetable_snapshot(con,sid,pid,label):
     lesson_ids=[int(x["id"]) for x in lessons]
     lesson_classes=[];lesson_teachers=[]
     for lesson_id in lesson_ids:
-        lesson_classes.extend(dict(x) for x in con.execute(
-            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall())
-        lesson_classes[-len(con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()):] if False else None
         for link in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall():
-            lesson_classes[-1]["lesson_id"]=lesson_id if lesson_classes else None
+            lesson_classes.append({"lesson_id":lesson_id,"class_id":int(link["class_id"])})
         for link in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall():
             lesson_teachers.append({"lesson_id":lesson_id,"teacher_id":int(link["teacher_id"])})
     fields=("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")
