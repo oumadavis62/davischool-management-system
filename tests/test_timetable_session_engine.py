@@ -107,6 +107,14 @@ class TimetableSessionEngineTests(unittest.TestCase):
                 learner_ids=[201], day_id=self.day_id,
             )
 
+
+    def test_room_capacity_counts_combined_class_enrolment(self):
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                class_ids=[1, 2], room_id=self.room_id, day_id=self.day_id,
+            )
+
     def test_activity_type_can_require_teacher_and_venue(self):
         self.db.execute(
             """INSERT INTO ds_timetable_activity_types
