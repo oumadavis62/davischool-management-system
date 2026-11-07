@@ -239,6 +239,8 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                              programme_id: int | None = None,
                              teaching_group_id: int | None = None,
                              duration_periods: int = 0,
+                             scheduling_requirement_id: int | None = None,
+                             pattern_session_no: int | None = None,
                              created_by: str = "") -> int:
     start_time, end_time = (start_time or "").strip(), (end_time or "").strip()
     if not _TIME_RE.fullmatch(start_time) or not _TIME_RE.fullmatch(end_time) or start_time >= end_time:
@@ -255,6 +257,65 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     period_id = int(period_id) if period_id is not None else None
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
+    if scheduling_requirement_id is not None:
+        requirement = cur.execute(
+            """SELECT * FROM ds_timetable_scheduling_requirements
+               WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+            (int(scheduling_requirement_id), school_id, profile_id),
+        ).fetchone()
+        if not requirement:
+            raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+        if str(requirement["schedule_layer"]) != schedule_layer or str(requirement["session_type"]) != session_type:
+            raise TimetableSetupError("The session layer and type must match its scheduling requirement.")
+        req_classes = [int(r["class_id"]) for r in cur.execute(
+            "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE requirement_id=? AND school_id=?",
+            (int(scheduling_requirement_id), school_id),
+        ).fetchall()]
+        req_teachers = [int(r["teacher_id"]) for r in cur.execute(
+            "SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers WHERE requirement_id=? AND school_id=?",
+            (int(scheduling_requirement_id), school_id),
+        ).fetchall()]
+        req_learners = [int(r["student_id"]) for r in cur.execute(
+            "SELECT student_id FROM ds_timetable_scheduling_requirement_learners WHERE requirement_id=? AND school_id=?",
+            (int(scheduling_requirement_id), school_id),
+        ).fetchall()]
+        if classes and set(classes) != set(req_classes):
+            raise TimetableSetupError("Session classes must match its scheduling requirement.")
+        if teachers and set(teachers) != set(req_teachers):
+            raise TimetableSetupError("Session teachers must match its assigned teaching team.")
+        if learners and set(learners) != set(req_learners):
+            raise TimetableSetupError("Session learners must match its scheduling requirement.")
+        classes, teachers, learners = req_classes, req_teachers, req_learners
+        if len(teachers) < int(requirement["min_teacher_count"] or 1):
+            raise TimetableSetupError("The assigned teaching team does not meet the required teacher count.")
+        if requirement["teaching_group_id"] is not None:
+            if teaching_group_id is not None and int(teaching_group_id) != int(requirement["teaching_group_id"]):
+                raise TimetableSetupError("Session teaching group does not match its scheduling requirement.")
+            teaching_group_id = int(requirement["teaching_group_id"])
+        if requirement["programme_id"] is not None:
+            if programme_id is not None and int(programme_id) != int(requirement["programme_id"]):
+                raise TimetableSetupError("Session programme does not match its scheduling requirement.")
+            programme_id = int(requirement["programme_id"])
+        if requirement["room_type"]:
+            requested_room = cur.execute(
+                "SELECT room_type FROM ds_timetable_rooms WHERE id=? AND school_id=? AND is_active=1",
+                (room_id, school_id),
+            ).fetchone() if room_id is not None else None
+            if not requested_room or str(requested_room["room_type"]) != str(requirement["room_type"]):
+                raise TimetableSetupError("This requirement needs a " + str(requirement["room_type"]) + " venue.")
+        if pattern_session_no is not None:
+            pattern = cur.execute(
+                """SELECT duration_periods,duration_minutes FROM ds_timetable_scheduling_patterns
+                   WHERE school_id=? AND profile_id=? AND requirement_id=? AND session_no=?""",
+                (school_id, profile_id, int(scheduling_requirement_id), int(pattern_session_no)),
+            ).fetchone()
+            if not pattern:
+                raise TimetableSetupError("Select a configured session number from this requirement's weekly pattern.")
+            if int(pattern["duration_periods"] or 0) and int(duration_periods) != int(pattern["duration_periods"]):
+                raise TimetableSetupError("Session period duration does not match its weekly pattern.")
+            actual_minutes = (int(end_time[:2]) * 60 + int(end_time[3:])) - (int(start_time[:2]) * 60 + int(start_time[3:]))
+            if pattern["duration_minutes"] is not None and actual_minutes != int(pattern["duration_minutes"]):
+                raise TimetableSetupError("Session duration in minutes does not match its weekly pattern.")
     if teaching_group_id is not None:
         group = cur.execute(
             "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
