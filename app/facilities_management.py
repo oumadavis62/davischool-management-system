@@ -86,7 +86,53 @@ def _layout(request, title, eyebrow, description, body):
 .fac-page .fac-pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#edf5ef;color:#245638;font-size:11px;font-weight:800}
 .fac-page .fac-empty{text-align:center;padding:26px;color:#718078}
 @media(max-width:760px){.fac-page .fac-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.fac-page .fac-form{grid-template-columns:1fr}.fac-page .wide{grid-column:auto}.fac-page .fac-card{padding:12px}}
+@media(max-width:560px){.fac-page .fac-form{grid-template-columns:1fr}.fac-page .wide{grid-column:auto}.fac-page .fac-card{padding:12px}}}
+
+.fac-page{--fac-forest:#174b32;gap:17px!important;padding-bottom:28px!important}
+.fac-page:before{content:"";display:block;height:5px;margin:-2px 0 0;border-radius:99px;background:linear-gradient(90deg,#174b32,#39845a 48%,#b8d8bd);box-shadow:0 2px 8px #174b321c}
+.fac-page .fac-head{align-items:center;padding:22px 24px;border:1px solid #dce9de;border-radius:19px;background:linear-gradient(115deg,#f5faf5,#fff 58%,#edf6ee);box-shadow:0 8px 24px #214c2d0b}
+.fac-page .fac-head h1{font-size:clamp(25px,3vw,33px);font-weight:800;letter-spacing:-.8px;color:#174b32}
+.fac-page .fac-head p{color:#718278;font-size:12px}
+.fac-page .fac-kpis{gap:13px!important}
+.fac-page .fac-kpis>div{position:relative;overflow:hidden;min-height:96px;padding:17px 18px 15px 20px!important;border:1px solid #e0ebe1!important;border-radius:16px!important;background:linear-gradient(145deg,#fff,#f8fbf8)!important;box-shadow:0 5px 17px #183d2609!important}
+.fac-page .fac-kpis>div:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#367c50,#a6c9a9)}
+.fac-page .fac-kpis small{font-size:11px;font-weight:750}.fac-page .fac-kpis strong{color:#1e5b3a;font-size:27px;letter-spacing:-.6px}
+.fac-page .fac-card{padding:18px!important;border:1px solid #e1ebe2!important;border-radius:17px!important;box-shadow:0 6px 22px #193d2609!important}
+.fac-page .fac-card h2{font-size:15px;font-weight:800;color:#214d34}
+.fac-page .fac-scroll{border:1px solid #e5ede6;border-radius:13px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.fac-page table{border-collapse:separate;border-spacing:0}
+.fac-page th{padding:13px 14px;background:linear-gradient(180deg,#f2f8f2,#eaf3eb);color:#42634c;font-size:10px;font-weight:800;letter-spacing:.7px;text-transform:uppercase}
+.fac-page td{padding:12px 14px;color:#3c5143}
+.fac-page tbody tr:nth-child(even){background:#fbfdfb}.fac-page tbody tr:hover{background:#f0f7f1}
+.fac-page label{color:#3d5946;font-weight:750}
+.fac-page input,.fac-page select,.fac-page textarea{min-height:42px;padding:10px 11px;border:1px solid #dce7de;border-radius:10px;background:#fcfefc}
+.fac-page input:focus,.fac-page select:focus,.fac-page textarea:focus{outline:0;border-color:#78a985;box-shadow:0 0 0 3px #e4f1e6}
+.fac-page .fac-btn{min-height:40px;padding:9px 15px;border:1px solid #1f5b3b;border-radius:10px;background:linear-gradient(135deg,#205f3e,#317b4d);font-weight:800;transition:all .16s ease}
+.fac-page .fac-btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
+.fac-page .fac-btn.light{border:1px solid #b9d4bf;background:#f0f7f1;color:#174b32}
+.fac-page .fac-filter-trigger{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid #cfe0d1;border-radius:11px;background:#fff;color:#245b39;font-size:12px;font-weight:800}
+.fac-page .fac-filter-trigger:before{content:"";width:7px;height:7px;border-radius:50%;background:#4b9562;box-shadow:0 0 0 4px #e7f2e8}
+.fac-filter-dialog,.fac-form-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:21px;padding:0;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.fac-filter-dialog::backdrop,.fac-form-dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.fac-filter-dialog .fac-dialog-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:17px 20px;background:linear-gradient(110deg,#f0f7f1,#fff);border-bottom:1px solid #e4ede5}
+.fac-filter-dialog .fac-dialog-head strong,.fac-form-dialog h2{font-size:16px;color:#1d5033}
+.fac-filter-dialog .fac-dialog-head button{width:36px;height:36px;border:0;border-radius:50%;background:#e5efe6;color:#315b3e;font-size:22px}
+.fac-filter-dialog .fac-dialog-content{padding:20px}
+.fac-filter-dialog form{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.fac-filter-dialog form label{flex:1;min-width:150px;display:grid;gap:7px}
+.fac-filter-dialog form .fac-btn.light{display:inline-flex;align-items:center;justify-content:center;min-height:42px;text-decoration:none}
+.fac-form-dialog{padding:22px}.fac-form-dialog h2{margin:0 0 16px;font-size:20px}
+.fac-form-dialog form{display:grid;gap:12px}.fac-form-dialog .fac-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:700px){.fac-page .fac-head{align-items:flex-start;flex-direction:column;padding:18px 16px}.fac-page .fac-head>.fac-btn{width:100%}.fac-page .fac-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.fac-page .fac-kpis>div{min-height:86px;padding:13px 12px 12px 15px!important}.fac-page .fac-kpis strong{font-size:23px}.fac-page .fac-card{padding:12px!important}.fac-page .fac-scroll{border-radius:10px}.fac-page table{min-width:760px}.fac-filter-dialog{border-radius:17px}.fac-filter-dialog .fac-dialog-content{padding:15px}.fac-form-dialog{padding:17px;border-radius:17px}.fac-form-dialog .fac-form{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.fac-page *,.fac-filter-dialog *,.fac-form-dialog *{transition:none!important;scroll-behavior:auto!important}}
+@media print{.fac-page .fac-filter-trigger,.fac-filter-dialog,.fac-form-dialog,.fac-page .no-print{display:none!important}.fac-page .fac-card{break-inside:avoid;box-shadow:none}}
+<script>
+(function(){function setup(){document.querySelectorAll('.fac-page').forEach(function(page){var head=page.querySelector('.fac-head');if(!head)return;
+var filter=page.querySelector('form[method="get"]');if(filter&&!filter.dataset.popupReady){filter.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='fac-filter-dialog';var bar=document.createElement('div');bar.className='fac-dialog-head';bar.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';bar.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='fac-dialog-content';filter.parentNode.insertBefore(dialog,filter);content.appendChild(filter);dialog.appendChild(bar);dialog.appendChild(content);page.appendChild(dialog);filter.querySelectorAll('a.fac-btn.light').forEach(function(a){if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='fac-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});head.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}
+var entry=page.querySelector('.fac-card form.fac-form');if(entry&&!entry.dataset.popupReady){entry.dataset.popupReady='1';var card=entry.closest('.fac-card');var h=card&&card.querySelector('h2');var title=h?h.textContent.trim():'Add facility or asset record';var modal=document.createElement('dialog');modal.className='fac-form-dialog';var mh=document.createElement('h2');mh.textContent=title;modal.appendChild(mh);entry.parentNode.insertBefore(modal,entry);modal.appendChild(entry);page.appendChild(modal);var add=document.createElement('button');add.type='button';add.className='fac-btn';add.textContent=title;add.addEventListener('click',function(){modal.showModal()});head.appendChild(add)}
+})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
+</script>
+</style>"""
 </style>"""
     return _school_page(request, title, "<div class='page fac-page'><div class='fac-head'><div><div class='lib-eyebrow'>" + escape(eyebrow) + "</div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div></div>" + body + "</div>" + styles)
 
