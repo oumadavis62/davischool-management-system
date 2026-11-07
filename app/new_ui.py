@@ -676,7 +676,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
-            ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
             ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
             ("/app/finance",_modern_icon("finance"),"Finance & Accounts","fees.view"),
             ("/app/announcements",_modern_icon("announcement"),"Announcements","communications.view"),
@@ -739,8 +738,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/students", "Students List")
-            + _nav_sub("/app/attendance", "Attendance Sheet")
-            + _nav_sub("/app/student-attendance-report", "Attendance Report")
             + _nav_sub("/app/students/id-cards", "ID Cards")
             + _nav_sub("/app/students/clearance", "Clearance List")
             + _nav_sub("/app/students/graduation-records", "Alumni List")
@@ -751,8 +748,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/staff", "Staff List")
-            + _nav_sub("/app/staff/attendance", "Attendance Sheet")
-            + _nav_sub("/app/staff/attendance-report", "Attendance Report")
             + _nav_sub("/app/staff/leave", "Leave Management")
             + _nav_sub("/app/staff/payroll", "Payroll Processing")
             + _nav_sub("/app/staff/payslips", "Payslips")
@@ -920,15 +915,31 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/parent-services/reports", "Parent & Student Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
-        links = "".join(
-            admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
-            else students_group if u == "/app/students" and role in ("school_admin", "registrar")
-            else staff_group if u == "/app/staff"
-            else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
-            else finance_accounts_group if u == "/app/finance" and role in ("school_admin", "registrar")
-            else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
-            for u,i,l,_ in nav
-        ) + library_group + inventory_group + transport_group + health_welfare_group + facilities_group + parent_student_services_group
+        nav_markup = []
+        for u, i, l, _permission in nav:
+            if u == "/app":
+                nav_markup.append("<div class='nav-section-label'>WORKSPACE</div>")
+            elif u in ("/app/admissions", "/app/students"):
+                if not any("SCHOOL OPERATIONS" in item for item in nav_markup):
+                    nav_markup.append("<div class='nav-section-label'>SCHOOL OPERATIONS</div>")
+            elif u == "/app/finance":
+                nav_markup.append("<div class='nav-section-label'>FINANCE &amp; RESOURCES</div>")
+            elif u == "/app/announcements":
+                nav_markup.append("<div class='nav-section-label'>COMMUNICATION &amp; GOVERNANCE</div>")
+            item_html = (
+                admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
+                else students_group if u == "/app/students" and role in ("school_admin", "registrar")
+                else staff_group if u == "/app/staff"
+                else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
+                else finance_accounts_group if u == "/app/finance" and role in ("school_admin", "registrar")
+                else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
+            )
+            nav_markup.append(item_html)
+        service_groups = [library_group, inventory_group, transport_group, health_welfare_group, facilities_group, parent_student_services_group]
+        if any(service_groups):
+            nav_markup.append("<div class='nav-section-label'>SCHOOL SERVICES</div>")
+            nav_markup.extend(service_groups)
+        links = "".join(nav_markup)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
         avatar_html = "<div class='avatar-wrap' id='teacherProfileMenu'><button type='button' class='avatar' id='teacherAvatarButton' aria-label='Open account menu' aria-expanded='false' onclick='toggleTeacherProfileMenu(event)'>" + escape(initials) + "</button><div class='logout-tab' id='teacherLogoutTab'><a href='/logout'>Log out</a></div></div>"
@@ -940,7 +951,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,Arial,sans-serif;background:#EAF3E8;color:#172033;--navy:#176B3A;--navy-dark:#0F4D2A;--gold:#2E8B57;--ink:#172033;--line:#d8e3f0}}
 .app{{display:flex;min-height:100vh}}.teacher-portal .side{{width:250px}}.teacher-portal .main{{margin-left:250px}}.teacher-portal .nav{{font-size:13px;padding:11px 12px}}.teacher-portal .nav:hover,.teacher-portal .nav:focus-visible{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a}}.teacher-portal .nav.active{{background:rgba(255,255,255,.12);color:#fff;border-left-color:#86c99a;font-weight:900}}.side{{width:250px;background:var(--navy-dark);color:#dbeafe;padding:18px 12px;position:fixed;inset:0 auto 0 0;overflow:auto;z-index:1201;transform:translateX(0);transition:transform .22s ease;will-change:transform}}
 .sidebar-brand{{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;color:#fff}}.sidebar-login-logo{{width:48px;height:48px;min-width:48px;border-radius:13px;background:#176B3A;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.12)}}.sidebar-login-logo .davi-mark{{position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#176B3A;font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;overflow:visible}}.sidebar-login-logo .davi-mark:before{{content:'D';position:absolute;left:50%;top:50%;transform:translate(-50%,-53%) skew(-7deg);font-family:Georgia,'Times New Roman',serif;font-size:39px;font-weight:900;font-style:italic;line-height:1;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.08);z-index:1}}.sidebar-login-logo .davi-mark .d-letter{{display:none}}.sidebar-login-logo .davi-mark:after{{content:'';display:none}}.sidebar-brand-title{{font-size:16px;font-weight:900;line-height:1.15;letter-spacing:-.2px;color:#fff;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center}}.brand{{font-size:17px;font-weight:900;color:white;padding:8px 10px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:9px;line-height:1.15}}.brand-logo{{width:38px;height:38px;flex:0 0 38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(0,0,0,.16)}}.brand-logo .davi-mark{{width:24px;height:24px;border-width:4px;border-left-width:5px;border-radius:5px 13px 13px 5px}}.brand-logo .davi-mark:after{{height:6px}}.brand small{{display:none}}
-.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav-group{{margin:3px 0}}.nav-group>summary{{list-style:none;cursor:pointer;user-select:none}}.nav-group>summary::-webkit-details-marker{{display:none}}.staff-manager-summary{{display:flex;gap:11px;align-items:center;color:#dbeafe;padding:10px 12px;border-radius:10px;font-size:13px;border-left:3px solid transparent}}.staff-manager-summary b{{font-weight:600;flex:1}}.staff-manager-summary:hover,.nav-group[open]>.staff-manager-summary{{background:rgba(46,139,87,.16);color:#fff;border-left-color:var(--gold)}}.nav-chevron{{font-size:12px;transition:transform .15s ease}}.nav-group[open] .nav-chevron{{transform:rotate(180deg)}}.nav-submenu{{margin:2px 0 8px 30px;padding-left:10px;border-left:1px solid rgba(219,234,254,.24);display:grid;gap:2px}}.nav-nested-group{{margin:1px 0}}.nav-subgroup-summary{{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:8px 10px;color:#dbeafe}}.nav-subgroup-summary::-webkit-details-marker{{display:none}}.nav-subgroup-summary:hover,.nav-nested-group[open]>.nav-subgroup-summary{{color:#fff;background:rgba(46,139,87,.14);border-radius:8px}}.nav-nested-submenu{{margin-left:12px;padding-left:9px}}.nav-sub{{display:flex;align-items:center;gap:9px;color:#cbd5e1;text-decoration:none;font-size:12px;padding:8px 10px;border-radius:8px}}.nav-sub-icon{{display:inline-flex;align-items:center;justify-content:center;flex:0 0 17px;width:17px;height:17px;opacity:.92}}.nav-sub-icon svg{{width:16px;height:16px;display:block}}.nav-subgroup-summary{{width:100%;box-sizing:border-box}}.nav-subgroup-summary b{{flex:1;font-weight:700}}.nav-sub:hover,.nav-sub.active{{background:rgba(255,255,255,.12);color:#fff}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
+.modern-icon{{display:block;flex:0 0 auto}}.icon-dashboard{{color:#38bdf8}}.icon-students{{color:#60a5fa}}.icon-staff{{color:#c084fc}}.icon-academics{{color:#4ade80}}.icon-attendance{{color:#2dd4bf}}.icon-calendar{{color:#fb923c}}.icon-finance{{color:#34d399}}.icon-accounting{{color:#818cf8}}.icon-announcement{{color:#fbbf24}}.icon-users{{color:#22d3ee}}.icon-shield{{color:#f87171}}.icon-settings{{color:#94a3b8}}.icon-audit{{color:#60a5fa}}.icon-school{{color:#34d399}}.icon-globe{{color:#38bdf8}}.icon-key{{color:#fbbf24}}.icon-marks{{color:#4ade80}}.icon-analysis{{color:#a78bfa}}.icon-grading{{color:#facc15}}.icon-allocation{{color:#fb7185}}.icon-report{{color:#38bdf8}}.icon-exam{{color:#f97316}}.icon-subject{{color:#4ade80}}.icon-correction{{color:#f87171}}.nav .modern-icon{{width:20px;height:20px}}.nav{{display:flex;gap:11px;align-items:center;color:#dbeafe;text-decoration:none;padding:10px 12px;border-radius:10px;font-size:13px;margin:3px 0;border-left:3px solid transparent}}.nav-section-label{{padding:15px 12px 5px;color:#8eae98;font-size:9px;font-weight:900;letter-spacing:1.25px;text-transform:uppercase}}.nav-group{{margin:3px 0}}.nav-group>summary{{list-style:none;cursor:pointer;user-select:none}}.nav-group>summary::-webkit-details-marker{{display:none}}.staff-manager-summary{{display:flex;gap:11px;align-items:center;color:#dbeafe;padding:10px 12px;border-radius:10px;font-size:13px;border-left:3px solid transparent}}.staff-manager-summary b{{font-weight:600;flex:1}}.staff-manager-summary:hover,.nav-group[open]>.staff-manager-summary{{background:rgba(46,139,87,.16);color:#fff;border-left-color:var(--gold)}}.nav-chevron{{font-size:12px;transition:transform .15s ease}}.nav-group[open] .nav-chevron{{transform:rotate(180deg)}}.nav-submenu{{margin:2px 0 8px 30px;padding-left:10px;border-left:1px solid rgba(219,234,254,.24);display:grid;gap:2px}}.nav-nested-group{{margin:1px 0}}.nav-subgroup-summary{{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:8px 10px;color:#dbeafe}}.nav-subgroup-summary::-webkit-details-marker{{display:none}}.nav-subgroup-summary:hover,.nav-nested-group[open]>.nav-subgroup-summary{{color:#fff;background:rgba(46,139,87,.14);border-radius:8px}}.nav-nested-submenu{{margin-left:12px;padding-left:9px}}.nav-sub{{display:flex;align-items:center;gap:9px;color:#cbd5e1;text-decoration:none;font-size:12px;padding:8px 10px;border-radius:8px}}.nav-sub-icon{{display:inline-flex;align-items:center;justify-content:center;flex:0 0 17px;width:17px;height:17px;opacity:.92}}.nav-sub-icon svg{{width:16px;height:16px;display:block}}.nav-subgroup-summary{{width:100%;box-sizing:border-box}}.nav-subgroup-summary b{{flex:1;font-weight:700}}.nav-sub:hover,.nav-sub.active{{background:rgba(255,255,255,.12);color:#fff}}.nav:hover{{background:rgba(46,139,87,.16);color:white;border-left-color:var(--gold)}}.overview-active .nav[href='/app']{{background:#176B3A;color:#fff;border-left-color:#2E8B57;font-weight:900;box-shadow:0 4px 12px #176B3A33}}
 .main{{margin-left:250px;flex:1;min-width:0;transition:margin-left .2s ease}}.sidebar-toggle{{border:1px solid #cbd5e1;background:#fff;color:var(--navy);border-radius:9px;padding:7px 10px;font-size:16px;cursor:pointer;line-height:1}}.sidebar-toggle:hover{{background:#f8fafc}}.sidebar-hidden .side{{transform:translateX(-100%)}}.sidebar-hidden .main{{margin-left:0}}.top{{height:68px;background:white;border-bottom:3px solid var(--gold);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:1000}}.top .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:#176B3A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;line-height:1;border:0;box-shadow:0 2px 7px rgba(23,107,58,.22)}}
 .teacher-portal .avatar-wrap{{position:relative}}.teacher-portal .avatar{{width:42px;height:42px;min-width:42px;border-radius:10px;background:var(--navy);color:white;display:flex;align-items:center;justify-content:center;font-weight:800;border:0;cursor:pointer;font-family:inherit}}.teacher-portal .avatar-wrap .logout-tab{{position:absolute;top:calc(100% + 8px);right:0;min-width:120px;background:#fff;border:1px solid #d8e3f0;border-radius:10px;box-shadow:0 10px 24px #00000018;padding:5px;display:none;z-index:1100}}.teacher-portal .avatar-wrap.open .logout-tab{{display:block}}.teacher-portal .logout-tab a{{display:block;padding:9px 12px;border-radius:7px;color:#172033;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap}}.teacher-portal .logout-tab a:hover,.teacher-portal .logout-tab a:focus-visible{{background:#176B3A;color:#fff}}
 .top-system-title{{font-size:18px;font-weight:900;color:#176B3A;line-height:1.1;margin-bottom:2px}}.top-welcome{{font-size:15px;color:#172033;line-height:1.15}}.page{{padding:28px;max-width:1500px;margin:auto}}.btn,.btnlink{{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important}}.btn:hover,.btnlink:hover{{background:var(--navy-dark)!important}}h1{{font-size:25px;margin:0 0 6px}}.muted{{color:#64748b;font-size:13px}}
@@ -6436,35 +6447,28 @@ function printBlankMarkSheet(){{
 def finance_page(request: Request):
     sid=_finance_access(request)
     if not sid:return RedirectResponse("/",303)
-    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
-    fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
-    exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
-    payments=cur.execute("SELECT fp.amount,fp.date,fp.reference,fp.method,s.name student_name FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id AND s.school_id=fp.school_id WHERE fp.school_id=? ORDER BY fp.id DESC LIMIT 8",(sid,)).fetchall()
-    voucher_count=cur.execute("SELECT COUNT(*) n FROM payment_vouchers WHERE school_id=?",(sid,)).fetchone()["n"]
-    lpo_count=cur.execute("SELECT COUNT(*) n FROM lpos WHERE school_id=?",(sid,)).fetchone()["n"]
-    cash=cur.execute("SELECT COALESCE(SUM(debit),0) debit,COALESCE(SUM(credit),0) credit FROM cashbook WHERE school_id=?",(sid,)).fetchone()
-    journal_count=cur.execute("SELECT COUNT(*) n FROM ds_fin_journals WHERE school_id=? AND status IN ('Posted','Reversed')",(sid,)).fetchone()["n"]
-    con.commit();con.close()
+    con=_db()
+    try:
+        cur=con.cursor();_finance_prepare(cur,sid)
+        fee=cur.execute("SELECT COALESCE(SUM(amount),0) expected,COALESCE(SUM(paid),0) paid FROM fees WHERE school_id=?",(sid,)).fetchone()
+        exp=cur.execute("SELECT COALESCE(SUM(amount),0) v FROM expenses WHERE school_id=?",(sid,)).fetchone()["v"]
+        payments=cur.execute("SELECT fp.amount,fp.date,fp.reference,fp.method,s.name student_name FROM fee_payments fp LEFT JOIN students s ON s.id=fp.student_id AND s.school_id=fp.school_id WHERE fp.school_id=? ORDER BY fp.id DESC LIMIT 8",(sid,)).fetchall()
+        voucher_count=cur.execute("SELECT COUNT(*) n FROM payment_vouchers WHERE school_id=?",(sid,)).fetchone()["n"]
+        lpo_count=cur.execute("SELECT COUNT(*) n FROM lpos WHERE school_id=?",(sid,)).fetchone()["n"]
+        cash=cur.execute("SELECT COALESCE(SUM(debit),0) debit,COALESCE(SUM(credit),0) credit FROM cashbook WHERE school_id=?",(sid,)).fetchone()
+        journal_count=cur.execute("SELECT COUNT(*) n FROM ds_fin_journals WHERE school_id=? AND status IN ('Posted','Reversed')",(sid,)).fetchone()["n"]
+        con.commit()
+    finally:
+        con.close()
     expected=float(fee["expected"] or 0);collected=float(fee["paid"] or 0);outstanding=max(0,expected-collected)
     rows="".join("<tr><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(p["student_name"] or "")),float(p["amount"] or 0),escape(str(p["date"] or "")),escape(str(p["reference"] or "")),escape(str(p["method"] or ""))) for p in payments)
-    modules=[
-      ("Fees & Billing","Learner charges, fee balances and arrears","/app/finance/billing","01"),
-      ("Collections & Receipting","Payment allocation and receipt register","/app/finance/collections","02"),
-      ("Accounts Payable","Supplier register, bills and approvals","/app/finance/payables","03"),
-      ("General Accounting","Chart of accounts, journals and period locks","/app/finance/ledger","04"),
-      ("Cash & Banking","Bank accounts, statement imports and reconciliation","/app/finance/banking","05"),
-      ("Budgets & Planning","Department budgets and expenditure variance","/app/finance/budgets","06"),
-      ("Financial Reports","Trial balance and financial statements","/app/finance/reports","07")]
-    module_html="".join("<a class='fin-module' href='%s'><span>%s</span><div><b>%s</b><small>%s</small></div><i>›</i></a>"%(u,n,escape(t),escape(d)) for t,d,u,n in modules)
     body=f"""<div class='page finance-hub'><section class='fin-hero'><div><div class='fin-eyebrow'>SCHOOL FINANCE · KENYA SHILLING</div><h1>Finance &amp; Accounts</h1><p>A connected command centre for learner billing, collections, expenditure, accounting controls and school financial reporting.</p><div class='fin-actions'><a href='/app/finance/collections'>Record collection</a><a href='/app/finance/payables'>Add supplier bill</a><a href='/app/finance/ledger'>Open general ledger</a></div></div><div class='fin-mark'><b>KES</b><span>Financial control</span><small>School-scoped records · Audit history</small></div></section>
-    {_finance_tabs("overview")}
     <section class='fin-kpis'><article><small>Fees billed</small><b>KES {expected:,.2f}</b><span>Recorded learner charges</span></article><article><small>Fees collected</small><b>KES {collected:,.2f}</b><span>{(collected/expected*100 if expected else 0):.1f}% collection rate</span></article><article><small>Outstanding fees</small><b>KES {outstanding:,.2f}</b><span>Uncollected fee balance</span></article><article><small>Recorded expenditure</small><b>KES {float(exp or 0):,.2f}</b><span>Expense register total</span></article></section>
-    <div class='fin-layout'><section class='fin-panel'><div class='fin-panel-head'><div><h2>Financial workspaces</h2><p>Open a workspace to access its registers, controls and reports.</p></div><span>7 workspaces</span></div><div class='fin-modules'>{module_html}</div></section>
-    <aside class='fin-panel'><h2>Accounting activity</h2><div class='fin-row'><span>Payment vouchers</span><b>{int(voucher_count)}</b></div><div class='fin-row'><span>Purchase orders / LPOs</span><b>{int(lpo_count)}</b></div><div class='fin-row'><span>Posted ledger journals</span><b>{int(journal_count)}</b></div><div class='fin-row'><span>Cashbook debits</span><b>KES {float(cash['debit'] or 0):,.2f}</b></div><div class='fin-row'><span>Cashbook credits</span><b>KES {float(cash['credit'] or 0):,.2f}</b></div><a class='fin-report-link' href='/app/finance/reports'>View financial statements →</a></aside></div>
-    <section class='fin-panel fin-recent'><div class='fin-panel-head'><div><h2>Recent collections</h2><p>Latest fee receipts recorded by the school.</p></div><a href='/app/finance/collections'>View all receipts →</a></div><div class='fin-table-scroll'><table><thead><tr><th>Learner</th><th>Amount</th><th>Date</th><th>Reference</th><th>Method</th></tr></thead><tbody>{rows or "<tr><td colspan='5'>No fee payments recorded.</td></tr>"}</tbody></table></div></section>
+    <section class='fin-panel fin-activity'><div class='fin-panel-head'><div><h2>Accounting activity</h2><p>Live totals from the school's financial registers and posted ledger.</p></div><a href='/app/finance/reports'>View financial statements →</a></div><div class='fin-activity-grid'><div class='fin-row'><span>Payment vouchers</span><b>{int(voucher_count)}</b></div><div class='fin-row'><span>Purchase orders / LPOs</span><b>{int(lpo_count)}</b></div><div class='fin-row'><span>Posted ledger journals</span><b>{int(journal_count)}</b></div><div class='fin-row'><span>Cashbook debits</span><b>KES {float(cash['debit'] or 0):,.2f}</b></div><div class='fin-row'><span>Cashbook credits</span><b>KES {float(cash['credit'] or 0):,.2f}</b></div></div></section>
+     <section class='fin-panel fin-recent'><div class='fin-panel-head'><div><h2>Recent collections</h2><p>Latest fee receipts recorded by the school.</p></div><a href='/app/finance/collections'>View all receipts →</a></div><div class='fin-table-scroll'><table><thead><tr><th>Learner</th><th>Amount</th><th>Date</th><th>Reference</th><th>Method</th></tr></thead><tbody>{rows or "<tr><td colspan='5'>No fee payments recorded.</td></tr>"}</tbody></table></div></section>
     <div class='fin-note'><b>Financial integrity:</b> New charges, collections and supplier activity are posted to the double-entry ledger. Historical transactions are retained; review opening balances and legacy records before relying on the statements as certified accounts.</div></div>
     <style>
-    .finance-hub{{max-width:1500px;margin:auto}}.fin-hero{{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:25px 28px;border:1px solid #d4e5d8;border-radius:18px;background:linear-gradient(120deg,#e5f2e8,#f8fbf8 62%,#d9eddf)}}.fin-eyebrow{{font-size:10px;font-weight:900;letter-spacing:1.5px;color:#397452}}.fin-hero h1{{font-size:30px;margin:7px 0;color:#183f2a}}.fin-hero p{{font-size:13px;color:#5d7464;max-width:650px;margin:0;line-height:1.6}}.fin-actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}}.fin-actions a,.fin-report-link{{padding:9px 12px;border-radius:8px;background:#176b3d;color:white;text-decoration:none;font-size:11px;font-weight:800}}.fin-mark{{min-width:175px;padding:18px;border:1px solid #c8dfce;border-radius:14px;background:#ffffffaa;display:grid;gap:5px;color:#2b6341}}.fin-mark b{{font-size:22px}}.fin-mark span{{font-size:12px;font-weight:800}}.fin-mark small{{font-size:10px;color:#718078}}.fin-tabs{{display:flex;gap:6px;overflow-x:auto;padding:5px 2px 11px;margin:15px 0 18px;border-bottom:1px solid #dce8df}}.fin-tabs a{{flex:0 0 auto;padding:10px 13px;border:1px solid #dce8df;border-radius:8px;background:white;color:#315342;text-decoration:none;font-size:11px;font-weight:850;white-space:nowrap}}.fin-tabs a.active,.fin-tabs a:hover{{background:#176b3d;color:white;border-color:#176b3d}}.fin-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}}.fin-kpis article{{display:grid;gap:6px;padding:15px;background:white;border:1px solid #e0eae2;border-radius:12px;min-width:0}}.fin-kpis small{{font-size:11px;color:#718078}}.fin-kpis b{{font-size:clamp(15px,2vw,21px);color:#204d33;overflow-wrap:anywhere}}.fin-kpis span{{font-size:10px;color:#87938a}}.fin-layout{{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(250px,.8fr);gap:12px}}.fin-panel{{background:white;border:1px solid #e0eae2;border-radius:14px;padding:17px;min-width:0}}.fin-panel h2{{font-size:16px;margin:0;color:#214b32}}.fin-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}}.fin-panel-head p{{font-size:11px;color:#829087;margin:4px 0 0}}.fin-panel-head>span{{font-size:10px;padding:6px 9px;background:#edf6ef;color:#286342;border-radius:99px;font-weight:800}}.fin-modules{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}.fin-module{{display:grid;grid-template-columns:30px minmax(0,1fr) 12px;align-items:center;gap:9px;padding:12px;border:1px solid #e6eee7;border-radius:10px;text-decoration:none;color:#294d36;transition:.15s}}.fin-module:hover{{background:#eff7f0;border-color:#82b294;transform:translateY(-1px)}}.fin-module>span{{width:29px;height:29px;border-radius:8px;background:#e9f4eb;display:grid;place-items:center;font-size:10px;font-weight:900;color:#25633d}}.fin-module b{{display:block;font-size:11px}}.fin-module small{{display:block;font-size:10px;color:#829087;margin-top:3px;line-height:1.35}}.fin-module i{{font-size:18px;font-style:normal;color:#77a187}}.fin-row{{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf1ed;font-size:11px;color:#708075}}.fin-row b{{text-align:right;color:#244c34;font-variant-numeric:tabular-nums}}.fin-report-link{{display:inline-block;margin-top:14px}}.fin-recent{{margin-top:12px}}.fin-panel-head>a{{font-size:11px;color:#286744;text-decoration:none;font-weight:850}}.fin-table-scroll{{overflow:auto}}.fin-table-scroll table{{width:100%;border-collapse:collapse;font-size:11px;min-width:560px}}.fin-table-scroll th,.fin-table-scroll td{{text-align:left;padding:10px;border-bottom:1px solid #edf1ed;white-space:nowrap}}.fin-table-scroll th{{color:#4c6956;background:#f6faf6}}.fin-note{{margin-top:12px;padding:13px 15px;border-radius:10px;background:#f5f9f5;border:1px solid #e3ece4;color:#718075;font-size:10px;line-height:1.6}}@media(max-width:900px){{.fin-layout{{grid-template-columns:1fr}}.fin-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:560px){{.fin-hero{{display:block;padding:18px}}.fin-mark{{margin-top:14px}}.fin-hero h1{{font-size:24px}}.fin-modules{{grid-template-columns:1fr}}.fin-kpis{{gap:7px}}.fin-kpis article{{padding:12px}}.fin-kpis b{{font-size:15px}}}}
+    .finance-hub{{max-width:1500px;margin:auto}}.fin-hero{{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:25px 28px;border:1px solid #d4e5d8;border-radius:18px;background:linear-gradient(120deg,#e5f2e8,#f8fbf8 62%,#d9eddf)}}.fin-eyebrow{{font-size:10px;font-weight:900;letter-spacing:1.5px;color:#397452}}.fin-hero h1{{font-size:30px;margin:7px 0;color:#183f2a}}.fin-hero p{{font-size:13px;color:#5d7464;max-width:650px;margin:0;line-height:1.6}}.fin-actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}}.fin-actions a,.fin-report-link{{padding:9px 12px;border-radius:8px;background:#176b3d;color:white;text-decoration:none;font-size:11px;font-weight:800}}.fin-mark{{min-width:175px;padding:18px;border:1px solid #c8dfce;border-radius:14px;background:#ffffffaa;display:grid;gap:5px;color:#2b6341}}.fin-mark b{{font-size:22px}}.fin-mark span{{font-size:12px;font-weight:800}}.fin-mark small{{font-size:10px;color:#718078}}.fin-tabs{{display:flex;gap:6px;overflow-x:auto;padding:5px 2px 11px;margin:15px 0 18px;border-bottom:1px solid #dce8df}}.fin-tabs a{{flex:0 0 auto;padding:10px 13px;border:1px solid #dce8df;border-radius:8px;background:white;color:#315342;text-decoration:none;font-size:11px;font-weight:850;white-space:nowrap}}.fin-tabs a.active,.fin-tabs a:hover{{background:#176b3d;color:white;border-color:#176b3d}}.fin-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}}.fin-kpis article{{display:grid;gap:6px;padding:15px;background:white;border:1px solid #e0eae2;border-radius:12px;min-width:0}}.fin-kpis small{{font-size:11px;color:#718078}}.fin-kpis b{{font-size:clamp(15px,2vw,21px);color:#204d33;overflow-wrap:anywhere}}.fin-kpis span{{font-size:10px;color:#87938a}}.fin-activity{{margin:12px 0}}.fin-activity-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}}.fin-panel{{background:white;border:1px solid #e0eae2;border-radius:14px;padding:17px;min-width:0}}.fin-panel h2{{font-size:16px;margin:0;color:#214b32}}.fin-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}}.fin-panel-head p{{font-size:11px;color:#829087;margin:4px 0 0}}.fin-panel-head>span{{font-size:10px;padding:6px 9px;background:#edf6ef;color:#286342;border-radius:99px;font-weight:800}}.fin-modules{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}.fin-module{{display:grid;grid-template-columns:30px minmax(0,1fr) 12px;align-items:center;gap:9px;padding:12px;border:1px solid #e6eee7;border-radius:10px;text-decoration:none;color:#294d36;transition:.15s}}.fin-module:hover{{background:#eff7f0;border-color:#82b294;transform:translateY(-1px)}}.fin-module>span{{width:29px;height:29px;border-radius:8px;background:#e9f4eb;display:grid;place-items:center;font-size:10px;font-weight:900;color:#25633d}}.fin-module b{{display:block;font-size:11px}}.fin-module small{{display:block;font-size:10px;color:#829087;margin-top:3px;line-height:1.35}}.fin-module i{{font-size:18px;font-style:normal;color:#77a187}}.fin-row{{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #edf1ed;font-size:11px;color:#708075}}.fin-row b{{text-align:right;color:#244c34;font-variant-numeric:tabular-nums}}.fin-report-link{{display:inline-block;margin-top:14px}}.fin-recent{{margin-top:12px}}.fin-panel-head>a{{font-size:11px;color:#286744;text-decoration:none;font-weight:850}}.fin-table-scroll{{overflow:auto}}.fin-table-scroll table{{width:100%;border-collapse:collapse;font-size:11px;min-width:560px}}.fin-table-scroll th,.fin-table-scroll td{{text-align:left;padding:10px;border-bottom:1px solid #edf1ed;white-space:nowrap}}.fin-table-scroll th{{color:#4c6956;background:#f6faf6}}.fin-note{{margin-top:12px;padding:13px 15px;border-radius:10px;background:#f5f9f5;border:1px solid #e3ece4;color:#718075;font-size:10px;line-height:1.6}}@media(max-width:900px){{.fin-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:560px){{.fin-hero{{display:block;padding:18px}}.fin-mark{{margin-top:14px}}.fin-hero h1{{font-size:24px}}.fin-modules{{grid-template-columns:1fr}}.fin-kpis{{gap:7px}}.fin-kpis article{{padding:12px}}.fin-kpis b{{font-size:15px}}}}
     </style>"""
     return _school_page(request,"Finance & Accounts",body)
 
@@ -15751,11 +15755,27 @@ def announcements_page(request: Request):
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "communications.view"):
         return HTMLResponse("You do not have permission to view announcements.", 403)
-    con=_db();cur=con.cursor();rows=cur.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall();con.close()
-    tr=_simple_rows(rows,["title","message","audience","created_at"])
-    body=f"""<div class='page'><h1>Announcements</h1><div class='muted'>Publish school notices and internal communications.</div>
-<div class='card section'><h2>New announcement</h2><form method='post' action='/app/announcements/add' style='display:grid;gap:10px'><input name='title' required placeholder='Title' class='field'><select name='audience' class='field'><option>All</option><option>Students</option><option>Parents</option><option>Teachers</option><option>Staff</option></select><textarea name='message' required placeholder='Message' class='field' rows='5'></textarea><button class='btn'>Publish Announcement</button></form></div>
-<div class='card section'><h2>Published announcements ({len(rows)})</h2><table><thead><tr><th>Title</th><th>Message</th><th>Audience</th><th>Created</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No announcements yet.</td></tr>'}</tbody></table></div></div><style>.field{{width:100%;padding:11px;border:1px solid #dbe2ea;border-radius:9px}}.btn{{padding:11px;border:0;border-radius:9px;background:#111827;color:#fff;font-weight:800}}</style>"""
+    con=_db()
+    try:
+        rows=con.execute("SELECT title,message,audience,created_at FROM announcements WHERE school_id=? ORDER BY id DESC LIMIT 300",(sid,)).fetchall()
+    finally:
+        con.close()
+    audiences=sorted({str(r["audience"] or "All") for r in rows})
+    cards=[]
+    for r in rows:
+        title=str(r["title"] or "")
+        message=str(r["message"] or "")
+        audience=str(r["audience"] or "All")
+        cards.append("<article class='ann-card' data-audience='"+escape(audience,quote=True).lower()+"' data-search='"+escape((title+' '+message+' '+audience).lower(),quote=True)+"'><div class='ann-meta'><b>"+escape(audience)+"</b><time>"+escape(str(r["created_at"] or ""))+"</time></div><h3>"+escape(title)+"</h3><p>"+escape(message).replace("\\n","<br>")+"</p></article>")
+    form=""
+    if _require_permission(request,sid,"communications.edit"):
+        form="""<section class='ann-panel'><h2>Create announcement</h2><p>Publish a notice to the intended school audience.</p><form method='post' action='/app/announcements/add' class='ann-form'><label>Title<input name='title' maxlength='180' required placeholder='Announcement title'></label><label>Audience<select name='audience'><option>All</option><option>Students</option><option>Parents</option><option>Teachers</option><option>Staff</option></select></label><label class='ann-wide'>Message<textarea name='message' rows='4' required placeholder='Write the announcement and any action required.'></textarea></label><div class='ann-wide ann-submit'><small>Published notices remain available in the school noticeboard.</small><button>Publish announcement</button></div></form></section>"""
+    options="".join("<option value='"+escape(v,quote=True).lower()+"'>"+escape(v)+"</option>" for v in audiences)
+    latest=escape(str(rows[0]["created_at"] or "—")) if rows else "—"
+    body="<div class='page ann-page'><header><div><small>SCHOOL COMMUNICATIONS</small><h1>Announcements</h1><p>One organised noticeboard for school updates, instructions and important dates.</p></div><div class='ann-mark'>DS<small>NOTICEBOARD</small></div></header><section class='ann-stats'><article><small>Published notices</small><b>"+str(len(rows))+"</b></article><article><small>Audience groups</small><b>"+str(len(audiences))+"</b></article><article><small>Most recent</small><b class='ann-latest'>"+latest+"</b></article></section>"+form+"<section class='ann-panel'><div class='ann-head'><div><h2>Published noticeboard</h2><p>Search and filter existing announcements.</p></div><b id='annCount'>"+str(len(rows))+" notices</b></div><div class='ann-filter'><label>Search<input id='annSearch' type='search' placeholder='Search title or message'></label><label>Audience<select id='annAudience'><option value=''>All audiences</option>"+options+"</select></label></div><div class='ann-cards' id='annCards'>"+("".join(cards) if cards else "<div class='ann-empty'>No announcements have been published yet.</div>")+"</div><div class='ann-empty' id='annNone' hidden>No matching announcements.</div></section></div>"
+    body+="""<style>
+    .ann-page{max-width:1450px;color:#203d2c}.ann-page header{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:16px}.ann-page header small{font-size:10px;letter-spacing:1.3px;font-weight:900;color:#39845a}.ann-page h1{font-size:29px;color:#174b2b;margin:6px 0}.ann-page header p,.ann-panel>p,.ann-head p{font-size:12px;color:#718477;margin:0}.ann-mark{width:100px;height:75px;border:1px solid #d0e4d4;border-radius:14px;background:#e8f3e9;display:grid;place-items:center;align-content:center;font-size:24px;font-weight:950;color:#176b3a}.ann-mark small{font-size:8px}.ann-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.ann-stats article,.ann-panel{background:#fff;border:1px solid #dce9df;border-radius:14px;padding:16px}.ann-stats article{display:grid;gap:7px}.ann-stats small{font-size:10px;text-transform:uppercase;color:#718477;font-weight:850}.ann-stats b{font-size:23px;color:#1c5635;overflow-wrap:anywhere}.ann-stats .ann-latest{font-size:12px}.ann-panel{margin:12px 0;box-shadow:0 4px 16px #184b2d0a}.ann-panel h2{font-size:17px;color:#204c32;margin:0 0 5px}.ann-form{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:14px}.ann-form label,.ann-filter label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#496451}.ann-form input,.ann-form select,.ann-form textarea,.ann-filter input,.ann-filter select{width:100%;min-width:0;padding:11px;border:1px solid #d8e5da;border-radius:9px;background:#fbfdfb;color:#263f2e;font:inherit;font-size:12px}.ann-wide{grid-column:1/-1}.ann-submit{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.ann-submit small{font-size:10px;color:#829087}.ann-submit button{border:0;border-radius:9px;padding:11px 16px;background:#176b3a;color:white;font-weight:850;cursor:pointer}.ann-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}.ann-head>b{font-size:10px;background:#edf6ef;color:#286342;padding:7px 10px;border-radius:20px}.ann-filter{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:13px}.ann-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ann-card{border:1px solid #e1ebe3;border-radius:11px;padding:14px;min-width:0}.ann-meta{display:flex;justify-content:space-between;align-items:center;gap:8px}.ann-meta b{font-size:9px;background:#edf6ef;color:#24613d;padding:5px 9px;border-radius:20px}.ann-meta time{font-size:9px;color:#829087}.ann-card h3{font-size:14px;color:#204b32;margin:11px 0 6px}.ann-card p{font-size:12px;color:#5f7264;line-height:1.6;margin:0;overflow-wrap:anywhere}.ann-empty{text-align:center;padding:24px;color:#839087;font-size:12px;border:1px dashed #d8e5da;border-radius:10px}.ann-card[hidden]{display:none}@media(max-width:700px){.ann-cards{grid-template-columns:1fr}.ann-stats{grid-template-columns:1fr 1fr}.ann-stats article:last-child{grid-column:1/-1}}@media(max-width:560px){.ann-mark{display:none}.ann-form,.ann-filter{grid-template-columns:1fr}.ann-wide{grid-column:auto}.ann-page h1{font-size:24px}}
+    </style><script>(function(){var s=document.getElementById('annSearch'),a=document.getElementById('annAudience'),cards=Array.from(document.querySelectorAll('.ann-card')),count=document.getElementById('annCount'),none=document.getElementById('annNone');function filter(){var q=(s.value||'').toLowerCase().trim(),v=(a.value||'').toLowerCase(),n=0;cards.forEach(function(c){var ok=(!q||(c.dataset.search||'').indexOf(q)>=0)&&(!v||c.dataset.audience===v);c.hidden=!ok;if(ok)n++;});count.textContent=n+' notice'+(n===1?'':'s');none.hidden=n!==0;}s.addEventListener('input',filter);a.addEventListener('change',filter);})();</script>"""
     return _school_page(request,"Announcements",body)
 
 @router.post("/app/announcements/add")
@@ -16162,25 +16182,46 @@ def roles_edit(request: Request, permission_id: int, role: str=Form(...), permis
 
 
 @router.get("/app/audit", response_class=HTMLResponse)
-def audit_page(request: Request):
+def audit_page(request: Request, q: str = "", action: str = "", user: str = "", from_date: str = "", to_date: str = ""):
     sid=_school_session(request)
     if not sid:return RedirectResponse("/")
     if not _require_permission(request, sid, "audit.view"):
         return HTMLResponse("You do not have permission to view the audit trail.", 403)
-    con=_db();cur=con.cursor()
-    rows=cur.execute("SELECT * FROM system_audit WHERE school_id=? ORDER BY id DESC LIMIT 500",(sid,)).fetchall()
-    con.close()
-    tr=_simple_rows(rows,["timestamp","user_email","action","details"])
-    body=f"""<div class='page'><h1>Audit Trail</h1>
-<div class='muted'>Security and activity history for this school.</div>
-<div class='card section'>
-<div style='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap'>
-<h2 style='margin:0'>Recent activity ({len(rows)})</h2>
-<form method='post' action='/app/audit/clear' data-native-post onsubmit="return confirm('Clear all audit trail records for this school? This action cannot be undone.');">
-<button class='btn' type='submit' style='background:#b91c1c!important;border-color:#b91c1c!important'>🗑️ Clear</button>
-</form></div>
-<div class='audit-table-scroll'><table><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th></tr></thead><tbody>{tr or '<tr><td colspan=4>No activity recorded yet.</td></tr>'}</tbody></table></div>
-</div></div>"""
+    con=_db()
+    try:
+        cur=con.cursor()
+        actions=cur.execute("SELECT DISTINCT action FROM system_audit WHERE school_id=? ORDER BY action LIMIT 100",(sid,)).fetchall()
+        where=["school_id=?"]
+        params=[sid]
+        if q.strip():
+            term="%"+q.strip()+"%"
+            where.append("(user_email LIKE ? OR action LIKE ? OR details LIKE ?)")
+            params.extend([term,term,term])
+        if action.strip():
+            where.append("action=?")
+            params.append(action.strip())
+        if user.strip():
+            where.append("user_email LIKE ?")
+            params.append("%"+user.strip()+"%")
+        if from_date.strip():
+            where.append("substr(timestamp,1,10)>=?")
+            params.append(from_date.strip()[:10])
+        if to_date.strip():
+            where.append("substr(timestamp,1,10)<=?")
+            params.append(to_date.strip()[:10])
+        rows=cur.execute("SELECT timestamp,user_email,action,details FROM system_audit WHERE "+" AND ".join(where)+" ORDER BY id DESC LIMIT 500",tuple(params)).fetchall()
+        total=int(cur.execute("SELECT COUNT(*) n FROM system_audit WHERE school_id=?",(sid,)).fetchone()["n"] or 0)
+    finally:
+        con.close()
+    today=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    actors={str(r["user_email"] or "").strip().lower() for r in rows if str(r["user_email"] or "").strip()}
+    today_count=sum(1 for r in rows if str(r["timestamp"] or "")[:10]==today)
+    tr="".join("<tr><td>"+escape(str(r["timestamp"] or ""))+"</td><td><b>"+escape(str(r["user_email"] or "System"))+"</b></td><td><span class='audit-action'>"+escape(str(r["action"] or "Activity"))+"</span></td><td>"+escape(str(r["details"] or ""))+"</td></tr>" for r in rows)
+    opts="".join("<option value='"+escape(str(r["action"] or ""),quote=True)+"' "+("selected" if str(r["action"] or "")==action else "")+">"+escape(str(r["action"] or "Other"))+"</option>" for r in actions)
+    body="<div class='page audit-page'><header><div><small>SECURITY &amp; ACCOUNTABILITY</small><h1>Audit Trail</h1><p>A searchable record of administrative actions and changes made within this school.</p></div><div class='audit-mark'>✓<small>ACTIVITY LOG</small></div></header><section class='audit-stats'><article><small>All recorded events</small><b>"+str(total)+"</b></article><article><small>Matching records</small><b>"+str(len(rows))+"</b></article><article><small>Distinct users</small><b>"+str(len(actors))+"</b></article><article><small>Today's activity</small><b>"+str(today_count)+"</b></article></section><section class='audit-panel'><div class='audit-head'><div><h2>Activity register</h2><p>Filter by action, account, date or keywords in activity details.</p></div><span>Read-only history</span></div><form method='get' action='/app/audit' class='audit-filters'><label>Keyword<input name='q' value='"+escape(q,quote=True)+"' placeholder='Search activity or details'></label><label>Action<select name='action'><option value=''>All actions</option>"+opts+"</select></label><label>User account<input name='user' value='"+escape(user,quote=True)+"' placeholder='Email or account'></label><label>From<input type='date' name='from_date' value='"+escape(from_date,quote=True)+"'></label><label>To<input type='date' name='to_date' value='"+escape(to_date,quote=True)+"'></label><div><button>Apply filters</button><a href='/app/audit'>Reset</a></div></form><div class='audit-scroll'><table><thead><tr><th>Timestamp</th><th>User account</th><th>Action</th><th>Activity details</th></tr></thead><tbody>"+(tr or "<tr><td colspan='4' class='audit-empty'>No activity matches the selected filters.</td></tr>")+"</tbody></table></div><p class='audit-note'>Historical entries are retained for accountability and are not deleted from this screen.</p></section></div>"
+    body+="""<style>
+    .audit-page{max-width:1500px;color:#203c2b}.audit-page header{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:16px}.audit-page header small{font-size:10px;letter-spacing:1.3px;font-weight:900;color:#39845a}.audit-page h1{font-size:29px;color:#174b2b;margin:6px 0}.audit-page header p,.audit-head p{font-size:12px;color:#718477;margin:0}.audit-mark{width:100px;height:75px;border:1px solid #d1e5d5;border-radius:14px;background:#eaf4ec;display:grid;place-items:center;align-content:center;color:#176b3a;font-size:26px;font-weight:900}.audit-mark small{font-size:8px}.audit-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.audit-stats article,.audit-panel{background:#fff;border:1px solid #dce9df;border-radius:14px;padding:15px}.audit-stats article{display:grid;gap:7px}.audit-stats small{font-size:10px;color:#718477;font-weight:850;text-transform:uppercase}.audit-stats b{font-size:23px;color:#1c5635}.audit-panel{box-shadow:0 4px 16px #184b2d0a}.audit-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:13px}.audit-head h2{font-size:17px;color:#204c32;margin:0 0 5px}.audit-head>span{font-size:9px;font-weight:900;color:#286342;background:#edf6ef;padding:7px 10px;border-radius:20px}.audit-filters{display:grid;grid-template-columns:2fr repeat(4,minmax(120px,1fr)) auto;gap:9px;align-items:end;padding:12px;background:#f7faf7;border:1px solid #e6eee7;border-radius:11px;margin-bottom:13px}.audit-filters label{display:grid;gap:5px;font-size:10px;font-weight:850;color:#526b59;min-width:0}.audit-filters input,.audit-filters select{width:100%;min-width:0;padding:9px;border:1px solid #d8e5da;border-radius:8px;background:#fff;color:#263f2e;font:inherit;font-size:11px}.audit-filters div{display:flex;gap:6px}.audit-filters button,.audit-filters a{padding:9px 11px;border:0;border-radius:8px;background:#176b3a;color:#fff;text-decoration:none;font-size:10px;font-weight:850;white-space:nowrap;cursor:pointer}.audit-filters a{background:#e8f2ea;color:#285a3c}.audit-scroll{width:100%;overflow:auto;border:1px solid #e7eee8;border-radius:10px;-webkit-overflow-scrolling:touch}.audit-scroll table{width:100%;min-width:760px;border-collapse:collapse}.audit-scroll th,.audit-scroll td{padding:11px 12px;border-bottom:1px solid #edf2ee;text-align:left;vertical-align:top;font-size:11px}.audit-scroll th{background:#f4f8f4;color:#5e7464;font-size:9px;text-transform:uppercase;white-space:nowrap}.audit-scroll td{color:#5d7163;overflow-wrap:anywhere}.audit-action{display:inline-block;padding:5px 8px;border-radius:6px;background:#edf5ef;color:#24613d;font-size:9px;font-weight:900;white-space:nowrap}.audit-empty{text-align:center!important;padding:24px!important}.audit-note{font-size:10px;color:#849188;margin:12px 0 0}@media(max-width:1000px){.audit-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.audit-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.audit-mark{display:none}.audit-page h1{font-size:24px}.audit-panel{padding:12px}.audit-filters{grid-template-columns:1fr 1fr}.audit-filters label:first-child,.audit-filters div{grid-column:1/-1}.audit-filters div>*{flex:1;text-align:center}}
+    </style>"""
     return _school_page(request,"Audit Trail",body)
 
 @router.post("/app/audit/clear")
@@ -20725,168 +20766,170 @@ def finance_workspace_section(request: Request, section: str):
     if section not in allowed:
         return RedirectResponse("/app/finance",303)
     con = _db()
-    cur = con.cursor()
-    _finance_prepare(cur,sid)
-    title = {
-        "billing":"Fees & Billing","collections":"Collections & Receipting",
-        "payables":"Accounts Payable","ledger":"General Accounting",
-        "banking":"Cash & Banking","budgets":"Budgets & Financial Planning",
-        "reports":"Financial Reports"
-    }[section]
-    content = ""
-    if section == "billing":
-        charges = cur.execute("""SELECT f.id,f.amount,f.paid,f.status,f.description,f.due_date,
-            s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
-            AND s.school_id=f.school_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 250""",(sid,)).fetchall()
-        students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
-        opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
-        rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
-            _finance_cell(x["student_name"]),_finance_cell(x["admission_no"]),float(x["amount"] or 0),
-            float(x["paid"] or 0),max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),
-            _finance_cell(x["status"] or "Pending"),_finance_cell(x["due_date"] or "")) for x in charges)
-        content = """<div class='fx-card'><h2>Create learner charge</h2><p>Charges are attached to the learner record and appear in their running fee balance.</p>
-        <form method='post' action='/app/finance/billing/charge' class='fx-form'>
-        <select name='student_id' required><option value=''>Select learner</option>%s</select>
-        <input name='description' required placeholder='Charge description / fee item'>
-        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
-        <input name='due_date' type='date'><button type='submit'>Create charge</button></form></div>
-        <div class='fx-card'><h2>Fee accounts</h2>%s</div>""" % (opts,_finance_table(["Learner","Admission No.","Billed","Paid","Balance","Status","Due date"],rows,"No fee charges recorded."))
-    elif section == "collections":
-        payments = cur.execute("""SELECT p.id,p.amount,p.reference,p.method,p.date,p.received_by,s.name learner
-            FROM fee_payments p LEFT JOIN students s ON s.id=p.student_id AND s.school_id=p.school_id
-            WHERE p.school_id=? ORDER BY p.id DESC LIMIT 300""",(sid,)).fetchall()
-        students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
-        opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
-        rows = "".join("<tr><td>RCP-%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
-            int(x["id"]),_finance_cell(x["learner"]),float(x["amount"] or 0),_finance_cell(x["method"]),
-            _finance_cell(x["reference"]),_finance_cell(x["date"]),_finance_cell(x["received_by"])) for x in payments)
-        content = """<div class='fx-card'><h2>Receive payment</h2><p>Payments are allocated against the learner's oldest outstanding charges. Overpayments are rejected.</p>
-        <form method='post' action='/app/finance/collections/receive' class='fx-form'>
-        <select name='student_id' required><option value=''>Select learner</option>%s</select>
-        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
-        <select name='method'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option><option>Card</option><option>Other</option></select>
-        <input name='reference' placeholder='M-Pesa / bank / receipt reference'><button type='submit'>Record & issue receipt</button></form></div>
-        <div class='fx-card'><h2>Receipt register</h2>%s</div>"""%(opts,_finance_table(["Receipt No.","Learner","Amount","Method","Reference","Date","Received by"],rows,"No payments recorded."))
-    elif section == "payables":
-        suppliers = cur.execute("SELECT * FROM ds_fin_suppliers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-        bills = cur.execute("""SELECT b.*,s.name supplier_name FROM ds_fin_bills b
-            JOIN ds_fin_suppliers s ON s.id=b.supplier_id AND s.school_id=b.school_id
-            WHERE b.school_id=? ORDER BY b.id DESC LIMIT 200""",(sid,)).fetchall()
-        sopts = "".join("<option value='%s'>%s</option>"%(x["id"],_finance_cell(x["name"])) for x in suppliers)
-        sr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["name"]),_finance_cell(x["phone"]),_finance_cell(x["email"]),_finance_cell(x["tax_pin"])) for x in suppliers)
-        br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
-            _finance_cell(x["supplier_name"]),_finance_cell(x["invoice_no"]),_finance_cell(x["due_date"]),
-            float(x["amount"] or 0),_finance_cell(x["status"]),(
-                "<form method='post' action='/app/finance/payables/pay'><input type='hidden' name='bill_id' value='%s'><button>Mark paid</button></form>"%x["id"]
-                if x["status"]=="Approved" else ("<form method='post' action='/app/finance/payables/approve'><input type='hidden' name='bill_id' value='%s'><button>Approve</button></form>"%x["id"] if x["status"]=="Draft" else ""))) for x in bills)
-        content = """<div class='fx-two'><div class='fx-card'><h2>Supplier register</h2><form method='post' action='/app/finance/payables/supplier' class='fx-form'>
-        <input name='name' required placeholder='Supplier name'><input name='phone' placeholder='Phone'><input name='email' type='email' placeholder='Email'><input name='tax_pin' placeholder='KRA PIN'><button>Add supplier</button></form>%s</div>
-        <div class='fx-card'><h2>Supplier invoice / bill</h2><form method='post' action='/app/finance/payables/bill' class='fx-form'>
-        <select name='supplier_id' required><option value=''>Select supplier</option>%s</select><input name='invoice_no' required placeholder='Supplier invoice no.'>
-        <input name='bill_date' type='date' required><input name='due_date' type='date'><input name='description' placeholder='Description'>
-        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Create draft bill</button></form></div></div>
-        <div class='fx-card'><h2>Supplier directory</h2>%s</div><div class='fx-card'><h2>Payables register</h2><p>Draft bills must be approved before payment. Payment is recorded in the cashbook and expense register.</p>%s</div>"""%(
-            _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),sopts,
-            _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),
-            _finance_table(["Supplier","Invoice","Due date","Amount","Status","Action"],br,"No supplier bills yet."))
-    elif section == "ledger":
-        accounts = cur.execute("SELECT * FROM ds_fin_accounts WHERE school_id=? AND active=1 ORDER BY code",(sid,)).fetchall()
-        journals = cur.execute("SELECT * FROM ds_fin_journals WHERE school_id=? ORDER BY created_at DESC LIMIT 100",(sid,)).fetchall()
-        ar = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td></tr>"%(
-            _finance_cell(x["code"]),_finance_cell(x["name"]),_finance_cell(x["account_type"]),
-            "Active" if x["active"] else "Inactive",float(x["opening_balance"] or 0)) for x in accounts)
-        jr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
-            _finance_cell(x["journal_date"]),_finance_cell(x["reference"]),_finance_cell(x["description"]),
-            _finance_cell(x["status"]),(
-                "<form method='post' action='/app/finance/ledger/post'><input type='hidden' name='journal_id' value='%s'><button>Post</button></form>"%x["id"]
-                if x["status"]=="Draft" else ("Reversed" if x["status"]=="Reversed" else "<form method='post' action='/app/finance/ledger/reverse'><input type='hidden' name='journal_id' value='%s'><input name='reason' required placeholder='Reversal reason'><button>Reverse</button></form>"%x["id"])),
-            _finance_cell(x["created_by"])) for x in journals)
-        opts = "".join("<option value='%s'>%s · %s</option>"%(_finance_cell(x["code"]),_finance_cell(x["code"]),_finance_cell(x["name"])) for x in accounts)
-        content = """<div class='fx-card'><h2>Chart of accounts</h2><p>Starter school chart. Additions are school-specific and do not change existing records.</p>%s
-        <form method='post' action='/app/finance/ledger/account' class='fx-form'><input name='code' required placeholder='Account code'><input name='name' required placeholder='Account name'>
-        <select name='account_type'><option>Asset</option><option>Liability</option><option>Equity</option><option>Income</option><option>Expense</option></select><input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
-        <div class='fx-card'><h2>New balanced journal</h2><p>Enter equal debit and credit values. Journals remain drafts until explicitly posted.</p>
-        <form method='post' action='/app/finance/ledger/journal' class='fx-form'><input name='journal_date' type='date' required><input name='reference' placeholder='Reference'>
-        <input name='description' required placeholder='Journal description'><select name='debit_account' required><option value=''>Debit account</option>%s</select>
-        <select name='credit_account' required><option value=''>Credit account</option>%s</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Save draft journal</button></form></div>
-        <div class='fx-card'><h2>Journal register</h2>%s</div>"""%(_finance_table(["Code","Account","Type","Status","Opening balance"],ar,"No accounts."),
-            opts,opts,_finance_table(["Date","Reference","Description","Status","Posted at","Created by"],jr,"No journals yet."))
-        periods=cur.execute("SELECT period_start,period_end,status FROM ds_fin_periods WHERE school_id=? ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
-        period_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["status"])) for x in periods)
-        content += "<div class='fx-card'><h2>Close accounting period</h2><p>Closing a period prevents new charges, receipts and journals dated inside that period. Ensure bank reconciliation and approvals are complete first.</p><form method='post' action='/app/finance/periods/close' class='fx-form'><input type='date' name='period_start' required><input type='date' name='period_end' required><button>Close period</button></form>"+_finance_table(["Period start","Period end","Status"],period_rows,"No accounting periods locked.")+"</div>"
-    elif section == "banking":
-        banks = cur.execute("SELECT * FROM ds_fin_bank_accounts WHERE school_id=? ORDER BY bank_name",(sid,)).fetchall()
-        lines = cur.execute("""SELECT l.*,b.bank_name,b.account_name FROM ds_fin_bank_lines l
-            JOIN ds_fin_bank_accounts b ON b.id=l.account_id AND b.school_id=l.school_id
-            WHERE l.school_id=? ORDER BY l.line_date DESC LIMIT 250""",(sid,)).fetchall()
-        opts = "".join("<option value='%s'>%s · %s</option>"%(x["id"],_finance_cell(x["bank_name"]),_finance_cell(x["account_name"])) for x in banks)
-        br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
-            _finance_cell(x["bank_name"]),_finance_cell(x["line_date"]),_finance_cell(x["reference"]),
-            _finance_cell(x["description"]),float(x["amount"] or 0),_finance_cell(x["direction"]),
-            "Reconciled" if x["reconciled"] else "<form method='post' action='/app/finance/banking/reconcile'><input type='hidden' name='line_id' value='%s'><button>Match cashbook</button></form>"%x["id"]) for x in lines)
-        content = """<div class='fx-two'><div class='fx-card'><h2>Bank / cash account</h2><form method='post' action='/app/finance/banking/account' class='fx-form'>
-        <input name='bank_name' required placeholder='Bank / M-Pesa / Cash'><input name='account_name' required placeholder='Account name'><input name='account_number' placeholder='Account number (optional)'>
-        <input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
-        <div class='fx-card'><h2>Statement line entry</h2><p>Enter or import statement lines, then match them to recorded cashbook transactions.</p>
-        <form method='post' action='/app/finance/banking/line' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select>
-        <input name='line_date' type='date' required><input name='reference' placeholder='Bank reference'><input name='description' placeholder='Description'>
-        <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount'><select name='direction'><option>Credit</option><option>Debit</option></select><button>Add statement line</button></form></div></div>
-        <div class='fx-card'><h2>Import bank statement (CSV)</h2><p>CSV headers: Date, Reference, Description, Amount, Direction. Alternatively use Date, Debit, Credit. Duplicate rows are skipped.</p>
-        <form method='post' enctype='multipart/form-data' action='/app/finance/banking/import' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select><input type='file' name='statement_file' accept='.csv,text/csv' required><button>Import statement</button></form></div>
-        <div class='fx-card'><h2>Reconciliation register</h2>%s</div>"""%(opts,opts,_finance_table(["Account","Date","Reference","Description","Amount","Direction","Match"],br,"No statement lines."))
-    elif section == "budgets":
-        budgets = cur.execute("SELECT * FROM ds_fin_budgets WHERE school_id=? ORDER BY budget_year DESC,department",(sid,)).fetchall()
-        actuals = cur.execute("SELECT category,COALESCE(SUM(amount),0) actual FROM expenses WHERE school_id=? GROUP BY category",(sid,)).fetchall()
-        actual_map = {str(x["category"] or "").strip().lower():float(x["actual"] or 0) for x in actuals}
-        rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(
-            _finance_cell(x["budget_year"]),_finance_cell(x["department"]),float(x["amount"] or 0),
-            actual_map.get(str(x["department"] or "").strip().lower(),0),
-            float(x["amount"] or 0)-actual_map.get(str(x["department"] or "").strip().lower(),0)) for x in budgets)
-        content = """<div class='fx-card'><h2>Annual / departmental budget</h2><form method='post' action='/app/finance/budgets/add' class='fx-form'>
-        <input name='budget_year' required placeholder='Financial year e.g. 2027'><input name='department' required placeholder='Department / expense category'>
-        <input name='account_code' placeholder='Account code (optional)'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Budget amount (KES)'><button>Save budget</button></form></div>
-        <div class='fx-card'><h2>Budget vs recorded expenditure</h2><p>Actuals are matched to the existing expense category field.</p>%s</div>"""%_finance_table(["Year","Department","Budget","Recorded actual","Variance"],rows,"No budgets created.")
-    else:
-        start_day=str(request.query_params.get("from") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-01-01"))[:10]
-        end_day=str(request.query_params.get("to") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d"))[:10]
-        accounts = cur.execute("""SELECT a.code,a.name,a.account_type,a.opening_balance,
-            COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.debit ELSE 0 END),0) debits,COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.credit ELSE 0 END),0) credits
-            FROM ds_fin_accounts a LEFT JOIN ds_fin_journal_lines l ON l.school_id=a.school_id AND l.account_code=a.code
-            LEFT JOIN ds_fin_journals j ON j.id=l.journal_id AND j.school_id=l.school_id AND j.status IN ('Posted','Reversed') AND j.journal_date BETWEEN ? AND ?
-            WHERE a.school_id=? AND a.active=1 GROUP BY a.code,a.name,a.account_type,a.opening_balance ORDER BY a.code""",(start_day,end_day,sid)).fetchall()
-        tb_rows=[];income=0.0;expenses_total=0.0;assets=0.0;liabilities=0.0;equity=0.0;cash_net=0.0
-        for acc in accounts:
-            debit=float(acc["debits"] or 0);credit=float(acc["credits"] or 0);opening=float(acc["opening_balance"] or 0)
-            kind=str(acc["account_type"] or "")
-            balance=opening+debit-credit if kind in ("Asset","Expense") else opening+credit-debit
-            dr=max(0,balance) if kind in ("Asset","Expense") else 0
-            cr=max(0,-balance) if kind in ("Asset","Expense") else max(0,balance)
-            tb_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(_finance_cell(acc["code"]),_finance_cell(acc["name"]),_finance_cell(kind),dr,cr))
-            if kind=="Income":income+=credit-debit
-            elif kind=="Expense":expenses_total+=debit-credit
-            elif kind=="Asset":assets+=balance
-            elif kind=="Liability":liabilities+=balance
-            elif kind=="Equity":equity+=balance
-            if str(acc["code"]) in ("1000","1010","1020"):cash_net+=debit-credit
-        surplus=income-expenses_total
-        statement_rows="<tr><td>Income</td><td>KES %,.2f</td></tr><tr><td>Expenses</td><td>KES %,.2f</td></tr><tr><td>Net surplus / (deficit)</td><td>KES %,.2f</td></tr>"%(income,expenses_total,surplus)
-        position_rows="<tr><td>Assets</td><td>KES %,.2f</td></tr><tr><td>Liabilities</td><td>KES %,.2f</td></tr><tr><td>Accumulated funds</td><td>KES %,.2f</td></tr><tr><td>Current period surplus / (deficit)</td><td>KES %,.2f</td></tr><tr><td>Total liabilities and funds</td><td>KES %,.2f</td></tr>"%(assets,liabilities,equity,surplus,liabilities+equity+surplus)
-        cash_rows="<tr><td>Net movement in cash, bank and mobile-money control accounts</td><td>KES %,.2f</td></tr>"%cash_net
-        closed=cur.execute("SELECT period_start,period_end,closed_by,closed_at FROM ds_fin_periods WHERE school_id=? AND status='Closed' ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
-        closed_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["closed_by"]),_finance_cell(x["closed_at"])) for x in closed)
-        content="""<div class='fx-card'><h2>Financial statement period</h2><form method='get' action='/app/finance/reports' class='fx-form'><input type='date' name='from' value='%s'><input type='date' name='to' value='%s'><button>Run statements</button></form><p>Statements are calculated from posted double-entry journals and account opening balances for the selected period.</p></div>
-        <div class='fx-kpis'><div><small>Total income</small><b>KES %,.2f</b></div><div><small>Total expenses</small><b>KES %,.2f</b></div><div><small>Net surplus / (deficit)</small><b>KES %,.2f</b></div><div><small>Assets</small><b>KES %,.2f</b></div></div>
-        <div class='fx-card'><h2>Trial balance</h2>%s</div>
-        <div class='fx-two'><div class='fx-card'><h2>Income statement</h2>%s</div><div class='fx-card'><h2>Statement of financial position</h2>%s</div></div>
-        <div class='fx-card'><h2>Cash flow summary</h2>%s</div>
-        <div class='fx-card'><h2>Accounting period locks</h2><p>Closed periods block new ledger postings and manual journal posting within their date range. Close only after reconciliation and review.</p>%s</div>"""%(escape(start_day),escape(end_day),income,expenses_total,surplus,assets,
-            _finance_table(["Code","Account","Type","Debit balance","Credit balance"],"".join(tb_rows),"No posted ledger entries for this period."),
-            _finance_table(["Description","Amount"],statement_rows,"No statement values."),
-            _finance_table(["Position","Amount"],position_rows,"No position values."),
-            _finance_table(["Cash flow measure","Amount"],cash_rows,"No cash movement."),
-            _finance_table(["Period start","Period end","Closed by","Closed at"],closed_rows,"No periods closed."))
-    con.commit()
-    con.close()
+    try:
+        cur = con.cursor()
+        _finance_prepare(cur,sid)
+        title = {
+            "billing":"Fees & Billing","collections":"Collections & Receipting",
+            "payables":"Accounts Payable","ledger":"General Accounting",
+            "banking":"Cash & Banking","budgets":"Budgets & Financial Planning",
+            "reports":"Financial Reports"
+        }[section]
+        content = ""
+        if section == "billing":
+            charges = cur.execute("""SELECT f.id,f.amount,f.paid,f.status,f.description,f.due_date,
+                s.name student_name,s.admission_no FROM fees f JOIN students s ON s.id=f.student_id
+                AND s.school_id=f.school_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 250""",(sid,)).fetchall()
+            students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
+            opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
+            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+                _finance_cell(x["student_name"]),_finance_cell(x["admission_no"]),float(x["amount"] or 0),
+                float(x["paid"] or 0),max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),
+                _finance_cell(x["status"] or "Pending"),_finance_cell(x["due_date"] or "")) for x in charges)
+            content = """<div class='fx-card'><h2>Create learner charge</h2><p>Charges are attached to the learner record and appear in their running fee balance.</p>
+            <form method='post' action='/app/finance/billing/charge' class='fx-form'>
+            <select name='student_id' required><option value=''>Select learner</option>%s</select>
+            <input name='description' required placeholder='Charge description / fee item'>
+            <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
+            <input name='due_date' type='date'><button type='submit'>Create charge</button></form></div>
+            <div class='fx-card'><h2>Fee accounts</h2>%s</div>""" % (opts,_finance_table(["Learner","Admission No.","Billed","Paid","Balance","Status","Due date"],rows,"No fee charges recorded."))
+        elif section == "collections":
+            payments = cur.execute("""SELECT p.id,p.amount,p.reference,p.method,p.date,p.received_by,s.name learner
+                FROM fee_payments p LEFT JOIN students s ON s.id=p.student_id AND s.school_id=p.school_id
+                WHERE p.school_id=? ORDER BY p.id DESC LIMIT 300""",(sid,)).fetchall()
+            students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
+            opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
+            rows = "".join("<tr><td>RCP-%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
+                int(x["id"]),_finance_cell(x["learner"]),float(x["amount"] or 0),_finance_cell(x["method"]),
+                _finance_cell(x["reference"]),_finance_cell(x["date"]),_finance_cell(x["received_by"])) for x in payments)
+            content = """<div class='fx-card'><h2>Receive payment</h2><p>Payments are allocated against the learner's oldest outstanding charges. Overpayments are rejected.</p>
+            <form method='post' action='/app/finance/collections/receive' class='fx-form'>
+            <select name='student_id' required><option value=''>Select learner</option>%s</select>
+            <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'>
+            <select name='method'><option>Cash</option><option>Bank</option><option>Mobile Money</option><option>Cheque</option><option>Card</option><option>Other</option></select>
+            <input name='reference' placeholder='M-Pesa / bank / receipt reference'><button type='submit'>Record & issue receipt</button></form></div>
+            <div class='fx-card'><h2>Receipt register</h2>%s</div>"""%(opts,_finance_table(["Receipt No.","Learner","Amount","Method","Reference","Date","Received by"],rows,"No payments recorded."))
+        elif section == "payables":
+            suppliers = cur.execute("SELECT * FROM ds_fin_suppliers WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+            bills = cur.execute("""SELECT b.*,s.name supplier_name FROM ds_fin_bills b
+                JOIN ds_fin_suppliers s ON s.id=b.supplier_id AND s.school_id=b.school_id
+                WHERE b.school_id=? ORDER BY b.id DESC LIMIT 200""",(sid,)).fetchall()
+            sopts = "".join("<option value='%s'>%s</option>"%(x["id"],_finance_cell(x["name"])) for x in suppliers)
+            sr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["name"]),_finance_cell(x["phone"]),_finance_cell(x["email"]),_finance_cell(x["tax_pin"])) for x in suppliers)
+            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+                _finance_cell(x["supplier_name"]),_finance_cell(x["invoice_no"]),_finance_cell(x["due_date"]),
+                float(x["amount"] or 0),_finance_cell(x["status"]),(
+                    "<form method='post' action='/app/finance/payables/pay'><input type='hidden' name='bill_id' value='%s'><button>Mark paid</button></form>"%x["id"]
+                    if x["status"]=="Approved" else ("<form method='post' action='/app/finance/payables/approve'><input type='hidden' name='bill_id' value='%s'><button>Approve</button></form>"%x["id"] if x["status"]=="Draft" else ""))) for x in bills)
+            content = """<div class='fx-two'><div class='fx-card'><h2>Supplier register</h2><form method='post' action='/app/finance/payables/supplier' class='fx-form'>
+            <input name='name' required placeholder='Supplier name'><input name='phone' placeholder='Phone'><input name='email' type='email' placeholder='Email'><input name='tax_pin' placeholder='KRA PIN'><button>Add supplier</button></form>%s</div>
+            <div class='fx-card'><h2>Supplier invoice / bill</h2><form method='post' action='/app/finance/payables/bill' class='fx-form'>
+            <select name='supplier_id' required><option value=''>Select supplier</option>%s</select><input name='invoice_no' required placeholder='Supplier invoice no.'>
+            <input name='bill_date' type='date' required><input name='due_date' type='date'><input name='description' placeholder='Description'>
+            <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Create draft bill</button></form></div></div>
+            <div class='fx-card'><h2>Supplier directory</h2>%s</div><div class='fx-card'><h2>Payables register</h2><p>Draft bills must be approved before payment. Payment is recorded in the cashbook and expense register.</p>%s</div>"""%(
+                _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),sopts,
+                _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),
+                _finance_table(["Supplier","Invoice","Due date","Amount","Status","Action"],br,"No supplier bills yet."))
+        elif section == "ledger":
+            accounts = cur.execute("SELECT * FROM ds_fin_accounts WHERE school_id=? AND active=1 ORDER BY code",(sid,)).fetchall()
+            journals = cur.execute("SELECT * FROM ds_fin_journals WHERE school_id=? ORDER BY created_at DESC LIMIT 100",(sid,)).fetchall()
+            ar = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td></tr>"%(
+                _finance_cell(x["code"]),_finance_cell(x["name"]),_finance_cell(x["account_type"]),
+                "Active" if x["active"] else "Inactive",float(x["opening_balance"] or 0)) for x in accounts)
+            jr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
+                _finance_cell(x["journal_date"]),_finance_cell(x["reference"]),_finance_cell(x["description"]),
+                _finance_cell(x["status"]),(
+                    "<form method='post' action='/app/finance/ledger/post'><input type='hidden' name='journal_id' value='%s'><button>Post</button></form>"%x["id"]
+                    if x["status"]=="Draft" else ("Reversed" if x["status"]=="Reversed" else "<form method='post' action='/app/finance/ledger/reverse'><input type='hidden' name='journal_id' value='%s'><input name='reason' required placeholder='Reversal reason'><button>Reverse</button></form>"%x["id"])),
+                _finance_cell(x["created_by"])) for x in journals)
+            opts = "".join("<option value='%s'>%s · %s</option>"%(_finance_cell(x["code"]),_finance_cell(x["code"]),_finance_cell(x["name"])) for x in accounts)
+            content = """<div class='fx-card'><h2>Chart of accounts</h2><p>Starter school chart. Additions are school-specific and do not change existing records.</p>%s
+            <form method='post' action='/app/finance/ledger/account' class='fx-form'><input name='code' required placeholder='Account code'><input name='name' required placeholder='Account name'>
+            <select name='account_type'><option>Asset</option><option>Liability</option><option>Equity</option><option>Income</option><option>Expense</option></select><input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
+            <div class='fx-card'><h2>New balanced journal</h2><p>Enter equal debit and credit values. Journals remain drafts until explicitly posted.</p>
+            <form method='post' action='/app/finance/ledger/journal' class='fx-form'><input name='journal_date' type='date' required><input name='reference' placeholder='Reference'>
+            <input name='description' required placeholder='Journal description'><select name='debit_account' required><option value=''>Debit account</option>%s</select>
+            <select name='credit_account' required><option value=''>Credit account</option>%s</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Save draft journal</button></form></div>
+            <div class='fx-card'><h2>Journal register</h2>%s</div>"""%(_finance_table(["Code","Account","Type","Status","Opening balance"],ar,"No accounts."),
+                opts,opts,_finance_table(["Date","Reference","Description","Status","Posted at","Created by"],jr,"No journals yet."))
+            periods=cur.execute("SELECT period_start,period_end,status FROM ds_fin_periods WHERE school_id=? ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
+            period_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["status"])) for x in periods)
+            content += "<div class='fx-card'><h2>Close accounting period</h2><p>Closing a period prevents new charges, receipts and journals dated inside that period. Ensure bank reconciliation and approvals are complete first.</p><form method='post' action='/app/finance/periods/close' class='fx-form'><input type='date' name='period_start' required><input type='date' name='period_end' required><button>Close period</button></form>"+_finance_table(["Period start","Period end","Status"],period_rows,"No accounting periods locked.")+"</div>"
+        elif section == "banking":
+            banks = cur.execute("SELECT * FROM ds_fin_bank_accounts WHERE school_id=? ORDER BY bank_name",(sid,)).fetchall()
+            lines = cur.execute("""SELECT l.*,b.bank_name,b.account_name FROM ds_fin_bank_lines l
+                JOIN ds_fin_bank_accounts b ON b.id=l.account_id AND b.school_id=l.school_id
+                WHERE l.school_id=? ORDER BY l.line_date DESC LIMIT 250""",(sid,)).fetchall()
+            opts = "".join("<option value='%s'>%s · %s</option>"%(x["id"],_finance_cell(x["bank_name"]),_finance_cell(x["account_name"])) for x in banks)
+            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+                _finance_cell(x["bank_name"]),_finance_cell(x["line_date"]),_finance_cell(x["reference"]),
+                _finance_cell(x["description"]),float(x["amount"] or 0),_finance_cell(x["direction"]),
+                "Reconciled" if x["reconciled"] else "<form method='post' action='/app/finance/banking/reconcile'><input type='hidden' name='line_id' value='%s'><button>Match cashbook</button></form>"%x["id"]) for x in lines)
+            content = """<div class='fx-two'><div class='fx-card'><h2>Bank / cash account</h2><form method='post' action='/app/finance/banking/account' class='fx-form'>
+            <input name='bank_name' required placeholder='Bank / M-Pesa / Cash'><input name='account_name' required placeholder='Account name'><input name='account_number' placeholder='Account number (optional)'>
+            <input name='opening_balance' type='number' step='0.01' value='0' placeholder='Opening balance'><button>Add account</button></form></div>
+            <div class='fx-card'><h2>Statement line entry</h2><p>Enter or import statement lines, then match them to recorded cashbook transactions.</p>
+            <form method='post' action='/app/finance/banking/line' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select>
+            <input name='line_date' type='date' required><input name='reference' placeholder='Bank reference'><input name='description' placeholder='Description'>
+            <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount'><select name='direction'><option>Credit</option><option>Debit</option></select><button>Add statement line</button></form></div></div>
+            <div class='fx-card'><h2>Import bank statement (CSV)</h2><p>CSV headers: Date, Reference, Description, Amount, Direction. Alternatively use Date, Debit, Credit. Duplicate rows are skipped.</p>
+            <form method='post' enctype='multipart/form-data' action='/app/finance/banking/import' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select><input type='file' name='statement_file' accept='.csv,text/csv' required><button>Import statement</button></form></div>
+            <div class='fx-card'><h2>Reconciliation register</h2>%s</div>"""%(opts,opts,_finance_table(["Account","Date","Reference","Description","Amount","Direction","Match"],br,"No statement lines."))
+        elif section == "budgets":
+            budgets = cur.execute("SELECT * FROM ds_fin_budgets WHERE school_id=? ORDER BY budget_year DESC,department",(sid,)).fetchall()
+            actuals = cur.execute("SELECT category,COALESCE(SUM(amount),0) actual FROM expenses WHERE school_id=? GROUP BY category",(sid,)).fetchall()
+            actual_map = {str(x["category"] or "").strip().lower():float(x["actual"] or 0) for x in actuals}
+            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(
+                _finance_cell(x["budget_year"]),_finance_cell(x["department"]),float(x["amount"] or 0),
+                actual_map.get(str(x["department"] or "").strip().lower(),0),
+                float(x["amount"] or 0)-actual_map.get(str(x["department"] or "").strip().lower(),0)) for x in budgets)
+            content = """<div class='fx-card'><h2>Annual / departmental budget</h2><form method='post' action='/app/finance/budgets/add' class='fx-form'>
+            <input name='budget_year' required placeholder='Financial year e.g. 2027'><input name='department' required placeholder='Department / expense category'>
+            <input name='account_code' placeholder='Account code (optional)'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Budget amount (KES)'><button>Save budget</button></form></div>
+            <div class='fx-card'><h2>Budget vs recorded expenditure</h2><p>Actuals are matched to the existing expense category field.</p>%s</div>"""%_finance_table(["Year","Department","Budget","Recorded actual","Variance"],rows,"No budgets created.")
+        else:
+            start_day=str(request.query_params.get("from") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-01-01"))[:10]
+            end_day=str(request.query_params.get("to") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d"))[:10]
+            accounts = cur.execute("""SELECT a.code,a.name,a.account_type,a.opening_balance,
+                COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.debit ELSE 0 END),0) debits,COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.credit ELSE 0 END),0) credits
+                FROM ds_fin_accounts a LEFT JOIN ds_fin_journal_lines l ON l.school_id=a.school_id AND l.account_code=a.code
+                LEFT JOIN ds_fin_journals j ON j.id=l.journal_id AND j.school_id=l.school_id AND j.status IN ('Posted','Reversed') AND j.journal_date BETWEEN ? AND ?
+                WHERE a.school_id=? AND a.active=1 GROUP BY a.code,a.name,a.account_type,a.opening_balance ORDER BY a.code""",(start_day,end_day,sid)).fetchall()
+            tb_rows=[];income=0.0;expenses_total=0.0;assets=0.0;liabilities=0.0;equity=0.0;cash_net=0.0
+            for acc in accounts:
+                debit=float(acc["debits"] or 0);credit=float(acc["credits"] or 0);opening=float(acc["opening_balance"] or 0)
+                kind=str(acc["account_type"] or "")
+                balance=opening+debit-credit if kind in ("Asset","Expense") else opening+credit-debit
+                dr=max(0,balance) if kind in ("Asset","Expense") else 0
+                cr=max(0,-balance) if kind in ("Asset","Expense") else max(0,balance)
+                tb_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(_finance_cell(acc["code"]),_finance_cell(acc["name"]),_finance_cell(kind),dr,cr))
+                if kind=="Income":income+=credit-debit
+                elif kind=="Expense":expenses_total+=debit-credit
+                elif kind=="Asset":assets+=balance
+                elif kind=="Liability":liabilities+=balance
+                elif kind=="Equity":equity+=balance
+                if str(acc["code"]) in ("1000","1010","1020"):cash_net+=debit-credit
+            surplus=income-expenses_total
+            statement_rows="<tr><td>Income</td><td>KES %,.2f</td></tr><tr><td>Expenses</td><td>KES %,.2f</td></tr><tr><td>Net surplus / (deficit)</td><td>KES %,.2f</td></tr>"%(income,expenses_total,surplus)
+            position_rows="<tr><td>Assets</td><td>KES %,.2f</td></tr><tr><td>Liabilities</td><td>KES %,.2f</td></tr><tr><td>Accumulated funds</td><td>KES %,.2f</td></tr><tr><td>Current period surplus / (deficit)</td><td>KES %,.2f</td></tr><tr><td>Total liabilities and funds</td><td>KES %,.2f</td></tr>"%(assets,liabilities,equity,surplus,liabilities+equity+surplus)
+            cash_rows="<tr><td>Net movement in cash, bank and mobile-money control accounts</td><td>KES %,.2f</td></tr>"%cash_net
+            closed=cur.execute("SELECT period_start,period_end,closed_by,closed_at FROM ds_fin_periods WHERE school_id=? AND status='Closed' ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
+            closed_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["closed_by"]),_finance_cell(x["closed_at"])) for x in closed)
+            content="""<div class='fx-card'><h2>Financial statement period</h2><form method='get' action='/app/finance/reports' class='fx-form'><input type='date' name='from' value='%s'><input type='date' name='to' value='%s'><button>Run statements</button></form><p>Statements are calculated from posted double-entry journals and account opening balances for the selected period.</p></div>
+            <div class='fx-kpis'><div><small>Total income</small><b>KES %,.2f</b></div><div><small>Total expenses</small><b>KES %,.2f</b></div><div><small>Net surplus / (deficit)</small><b>KES %,.2f</b></div><div><small>Assets</small><b>KES %,.2f</b></div></div>
+            <div class='fx-card'><h2>Trial balance</h2>%s</div>
+            <div class='fx-two'><div class='fx-card'><h2>Income statement</h2>%s</div><div class='fx-card'><h2>Statement of financial position</h2>%s</div></div>
+            <div class='fx-card'><h2>Cash flow summary</h2>%s</div>
+            <div class='fx-card'><h2>Accounting period locks</h2><p>Closed periods block new ledger postings and manual journal posting within their date range. Close only after reconciliation and review.</p>%s</div>"""%(escape(start_day),escape(end_day),income,expenses_total,surplus,assets,
+                _finance_table(["Code","Account","Type","Debit balance","Credit balance"],"".join(tb_rows),"No posted ledger entries for this period."),
+                _finance_table(["Description","Amount"],statement_rows,"No statement values."),
+                _finance_table(["Position","Amount"],position_rows,"No position values."),
+                _finance_table(["Cash flow measure","Amount"],cash_rows,"No cash movement."),
+                _finance_table(["Period start","Period end","Closed by","Closed at"],closed_rows,"No periods closed."))
+        con.commit()
+    finally:
+        con.close()
     body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
     <style>
     .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}

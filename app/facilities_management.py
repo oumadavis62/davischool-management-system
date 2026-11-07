@@ -387,7 +387,7 @@ def maintenance_history(request: Request, q: str = ""):
         cur = con.cursor()
         _schema(cur)
         term = "%" + q.strip() + "%"
-        rows = cur.execute("SELECT m.*,f.facility_name,r.room_name,a.asset_name FROM facility_maintenance m LEFT JOIN school_facilities f ON f.id=m.facility_id AND f.school_id=m.school_id LEFT JOIN facility_rooms r ON r.id=m.room_id AND r.school_id=m.school_id LEFT JOIN facility_assets a ON a.id=m.asset_id AND a.school_id=m.school_id WHERE m.school_id=? AND (?='' OR m.request_no LIKE ? OR m.issue LIKE ? OR m.action_taken LIKE ?) ORDER BY CASE WHEN m.status='Completed' THEN 0 ELSE 1 END,m.completed_date DESC,m.request_date DESC", (sid, q.strip(), term, term, term, term)).fetchall()
+        rows = cur.execute("SELECT m.*,f.facility_name,r.room_name,a.asset_name FROM facility_maintenance m LEFT JOIN school_facilities f ON f.id=m.facility_id AND f.school_id=m.school_id LEFT JOIN facility_rooms r ON r.id=m.room_id AND r.school_id=m.school_id LEFT JOIN facility_assets a ON a.id=m.asset_id AND a.school_id=m.school_id WHERE m.school_id=? AND (?='' OR m.request_no LIKE ? OR m.issue LIKE ? OR m.action_taken LIKE ?) ORDER BY CASE WHEN m.status='Completed' THEN 0 ELSE 1 END,m.completed_date DESC,m.request_date DESC", (sid, q.strip(), term, term, term)).fetchall()
         completed = _count(cur, "facility_maintenance", sid, " AND status='Completed'")
         con.commit()
     finally:
