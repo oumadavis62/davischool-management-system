@@ -21155,7 +21155,16 @@ def admission_reports_page(request: Request, year: str = "", class_id: str = "")
             params.append(int(class_id))
         counts = cur.execute("SELECT lower(status) status,COUNT(*) total FROM admission_applications WHERE " + where + " GROUP BY lower(status)",params).fetchall()
         classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        years = cur.execute("SELECT DISTINCT substr(CAST(application_date AS TEXT),1,4) year FROM admission_applications WHERE school_id=? AND application_date IS NOT NULL AND CAST(application_date AS TEXT)<>'' ORDER BY year DESC",(sid,)).fetchall()
+        # Avoid backend-specific substring/DISTINCT ordering behaviour here.
+        # Application dates may be stored as text or native date values on older databases.
+        date_rows = cur.execute("SELECT application_date FROM admission_applications WHERE school_id=? AND application_date IS NOT NULL",(sid,)).fetchall()
+        available_years = set()
+        for date_row in date_rows:
+            date_value = str(date_row["application_date"] or "").strip()
+            match = re.match(r"^(\\d{4})", date_value)
+            if match:
+                available_years.add(match.group(1))
+        years = [{"year": value} for value in sorted(available_years, reverse=True)]
         con.commit()
     finally:
         con.close()
