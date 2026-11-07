@@ -1434,7 +1434,7 @@ def _timetable(request, con, sid):
     card.classList.remove('tt-dragging');
     var target=document.elementFromPoint(e.clientX,e.clientY);
     var slot=target&&target.closest('.tt-drop-slot');
-    if(!slot)return;
+    if(!slot||slot.dataset.slotId===card.dataset.slotId)return;
     touchMoved=true;
     var fd=new FormData();
     fd.append('day_name',slot.dataset.day);
