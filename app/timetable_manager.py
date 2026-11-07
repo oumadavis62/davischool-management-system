@@ -197,6 +197,15 @@ def _ensure_tables(con):
         slot_columns = {str(x["name"]) for x in slot_rows}
     if "profile_id" not in slot_columns:
         cur.execute("ALTER TABLE timetable_slots ADD COLUMN profile_id INTEGER DEFAULT 1")
+    if hasattr(con, "create_function"):
+        lesson_rows = cur.execute("PRAGMA table_info(timetable_lessons)").fetchall()
+        lesson_columns = {str(x["name"]) for x in lesson_rows}
+    else:
+        lesson_rows = cur.execute("""SELECT column_name AS name FROM information_schema.columns
+            WHERE table_schema=current_schema() AND table_name='timetable_lessons'""").fetchall()
+        lesson_columns = {str(x["name"]) for x in lesson_rows}
+    if "profile_id" not in lesson_columns:
+        cur.execute("ALTER TABLE timetable_lessons ADD COLUMN profile_id INTEGER")
     return cur
 
 
@@ -291,6 +300,7 @@ def _seed(con, sid):
     cur.execute("UPDATE timetable_profiles SET active=0 WHERE school_id=? AND id<>?",(sid,pid))
     cur.execute("UPDATE timetable_profiles SET active=1 WHERE school_id=? AND id=?",(sid,pid))
     cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND (profile_id IS NULL OR profile_id=1)",(pid,sid))
+    cur.execute("UPDATE timetable_lessons SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     con.commit()
 
 
@@ -779,7 +789,7 @@ def _lessons(request, con, sid):
     rows = con.execute("""SELECT l.*,c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher,r.name room
         FROM timetable_lessons l JOIN classes c ON c.id=l.class_id JOIN subjects sub ON sub.id=l.subject_id
         LEFT JOIN teachers t ON t.id=l.teacher_id LEFT JOIN timetable_rooms r ON r.id=l.room_id
-        WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""", (sid,)).fetchall()
+        WHERE l.school_id=? AND l.profile_id=timetable_active_profile(l.school_id) ORDER BY c.name,c.stream,sub.name,l.id""", (sid,)).fetchall()
     html_parts=[]
     for r in rows:
         cr=con.execute("SELECT c.name,c.stream FROM timetable_lesson_classes lc JOIN classes c ON c.id=lc.class_id WHERE lc.school_id=? AND lc.lesson_id=? ORDER BY c.name,c.stream",(sid,r["id"])).fetchall()
@@ -791,7 +801,7 @@ def _lessons(request, con, sid):
     edit_id = request.query_params.get("edit", "")
     edit = None
     if str(edit_id).isdigit():
-        edit = con.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=?", (int(edit_id), sid)).fetchone()
+        edit = con.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)", (int(edit_id), sid)).fetchone()
     return _lesson_form(con,sid,edit) + f"""<div class='tt-card'><h3>Lesson Cards ({len(rows)})</h3><div class='tt-muted'>This is the timetable equivalent of aSc lesson cards/contracts. One row is one weekly teaching requirement.</div><div class='tt-scroll' style='margin-top:10px'><table class='tt-table'><thead><tr><th>Classes / Streams</th><th>Subject</th><th>Teachers</th><th>/Week</th><th>Length</th><th>Group</th><th></th><th></th></tr></thead><tbody>{html or '<tr><td colspan=8>No lesson cards yet.</td></tr>'}</tbody></table></div></div>"""
 
 
@@ -1690,7 +1700,7 @@ def timetable_publish(request:Request):
     if response:return response
     try:
         report=_verify(con,sid)
-        lesson_total=int(con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?",(sid,)).fetchone()["c"] or 0)
+        lesson_total=int(con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,_active_profile_id(con,sid))).fetchone()["c"] or 0)
         slot_total=int(con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,_active_profile_id(con,sid))).fetchone()["c"] or 0)
         if lesson_total<1 or slot_total<1 or "All timetable checks passed" not in report:
             return RedirectResponse("/app/timetable?tab=verify&error=Add+and+place+lessons,+then+resolve+all+verification+issues+before+publishing",303)
@@ -1830,10 +1840,31 @@ def timetable_profile_duplicate(request:Request,pid:int):
             int(source["periods_per_day"] or 7),int(source["period_minutes"] or 40),int(source["periods_per_week"] or 35),
             str(source["complexity"] or "normal"),str(source["relaxation"] or "relaxed"),now,now))
         new_id=int(con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND name=?",(sid,name)).fetchone()["id"])
-        con.execute("""INSERT INTO timetable_slots(
-            school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id
-        ) SELECT school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,?
-          FROM timetable_slots WHERE school_id=? AND profile_id=?""",(new_id,sid,pid))
+        lesson_map={}
+        source_lessons=con.execute("SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+        for lesson in source_lessons:
+            con.execute("""INSERT INTO timetable_lessons(
+                school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,
+                duration,cycle,locked,preferred_room,notes,profile_id
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                sid,lesson["class_id"],lesson["subject_id"],lesson["teacher_id"],lesson["room_id"],
+                lesson["group_name"],lesson["lessons_per_week"],lesson["duration"],lesson["cycle"],
+                lesson["locked"],lesson["preferred_room"],lesson["notes"],new_id))
+            new_lesson_id=int(con.execute("SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 1",(sid,new_id)).fetchone()["id"])
+            lesson_map[int(lesson["id"])]=new_lesson_id
+            for link in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(lesson["id"]))).fetchall():
+                con.execute("INSERT INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,new_lesson_id,int(link["class_id"])))
+            for link in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(lesson["id"]))).fetchall():
+                con.execute("INSERT INTO timetable_lesson_teachers(school_id,lesson_id,teacher_id) VALUES(?,?,?)",(sid,new_lesson_id,int(link["teacher_id"])))
+        source_slots=con.execute("SELECT * FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+        for slot in source_slots:
+            mapped=lesson_map.get(int(slot["lesson_id"]))
+            if mapped is None: raise ValueError("A timetable placement references a lesson outside its source profile")
+            con.execute("""INSERT INTO timetable_slots(
+                school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id
+            ) VALUES(?,?,?,?,?,?,?,?,?,?)""",(
+                sid,mapped,slot["day_name"],slot["period_no"],slot["start_time"],slot["end_time"],
+                slot["room_id"],slot["locked"],slot["generated_run"],new_id))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+duplicated+with+its+saved+placements",303)
     finally:con.close()
@@ -2018,11 +2049,11 @@ async def timetable_lesson_save(request:Request):
         primary_teacher=valid_teacher_ids[0] if valid_teacher_ids else None
         vals=(primary_class,subject_id,primary_teacher,room,group_name,lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",locked,preferred_room,notes)
         if lesson_id:
-            cur.execute("""UPDATE timetable_lessons SET class_id=?,subject_id=?,teacher_id=?,room_id=?,group_name=?,lessons_per_week=?,duration=?,cycle=?,locked=?,preferred_room=?,notes=? WHERE id=? AND school_id=?""",vals+(lesson_id,sid))
+            cur.execute("""UPDATE timetable_lessons SET class_id=?,subject_id=?,teacher_id=?,room_id=?,group_name=?,lessons_per_week=?,duration=?,cycle=?,locked=?,preferred_room=?,notes=? WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)""",vals+(lesson_id,sid))
             cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
             cur.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
         else:
-            cur.execute("""INSERT INTO timetable_lessons(school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,duration,cycle,locked,preferred_room,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(sid,)+vals)
+            cur.execute("""INSERT INTO timetable_lessons(school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,duration,cycle,locked,preferred_room,notes,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(sid,)+vals+(_active_profile_id(con,sid),))
             lesson_id=cur.lastrowid
         for cid in valid_class_ids: cur.execute("INSERT INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,lesson_id,cid))
         for tid in valid_teacher_ids: cur.execute("INSERT INTO timetable_lesson_teachers(school_id,lesson_id,teacher_id) VALUES(?,?,?)",(sid,lesson_id,tid))
@@ -2033,7 +2064,14 @@ def timetable_lesson_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        cur=con.cursor();cur.execute("DELETE FROM timetable_slots WHERE lesson_id=? AND school_id=? AND locked=0",(rid,sid));cur.execute("DELETE FROM timetable_lessons WHERE id=? AND school_id=?",(rid,sid));con.commit()
+        cur=con.cursor()
+        owned=cur.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(rid,sid)).fetchone()
+        if not owned:return RedirectResponse("/app/timetable?tab=lessons&error=Lesson+card+not+found+in+this+timetable",303)
+        cur.execute("DELETE FROM timetable_slots WHERE lesson_id=? AND school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(rid,sid))
+        cur.execute("DELETE FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(rid,sid))
+        cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,rid))
+        cur.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,rid))
+        con.commit()
         return RedirectResponse("/app/timetable?tab=lessons&msg=Lesson+card+deleted",303)
     finally:con.close()
 
@@ -2150,7 +2188,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         "SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)
     ).fetchall()]
 
-    lesson_sql="SELECT * FROM timetable_lessons WHERE school_id=?"
+    lesson_sql="SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=timetable_active_profile(school_id)"
     params=(sid,)
     if class_filter:
         lesson_sql += """ AND (class_id=? OR id IN (
@@ -2910,7 +2948,7 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
     if response: return response
     try:
         cur=con.cursor()
-        lesson=cur.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=?",(lesson_id,sid)).fetchone()
+        lesson=cur.execute("SELECT * FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(lesson_id,sid)).fetchone()
         if not lesson:return RedirectResponse("/app/timetable?tab=timetable&error=Lesson+card+not+found",303)
         target=int(class_id) if str(class_id).isdigit() else int(lesson["class_id"])
         linked=cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()
