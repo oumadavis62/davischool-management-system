@@ -21043,7 +21043,7 @@ def admission_letter_print(request: Request, application_id: int):
           {_letter_cell("Stream", class_stream)}
           {''.join(application_fields)}
         </div></section>
-        <p class='letter-instructions'>Please quote the learner's admission number in all future school correspondence and retain this letter for your records. The school will communicate any further reporting instructions through the parent / guardian contact details provided above.</p>
+        <p class='letter-instructions'>The school will communicate any further reporting instructions through the parent / guardian contact details provided above.</p>
         <div class='letter-signoff'><div><p>Yours faithfully,</p><div class='signature-space'></div><strong>School Administration</strong><span>For and on behalf of {escape(school_name)}</span></div><div class='stamp-space'>OFFICIAL<br> SCHOOL STAMP</div></div>
         <footer class='letter-footer'>This is an official admission record generated from the learner's saved registration details.</footer>
       </article>
