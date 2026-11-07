@@ -27,6 +27,7 @@ class TimetableSchemaTests(unittest.TestCase):
             "ds_timetable_periods",
             "ds_timetable_breaks",
             "ds_timetable_rooms",
+            "ds_timetable_calendar_exceptions",
             "ds_timetable_teacher_availability",
             "ds_timetable_class_requirements",
             "ds_timetable_lessons",
