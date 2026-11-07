@@ -18,6 +18,85 @@ def _library_guard(request, permission="library.view"):
     return sid, None
 
 
+def _library_page(request, title, body):
+    """Apply the shared responsive Library Manager layout and filter pop-up."""
+    shared = r"""
+<style>
+.library-page{max-width:none;width:100%;min-width:0;color:#234332}
+.library-page .lib-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.library-page .lib-heading h1{margin:3px 0 5px;color:#174b2b;font-size:clamp(22px,3vw,29px);letter-spacing:-.35px}
+.library-page .lib-eyebrow{color:#397653;font-size:10px;letter-spacing:1.25px;font-weight:850}
+.library-page .lib-muted{color:#718176;font-size:12px;line-height:1.5}
+.library-page .lib-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:16px 0}
+.library-page .lib-kpis>div{background:#fff;border:1px solid #dce9de;border-radius:14px;padding:15px 17px;min-width:0;box-shadow:0 3px 12px #1c4a2b0a}
+.library-page .lib-kpis span{display:block;color:#718176;font-size:11px;font-weight:650;line-height:1.4}
+.library-page .lib-kpis strong{display:block;color:#176b3a;font-size:25px;line-height:1.2;margin-top:6px}
+.library-page .lib-filter-card,.library-page .lib-table-card{background:#fff;border:1px solid #e0eae1;border-radius:15px;padding:16px;margin:0 0 14px;box-shadow:0 3px 14px #1c4a2b08}
+.library-page .lib-table-card .page-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.library-page .lib-table-card h2{font-size:16px;color:#245638;margin:0}
+.library-page .lib-table-scroll{width:100%;max-width:100%;overflow:auto hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:1px solid #edf2ed;border-radius:10px}
+.library-page .lib-table-scroll table{border-collapse:separate;border-spacing:0;width:100%;min-width:760px}
+.library-page .lib-table-scroll th{background:#edf5ee;color:#315d40;font-size:11px;font-weight:800;white-space:nowrap;position:sticky;top:0;z-index:1}
+.library-page .lib-table-scroll td{font-size:12px;color:#354c3c;vertical-align:middle}
+.library-page .lib-table-scroll th,.library-page .lib-table-scroll td{padding:11px 12px;border-bottom:1px solid #e8eee9;text-align:left}
+.library-page .lib-table-scroll tbody tr:hover{background:#f7fbf7}
+.library-page .lib-status{display:inline-flex;align-items:center;white-space:nowrap;padding:5px 9px;border-radius:20px;background:#e8f4ea;color:#276640;font-size:10px;font-weight:800}
+.library-page .lib-inactive{background:#f2eeee;color:#785b5b}
+.library-page .lib-empty{text-align:center!important;padding:30px!important;color:#748278}
+.library-page .btn{border-radius:9px;font-weight:750;box-shadow:none}
+.library-page .btn:not(.btn-light){background:#23643d;border-color:#23643d;color:#fff}
+.library-page .btn:not(.btn-light):hover{background:#174b2b}
+.library-page .btn-light{background:#f0f6f0;border:1px solid #d7e5d9;color:#315c3e}
+.library-page .lib-dialog{width:min(760px,calc(100% - 24px));max-height:min(88dvh,850px);overflow:auto;border:1px solid #d9e7da;border-radius:18px;padding:0;background:#fbfdfb;box-shadow:0 22px 75px #12271a45}
+.library-page .lib-dialog::backdrop{background:#10201780;backdrop-filter:blur(3px)}
+.library-page .lib-dialog form{padding:clamp(16px,3vw,24px)}
+.library-page .lib-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px;padding-bottom:13px;border-bottom:1px solid #e5eee6}
+.library-page .lib-dialog-head h2{margin:4px 0;color:#205b37;font-size:20px}
+.library-page .lib-close{border:0;background:#eaf3eb;color:#245638;border-radius:50%;width:36px;height:36px;font-size:22px;cursor:pointer;flex:0 0 auto}
+.library-page .lib-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.library-page .lib-form-grid label,.library-page .lib-filters label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:750;color:#40594a;min-width:0}
+.library-page .lib-form-grid .field,.library-page .lib-filters .field{width:100%;min-width:0;border:1px solid #cdddcf;border-radius:9px;background:#fff;padding:10px 11px;color:#254532}
+.library-page .lib-notes{grid-column:1/-1}
+.library-page .lib-dialog-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid #e5eee6}
+.lib-filter-dialog{width:min(620px,calc(100% - 24px))!important}
+.lib-filter-dialog .lib-filter-intro{font-size:12px;color:#718176;margin:-8px 0 16px}
+.lib-filter-dialog .lib-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:end}
+.lib-filter-dialog .lib-filters label:first-child{grid-column:1/-1}
+.lib-filter-dialog .lib-filters .btn,.lib-filter-dialog .lib-filters a{align-self:end;text-align:center;text-decoration:none;padding:10px 15px}
+.lib-filter-launch{display:flex;justify-content:flex-end;margin:0 0 12px}
+.lib-filter-launch button{display:inline-flex;align-items:center;gap:8px;border:1px solid #cbdccc;background:#f1f7f1;color:#285b3b;padding:9px 14px;border-radius:10px;font-weight:800;cursor:pointer}
+.lib-filter-launch button:hover{background:#e5f1e6}
+@media(max-width:650px){.library-page .lib-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.library-page .lib-kpis>div{padding:12px}.library-page .lib-kpis strong{font-size:22px}.library-page .lib-filter-card,.library-page .lib-table-card{padding:12px}.library-page .lib-form-grid,.lib-filter-dialog .lib-filters{grid-template-columns:1fr}.library-page .lib-notes,.lib-filter-dialog .lib-filters label:first-child{grid-column:auto}.library-page .lib-dialog-actions>*{flex:1}.library-page .lib-table-scroll{max-height:68dvh}}
+@media print{.lib-filter-launch,.lib-filter-dialog{display:none!important}.library-page .lib-table-scroll{overflow:visible!important}.library-page .lib-table-scroll table{min-width:0!important}.library-page .lib-table-scroll th,.library-page .lib-table-scroll td{font-size:9px!important;padding:5px!important}}
+</style>
+<script>
+(function(){
+ function setupLibraryFilters(){
+  document.querySelectorAll('.library-page .lib-filter-card').forEach(function(card){
+   if(card.dataset.popupReady==='1')return;
+   var form=card.querySelector('form');if(!form)return;
+   card.dataset.popupReady='1';
+   var dialog=document.createElement('dialog');dialog.className='lib-dialog lib-filter-dialog';dialog.id='libraryFilterDialog';
+   var wrap=document.createElement('div');wrap.className='lib-dialog-head';
+   var heading=document.createElement('div');heading.innerHTML='<div class="lib-eyebrow">LIBRARY MANAGER / FILTERS</div><h2>Filter this page</h2>';
+   var close=document.createElement('button');close.type='button';close.className='lib-close';close.setAttribute('aria-label','Close filters');close.textContent='×';close.addEventListener('click',function(){dialog.close();});
+   wrap.append(heading,close);dialog.append(wrap);
+   var intro=document.createElement('p');intro.className='lib-filter-intro';intro.textContent='Choose the criteria you want to use, then apply your filters.';dialog.append(intro);
+   dialog.append(form);document.body.append(dialog);
+   var launch=document.createElement('div');launch.className='lib-filter-launch';
+   var button=document.createElement('button');button.type='button';button.innerHTML='<span aria-hidden="true">☷</span> Filter records';button.addEventListener('click',function(){dialog.showModal();});launch.append(button);
+   card.replaceWith(launch);
+   dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close();});
+   form.addEventListener('submit',function(){button.disabled=true;button.textContent='Applying…';});
+  });
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupLibraryFilters);else setupLibraryFilters();
+})();
+</script>
+"""
+    return _school_page(request, title, body + shared)
+
+
 def _ensure_book_catalogue(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS library_books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +226,7 @@ document.getElementById('libraryBookForm').addEventListener('submit',function(e)
 </style>
 """
     con.close()
-    return _school_page(request, "Book Catalogue", body)
+    return _library_page(request, "Book Catalogue", body)
 
 
 @router.post("/app/library/catalogue/save")
@@ -285,7 +364,7 @@ def library_book_register(request: Request, q: str = "", status: str = ""):
 <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('copyDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not books else ''}>Save Copy</button></div></form></dialog>
 """
         con.close()
-        return _school_page(request, "Book Register", body)
+        return _library_page(request, "Book Register", body)
     except Exception:
         con.close()
         raise
@@ -430,7 +509,7 @@ def library_issue_books(request: Request, q: str = "", borrower_type: str = "", 
 <div class="lib-form-grid"><label>Available book copy *<select class="field" name="copy_id" required>{copy_options}</select></label><label>Borrower type *<select class="field" name="borrower_type" required><option>Student</option><option>Staff</option></select></label><label>Borrower full name *<input class="field" name="borrower_name" required maxlength="180"></label><label>Admission / Staff number<input class="field" name="borrower_ref" maxlength="80"></label><label>Issue date *<input class="field" type="date" name="issue_date" value="{datetime.now().date().isoformat()}" required></label><label>Due date *<input class="field" type="date" name="due_date" min="{datetime.now().date().isoformat()}" required></label><label class="lib-notes">Notes<textarea class="field" name="notes" rows="2"></textarea></label></div>
 <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('issueDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not available_copies else ''}>Confirm Issue</button></div></form></dialog>
 """
-        return _school_page(request, "Issue Books", body)
+        return _library_page(request, "Issue Books", body)
     finally:
         con.close()
 
@@ -559,7 +638,7 @@ def library_book_returns(request: Request, q: str = ""):
 </div>
 {dialogs}
 """
-        return _school_page(request, "Book Returns", body)
+        return _library_page(request, "Book Returns", body)
     finally:
         con.close()
 
@@ -685,7 +764,7 @@ def library_overdue_books(request: Request, q: str = "", borrower_type: str = ""
  <section class="card lib-table-card"><div class="page-heading"><h2>Overdue loan register</h2><span class="lib-muted">{len(rows)} overdue record(s)</span></div><div class="lib-table-scroll"><table style="min-width:900px"><thead><tr><th>Book / Accession</th><th>Borrower</th><th>Issue date</th><th>Due date</th><th>Overdue duration</th></tr></thead><tbody>{table}</tbody></table></div></section>
 </div>
 """
-        return _school_page(request, "Overdue Books", body)
+        return _library_page(request, "Overdue Books", body)
     finally:
         con.close()
 
@@ -771,7 +850,7 @@ def library_members(request: Request, q: str = "", member_type: str = "", status
  <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="submit">Save Member</button></div>
 </form></dialog>
 """
-        return _school_page(request, "Library Members", body)
+        return _library_page(request, "Library Members", body)
     finally:
         con.close()
 
@@ -918,6 +997,6 @@ def library_reports(request: Request, date_from: str = "", date_to: str = ""):
 </div>
 <style>@media print{{.nav,.sidebar,.lib-filter-card,.lib-heading button{{display:none!important}}.page{{width:100%!important;max-width:none!important;margin:0!important}}.card{{break-inside:avoid;box-shadow:none!important}}body{{background:#fff!important}}}}</style>
 """
-        return _school_page(request, "Library Reports", body)
+        return _library_page(request, "Library Reports", body)
     finally:
         con.close()
