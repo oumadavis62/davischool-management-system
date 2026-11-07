@@ -722,6 +722,10 @@ def _lesson_form(con, sid, existing=None):
         selected_class_ids.update(int(x["class_id"]) for x in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?", (sid, int(e["id"]))).fetchall())
         selected_teacher_ids.update(int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?", (sid, int(e["id"]))).fetchall())
     opts = lambda rows,key,label: "".join(f"<option value='{r[key]}' {'selected' if str(e.get(key,''))==str(r[key]) else ''}>{escape(str(r[label] or ''))}</option>" for r in rows)
+    preferred_room_opts = "".join(
+        f"<option value='{r['id']}' {'selected' if str(e.get('preferred_room',''))==str(r['id']) else ''}>{escape(str(r['name'] or ''))}</option>"
+        for r in rooms
+    )
     return f"""<div class='tt-card'><h3>{'✏️ Edit Lesson' if existing else '📝 Add Lesson Card'}</h3><div class='tt-muted'>Each lesson card represents a teaching requirement. Weekly count and duration are used by the generator.</div>
 <form method='post' action='/app/timetable/lesson/save' class='tt-form' style='margin-top:12px'>
 <input type='hidden' name='lesson_id' value='{e.get("id","")}'>
@@ -731,7 +735,7 @@ def _lesson_form(con, sid, existing=None):
 <label><span class='tt-label'>Lessons per week</span><input class='tt-field' name='lessons_per_week' type='number' min='1' max='30' value='{e.get("lessons_per_week",1)}' required></label>
 <label><span class='tt-label'>Duration (periods)</span><select class='tt-field' name='duration'><option value='1' {'selected' if str(e.get('duration',1))=='1' else ''}>Single</option><option value='2' {'selected' if str(e.get('duration',1))=='2' else ''}>Double</option><option value='3' {'selected' if str(e.get('duration',1))=='3' else ''}>Triple</option></select></label>
 <label><span class='tt-label'>Required room</span><select class='tt-field' name='room_id'><option value=''>No fixed room</option>{opts(rooms,'id','name')}</select><small class='tt-muted'>A required room is reserved exclusively for this lesson.</small></label>
-<label><span class='tt-label'>Preferred room</span><select class='tt-field' name='preferred_room'><option value=''>No preference</option>{opts(rooms,'preferred_room','name')}</select><small class='tt-muted'>The generator tries this room first, then another available room.</small></label>
+<label><span class='tt-label'>Preferred room</span><select class='tt-field' name='preferred_room'><option value=''>No preference</option>{preferred_room_opts}</select><small class='tt-muted'>The generator tries this room first, then another available room.</small></label>
 <label><span class='tt-label'>Group / Division</span><input class='tt-field' name='group_name' value='{escape(str(e.get("group_name") or ""))}' placeholder='Entire class / Boys / Group A'></label>
 <label><span class='tt-label'>Cycle / Term</span><select class='tt-field' name='cycle'><option>Every week</option><option {'selected' if e.get('cycle')=='Alternate weeks' else ''}>Alternate weeks</option></select></label>
 <label class='tt-check'><input type='checkbox' name='locked' value='1' {'checked' if int(e.get('locked',0) or 0) else ''}> Locked card</label>
