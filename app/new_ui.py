@@ -16239,9 +16239,13 @@ def accounting_expense(request: Request,category:str=Form(...),description:str=F
         return HTMLResponse("Enter an expense category, description and positive amount.",400)
     day=date.strip() or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
     voucher=voucher_no.strip() or ("EXP-"+datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y%m%d%H%M%S"))
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    if not _finance_period_open(cur,sid,day):
+        con.close();return HTMLResponse("The selected expense date falls in a closed accounting period.",409)
     cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)",
                 (sid,category.strip(),description.strip(),amount,paid_to.strip(),voucher,day,"Paid"))
+    expense_id=cur.lastrowid
+    _finance_post_source(cur,sid,day,voucher,description.strip(),_finance_expense_account(category),"1000",amount,str(request.session.get("email","")),"expense",expense_id)
     cur.execute("INSERT INTO cashbook(school_id,date,reference,description,debit,credit,account) VALUES(?,?,?,?,?,?,?)",
                 (sid,day,voucher,description.strip(),amount,0,category.strip()))
     _audit(cur,sid,request,"EXPENSE_CREATE",voucher+" KES %.2f"%amount)
@@ -20798,7 +20802,7 @@ def finance_workspace_section(request: Request, section: str):
             _finance_cell(x["journal_date"]),_finance_cell(x["reference"]),_finance_cell(x["description"]),
             _finance_cell(x["status"]),(
                 "<form method='post' action='/app/finance/ledger/post'><input type='hidden' name='journal_id' value='%s'><button>Post</button></form>"%x["id"]
-                if x["status"]=="Draft" else _finance_cell(x["posted_at"])),
+                if x["status"]=="Draft" else ("Reversed" if x["status"]=="Reversed" else "<form method='post' action='/app/finance/ledger/reverse'><input type='hidden' name='journal_id' value='%s'><input name='reason' required placeholder='Reversal reason'><button>Reverse</button></form>"%x["id"])),
             _finance_cell(x["created_by"])) for x in journals)
         opts = "".join("<option value='%s'>%s · %s</option>"%(_finance_cell(x["code"]),_finance_cell(x["code"]),_finance_cell(x["name"])) for x in accounts)
         content = """<div class='fx-card'><h2>Chart of accounts</h2><p>Starter school chart. Additions are school-specific and do not change existing records.</p>%s
@@ -20849,7 +20853,7 @@ def finance_workspace_section(request: Request, section: str):
         start_day=str(request.query_params.get("from") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-01-01"))[:10]
         end_day=str(request.query_params.get("to") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d"))[:10]
         accounts = cur.execute("""SELECT a.code,a.name,a.account_type,a.opening_balance,
-            COALESCE(SUM(l.debit),0) debits,COALESCE(SUM(l.credit),0) credits
+            COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.debit ELSE 0 END),0) debits,COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN l.credit ELSE 0 END),0) credits
             FROM ds_fin_accounts a LEFT JOIN ds_fin_journal_lines l ON l.school_id=a.school_id AND l.account_code=a.code
             LEFT JOIN ds_fin_journals j ON j.id=l.journal_id AND j.school_id=l.school_id AND j.status IN ('Posted','Reversed') AND j.journal_date BETWEEN ? AND ?
             WHERE a.school_id=? AND a.active=1 GROUP BY a.code,a.name,a.account_type,a.opening_balance ORDER BY a.code""",(start_day,end_day,sid)).fetchall()
