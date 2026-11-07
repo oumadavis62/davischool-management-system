@@ -68,19 +68,6 @@ def _ensure_live_postgres_schema():
             "stream": "TEXT", "year": "TEXT", "term": "TEXT", "exam_id": "INTEGER",
             "out_of": "INTEGER", "created_at": "TEXT",
         },
-        "timetable": {"school_id": "INTEGER", "day": "TEXT", "start_time": "TEXT", "end_time": "TEXT", "class_name": "TEXT", "stream": "TEXT", "subject": "TEXT", "teacher": "TEXT", "room": "TEXT"},
-        "timetable_breaks": {"school_id": "INTEGER", "name": "TEXT", "start_time": "TEXT", "end_time": "TEXT"},
-        "timetable_settings": {"periods_per_day": "INTEGER", "period_minutes": "INTEGER", "periods_per_week": "INTEGER"},
-        "timetable_periods": {"school_id": "INTEGER", "period_no": "INTEGER", "start_time": "TEXT", "end_time": "TEXT"},
-        "timetable_days": {"id": "BIGSERIAL", "school_id": "INTEGER", "day_no": "INTEGER", "name": "TEXT", "short_name": "TEXT", "enabled": "INTEGER"},
-        "timetable_rooms": {"id": "BIGSERIAL", "school_id": "INTEGER", "name": "TEXT", "code": "TEXT", "capacity": "INTEGER", "room_type": "TEXT", "active": "INTEGER"},
-        "timetable_lessons": {"id": "BIGSERIAL", "school_id": "INTEGER", "class_id": "INTEGER", "subject_id": "INTEGER", "teacher_id": "INTEGER", "room_id": "INTEGER", "group_name": "TEXT", "lessons_per_week": "INTEGER", "duration": "INTEGER", "cycle": "TEXT", "locked": "INTEGER", "preferred_room": "INTEGER", "notes": "TEXT"},
-        "timetable_lesson_classes": {"id": "BIGSERIAL", "school_id": "INTEGER", "lesson_id": "INTEGER", "class_id": "INTEGER"},
-        "timetable_lesson_teachers": {"id": "BIGSERIAL", "school_id": "INTEGER", "lesson_id": "INTEGER", "teacher_id": "INTEGER"},
-        "timetable_availability": {"id": "BIGSERIAL", "school_id": "INTEGER", "resource_type": "TEXT", "resource_id": "INTEGER", "day_name": "TEXT", "period_no": "INTEGER", "allowed": "INTEGER"},
-        "timetable_constraints": {"id": "BIGSERIAL", "school_id": "INTEGER", "scope": "TEXT", "constraint_type": "TEXT", "target_id": "INTEGER", "value": "TEXT", "priority": "TEXT", "enabled": "INTEGER", "notes": "TEXT"},
-        "timetable_slots": {"id": "BIGSERIAL", "school_id": "INTEGER", "lesson_id": "INTEGER", "day_name": "TEXT", "period_no": "INTEGER", "start_time": "TEXT", "end_time": "TEXT", "room_id": "INTEGER", "locked": "INTEGER", "generated_run": "TEXT"},
-        "timetable_generation_runs": {"id": "BIGSERIAL", "school_id": "INTEGER", "created_at": "TEXT", "mode": "TEXT", "complexity": "TEXT", "status": "TEXT", "placed": "INTEGER", "requested": "INTEGER", "message": "TEXT"},
 
         "fees": {"school_id": "INTEGER", "student_id": "INTEGER", "amount": "REAL", "paid": "REAL", "description": "TEXT", "due_date": "TEXT", "status": "TEXT"},
         "announcements": {"school_id": "INTEGER", "title": "TEXT", "message": "TEXT", "audience": "TEXT", "created_at": "TEXT"},
@@ -101,12 +88,6 @@ def _ensure_live_postgres_schema():
 
     with psycopg.connect(database_url) as pg:
         with pg.cursor() as cur:
-            cur.execute("""CREATE TABLE IF NOT EXISTS timetable_settings(
-                school_id INTEGER PRIMARY KEY,
-                periods_per_day INTEGER NOT NULL,
-                period_minutes INTEGER NOT NULL,
-                periods_per_week INTEGER NOT NULL
-            )""")
             cur.execute("""CREATE TABLE IF NOT EXISTS timetable_periods(
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL,
