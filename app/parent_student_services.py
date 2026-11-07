@@ -108,6 +108,13 @@ def _page(request, title, description, body):
 .ps-request-kpis strong{font-size:29px;line-height:1.1;position:relative;z-index:1}
 .ps-request-kpis em{display:block;margin-top:5px;color:#829087;font-size:11px;font-style:normal}
 .ps-request-register{border-color:#cfe2d2;background:linear-gradient(145deg,#f1f8f2 0%,#fff 58%,#f7fbf7 100%)}
+.ps-request-open{padding:12px 18px;font-size:13px;border-radius:11px}
+.ps-request-dialog{width:min(820px,calc(100vw - 28px));padding:24px;background:linear-gradient(145deg,#eaf5ec 0%,#fff 42%,#f4faf5 100%)}
+.ps-request-dialog .ps-dialog-head{padding:0 42px 14px 0;border-bottom:1px solid #dceade;margin-bottom:18px}
+.ps-request-dialog .ps-dialog-head h2{font-size:20px}
+.ps-request-dialog .ps-dialog-close{position:absolute;top:14px;right:14px;width:36px;height:36px;padding:0;border-radius:50%;font-size:24px;line-height:1;background:#e3f0e5;color:#205a38}
+.ps-request-dialog .ps-actions{padding-top:14px;border-top:1px solid #dceade}
+@media(max-width:560px){.ps-request-dialog{padding:17px}.ps-request-dialog .ps-dialog-close{top:10px;right:10px}}
 .ps-request-cardhead{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
 .ps-request-cardhead h2{margin:3px 0 0;font-size:19px;color:#1d5734}
 .ps-request-cardhead p{margin-top:4px;max-width:560px}
@@ -138,11 +145,12 @@ def _page(request, title, description, body):
    var form=card.querySelector(':scope > form.ps-form');
    if(form){
     var heading=card.querySelector('h2'),label=heading?heading.textContent.trim():'Open form';
-    var trigger=document.createElement('button');trigger.type='button';trigger.className='ps-btn ps-entry-trigger';trigger.textContent=label;
-    var dialog=document.createElement('dialog');dialog.className='ps-dialog';
+    var isRequestForm=card.classList.contains('ps-request-register');
+    var trigger=document.createElement('button');trigger.type='button';trigger.className='ps-btn ps-entry-trigger'+(isRequestForm?' ps-request-open':'');trigger.textContent=isRequestForm?'＋ New Service Request':label;
+    var dialog=document.createElement('dialog');dialog.className='ps-dialog'+(isRequestForm?' ps-request-dialog':'');
     var head=document.createElement('div');head.className='ps-dialog-head';
-    var title=document.createElement('h2');title.textContent=label;
-    var close=document.createElement('button');close.type='button';close.className='ps-dialog-close';close.textContent='Close';close.addEventListener('click',function(){dialog.close()});
+    var title=document.createElement('h2');title.textContent=isRequestForm?'New Student Service Request':label;
+    var close=document.createElement('button');close.type='button';close.className='ps-dialog-close';close.textContent='×';close.setAttribute('aria-label','Close dialog');close.title='Close';close.addEventListener('click',function(){dialog.close()});
     head.append(title,close);dialog.append(head,form);card.insertBefore(trigger,form);card.insertBefore(dialog,form);
     trigger.addEventListener('click',function(){dialog.showModal()});
     dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()});
