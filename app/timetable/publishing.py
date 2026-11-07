@@ -340,7 +340,13 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
                VALUES(?,?,?,?,?,?)""",
             (school_id,new_id,row["day_code"],row["day_name"],row["day_order"],row["is_instructional"]),
         )
-        day_map[int(row["id"])] = int(cur.lastrowid)
+        new_day_id = int(cur.lastrowid or 0)
+        if not new_day_id:
+            new_day_id = int(cur.execute(
+                "SELECT id FROM ds_timetable_days WHERE school_id=? AND profile_id=? AND day_code=?",
+                (school_id,new_id,row["day_code"]),
+            ).fetchone()["id"])
+        day_map[int(row["id"])] = new_day_id
     for row in cur.execute("SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no,id",(school_id,source_profile_id)).fetchall():
         cur.execute(
             """INSERT INTO ds_timetable_periods
@@ -348,7 +354,13 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
                VALUES(?,?,?,?,?,?,?,?)""",
             (school_id,new_id,row["period_no"],row["label"],row["start_time"],row["end_time"],row["period_type"],row["duration_minutes"]),
         )
-        period_map[int(row["id"])] = int(cur.lastrowid)
+        new_period_id = int(cur.lastrowid or 0)
+        if not new_period_id:
+            new_period_id = int(cur.execute(
+                "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=?",
+                (school_id,new_id,row["period_no"]),
+            ).fetchone()["id"])
+        period_map[int(row["id"])] = new_period_id
     for row in cur.execute("SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=?",(school_id,source_profile_id)).fetchall():
         cur.execute(
             """INSERT INTO ds_timetable_breaks (school_id,profile_id,break_no,label,start_time,end_time,applies_to)
@@ -383,11 +395,11 @@ def create_revision(connection: Any, school_id: int, source_profile_id: int, act
             continue
         cur.execute(
             """INSERT INTO ds_timetable_lessons
-               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,generation_run_id,status,created_by,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,NULL,'scheduled',?,?,?)""",
+               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,day_id,period_id,duration_periods,lesson_group,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,NULL,'scheduled',?,?,?)""",
             (
                 school_id,new_id,row["class_id"],row["subject_id"],row["teacher_id"],row["room_id"],
-                day_map[int(row["day_id"])],period_map[int(row["period_id"])],row["duration_periods"],
+                day_map[int(row["day_id"])],period_map[int(row["period_id"])],row["duration_periods"],row["lesson_group"],
                 actor,now,now,
             ),
         )
