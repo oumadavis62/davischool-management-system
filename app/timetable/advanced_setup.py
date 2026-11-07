@@ -598,3 +598,80 @@ def save_scheduling_pattern(connection: Any, school_id: int, profile_id: int,
     except Exception:
         connection.rollback()
         raise
+
+
+
+def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
+                              name: str, constraint_type: str = "prohibit",
+                              applies_to: str = "all", schedule_layer: str = "all",
+                              subject_id: int | None = None,
+                              teacher_id: int | None = None,
+                              class_id: int | None = None,
+                              room_id: int | None = None,
+                              day_id: int | None = None,
+                              period_id: int | None = None,
+                              start_time: str | None = None,
+                              end_time: str | None = None,
+                              effective_from: str | None = None,
+                              effective_to: str | None = None,
+                              reason: str = "") -> int:
+    name = (name or "").strip()
+    if not name or len(name) > 120:
+        raise TimetableSetupError("Give this timetable constraint a name (maximum 120 characters).")
+    if constraint_type not in {"prohibit", "prefer", "require"}:
+        raise TimetableSetupError("Choose prohibit, prefer or require as the constraint type.")
+    if applies_to not in {"all", "lesson", "remedial", "activity"}:
+        raise TimetableSetupError("Choose a valid session scope.")
+    if schedule_layer not in {"all", "instructional", "additional_learning", "school_activity"}:
+        raise TimetableSetupError("Choose a valid timetable layer.")
+    if (start_time is None) != (end_time is None):
+        raise TimetableSetupError("Enter both start and end times for a time-window constraint.")
+    if start_time is not None:
+        start_time, end_time, _ = _time_range(start_time, end_time)
+    for value in (effective_from, effective_to):
+        if value:
+            try:
+                date.fromisoformat(str(value))
+            except ValueError:
+                raise TimetableSetupError("Constraint effective dates must use YYYY-MM-DD.")
+    if effective_from and effective_to and effective_from > effective_to:
+        raise TimetableSetupError("Constraint end date cannot be before its start date.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    for table, value, label in (
+        ("ds_timetable_days", day_id, "day"),
+        ("ds_timetable_periods", period_id, "period"),
+    ):
+        if value is not None and not cur.execute(
+            f"SELECT id FROM {table} WHERE id=? AND school_id=? AND profile_id=?",
+            (int(value), school_id, profile_id),
+        ).fetchone():
+            raise TimetableSetupError(f"Select a {label} from this timetable profile.")
+    for table, value, label in (
+        ("subjects", subject_id, "subject"),
+        ("teachers", teacher_id, "teacher"),
+        ("classes", class_id, "class"),
+        ("ds_timetable_rooms", room_id, "room"),
+    ):
+        if value is not None and not cur.execute(
+            f"SELECT id FROM {table} WHERE id=? AND school_id=?",
+            (int(value), school_id),
+        ).fetchone():
+            raise TimetableSetupError(f"The selected {label} does not belong to this school.")
+    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    cur.execute(
+        """INSERT INTO ds_timetable_constraints
+           (school_id,profile_id,name,constraint_type,applies_to,schedule_layer,
+            subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
+            effective_from,effective_to,reason,is_active,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
+        (school_id,profile_id,name,constraint_type,applies_to,schedule_layer,
+         subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
+         effective_from,effective_to,(reason or "").strip(),now,now),
+    )
+    row = cur.execute(
+        "SELECT id FROM ds_timetable_constraints WHERE school_id=? AND profile_id=? AND name=?",
+        (school_id,profile_id,name),
+    ).fetchone()
+    connection.commit()
+    return int(row["id"])
