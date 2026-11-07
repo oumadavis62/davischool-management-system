@@ -20887,8 +20887,14 @@ def finance_billing_charge(request: Request, student_id:int=Form(...), descripti
     con=_db();cur=con.cursor()
     student=cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone()
     if not student:con.close();return HTMLResponse("Learner not found in this school.",404)
+    _finance_prepare(cur,sid)
+    day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    if not _finance_period_open(cur,sid,day):
+        con.close();return HTMLResponse("The current accounting period is closed.",409)
     cur.execute("INSERT INTO fees(school_id,student_id,amount,paid,description,due_date,status) VALUES(?,?,?,?,?,?,?)",
                 (sid,student_id,amount,0,description.strip(),due_date or None,"Pending"))
+    fee_id=cur.lastrowid
+    _finance_post_source(cur,sid,day,"FEE-"+str(fee_id),"Learner fee charge: "+description.strip(),"1100","4000",amount,str(request.session.get("email","")),"fee_charge",fee_id)
     _audit(cur,sid,request,"FEE_CHARGE", "Created fee charge %s for learner %s"%(amount,student_id))
     con.commit();con.close()
     return RedirectResponse("/app/finance/billing",303)
@@ -20899,7 +20905,7 @@ def finance_collections_receive(request: Request, student_id:int=Form(...), amou
     sid=_finance_access(request)
     if not sid:return RedirectResponse("/",303)
     if amount<=0:return HTMLResponse("Payment must be greater than zero.",400)
-    con=_db();cur=con.cursor()
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
     if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?",(student_id,sid)).fetchone():
         con.close();return HTMLResponse("Learner not found in this school.",404)
     charges=cur.execute("SELECT id,amount,paid FROM fees WHERE school_id=? AND student_id=? AND COALESCE(amount,0)>COALESCE(paid,0) ORDER BY id",(sid,student_id)).fetchall()
@@ -20907,8 +20913,14 @@ def finance_collections_receive(request: Request, student_id:int=Form(...), amou
     if outstanding<=0 or amount>outstanding:
         con.close();return HTMLResponse("Payment must not exceed the learner's outstanding balance (KES %.2f)."%outstanding,400)
     day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    if not _finance_period_open(cur,sid,day):
+        con.close();return HTMLResponse("The current accounting period is closed.",409)
     cur.execute("INSERT INTO fee_payments(school_id,student_id,amount,reference,method,date,received_by) VALUES(?,?,?,?,?,?,?)",
                 (sid,student_id,amount,reference.strip(),method.strip() or "Cash",day,str(request.session.get("email",""))))
+    payment_id=cur.lastrowid
+    pay_method=(method or "Cash").lower()
+    debit_code="1020" if "mobile" in pay_method or "mpesa" in pay_method else ("1010" if any(x in pay_method for x in ("bank","cheque","card")) else "1000")
+    _finance_post_source(cur,sid,day,reference.strip() or "RCP-"+str(payment_id),"Learner fee payment",debit_code,"1100",amount,str(request.session.get("email","")),"fee_payment",payment_id)
     remaining=amount
     for item in charges:
         if remaining<=0:break
@@ -20958,6 +20970,12 @@ def finance_supplier_bill_approve(request: Request,bill_id:str=Form(...)):
     con=_db();cur=con.cursor();bill=cur.execute("SELECT id,invoice_no,status FROM ds_fin_bills WHERE id=? AND school_id=?",(bill_id,sid)).fetchone()
     if not bill:con.close();return HTMLResponse("Bill not found.",404)
     if bill["status"]!="Draft":con.close();return HTMLResponse("Only draft bills can be approved.",409)
+    _finance_prepare(cur,sid)
+    bill=cur.execute("SELECT id,invoice_no,status,bill_date,amount FROM ds_fin_bills WHERE id=? AND school_id=?",(bill_id,sid)).fetchone()
+    bill_day=str(bill["bill_date"] or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d"))
+    if not _finance_period_open(cur,sid,bill_day):
+        con.close();return HTMLResponse("The bill date falls in a closed accounting period.",409)
+    _finance_post_source(cur,sid,bill_day,"BILL-"+str(bill_id),"Supplier bill accrual: "+str(bill["invoice_no"]),"5900","2000",float(bill["amount"] or 0),str(request.session.get("email","")),"supplier_bill_approved",bill_id)
     cur.execute("UPDATE ds_fin_bills SET status='Approved' WHERE id=? AND school_id=?",(bill_id,sid))
     _audit(cur,sid,request,"SUPPLIER_BILL_APPROVE",bill["invoice_no"]);con.commit();con.close()
     return RedirectResponse("/app/finance/payables",303)
@@ -20973,6 +20991,10 @@ def finance_supplier_bill_pay(request: Request,bill_id:str=Form(...)):
     if not bill:con.close();return HTMLResponse("Bill not found.",404)
     if bill["status"]!="Approved":con.close();return HTMLResponse("Only approved bills can be paid.",409)
     day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    _finance_prepare(cur,sid)
+    if not _finance_period_open(cur,sid,day):
+        con.close();return HTMLResponse("The current accounting period is closed.",409)
+    _finance_post_source(cur,sid,day,"PAY-"+str(bill_id),"Settle supplier bill "+str(bill["invoice_no"]),"2000","1010",float(bill["amount"] or 0),str(request.session.get("email","")),"supplier_bill_paid",bill_id)
     voucher_no="PV-"+day.replace("-","")+"-"+str(bill_id)[:8].upper()
     description="Supplier payment: "+str(bill["supplier"])+" · "+str(bill["description"] or bill["invoice_no"])
     cur.execute("INSERT INTO expenses(school_id,category,description,amount,paid_to,voucher_no,date,status) VALUES(?,?,?,?,?,?,?,?)",
@@ -21029,6 +21051,8 @@ def finance_journal_post(request: Request,journal_id:str=Form(...)):
     journal=cur.execute("SELECT * FROM ds_fin_journals WHERE id=? AND school_id=?",(journal_id,sid)).fetchone()
     if not journal:con.close();return HTMLResponse("Journal not found.",404)
     if journal["status"]!="Draft":con.close();return HTMLResponse("Only draft journals can be posted.",409)
+    if not _finance_period_open(cur,sid,journal["journal_date"]):
+        con.close();return HTMLResponse("This journal date falls in a closed accounting period.",409)
     sums=cur.execute("SELECT COALESCE(SUM(debit),0) debit,COALESCE(SUM(credit),0) credit,COUNT(*) n FROM ds_fin_journal_lines WHERE journal_id=? AND school_id=?",(journal_id,sid)).fetchone()
     debit=float(sums["debit"] or 0);credit=float(sums["credit"] or 0)
     if int(sums["n"] or 0)<2 or abs(debit-credit)>0.005 or debit<=0:
