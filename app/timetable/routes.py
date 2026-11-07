@@ -270,6 +270,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-add-card{{min-height:100%;display:flex;align-items:center}}.tt-add-card .tt-btn{{width:100%;min-height:74px;white-space:normal;text-align:center}}
         .tt-table{{overflow:auto;border:1px solid #e1ebe2;border-radius:13px;background:#fff}}.tt-table table{{width:100%;border-collapse:collapse;min-width:450px}}.tt-table th{{background:#edf5ee;color:#315b3e;text-align:left;font-size:10px;letter-spacing:.04em}}.tt-table th,.tt-table td{{padding:11px;border-bottom:1px solid #edf2ed;font-size:11px;white-space:nowrap}}.tt-table tr:last-child td{{border-bottom:0}}.tt-muted{{color:#94a39a;text-align:center;padding:18px!important}}
         .tt-alert{{padding:12px 14px;border-radius:11px;margin-bottom:14px;font-size:12px;font-weight:700}}.tt-alert.success{{background:#eaf5ec;color:#17633b}}.tt-alert.error{{background:#fff1f0;color:#a12828}}.tt-empty{{text-align:center;padding:34px}}.tt-empty b{{font-size:18px}}
+        /* Compact seven-step setup accordion */
+        .tt-section{{padding:16px 18px;margin-bottom:10px;border-radius:16px;transition:box-shadow .18s,border-color .18s}}
+        .tt-section.tt-step-open{{border-color:#b9d8c0;box-shadow:0 8px 22px rgba(36,83,52,.075)}}
+        .tt-section-title{{margin:0;gap:12px}}
+        .tt-section-title>div{{flex:1;min-width:0}}
+        .tt-section-toggle{{flex:none;display:inline-flex;align-items:center;gap:8px;border:1px solid #d8e7da;border-radius:10px;padding:8px 11px;background:#f5faf5;color:#326846;font-size:11px;font-weight:800;cursor:pointer}}
+        .tt-section-toggle:hover{{background:#eaf5ec;border-color:#bcd9c2}}
+        .tt-section-toggle .tt-chevron{{display:inline-block;transition:transform .18s;font-size:14px}}
+        .tt-section.tt-step-open .tt-chevron{{transform:rotate(180deg)}}
+        .tt-section-content{{padding-top:15px}}
+        .tt-section-content[hidden]{{display:none!important}}
         .tt-modal{{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(20,43,30,.48);backdrop-filter:blur(5px)}}.tt-modal.is-open{{display:flex;animation:ttFade .16s ease-out}}.tt-modal:target{{display:flex;animation:ttFade .16s ease-out}}.tt-profile-create-card>.tt-btn{{margin-top:12px;text-decoration:none!important}}.tt-modal-close{{display:grid;place-items:center;text-decoration:none!important}}
         .tt-modal-dialog{{position:relative;width:min(620px,100%);max-height:min(88vh,850px);overflow:auto;padding:25px;background:linear-gradient(145deg,#fff 0%,#f4faf4 100%);border:1px solid #d5e6d8;border-radius:22px;box-shadow:0 24px 70px rgba(18,52,31,.25);animation:ttPop .18s ease-out}}
         .tt-modal-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:19px}}.tt-modal-head h3{{font-size:20px;margin:4px 0;color:#214a34}}.tt-modal-head p{{font-size:12px;color:#718477;margin:0}}.tt-modal-close{{border:0;width:35px;height:35px;border-radius:11px;background:#eaf4eb;color:#326a43;font-size:21px;cursor:pointer;flex:none}}
@@ -301,6 +312,36 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             open.addEventListener('click',()=>{{host.classList.add('is-open');document.body.style.overflow='hidden';close.focus();}});
             close.addEventListener('click',closeModal); host.addEventListener('click',e=>{{if(e.target===host)closeModal();}});
             host.addEventListener('keydown',e=>{{if(e.key==='Escape')closeModal();}});
+          }});
+          // Turn the seven long setup panels into a compact, accessible accordion.
+          // Keep the first step open; all remaining steps stay visible as concise headers.
+          root.querySelectorAll('.tt-section').forEach((section,index)=>{{
+            const heading=section.querySelector('.tt-section-title');
+            if(!heading) return;
+            const content=document.createElement('div');
+            content.className='tt-section-content';
+            let node=heading.nextSibling;
+            while(node){{
+              const next=node.nextSibling;
+              content.appendChild(node);
+              node=next;
+            }}
+            section.appendChild(content);
+            const toggle=document.createElement('button');
+            toggle.type='button';
+            toggle.className='tt-section-toggle';
+            toggle.setAttribute('aria-expanded',index===0?'true':'false');
+            toggle.innerHTML='<span class="tt-toggle-label">'+(index===0?'Close section':'Open section')+'</span><span class="tt-chevron" aria-hidden="true">⌄</span>';
+            heading.appendChild(toggle);
+            if(index!==0) content.hidden=true;
+            else section.classList.add('tt-step-open');
+            toggle.addEventListener('click',()=>{{
+              const opening=content.hidden;
+              content.hidden=!opening;
+              section.classList.toggle('tt-step-open',opening);
+              toggle.setAttribute('aria-expanded',opening?'true':'false');
+              toggle.querySelector('.tt-toggle-label').textContent=opening?'Close section':'Open section';
+            }});
           }});
         }})();
         </script>
