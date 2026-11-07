@@ -82,7 +82,7 @@ def _library_page(request, title, body):
    var close=document.createElement('button');close.type='button';close.className='lib-close';close.setAttribute('aria-label','Close filters');close.textContent='×';close.addEventListener('click',function(){dialog.close();});
    wrap.append(heading,close);dialog.append(wrap);
    var intro=document.createElement('p');intro.className='lib-filter-intro';intro.textContent='Choose the criteria you want to use, then apply your filters.';dialog.append(intro);
-   dialog.append(form);document.body.append(dialog);
+   dialog.append(form);var page=card.closest('.library-page');(page||document.body).append(dialog);
    var launch=document.createElement('div');launch.className='lib-filter-launch';
    var button=document.createElement('button');button.type='button';button.innerHTML='<span aria-hidden="true">☷</span> Filter records';button.addEventListener('click',function(){dialog.showModal();});launch.append(button);
    card.replaceWith(launch);
