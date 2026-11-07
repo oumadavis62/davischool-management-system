@@ -857,7 +857,7 @@ def school_header(school, name, active="dashboard", is_impersonating=False, role
     acad_bg = "background:#0b3d91;color:white" if is_academic_active else "background:white;color:#0b3d91;border:1px solid #e2e8f0"
     comm_bg = "background:#0b3d91;color:white" if is_comm_active else "background:white;color:#0b3d91;border:1px solid #e2e8f0"
     sys_bg = "background:#0b3d91;color:white" if is_system_active else "background:white;color:#0b3d91;border:1px solid #e2e8f0"
-    teacher_timetable_nav = "<a href='/app/timetable' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;background:#0b3d91;color:white;font-weight:800'>📅 My Timetable</a>" if role == "teacher" else ""
+    teacher_timetable_nav = "<a href='/app/timetable' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;background:#0b3d91;color:white;font-weight:800'>📅 My Timetable</a>" if str(role or "").strip().lower() == "teacher" else ""
     def nav(link, icon, label):
         is_active = "background:#0b3d91;color:white;font-weight:800" if active==link else "color:#475569;background:transparent"
         return f"<a href='/school/{link}' class='nav-item' style='display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;text-decoration:none;font-size:13px;margin-bottom:4px;{is_active}'>{icon} {label}</a>"
@@ -2820,7 +2820,9 @@ def module_page(request, title, active, body, global_mode=False):
         school = get_school_obj(request)
         if not school: return RedirectResponse("/dashboard")
         role_modules={"teacher":{"record-marks":"marks.edit","attendance":"attendance.edit","analysis":"reports.view"},"accountant":{"fees":"fees.view","finance":"finance.view"},"registrar":{"students":"students.view","staff":"staff.view"}}
-        if role not in ["school_admin","registrar","super_admin"]:
+        # Teacher portal home is a valid landing page, not a restricted school module.
+        # Allow it to render with the teacher-specific sidebar (including My Timetable).
+        if role not in ["school_admin","registrar","super_admin"] and not (role == "teacher" and active == "dashboard"):
             permission=role_modules.get(role,{}).get(active)
             if not permission or not _role_permission(request,permission):
                 return RedirectResponse("/portal" if role in ("teacher","accountant","registrar","parent","student") else "/")
