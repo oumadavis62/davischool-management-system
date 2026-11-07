@@ -43,6 +43,24 @@ class TimetableSetupTests(unittest.TestCase):
         with self.assertRaises(TimetableSetupError):
             create_profile(self.db, 1, "Duplicate", "2027", "Term 1")
 
+    def test_academic_calendar_dates_are_saved_and_ordered(self):
+        pid = create_profile(
+            self.db, 1, "2027 Term 2", "2027", "Term 2",
+            academic_start_date="2027-05-03",
+            academic_end_date="2027-08-06",
+        )
+        row = self.db.execute(
+            "SELECT academic_start_date,academic_end_date FROM ds_timetable_profiles WHERE id=?",
+            (pid,),
+        ).fetchone()
+        self.assertEqual(tuple(row), ("2027-05-03", "2027-08-06"))
+        with self.assertRaises(TimetableSetupError):
+            create_profile(
+                self.db, 1, "Bad dates", "2028", "Term 1",
+                academic_start_date="2028-03-01",
+                academic_end_date="2028-02-01",
+            )
+
     def test_days_and_periods_are_saved_and_period_overlap_rejected(self):
         save_day(self.db, 1, self.profile_id, "MON", "Monday", 1)
         save_period(self.db, 1, self.profile_id, 1, "Period 1", "08:00", "08:40")
