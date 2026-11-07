@@ -20266,7 +20266,7 @@ def admissions_register_page(request: Request):
         con.commit()
     finally:
         con.close()
-    table = _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_decision_actions=False)
+    table = _admission_table_html(rows, show_action=True, allow_edit_delete=False, show_decision_actions=False)
     body = f"""<div class='page adm-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
