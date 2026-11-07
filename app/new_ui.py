@@ -57,17 +57,18 @@ class SchoolPermissionRoute(APIRoute):
                     ("POST", "/app/academics/marks/request-correction"),
                     ("GET", "/app/academics/marksheets"), ("GET", "/app/academics/marksheets/csv"),
                     ("GET", "/app/academics/marksheets/pdf"),
+                    ("GET", "/app/timetable/my"),
                 }
                 if (method, path) not in teacher_routes:
                     return HTMLResponse("This page is outside the Teacher Portal permissions.",403)
             elif role == "parent":
-                if (method, path) not in {("GET", "/app"), ("GET", "/app/parent"), ("POST", "/app/parent/message")}:
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/parent"), ("POST", "/app/parent/message"), ("GET", "/app/timetable/my")}:
                     return HTMLResponse("This page is outside the Parent Portal permissions.",403)
             elif role == "accountant":
                 if (method, path) not in {("GET", "/app"), ("GET", "/app/accounting"), ("POST", "/app/accounting/expense")}:
                     return HTMLResponse("This page is outside the Accountant Portal permissions.",403)
             elif role == "student":
-                if (method, path) != ("GET", "/app"):
+                if (method, path) not in {("GET", "/app"), ("GET", "/app/timetable/my")}:
                     return HTMLResponse("The Student Portal is not yet available.",403)
             required = _central_route_permission(
                 request.url.path, request.method, request.session.get("role", "")
@@ -711,6 +712,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             ("/app/class-teacher",_modern_icon("users"),"Class Register","class_teacher.view"),
             ("/app/class-monitoring",_modern_icon("clipboard-check"),"Class Monitoring","teacher_portal.class_monitoring"),
             ("/app/teacher-performance",_modern_icon("chart"),"Performance Monitoring","teacher_portal.performance"),
+            ("/app/timetable/my",_modern_icon("calendar"),"My Timetable","teacher_portal.view"),
         ]
         teacher_nav = [item for item in teacher_nav if _require_permission(request,int(school_id or 0),item[3])]
         links = "".join(f"<a href='{u}' class='nav{(' active' if (l == 'Overview' and title == 'DaviSchool') or (l == 'Record Marks' and title == 'Record Marks') else '')}' data-teacher-nav='1'><span>{i}</span>{escape(l)}</a>" for u,i,l,_permission in teacher_nav)
@@ -996,6 +998,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
         if administration_governance_links:
             nav_markup.append("<div class='nav-section-label'>ADMINISTRATION AND GOVERNANCE</div>")
             nav_markup.append(administration_governance_links)
+        if role in ("school_admin", "registrar"):
+            nav_markup.append("<div class='nav-section-label'>ACADEMIC OPERATIONS</div>")
+            nav_markup.append(_nav_sub("/app/timetable", "Smart Timetable"))
         links = "".join(nav_markup)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
