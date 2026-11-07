@@ -38,6 +38,7 @@ def _transport_page(request, title, body):
 .transport-page.inv-workspace .btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
 .transport-page.inv-workspace .btn.btn-light{border-color:#dce8de;background:#f4f8f4;color:#3f6249!important}
 .transport-page.inv-workspace .tr-dialog,.transport-page.inv-workspace dialog.tr-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:20px;padding:22px;background:#fff;box-shadow:0 28px 90px #102d1c55}
+dialog.tr-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:20px;padding:22px;background:#fff;box-shadow:0 28px 90px #102d1c55}dialog.tr-dialog h2{margin:0 0 15px;color:#1d5033;font-size:20px}
 .transport-page.inv-workspace dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
 .transport-page.inv-workspace .tr-dialog h2{margin:0 0 15px;color:#1d5033;font-size:20px}
 .transport-page.inv-workspace .tr-form{gap:13px}
