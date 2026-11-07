@@ -2631,7 +2631,8 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         if not target_class:
             return RedirectResponse("/app/timetable?tab=timetable&error=Invalid+target+class",303)
         linked_classes = cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()
-        if len(linked_classes) > 1 and target_class_id != int(moving["class_id"]):
+        linked_class_ids={int(x["class_id"]) for x in linked_classes} or {int(moving["class_id"])}
+        if len(linked_class_ids) > 1 and target_class_id not in linked_class_ids:
             return RedirectResponse("/app/timetable?tab=timetable&error=Combined+lessons+must+be+moved+as+a+group",303)
         if int(moving["duration"] or 1) == 2 and int(period_no) % 2 == 0:
             return RedirectResponse("/app/timetable?tab=timetable&error=Double+lessons+must+occupy+periods+1-2,+3-4,+5-6,+7-8",303)
@@ -2678,10 +2679,9 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         end_time=pmap[int(period_no)+duration-1]["end_time"]
         cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
                     (day_name,period_no,period["start_time"],end_time,room,rid,sid))
-        if target_class_id != int(moving["class_id"]):
+        if len(linked_class_ids)<=1 and target_class_id != int(moving["class_id"]):
             cur.execute("UPDATE timetable_lessons SET class_id=? WHERE id=? AND school_id=?",(target_class_id,int(moving["lesson_id"]),sid))
-            if linked_classes:
-                cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"])))
+            cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"])))
             cur.execute("INSERT OR IGNORE INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,int(moving["lesson_id"]),target_class_id))
         con.commit()
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
