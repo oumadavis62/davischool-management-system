@@ -8,6 +8,63 @@ from app.new_ui import _audit, _db, _school_page, _school_session
 
 router = APIRouter()
 
+def _health_page(request, title, body):
+    shared = """
+<style>
+.health-page{--health-forest:#174b32;--health-green:#26734a;gap:17px!important;padding-bottom:28px!important}
+.health-page:before{content:"";display:block;height:5px;margin:-2px 0 0;border-radius:99px;background:linear-gradient(90deg,#174b32,#39845a 48%,#b8d8bd);box-shadow:0 2px 8px #174b321c}
+.health-page .health-head{position:relative;overflow:hidden;isolation:isolate;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:22px 24px 21px;margin:0 0 0;border:1px solid #dce9de;border-radius:19px;background:linear-gradient(115deg,#f5faf5 0%,#fff 58%,#edf6ee 100%);box-shadow:0 8px 24px #214c2d0b}
+.health-page .health-head h1{font-size:clamp(25px,3vw,33px);font-weight:800;letter-spacing:-.8px;line-height:1.15;color:#174b32;margin:7px 0 8px}
+.health-page .health-head p{color:#718278;font-size:12px;line-height:1.55}
+.health-page .health-kpis{gap:13px!important}
+.health-page .health-kpis>div{position:relative;overflow:hidden;min-height:96px;padding:17px 18px 15px 20px!important;border:1px solid #e0ebe1!important;border-radius:16px!important;background:linear-gradient(145deg,#fff,#f8fbf8)!important;box-shadow:0 5px 17px #183d2609!important}
+.health-page .health-kpis>div:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#367c50,#a6c9a9)}
+.health-page .health-kpis small{color:#718176!important;font-size:11px!important;font-weight:750}
+.health-page .health-kpis strong{color:#1e5b3a!important;font-size:27px!important;letter-spacing:-.6px}
+.health-page .health-card{padding:18px!important;margin:0!important;border:1px solid #e1ebe2!important;border-radius:17px!important;background:#fff!important;box-shadow:0 6px 22px #193d2609!important}
+.health-page .health-card h2{margin:0 0 14px;color:#214d34;font-size:15px;font-weight:800}
+.health-page .health-table-wrap{max-width:100%;border:1px solid #e5ede6;border-radius:13px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.health-page table{border-collapse:separate!important;border-spacing:0!important;width:100%;min-width:760px}
+.health-page th{padding:13px 14px!important;background:linear-gradient(180deg,#f2f8f2,#eaf3eb)!important;color:#42634c!important;font-size:10px!important;font-weight:800;letter-spacing:.7px;text-transform:uppercase}
+.health-page td{padding:12px 14px!important;border-bottom:1px solid #edf2ed!important;color:#3c5143;font-size:12px!important}
+.health-page tbody tr:nth-child(even){background:#fbfdfb}
+.health-page tbody tr:hover{background:#f0f7f1}
+.health-page label{color:#3d5946!important;font-size:11px!important;font-weight:750!important;line-height:1.35}
+.health-page input,.health-page select,.health-page textarea{min-height:42px!important;padding:10px 11px!important;border:1px solid #dce7de!important;border-radius:10px!important;background:#fcfefc!important;color:#294534}
+.health-page input:focus,.health-page select:focus,.health-page textarea:focus{outline:0;border-color:#78a985!important;box-shadow:0 0 0 3px #e4f1e6}
+.health-page .health-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #1f5b3b;border-radius:10px;background:linear-gradient(135deg,#205f3e,#317b4d);color:#fff!important;font-size:12px;font-weight:800;box-shadow:none;transition:all .16s ease}
+.health-page .health-btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
+.health-page .health-btn.secondary{border:1px solid #b9d4bf;background:#f0f7f1;color:#174b32!important;text-decoration:none!important}
+.health-page .health-filter-trigger{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid #cfe0d1;border-radius:11px;background:#fff;color:#245b39;font-size:12px;font-weight:800;box-shadow:0 3px 10px #214c2d0b}
+.health-page .health-filter-trigger:before{content:"";width:7px;height:7px;border-radius:50%;background:#4b9562;box-shadow:0 0 0 4px #e7f2e8}
+.health-filter-dialog,.health-form-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:21px;padding:0;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.health-filter-dialog::backdrop,.health-form-dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.health-filter-dialog .health-dialog-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:17px 20px;background:linear-gradient(110deg,#f0f7f1,#fff);border-bottom:1px solid #e4ede5}
+.health-filter-dialog .health-dialog-head strong{font-size:16px;color:#1d5033}
+.health-filter-dialog .health-dialog-head button{width:36px;height:36px;border:0;border-radius:50%;background:#e5efe6;color:#315b3e;font-size:22px}
+.health-filter-dialog .health-dialog-content{padding:20px}
+.health-filter-dialog form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;align-items:end}
+.health-filter-dialog form label{display:grid;gap:7px;min-width:0}
+.health-filter-dialog form a.health-btn.secondary{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 16px;color:#174b32!important;text-decoration:none!important}
+.health-form-dialog{padding:22px}
+.health-form-dialog h2{margin:0 0 16px;color:#1d5033;font-size:20px}
+.health-form-dialog form{display:grid;gap:13px}
+.health-form-dialog .health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.health-form-dialog .health-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:5px}
+@media(max-width:700px){.health-page .health-head{align-items:flex-start;flex-direction:column;padding:18px 16px;border-radius:16px}.health-page .health-head>.health-btn{width:100%}.health-page .health-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.health-page .health-kpis>div{min-height:86px;padding:13px 12px 12px 15px!important}.health-page .health-kpis strong{font-size:23px!important}.health-page .health-card{padding:12px!important;border-radius:14px!important}.health-page .health-table-wrap{border-radius:10px}.health-page table{min-width:760px}.health-filter-dialog{border-radius:17px}.health-filter-dialog .health-dialog-content{padding:15px}.health-filter-dialog form,.health-form-dialog .health-grid{grid-template-columns:1fr}.health-form-dialog{padding:17px;border-radius:17px}}
+@media(prefers-reduced-motion:reduce){.health-page *,.health-filter-dialog *,.health-form-dialog *{transition:none!important;scroll-behavior:auto!important}}
+@media print{.health-page .health-filter-trigger,.health-filter-dialog,.health-form-dialog,.health-page .no-print{display:none!important}.health-page .health-card{break-inside:avoid;box-shadow:none}}
+</style>
+<script>
+(function(){function setup(){document.querySelectorAll('.health-page').forEach(function(page){var heading=page.querySelector('.health-head');if(!heading)return;
+var filter=page.querySelector('form[method="get"]');if(filter&&!filter.dataset.popupReady){filter.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='health-filter-dialog';var head=document.createElement('div');head.className='health-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='health-dialog-content';filter.parentNode.insertBefore(dialog,filter);content.appendChild(filter);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);filter.querySelectorAll('a.health-btn.secondary').forEach(function(a){if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='health-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}
+var entry=page.querySelector('form[action="/app/health/profiles/save"],form[action="/app/health/visits/save"],form[action="/app/welfare/cases/add"]');if(entry&&!entry.dataset.popupReady){entry.dataset.popupReady='1';var section=entry.closest('.health-card');var title=section&&section.querySelector('h2')?section.querySelector('h2').textContent.trim():'Record health or welfare details';var formDialog=document.createElement('dialog');formDialog.className='health-form-dialog';var h=document.createElement('h2');h.textContent=title;formDialog.appendChild(h);entry.parentNode.insertBefore(formDialog,entry);formDialog.appendChild(entry);page.appendChild(formDialog);if(section)section.remove();var add=document.createElement('button');add.type='button';add.className='health-btn';add.textContent=title;add.addEventListener('click',function(){formDialog.showModal()});heading.appendChild(add)}
+})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
+</script>
+"""
+    return _school_page(request, title, body + shared)
+
+
 
 def _health_guard(request):
     sid = _school_session(request)
@@ -170,7 +227,7 @@ def health_profiles_page(request: Request, q: str = ""):
         int(welfare_total["n"] or 0),
         options, escape(q, quote=True), rows_html, _health_styles()
     )
-    return _school_page(request, "Student Health Profiles", body)
+    return _health_page(request, "Student Health Profiles", body)
 
 
 @router.post("/app/health/profiles/save")
@@ -257,7 +314,7 @@ def clinic_visits_page(request: Request, q: str = ""):
     <div class='health-table-wrap'><table><thead><tr><th>Date</th><th>Learner</th><th>Complaint</th><th>Treatment</th><th>Attended by</th><th>Guardian notified</th></tr></thead><tbody>%s</tbody></table></div></section></div>%s""" % (
         int(total["n"] or 0), len(rows), opts, date.today().isoformat(), escape(q, quote=True), visit_rows, _health_styles()
     )
-    return _school_page(request, "Clinic Visits", body)
+    return _health_page(request, "Clinic Visits", body)
 
 
 @router.post("/app/health/visits/save")
@@ -358,7 +415,7 @@ def welfare_cases_page(request: Request, status: str = "Open"):
         "selected" if status == "Closed" else "", "selected" if status == "All" else "",
         case_rows, _health_styles()
     )
-    return _school_page(request, "Student Welfare Cases", body)
+    return _health_page(request, "Student Welfare Cases", body)
 
 
 @router.post("/app/welfare/cases/add")
@@ -452,4 +509,4 @@ def health_reports_page(request: Request):
         int(profiles["n"] or 0), int(visits["n"] or 0), int(welfare["total"] or 0),
         int(welfare["priority_open"] or 0), _health_styles()
     )
-    return _school_page(request, "Health & Welfare Reports", body)
+    return _health_page(request, "Health & Welfare Reports", body)
