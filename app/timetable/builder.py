@@ -245,8 +245,6 @@ def place_advanced_requirement_session(connection: Any, school_id: int, profile_
     if requirement["schedule_layer"] != "instructional":
         raise TimetableSetupError("This manual period-grid action supports instructional sessions; use the programme scheduler for additional learning and activities.")
     span = _period_span(cur, school_id, profile_id, period_id, int(pattern["duration_periods"] or 1))
-    if pattern["preferred_day_id"] is not None and int(pattern["preferred_day_id"]) != int(day_id):
-        raise TimetableSetupError("This session pattern is assigned to a different preferred day.")
     return create_scheduled_session(
         connection, school_id, profile_id,
         str(span[0]["start_time"]), str(span[-1]["end_time"]),
