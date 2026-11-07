@@ -120,6 +120,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     ).fetchall()
     if not days or not periods or not requirements:
         raise TimetableSetupError("Configure instructional days, teaching periods and weekly lesson requirements before automatic generation.")
+    allocations = cur.execute(
+        """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
+           FROM teacher_allocations ta
+           JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
+           JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
+           JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+           WHERE ta.school_id=?""",
+        (school_id,),
+    ).fetchall()
+    allocation_keys = {(int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"])) for a in allocations}
+    requirement_keys = {(int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])) for r in requirements}
+    missing_requirements = allocation_keys - requirement_keys
+    stale_requirements = requirement_keys - allocation_keys
+    if missing_requirements:
+        raise TimetableSetupError(
+            str(len(missing_requirements)) + " existing class/subject/teacher allocations are missing weekly lesson requirements. Configure every allocation before generating a complete timetable."
+        )
+    if stale_requirements:
+        raise TimetableSetupError(
+            "Some weekly requirements no longer match current teacher allocations. Review Timetable Setup before generating."
+        )
     teaching_periods = [p for p in periods if str(p["period_type"] or "lesson") == "lesson"]
     if not teaching_periods:
         raise TimetableSetupError("No teaching periods are configured for this timetable profile.")
