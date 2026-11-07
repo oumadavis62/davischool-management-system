@@ -20401,7 +20401,7 @@ def admissions_register_page(request: Request):
         <div class='wide'><button type='submit' class='adm-submit'>Save Application</button></div>
       </form></div>
       <div class='adm-card adm-register-table-card'><h2>All Applications</h2><div class='adm-table-wrap adm-register-table-wrap'><table class='adm-table'>
-      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
+      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Stream</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
       <tbody>{table}</tbody></table></div></div></div>
       <style>
       .adm-page{{max-width:1500px;display:grid;gap:16px}}.adm-register-page{{height:calc(100dvh - 145px);min-height:340px;max-height:900px;grid-template-rows:auto minmax(0,1fr);overflow:hidden}}.adm-register-page>.adm-heading{{min-height:0}}.adm-register-page>.adm-register-table-card{{min-height:0;display:flex;flex-direction:column;overflow:hidden}}.adm-register-table-wrap{{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}}.adm-register-table-wrap .adm-table{{min-width:1050px}}.adm-register-table-wrap .adm-table thead th{{position:sticky;top:0;z-index:2}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{margin:5px 0 0;color:#687c6d;font-size:13px}}
