@@ -1,0 +1,125 @@
+"""Integration tests for combined teaching and cross-layer conflicts."""
+import sqlite3
+import unittest
+
+from app.timetable.schema import ensure_timetable_schema
+from app.timetable.setup import create_profile, save_day, save_period, save_room, TimetableSetupError
+from app.timetable.session_engine import (
+    create_scheduled_session,
+    create_teaching_group,
+    find_session_conflicts,
+)
+
+
+class TimetableSessionEngineTests(unittest.TestCase):
+    def setUp(self):
+        self.db = sqlite3.connect(":memory:")
+        self.db.row_factory = sqlite3.Row
+        ensure_timetable_schema(self.db)
+        self.db.execute("CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
+        self.db.execute("CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
+        self.db.execute("CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, class_id INTEGER)")
+        self.db.executemany(
+            "INSERT INTO classes(id,school_id,name) VALUES(?,?,?)",
+            [(1, 8, "Grade 7 Blue"), (2, 8, "Grade 7 Green"), (3, 8, "Grade 8 Blue")],
+        )
+        self.db.executemany(
+            "INSERT INTO teachers(id,school_id,name) VALUES(?,?,?)",
+            [(11, 8, "Teacher A"), (12, 8, "Teacher B"), (13, 9, "Other school")],
+        )
+        self.db.executemany(
+            "INSERT INTO students(id,school_id,class_id) VALUES(?,?,?)",
+            [(101, 8, 1), (102, 8, 1), (103, 8, 2), (201, 9, 1)],
+        )
+        self.profile_id = create_profile(self.db, 8, "2027", "2027", "Term 1")
+        save_day(self.db, 8, self.profile_id, "MON", "Monday", 1)
+        self.day_id = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE profile_id=?", (self.profile_id,)
+        ).fetchone()["id"]
+        save_period(self.db, 8, self.profile_id, 1, "Period 1", "08:00", "08:40")
+        self.period_id = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE profile_id=?", (self.profile_id,)
+        ).fetchone()["id"]
+        save_room(self.db, 8, "LAB1", "Science Lab", "laboratory", 2)
+        self.room_id = self.db.execute(
+            "SELECT id FROM ds_timetable_rooms WHERE school_id=8"
+        ).fetchone()["id"]
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_combined_classes_and_team_teaching_are_saved_once(self):
+        group = create_teaching_group(
+            self.db, 8, self.profile_id, "Grade 7 combined science", [1, 2],
+            subject_id=5,
+        )
+        session = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "08:40",
+            class_ids=[1, 2], teacher_ids=[11, 12], learner_ids=[101, 102, 103],
+            room_id=None, day_id=self.day_id, period_id=self.period_id,
+            teaching_group_id=group, subject_id=5,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_session_classes WHERE session_id=?",
+                (session,),
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
+                (session,),
+            ).fetchone()[0],
+            2,
+        )
+
+    def test_teacher_and_class_conflicts_are_detected_across_layers(self):
+        create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:00",
+            schedule_layer="additional_learning", session_type="remedial",
+            class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+        )
+        conflicts = find_session_conflicts(
+            self.db, 8, self.profile_id, "08:30", "09:10",
+            class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+        )
+        self.assertEqual(len(conflicts), 1)
+        self.assertIn("class:1", conflicts[0]["reasons"])
+        self.assertIn("teacher:11", conflicts[0]["reasons"])
+
+    def test_room_capacity_and_school_tenant_boundaries_are_enforced(self):
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                schedule_layer="additional_learning", session_type="remedial",
+                learner_ids=[101, 102, 103], room_id=self.room_id,
+                day_id=self.day_id,
+            )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                class_ids=[1], teacher_ids=[13], day_id=self.day_id,
+            )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                learner_ids=[201], day_id=self.day_id,
+            )
+
+    def test_activity_type_can_require_teacher_and_venue(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_activity_types
+               (school_id,code,name,requires_teacher,requires_room)
+               VALUES(8,'ASSEMBLY','Assembly',1,1)"""
+        )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                schedule_layer="school_activity", session_type="ASSEMBLY",
+                day_id=self.day_id,
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
