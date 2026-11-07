@@ -1000,9 +1000,15 @@ def _reports_view(con, sid):
     teacher_names={}
     for raw in rows:
         row=dict(raw);duration=max(1,int(row.get("duration") or 1))
-        class_label=str(row.get("class_name") or "Unassigned class")+(" "+str(row["stream"]) if row.get("stream") else "")
-        c=class_load.setdefault(class_label,{"lessons":0,"periods":0,"days":set()})
-        c["lessons"]+=1;c["periods"]+=duration;c["days"].add(str(row["day_name"]))
+        class_ids={int(v["class_id"]) for v in con.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(row["lesson_id"]))).fetchall()}
+        if not class_ids and row.get("class_id"):
+            class_ids={int(row["class_id"])}
+        for class_id in class_ids:
+            cls=con.execute("SELECT name,stream FROM classes WHERE school_id=? AND id=?",(sid,class_id)).fetchone()
+            class_label=(str(cls["name"])+(" "+str(cls["stream"]) if cls["stream"] else "")) if cls else "Unassigned class"
+            c=class_load.setdefault(class_label,{"lessons":0,"periods":0,"days":set()})
+            c["lessons"]+=1;c["periods"]+=duration;c["days"].add(str(row["day_name"]))
         subject=str(row.get("subject") or "Unassigned subject")
         subject_load[subject]=subject_load.get(subject,0)+1
         teacher_ids={int(row["teacher_id"])} if row.get("teacher_id") else set()
