@@ -1625,8 +1625,10 @@ def timetable_publish(request:Request):
     if response:return response
     try:
         report=_verify(con,sid)
-        if "All timetable checks passed" not in report:
-            return RedirectResponse("/app/timetable?tab=verify&error=Resolve+all+verification+issues+before+publishing",303)
+        lesson_total=int(con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?",(sid,)).fetchone()["c"] or 0)
+        slot_total=int(con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,_active_profile_id(con,sid))).fetchone()["c"] or 0)
+        if lesson_total<1 or slot_total<1 or "All timetable checks passed" not in report:
+            return RedirectResponse("/app/timetable?tab=verify&error=Add+and+place+lessons,+then+resolve+all+verification+issues+before+publishing",303)
         pid=_active_profile_id(con,sid)
         fingerprint=_publication_fingerprint(con,sid)
         now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
