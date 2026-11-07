@@ -161,6 +161,20 @@ class TimetableSessionEngineTests(unittest.TestCase):
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
 
+    def test_required_period_constraint_rejects_other_period(self):
+        second = save_period(self.db, 8, self.profile_id, 2, "Period 2", "08:40", "09:20")
+        save_timetable_constraint(
+            self.db, 8, self.profile_id, "Science must be first period",
+            constraint_type="require", subject_id=5, period_id=self.period_id,
+            reason="Science practicals are scheduled first.",
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "requires a different"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:40", "09:20",
+                class_ids=[1], teacher_ids=[11], subject_id=5,
+                day_id=self.day_id, period_id=second,
+            )
+
     def test_teacher_and_class_conflicts_are_detected_across_layers(self):
         create_scheduled_session(
             self.db, 8, self.profile_id, "08:00", "09:00",
