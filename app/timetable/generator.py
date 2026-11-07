@@ -74,6 +74,8 @@ def _can_place(task, candidate, placements) -> bool:
 def _score(task, candidate, placements) -> float:
     day_id = candidate["day_id"]
     score = candidate["period_no"] * 0.15
+    if candidate.get("preferred"):
+        score -= 4.0
     same_subject_day = sum(
         1 for p in placements
         if int(p["class_id"]) == task["class_id"]
@@ -137,6 +139,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     unavailable = {
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
         for a in availability
+    }
+    preferred_rows = cur.execute(
+        """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
+           WHERE school_id=? AND profile_id=? AND availability='preferred'""",
+        (school_id, profile_id),
+    ).fetchall()
+    preferred = {
+        (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
+        for a in preferred_rows
     }
     manual = cur.execute(
         """SELECT * FROM ds_timetable_lessons
@@ -232,16 +243,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     for b in breaks
                 ):
                     continue
-                for room_id in room_ids:
-                    candidates.append({
-                        "day_id": day_id,
-                        "period_id": int(period["id"]),
-                        "room_id": room_id,
-                        "duration": len(span),
-                        "start_time": span[0]["start_time"],
-                        "end_time": span[-1]["end_time"],
-                        "period_no": int(period["period_no"]),
-                    })
+                candidates.append({
+                    "day_id": day_id,
+                    "period_id": int(period["id"]),
+                    "duration": len(span),
+                    "start_time": span[0]["start_time"],
+                    "end_time": span[-1]["end_time"],
+                    "period_no": int(period["period_no"]),
+                    "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
+                })
         if not candidates:
             message = (
                 "No valid time slots are available for class ID " + str(task["class_id"]) +
@@ -307,25 +317,36 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             key=lambda candidate: _score(task, candidate, placements),
         )
         for candidate in candidates:
-            nodes += 1
-            if nodes > int(node_limit):
-                exhausted = True
-                return False
-            if not _can_place(task, candidate, placements):
-                continue
-            placement = dict(candidate)
-            placement.update({
-                "class_id": task["class_id"],
-                "subject_id": task["subject_id"],
-                "teacher_id": task["teacher_id"],
-                "fixed": False,
-            })
-            placements.append(placement)
-            if search(position + 1):
-                return True
-            placements.pop()
-            if exhausted:
-                return False
+            room_order = sorted(
+                room_ids,
+                key=lambda room: sum(
+                    1 for placed in placements
+                    if int(placed["day_id"]) == int(candidate["day_id"])
+                    and placed.get("room_id") is not None
+                    and room is not None
+                    and int(placed["room_id"]) == int(room)
+                ),
+            )
+            for room_id in room_order:
+                nodes += 1
+                if nodes > int(node_limit):
+                    exhausted = True
+                    return False
+                placement = dict(candidate, room_id=room_id)
+                if not _can_place(task, placement, placements):
+                    continue
+                placement.update({
+                    "class_id": task["class_id"],
+                    "subject_id": task["subject_id"],
+                    "teacher_id": task["teacher_id"],
+                    "fixed": False,
+                })
+                placements.append(placement)
+                if search(position + 1):
+                    return True
+                placements.pop()
+                if exhausted:
+                    return False
         return False
 
     snapshot = {
