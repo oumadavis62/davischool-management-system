@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from app.timetable.setup import TimetableSetupError, _profile
 
-_TIME_RE = re.compile(r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 def _unique_ids(values: Iterable[Any], field: str) -> list[int]:
