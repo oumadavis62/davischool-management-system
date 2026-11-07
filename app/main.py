@@ -558,6 +558,13 @@ def init_db():
     # These tables are exclusively owned by the legacy timetable module;
     # remove them in dependency order so the replacement starts with no
     # inherited timetable configuration, placements, drafts, or history.
+    if os.environ.get("DATABASE_URL", "").strip():
+        try:
+            cur.execute("DROP FUNCTION IF EXISTS timetable_active_profile(INTEGER)")
+        except Exception:
+            con.rollback()
+            cur = con.cursor()
+    _drop_cascade = " CASCADE" if os.environ.get("DATABASE_URL", "").strip() else ""
     for _table in (
         "timetable_edit_history",
         "timetable_snapshots",
@@ -580,7 +587,7 @@ def init_db():
         "timetable_settings",
         "timetable",
     ):
-        cur.execute("DROP TABLE IF EXISTS " + _table)
+        cur.execute("DROP TABLE IF EXISTS " + _table + _drop_cascade)
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, status TEXT DEFAULT 'active')")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
     # Additive account fields used by the current login and teacher-account
