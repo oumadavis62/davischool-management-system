@@ -21084,7 +21084,7 @@ def admission_letter_print(request: Request, application_id: int):
         html,body{{margin:0!important;padding:0!important;background:#fff!important}}
         .letter-page{{margin:0!important;padding:0!important;max-width:none!important}}
         .letter-tools{{display:none!important}}
-        .letter-paper{{width:210mm!important;height:297mm!important;min-height:297mm!important;margin:0!important;padding:17mm 18mm 15mm!important;border:0!important;border-radius:0!important;box-shadow:none!important;page-break-after:avoid;break-after:avoid;overflow:hidden}}
+        .letter-paper{{width:210mm!important;min-height:297mm!important;height:auto!important;margin:0!important;padding:17mm 18mm 15mm!important;border:0!important;border-radius:0!important;box-shadow:none!important;page-break-after:avoid;break-after:avoid}}
         .letter-section,.letter-signoff{{break-inside:avoid;page-break-inside:avoid}}
         *{{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
       }}
