@@ -136,7 +136,7 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.db.commit()
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
         self.assertEqual(result["status"], "failed")
-        self.assertIn("No complete clash-free", result["message"])
+        self.assertIn("without a valid slot", result["message"])
         self.assertEqual(
             self.db.execute(
                 "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?",
