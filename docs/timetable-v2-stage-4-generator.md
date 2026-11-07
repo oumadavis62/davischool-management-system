@@ -43,3 +43,7 @@ The solver uses bounded backtracking. If it cannot find a complete timetable wit
 ## Tests
 
 SQLite tests cover complete generation, room assignment, manual lesson preservation, safe replacement behavior, failure recovery, weekly constraints and missing allocation requirements.
+
+## CI execution
+
+The repository workflow compiles all application and test modules, then runs `python -m unittest discover -s tests -v` on pushes and pull requests targeting `main`.
