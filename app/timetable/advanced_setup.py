@@ -427,3 +427,174 @@ def save_programme_session(connection: Any, school_id: int, profile_id: int,
     ).fetchone()
     connection.commit()
     return int(row["id"])
+
+
+def create_scheduling_requirement(connection: Any, school_id: int, profile_id: int,
+                                  name: str, class_ids: list[int] | None = None,
+                                  teacher_ids: list[int] | None = None,
+                                  learner_ids: list[int] | None = None,
+                                  schedule_layer: str = "instructional",
+                                  session_type: str = "lesson",
+                                  subject_id: int | None = None,
+                                  programme_id: int | None = None,
+                                  teaching_group_id: int | None = None,
+                                  weekly_occurrences: int = 1,
+                                  weekly_periods: int = 0,
+                                  counts_toward_curriculum: bool = True,
+                                  min_teacher_count: int = 1,
+                                  room_type: str = "") -> int:
+    """Create a normalized requirement with many classes, teachers and learners."""
+    name = (name or "").strip()
+    classes = list(dict.fromkeys(int(v) for v in (class_ids or [])))
+    teachers = list(dict.fromkeys(int(v) for v in (teacher_ids or [])))
+    learners = list(dict.fromkeys(int(v) for v in (learner_ids or [])))
+    if not name or schedule_layer not in {"instructional", "additional_learning", "school_activity"}:
+        raise TimetableSetupError("Give the scheduling requirement a name and valid schedule layer.")
+    if not 1 <= int(weekly_occurrences) <= 70 or not 0 <= int(weekly_periods) <= 210:
+        raise TimetableSetupError("Weekly sessions must be 1–70 and weekly periods 0–210.")
+    if not 1 <= int(min_teacher_count) <= 20:
+        raise TimetableSetupError("Minimum teacher count must be between 1 and 20.")
+    if schedule_layer == "instructional" and not classes and not learners and teaching_group_id is None:
+        raise TimetableSetupError("An instructional requirement must target classes, a teaching group or learners.")
+    if len(teachers) < int(min_teacher_count):
+        raise TimetableSetupError("The selected teaching team is smaller than the required teacher count.")
+    if room_type and room_type not in {"classroom", "laboratory", "library", "hall", "workshop", "sports", "other"}:
+        raise TimetableSetupError("Choose a valid room type.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    if teaching_group_id is not None:
+        group = cur.execute(
+            "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+            (teaching_group_id, school_id, profile_id),
+        ).fetchone()
+        if not group:
+            raise TimetableSetupError("Select an active teaching group from this timetable profile.")
+        group_classes = [int(row["class_id"]) for row in cur.execute(
+            "SELECT class_id FROM ds_timetable_teaching_group_classes WHERE teaching_group_id=? AND school_id=?",
+            (teaching_group_id, school_id),
+        ).fetchall()]
+        if classes and set(classes) != set(group_classes):
+            raise TimetableSetupError("Requirement classes must match all classes in the selected teaching group.")
+        classes = group_classes
+    for class_id in classes:
+        if not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone():
+            raise TimetableSetupError("A selected class does not belong to this school.")
+    for teacher_id in teachers:
+        if not cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?", (teacher_id, school_id)).fetchone():
+            raise TimetableSetupError("A selected teacher does not belong to this school.")
+    for learner_id in learners:
+        if not cur.execute("SELECT id FROM students WHERE id=? AND school_id=?", (learner_id, school_id)).fetchone():
+            raise TimetableSetupError("A selected learner does not belong to this school.")
+    if programme_id is not None and not cur.execute(
+        "SELECT id FROM ds_timetable_learning_programmes WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+        (programme_id, school_id, profile_id),
+    ).fetchone():
+        raise TimetableSetupError("Select a learning programme belonging to this timetable profile.")
+    cur.execute(
+        """INSERT INTO ds_timetable_scheduling_requirements
+           (school_id,profile_id,name,schedule_layer,session_type,subject_id,programme_id,
+            teaching_group_id,weekly_occurrences,weekly_periods,counts_toward_curriculum,
+            min_teacher_count,room_type)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (school_id, profile_id, name, schedule_layer, session_type, subject_id, programme_id,
+         teaching_group_id, int(weekly_occurrences), int(weekly_periods),
+         int(bool(counts_toward_curriculum)), int(min_teacher_count), room_type or None),
+    )
+    row = cur.execute(
+        "SELECT id FROM ds_timetable_scheduling_requirements WHERE school_id=? AND profile_id=? AND name=?",
+        (school_id, profile_id, name),
+    ).fetchone()
+    requirement_id = int(row["id"])
+    try:
+        for class_id in classes:
+            cur.execute(
+                """INSERT INTO ds_timetable_scheduling_requirement_classes
+                   (school_id,profile_id,requirement_id,class_id) VALUES(?,?,?,?)""",
+                (school_id, profile_id, requirement_id, class_id),
+            )
+        for index, teacher_id in enumerate(teachers):
+            cur.execute(
+                """INSERT INTO ds_timetable_scheduling_requirement_teachers
+                   (school_id,profile_id,requirement_id,teacher_id,role) VALUES(?,?,?,?,?)""",
+                (school_id, profile_id, requirement_id, teacher_id, "lead" if index == 0 else "support"),
+            )
+        for learner_id in learners:
+            cur.execute(
+                """INSERT INTO ds_timetable_scheduling_requirement_learners
+                   (school_id,profile_id,requirement_id,student_id) VALUES(?,?,?,?)""",
+                (school_id, profile_id, requirement_id, learner_id),
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    return requirement_id
+
+
+def save_scheduling_pattern(connection: Any, school_id: int, profile_id: int,
+                            requirement_id: int, sessions: list[dict[str, Any]]) -> None:
+    """Save exact session pattern; both session count and period total must balance."""
+    if not isinstance(sessions, list) or not sessions:
+        raise TimetableSetupError("Add at least one session to the scheduling pattern.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT weekly_occurrences,weekly_periods,schedule_layer
+           FROM ds_timetable_scheduling_requirements
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("The scheduling requirement does not belong to this timetable profile.")
+    if len(sessions) != int(requirement["weekly_occurrences"]):
+        raise TimetableSetupError(
+            f"This requirement needs {int(requirement['weekly_occurrences'])} sessions per week; you supplied {len(sessions)}."
+        )
+    normalized = []
+    period_total = 0
+    for index, item in enumerate(sessions, start=1):
+        duration = int(item.get("duration_periods", 0) or 0)
+        minutes = int(item.get("duration_minutes", 0) or 0)
+        if requirement["schedule_layer"] == "instructional":
+            if not 1 <= duration <= 4:
+                raise TimetableSetupError("Instructional sessions must occupy 1–4 consecutive periods.")
+            period_total += duration
+        elif duration < 0 or minutes < 1:
+            raise TimetableSetupError("Additional-learning and activity sessions require a duration in minutes.")
+        day_id, slot_id = item.get("preferred_day_id"), item.get("preferred_slot_id")
+        if day_id is not None and not cur.execute(
+            "SELECT id FROM ds_timetable_days WHERE id=? AND school_id=? AND profile_id=?",
+            (int(day_id), school_id, profile_id),
+        ).fetchone():
+            raise TimetableSetupError("A preferred day is outside this timetable profile.")
+        if slot_id is not None and not cur.execute(
+            "SELECT id FROM ds_timetable_schedule_slots WHERE id=? AND school_id=? AND profile_id=?",
+            (int(slot_id), school_id, profile_id),
+        ).fetchone():
+            raise TimetableSetupError("A preferred slot is outside this timetable profile.")
+        normalized.append((index, duration, minutes or None,
+                           int(day_id) if day_id is not None else None,
+                           int(slot_id) if slot_id is not None else None,
+                           str(item.get("session_label") or f"Session {index}")[:80]))
+    expected_periods = int(requirement["weekly_periods"] or 0)
+    if requirement["schedule_layer"] == "instructional" and expected_periods and period_total != expected_periods:
+        raise TimetableSetupError(
+            f"The pattern totals {period_total} periods, but the weekly allocation is {expected_periods}."
+        )
+    try:
+        cur.execute(
+            "DELETE FROM ds_timetable_scheduling_patterns WHERE school_id=? AND profile_id=? AND requirement_id=?",
+            (school_id, profile_id, requirement_id),
+        )
+        for values in normalized:
+            cur.execute(
+                """INSERT INTO ds_timetable_scheduling_patterns
+                   (school_id,profile_id,requirement_id,session_no,duration_periods,
+                    duration_minutes,preferred_day_id,preferred_slot_id,session_label)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, requirement_id) + values,
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
