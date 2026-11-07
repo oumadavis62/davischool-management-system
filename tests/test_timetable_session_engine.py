@@ -54,6 +54,12 @@ class TimetableSessionEngineTests(unittest.TestCase):
             self.db, 8, self.profile_id, "Grade 7 combined science", [1, 2],
             subject_id=5,
         )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                teacher_ids=[11], room_id=self.room_id, day_id=self.day_id,
+                period_id=self.period_id, teaching_group_id=group,
+            )
         session = create_scheduled_session(
             self.db, 8, self.profile_id, "08:00", "08:40",
             class_ids=[1, 2], teacher_ids=[11, 12], learner_ids=[101, 102, 103],
