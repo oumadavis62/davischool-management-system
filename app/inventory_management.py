@@ -61,7 +61,27 @@ def _inventory_page(request, title, body):
 (function(){function setup(){document.querySelectorAll('.inventory-page,.inv-movements,.inv-req,.inv-report').forEach(function(page){page.classList.add('inv-workspace');var heading=page.querySelector('.page-heading');if(!heading)return;var entryForm=page.querySelector('form[action="/app/inventory/transactions/save"],form[action="/app/inventory/requisitions/create"]');if(entryForm&&!entryForm.dataset.popupReady){entryForm.dataset.popupReady='1';var source=entryForm.closest('section.panel');var entryTitle=(source&&source.querySelector('h2')?source.querySelector('h2').textContent.trim():'Record stock details');var entryDialog=document.createElement('dialog');entryDialog.className='inv-form-dialog';var entryHead=document.createElement('h2');entryHead.textContent=entryTitle;entryDialog.appendChild(entryHead);entryForm.parentNode.insertBefore(entryDialog,entryForm);entryDialog.appendChild(entryForm);page.appendChild(entryDialog);if(source)source.remove();var entryTrigger=document.createElement('button');entryTrigger.type='button';entryTrigger.className='btn';entryTrigger.textContent=entryTitle;entryTrigger.addEventListener('click',function(){entryDialog.showModal()});heading.appendChild(entryTrigger)}var form=page.querySelector('form[method="get"]');if(form&&!form.dataset.popupReady){form.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='inv-filter-dialog';var head=document.createElement('div');head.className='inv-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='inv-dialog-content';form.parentNode.insertBefore(dialog,form);content.appendChild(form);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);form.querySelectorAll('a.btn-light').forEach(function(a){a.classList.add('inv-clear');if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='inv-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})(); 
 </script>
 """
-    return _school_page(request, title, body + shared)
+\n    dialog_close_support = """<style>
+.ds-modal-close{position:absolute!important;top:12px!important;right:12px!important;z-index:5;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;border:1px solid #cfe0d2!important;border-radius:50%!important;background:#eaf4ec!important;color:#205a38!important;font:700 24px/1 Arial,sans-serif!important;cursor:pointer!important;box-shadow:0 2px 8px #163b2418!important}
+.ds-modal-close:hover{background:#d9ecdd!important;transform:scale(1.04)}
+dialog:has(.ds-modal-close){position:relative}
+dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
+@media(max-width:560px){.ds-modal-close{top:10px!important;right:10px!important;width:34px!important;height:34px!important}}
+</style><script>
+(function(){
+ function addClose(dialog){
+  if(!dialog||dialog.dataset.dsCloseReady==='1')return;
+  dialog.dataset.dsCloseReady='1';
+  var existing=dialog.querySelector('button[aria-label*="close" i],button[title*="close" i],.lib-close,.inv-dialog-head button,.ps-dialog-close,.fac-dialog-close,.health-dialog-close,.tr-dialog-close,.ds-modal-close');
+  if(existing){existing.classList.add('ds-modal-close');if(!existing.getAttribute('aria-label'))existing.setAttribute('aria-label','Close dialog');if(!existing.getAttribute('title'))existing.setAttribute('title','Close');return;}
+  var close=document.createElement('button');close.type='button';close.className='ds-modal-close';close.textContent='×';close.setAttribute('aria-label','Close dialog');close.title='Close';close.addEventListener('click',function(){dialog.close()});
+  dialog.insertBefore(close,dialog.firstChild);
+ }
+ function scan(root){(root||document).querySelectorAll('dialog').forEach(addClose)}
+ function init(){scan(document);new MutationObserver(function(records){records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1){if(node.matches&&node.matches('dialog'))addClose(node);scan(node)}})})}).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('dialog');if(d&&e.target===d)d.close()});}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""    return _school_page(request, title, body + shared + dialog_close_support)
 
 
 def _guard(request, permission="inventory.view"):
