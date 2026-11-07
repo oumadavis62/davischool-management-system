@@ -456,6 +456,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           <input type='hidden' name='profile_id' value='{pid}'>
           <div class='fields'>
             <div><label>Constraint name</label><input name='name' required maxlength='120' placeholder='e.g. No Mathematics after lunch'></div>
+            <div><label>Rule behavior</label><select name='constraint_type'><option value='prohibit'>Prohibit this time</option><option value='require'>Require this time</option><option value='prefer'>Prefer this time (soft rule)</option></select></div>
             <div><label>Applies to</label><select name='applies_to'><option value='all'>All sessions</option><option value='lesson'>Ordinary lessons</option><option value='remedial'>Remedial lessons</option><option value='activity'>Activities</option></select></div>
             <div><label>Timetable layer</label><select name='schedule_layer'><option value='all'>All layers</option><option value='instructional'>Instructional</option><option value='additional_learning'>Additional learning</option><option value='school_activity'>School activities</option></select></div>
             <div><label>Subject</label><select name='subject_id'>{subject_opts}</select></div>
@@ -478,7 +479,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
 
     @app.post("/app/timetable/constraints")
     def create_timetable_constraint(request: Request, profile_id: int = Form(...),
-        name: str = Form(...), applies_to: str = Form("all"), schedule_layer: str = Form("all"),
+        name: str = Form(...), constraint_type: str = Form("prohibit"),
+        applies_to: str = Form("all"), schedule_layer: str = Form("all"),
         subject_id: str = Form(""), teacher_id: str = Form(""), class_id: str = Form(""),
         room_id: str = Form(""), day_id: str = Form(""), period_id: str = Form(""),
         start_time: str = Form(""), end_time: str = Form(""), effective_from: str = Form(""),
@@ -489,7 +491,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         con = get_db()
         try:
             save_timetable_constraint(
-                con, int(school["id"]), profile_id, name, "prohibit", applies_to, schedule_layer,
+                con, int(school["id"]), profile_id, name, constraint_type, applies_to, schedule_layer,
                 int(subject_id) if subject_id else None, int(teacher_id) if teacher_id else None,
                 int(class_id) if class_id else None, int(room_id) if room_id else None,
                 int(day_id) if day_id else None, int(period_id) if period_id else None,
