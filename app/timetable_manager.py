@@ -1932,7 +1932,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
 
     base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(school_id)""",(sid,)).fetchall()]
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()]
     # Include combined-class and co-teacher relationships for every existing
     # placement, including lessons outside a class-filtered generation run.
     for row in base:
@@ -2645,7 +2645,7 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         moving_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or {int(target_class_id)}
         moving_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or ({int(moving["teacher_id"])} if moving["teacher_id"] else set())
         others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-            WHERE s.school_id=? AND s.profile_id=timetable_active_profile(school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
+            WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
         probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
         for o in others:
             if not _overlaps(probe,o): continue
