@@ -2677,6 +2677,7 @@ def parent_portal(request: Request):
             "<button type='button' class='parent-nav-btn active' data-section='overview' onclick=\"parentShow('overview')\">Overview</button>"
             "<button type='button' class='parent-nav-btn' data-section='academics' onclick=\"parentShow('academics')\">Academics</button>"
             "<button type='button' class='parent-nav-btn' data-section='fees' onclick=\"parentShow('fees')\">Fees</button>"
+            "<a class='parent-nav-btn' href='/app/timetable' style='text-decoration:none'>My Timetable</a>"
             "</nav>" + overview + academics + fees + "</div>"
             "<script>function parentShow(section){document.querySelectorAll('.parent-panel').forEach(function(p){p.hidden=p.id!=='parent-'+section;});document.querySelectorAll('.parent-nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.section===section);});window.scrollTo({top:0,behavior:'smooth'});}</script>"
         )
