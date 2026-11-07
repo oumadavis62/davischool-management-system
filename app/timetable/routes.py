@@ -19,6 +19,7 @@ from app.timetable.setup import (
     save_class_requirement,
     _profile,
 )
+from app.timetable.advanced_setup import save_timetable_constraint
 
 
 def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
@@ -382,6 +383,122 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         </script>
         """
         return module_page(request, "Timetable Setup", "timetable", body)
+
+
+    @app.get("/app/timetable/constraints", response_class=HTMLResponse)
+    def timetable_constraints_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        school_id = int(school["id"])
+        con = get_db()
+        cur = con.cursor()
+        profiles = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE school_id=? ORDER BY academic_year DESC,term,id DESC",
+            (school_id,),
+        ).fetchall()
+        selected = next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or next(
+            (p for p in profiles if str(p["status"] or "draft").lower() == "draft"), None
+        ) or (profiles[0] if profiles else None)
+        if not selected:
+            con.close()
+            return module_page(request, "Timetable Constraints", "timetable",
+                "<div class='tt-empty'><h2>Create a timetable profile first</h2><a href='/app/timetable/setup'>Open timetable setup</a></div>")
+        pid = int(selected["id"])
+        days = cur.execute("SELECT id,day_name FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order", (school_id,pid)).fetchall()
+        periods = cur.execute("SELECT id,label FROM ds_timetable_periods WHERE school_id=? AND profile_id=? ORDER BY period_no", (school_id,pid)).fetchall()
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
+        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        subjects = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        rooms = cur.execute("SELECT id,name FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
+        rules = cur.execute(
+            """SELECT r.*,s.name subject_name,t.name teacher_name,c.name class_name,d.day_name,p.label period_label,rm.name room_name
+               FROM ds_timetable_constraints r
+               LEFT JOIN subjects s ON s.id=r.subject_id AND s.school_id=r.school_id
+               LEFT JOIN teachers t ON t.id=r.teacher_id AND t.school_id=r.school_id
+               LEFT JOIN classes c ON c.id=r.class_id AND c.school_id=r.school_id
+               LEFT JOIN ds_timetable_days d ON d.id=r.day_id AND d.profile_id=r.profile_id
+               LEFT JOIN ds_timetable_periods p ON p.id=r.period_id AND p.profile_id=r.profile_id
+               LEFT JOIN ds_timetable_rooms rm ON rm.id=r.room_id AND rm.school_id=r.school_id
+               WHERE r.school_id=? AND r.profile_id=? ORDER BY r.is_active DESC,r.name""",
+            (school_id,pid),
+        ).fetchall()
+        con.close()
+        esc = lambda v: escape(str(v if v is not None else ""))
+        option = lambda rows, label: "<option value=''>Any " + label + "</option>" + "".join(
+            f"<option value='{int(row['id'])}'>{esc(row['name'] if 'name' in row.keys() else row[label])}</option>" for row in rows
+        )
+        class_opts = "<option value=''>Any class</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['name'])} {esc(x['stream'] or '')}</option>" for x in classes)
+        day_opts = "<option value=''>Any day</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['day_name'])}</option>" for x in days)
+        period_opts = "<option value=''>Any period</option>" + "".join(f"<option value='{int(x['id'])}'>{esc(x['label'])}</option>" for x in periods)
+        teacher_opts = option(teachers, "teacher")
+        subject_opts = option(subjects, "subject")
+        room_opts = option(rooms, "room")
+        notice = f"<div class='tt-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
+        rule_rows = "".join(
+            f"<tr><td><b>{esc(r['name'])}</b><small>{esc(r['reason'] or '')}</small></td><td>{esc(r['subject_name'] or 'Any subject')} · {esc(r['teacher_name'] or 'Any teacher')} · {esc(r['class_name'] or 'Any class')}</td><td>{esc(r['day_name'] or 'Any day')} · {esc(r['period_label'] or 'Any period')}</td><td>{esc(r['start_time'] or 'Any start')}–{esc(r['end_time'] or 'Any end')}</td><td>{'Active' if int(r['is_active'] or 0) else 'Inactive'}</td></tr>"
+            for r in rules
+        ) or "<tr><td colspan='5'>No constraints have been configured for this profile yet.</td></tr>"
+        body = f"""
+        <style>
+          .tt-constraints{{max-width:1400px;margin:auto;color:#23443a}}.tt-constraints .panel{{background:#fff;border:1px solid #e1ebe4;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 8px 24px #244d3510}}
+          .tt-constraints h2{{margin:0 0 8px}}.tt-constraints p{{color:#667b70}}.tt-constraints .fields{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}}
+          .tt-constraints label{{display:block;font-size:12px;font-weight:700;margin:0 0 6px}}.tt-constraints input,.tt-constraints select{{width:100%;padding:11px;border:1px solid #d9e5dc;border-radius:10px;background:#fbfdfb;color:#244338}}
+          .tt-constraints button{{border:0;border-radius:10px;background:#527d66;color:white;padding:12px 20px;font-weight:700;cursor:pointer;margin-top:14px}}
+          .tt-constraints table{{width:100%;border-collapse:collapse;font-size:13px}}.tt-constraints td,.tt-constraints th{{padding:12px;border-bottom:1px solid #e9eee9;text-align:left}}.tt-constraints small{{display:block;color:#728478}}
+          .tt-constraints .notice{{padding:12px;border-radius:10px;background:#eff6ef;margin:12px 0}}@media(max-width:650px){{.tt-constraints .table-wrap{{overflow:auto}}}}
+        </style>
+        <div class='tt-constraints'><h2>Scheduling constraints</h2>
+        <p>Define hard rules that the automatic generator must obey and the manual builder must reject. Leave a target blank to apply the rule more broadly.</p>
+        {notice}
+        <form class='panel' method='post' action='/app/timetable/constraints'>
+          <input type='hidden' name='profile_id' value='{pid}'>
+          <div class='fields'>
+            <div><label>Constraint name</label><input name='name' required maxlength='120' placeholder='e.g. No Mathematics after lunch'></div>
+            <div><label>Applies to</label><select name='applies_to'><option value='all'>All sessions</option><option value='lesson'>Ordinary lessons</option><option value='remedial'>Remedial lessons</option><option value='activity'>Activities</option></select></div>
+            <div><label>Timetable layer</label><select name='schedule_layer'><option value='all'>All layers</option><option value='instructional'>Instructional</option><option value='additional_learning'>Additional learning</option><option value='school_activity'>School activities</option></select></div>
+            <div><label>Subject</label><select name='subject_id'>{subject_opts}</select></div>
+            <div><label>Teacher</label><select name='teacher_id'>{teacher_opts}</select></div>
+            <div><label>Class / stream</label><select name='class_id'>{class_opts}</select></div>
+            <div><label>Room / facility</label><select name='room_id'>{room_opts}</select></div>
+            <div><label>Day</label><select name='day_id'>{day_opts}</select></div>
+            <div><label>Period</label><select name='period_id'>{period_opts}</select></div>
+            <div><label>Not before (optional)</label><input type='time' name='start_time'></div>
+            <div><label>Not after (optional)</label><input type='time' name='end_time'></div>
+            <div><label>Effective from</label><input type='date' name='effective_from'></div>
+            <div><label>Effective until</label><input type='date' name='effective_to'></div>
+            <div style='grid-column:1/-1'><label>Reason / instruction</label><input name='reason' placeholder='Explain why this time is blocked'></div>
+          </div><button type='submit'>Save constraint</button>
+        </form>
+        <section class='panel'><h2>Configured rules</h2><div class='table-wrap'><table><thead><tr><th>Rule</th><th>Target</th><th>Day / period</th><th>Time window</th><th>Status</th></tr></thead><tbody>{rule_rows}</tbody></table></div></section>
+        <p><a href='/app/timetable/setup?profile_id={pid}'>← Back to timetable setup</a></p></div>
+        """
+        return module_page(request, "Timetable Constraints", "timetable", body)
+
+    @app.post("/app/timetable/constraints")
+    def create_timetable_constraint(request: Request, profile_id: int = Form(...),
+        name: str = Form(...), applies_to: str = Form("all"), schedule_layer: str = Form("all"),
+        subject_id: str = Form(""), teacher_id: str = Form(""), class_id: str = Form(""),
+        room_id: str = Form(""), day_id: str = Form(""), period_id: str = Form(""),
+        start_time: str = Form(""), end_time: str = Form(""), effective_from: str = Form(""),
+        effective_to: str = Form(""), reason: str = Form("")):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            save_timetable_constraint(
+                con, int(school["id"]), profile_id, name, "prohibit", applies_to, schedule_layer,
+                int(subject_id) if subject_id else None, int(teacher_id) if teacher_id else None,
+                int(class_id) if class_id else None, int(room_id) if room_id else None,
+                int(day_id) if day_id else None, int(period_id) if period_id else None,
+                start_time or None, end_time or None, effective_from or None, effective_to or None, reason,
+            )
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&message=Constraint%20saved", 303)
+        except (TimetableSetupError, ValueError) as exc:
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303)
+        finally:
+            con.close()
 
     # Compatibility endpoint: older cached setup pages submitted to the page URL.
     # Keep this alias so profile creation cannot fail with 405 on stale markup.
