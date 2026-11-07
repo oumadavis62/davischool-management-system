@@ -346,6 +346,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     and placed.get("room_id") is not None
                     and room is not None
                     and int(placed["room_id"]) == int(room)
+                    and _overlap(candidate["start_time"], candidate["end_time"], placed["start_time"], placed["end_time"])
                 ),
             )
             for room_id in room_order:
