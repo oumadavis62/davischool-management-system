@@ -97,9 +97,15 @@ class TimetablePublishingTests(unittest.TestCase):
             (revision_id,),
         ).fetchone()
         self.assertIsNone(copied["generation_run_id"])
+        revision_tue = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE profile_id=? AND day_code='TUE'", (revision_id,)
+        ).fetchone()[0]
+        revision_p2 = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE profile_id=? AND period_no=2", (revision_id,)
+        ).fetchone()[0]
         move_lesson(self.db, 1, revision_id, self.db.execute(
             "SELECT id FROM ds_timetable_lessons WHERE profile_id=?", (revision_id,)
-        ).fetchone()[0], self.tue, self.p2, "admin@test")
+        ).fetchone()[0], revision_tue, revision_p2, "admin@test")
         submit_for_approval(self.db, 1, revision_id, "admin@test")
         second = publish_timetable(self.db, 1, revision_id, "admin@test")
         old_status = self.db.execute("SELECT status FROM ds_timetable_profiles WHERE id=?", (self.profile_id,)).fetchone()[0]
