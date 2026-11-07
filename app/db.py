@@ -133,7 +133,7 @@ class CompatCursor:
                 candidate,
                 flags=re.IGNORECASE,
             )
-            if table_match and table_match.group(1).lower() not in {"teacher_mark_drafts", "academic_locks", "system_audit", "exam_class_participation", "student_promotion_cohort_snapshots", "student_promotion_cohort_members", "parent_student_links", "parent_access_credentials", "ds_fin_accounts"}:
+            if table_match and table_match.group(1).lower() not in {"teacher_mark_drafts", "academic_locks", "system_audit", "exam_class_participation", "student_promotion_cohort_snapshots", "student_promotion_cohort_members", "parent_student_links", "parent_access_credentials", "ds_fin_accounts", "admission_number_settings", "ds_fin_periods", "ds_fin_reversals"}:
                 translated = candidate + " RETURNING id"
         self._cursor.execute(translated, params)
         self._lastrowid = None
