@@ -4,6 +4,7 @@ import unittest
 
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, TimetableSetupError
+from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
@@ -113,6 +114,44 @@ class TimetableSessionEngineTests(unittest.TestCase):
             create_scheduled_session(
                 self.db, 8, self.profile_id, "08:00", "09:00",
                 class_ids=[1, 2], room_id=self.room_id, day_id=self.day_id,
+            )
+
+
+    def test_programme_enforces_team_size_and_room_type(self):
+        programme = create_learning_programme(
+            self.db, 8, self.profile_id, "Saturday science remedial",
+            programme_type="remedial", schedule_layer="additional_learning",
+        )
+        save_programme_session(
+            self.db, 8, self.profile_id, programme, "08:00", "09:00", 60,
+            day_id=self.day_id, required_teacher_count=2, room_type="laboratory",
+        )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                schedule_layer="additional_learning", session_type="remedial",
+                teacher_ids=[11], room_id=self.room_id, day_id=self.day_id,
+                programme_id=programme,
+            )
+        session = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:00",
+            schedule_layer="additional_learning", session_type="remedial",
+            teacher_ids=[11, 12], room_id=self.room_id, day_id=self.day_id,
+            programme_id=programme,
+        )
+        self.assertGreater(session, 0)
+
+    def test_activity_type_setup_is_school_scoped(self):
+        activity_id = save_activity_type(
+            self.db, 8, "ASSEMBLY", "Assembly",
+            requires_teacher=True, requires_room=True, tracks_attendance=True,
+        )
+        self.assertGreater(activity_id, 0)
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                schedule_layer="school_activity", session_type="ASSEMBLY",
+                day_id=self.day_id,
             )
 
     def test_activity_type_can_require_teacher_and_venue(self):
