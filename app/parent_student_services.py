@@ -141,6 +141,7 @@ def _page(request, title, description, body):
 </style>
 <script>
 (function(){
+ function init(){
   var requestDialog=document.getElementById('ps-request-dialog');
   var requestOpen=document.getElementById('ps-request-open');
   var requestClose=document.getElementById('ps-request-close');
