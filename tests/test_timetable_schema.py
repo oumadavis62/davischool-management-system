@@ -54,6 +54,8 @@ class TimetableSchemaTests(unittest.TestCase):
         }
         self.assertIn("academic_start_date", columns)
         self.assertIn("academic_end_date", columns)
+        lesson_columns = {row[1] for row in self.connection.execute("PRAGMA table_info(ds_timetable_lessons)").fetchall()}
+        self.assertIn("generation_run_id", lesson_columns)
 
     def test_profile_is_tenant_scoped_and_insertable(self):
         ensure_timetable_schema(self.connection)
