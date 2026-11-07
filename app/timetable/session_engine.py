@@ -145,14 +145,15 @@ def _validate_constraints(cur: Any, school_id: int, profile_id: int,
     rules = cur.execute(
         """SELECT * FROM ds_timetable_constraints
            WHERE school_id=? AND profile_id=? AND is_active=1
-             AND constraint_type='prohibit'
+             AND constraint_type IN ('prohibit','require')
              AND (schedule_layer='all' OR schedule_layer=?)
              AND (applies_to='all' OR applies_to=? OR applies_to=?)""",
         (school_id, profile_id, schedule_layer, session_type,
          "lesson" if schedule_layer == "instructional" else
          "remedial" if schedule_layer == "additional_learning" else "activity"),
     ).fetchall()
-    session_minutes = lambda value: int(value[:2]) * 60 + int(value[3:])
+    def minutes(value):
+        return int(str(value)[:2]) * 60 + int(str(value)[3:])
     for rule in rules:
         if rule["subject_id"] is not None and int(rule["subject_id"]) != int(subject_id or 0):
             continue
@@ -162,55 +163,59 @@ def _validate_constraints(cur: Any, school_id: int, profile_id: int,
             continue
         if rule["room_id"] is not None and int(rule["room_id"]) != int(room_id or 0):
             continue
-        if rule["day_id"] is not None and int(rule["day_id"]) != int(day_id or 0):
-            continue
+        slot_matches = True
+        has_slot_target = False
+        if rule["day_id"] is not None:
+            has_slot_target = True
+            slot_matches = slot_matches and int(rule["day_id"]) == int(day_id or 0)
         if rule["period_id"] is not None:
+            has_slot_target = True
             if period_id is None:
-                continue
-            ordered = cur.execute(
-                """SELECT id,period_no FROM ds_timetable_periods
-                   WHERE school_id=? AND profile_id=? ORDER BY period_no,id""",
-                (school_id, profile_id),
-            ).fetchall()
-            start_index = next((i for i, row in enumerate(ordered)
-                                if int(row["id"]) == int(period_id)), None)
-            if start_index is None:
-                continue
-            duration = 1
-            # Session period span is determined by its configured start/end times.
-            periods = cur.execute(
-                """SELECT id FROM ds_timetable_periods
-                   WHERE school_id=? AND profile_id=? AND period_no>=?
-                   ORDER BY period_no,id""",
-                (school_id, profile_id, int(ordered[start_index]["period_no"])),
-            ).fetchall()
-            span_ids = []
-            for item in periods:
-                span_ids.append(int(item["id"]))
-                span = cur.execute(
-                    "SELECT end_time FROM ds_timetable_periods WHERE id=? AND school_id=?",
-                    (int(item["id"]), school_id),
-                ).fetchone()
-                if span and str(span["end_time"]) == end:
-                    break
-            if int(rule["period_id"]) not in span_ids:
-                continue
+                slot_matches = False
+            else:
+                ordered = cur.execute(
+                    """SELECT id,period_no FROM ds_timetable_periods
+                       WHERE school_id=? AND profile_id=? ORDER BY period_no,id""",
+                    (school_id, profile_id),
+                ).fetchall()
+                start_index = next((i for i, row in enumerate(ordered)
+                                    if int(row["id"]) == int(period_id)), None)
+                span_ids = []
+                if start_index is not None:
+                    periods = cur.execute(
+                        """SELECT id,end_time FROM ds_timetable_periods
+                           WHERE school_id=? AND profile_id=? AND period_no>=?
+                           ORDER BY period_no,id""",
+                        (school_id, profile_id, int(ordered[start_index]["period_no"])),
+                    ).fetchall()
+                    for item in periods:
+                        span_ids.append(int(item["id"]))
+                        if str(item["end_time"]) == end:
+                            break
+                slot_matches = slot_matches and int(rule["period_id"]) in span_ids
         if rule["start_time"] and rule["end_time"]:
-            if not (session_minutes(start) < session_minutes(str(rule["end_time"]))
-                    and session_minutes(end) > session_minutes(str(rule["start_time"]))):
-                continue
-        if session_date:
-            if rule["effective_from"] and session_date < str(rule["effective_from"]):
-                continue
-            if rule["effective_to"] and session_date > str(rule["effective_to"]):
-                continue
-        elif rule["effective_from"] or rule["effective_to"]:
-            # Date-scoped restrictions cannot be applied to an undated weekly pattern.
+            has_slot_target = True
+            overlaps = minutes(start) < minutes(rule["end_time"]) and minutes(end) > minutes(rule["start_time"])
+            slot_matches = slot_matches and overlaps
+        if rule["effective_from"] or rule["effective_to"]:
+            has_slot_target = True
+            date_matches = bool(session_date)
+            if session_date and rule["effective_from"]:
+                date_matches = date_matches and session_date >= str(rule["effective_from"])
+            if session_date and rule["effective_to"]:
+                date_matches = date_matches and session_date <= str(rule["effective_to"])
+            slot_matches = slot_matches and date_matches
+        if not has_slot_target:
             continue
         reason = str(rule["reason"] or rule["name"])
-        raise TimetableSetupError(
-            f"Scheduling constraint '{rule['name']}' blocks this session: {reason}"
-        )
+        if rule["constraint_type"] == "prohibit" and slot_matches:
+            raise TimetableSetupError(
+                f"Scheduling constraint '{rule['name']}' blocks this session: {reason}"
+            )
+        if rule["constraint_type"] == "require" and not slot_matches:
+            raise TimetableSetupError(
+                f"Scheduling requirement '{rule['name']}' requires a different day or time: {reason}"
+            )
 
 
 def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
