@@ -1932,7 +1932,17 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
 
     base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()]
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(school_id)""",(sid,)).fetchall()]
+    # Include combined-class and co-teacher relationships for every existing
+    # placement, including lessons outside a class-filtered generation run.
+    for row in base:
+        lid=int(row["lesson_id"])
+        lesson_classes.setdefault(lid,{int(x["class_id"]) for x in cur.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or {int(row["class_id"])})
+        lesson_teachers.setdefault(lid,{int(x["teacher_id"]) for x in cur.execute(
+            "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or ({int(row["teacher_id"])} if row["teacher_id"] else set()))
 
     def overlap(a_pno,a_duration,b):
         return (
