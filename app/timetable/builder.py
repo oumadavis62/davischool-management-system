@@ -44,8 +44,11 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
     if not day:
         raise TimetableSetupError("Choose an instructional day in the selected timetable profile.")
     allocation = cursor.execute(
-        """SELECT id FROM teacher_allocations
-           WHERE school_id=? AND class_id=? AND subject_id=? AND teacher_id=? LIMIT 1""",
+        """SELECT ta.id FROM teacher_allocations ta
+           JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
+           JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
+           JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+           WHERE ta.school_id=? AND ta.class_id=? AND ta.subject_id=? AND ta.teacher_id=? LIMIT 1""",
         (school_id, class_id, subject_id, teacher_id),
     ).fetchone()
     if not allocation:
@@ -166,7 +169,7 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     ).fetchone()
     if not existing:
         raise TimetableSetupError("The selected lesson no longer exists in this timetable.")
-    _placement_context(
+    requirement, span = _placement_context(
         cur, school_id, profile_id, int(existing["class_id"]), int(existing["subject_id"]),
         int(existing["teacher_id"]), day_id, period_id,
         int(existing["room_id"]) if existing["room_id"] is not None else None,
@@ -175,8 +178,8 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     before = dict(existing)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     cur.execute(
-        "UPDATE ds_timetable_lessons SET day_id=?,period_id=?,updated_at=? WHERE id=? AND school_id=? AND profile_id=?",
-        (day_id, period_id, now, lesson_id, school_id, profile_id),
+        "UPDATE ds_timetable_lessons SET day_id=?,period_id=?,duration_periods=?,updated_at=? WHERE id=? AND school_id=? AND profile_id=?",
+        (day_id, period_id, len(span), now, lesson_id, school_id, profile_id),
     )
     after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (lesson_id, school_id)).fetchone()
     _log_change(cur, school_id, profile_id, lesson_id, "LESSON_MOVE", before, after, changed_by)
