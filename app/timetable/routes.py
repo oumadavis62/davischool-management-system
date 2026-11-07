@@ -37,10 +37,107 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return RedirectResponse("/app/timetable/setup" + (("?" + "&".join(parts)) if parts else ""), 303)
 
     @app.get("/app/timetable", response_class=HTMLResponse)
-    def timetable_home(request: Request):
-        if not school_for(request):
+    def timetable_home(request: Request, profile_id: int = 0):
+        school = school_for(request)
+        if not school:
             return RedirectResponse("/", 303)
-        return RedirectResponse("/app/timetable/builder", 303)
+        school_id = int(school["id"])
+        con = get_db()
+        cur = con.cursor()
+        profiles = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE school_id=? ORDER BY academic_year DESC,term,id DESC",
+            (school_id,),
+        ).fetchall()
+        selected = next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None)
+        stats = {"days": 0, "periods": 0, "rooms": 0, "requirements": 0, "lessons": 0}
+        if selected:
+            pid = int(selected["id"])
+            stats["days"] = int(cur.execute("SELECT COUNT(*) FROM ds_timetable_days WHERE school_id=? AND profile_id=? AND is_instructional=1", (school_id,pid)).fetchone()[0] or 0)
+            stats["periods"] = int(cur.execute("SELECT COUNT(*) FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson'", (school_id,pid)).fetchone()[0] or 0)
+            stats["rooms"] = int(cur.execute("SELECT COUNT(*) FROM ds_timetable_rooms WHERE school_id=? AND is_active=1", (school_id,)).fetchone()[0] or 0)
+            stats["requirements"] = int(cur.execute("SELECT COUNT(*) FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?", (school_id,pid)).fetchone()[0] or 0)
+            stats["lessons"] = int(cur.execute("SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=? AND profile_id=? AND status='scheduled'", (school_id,pid)).fetchone()[0] or 0)
+        con.close()
+
+        esc = lambda value: escape(str(value if value is not None else ""))
+        if selected:
+            pid = int(selected["id"])
+            profile_options = "".join(
+                f"<option value='{int(p['id'])}' {'selected' if int(p['id']) == pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
+                for p in profiles
+            )
+            profile_control = f"<form class='tt-home-profile' method='get' action='/app/timetable'><label for='tt-home-profile'>Working timetable</label><select id='tt-home-profile' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>"
+            status = esc(selected["status"]).upper()
+            profile_name = esc(selected["name"])
+            profile_meta = f"{esc(selected['academic_year'])} · {esc(selected['term'])}"
+            progress_items = [
+                ("School days", stats["days"], "Define the instructional week", "/app/timetable/setup"),
+                ("Lesson periods", stats["periods"], "Set lesson times and durations", "/app/timetable/setup"),
+                ("Lesson requirements", stats["requirements"], "Connect classes, subjects and teachers", "/app/timetable/setup"),
+                ("Scheduled lessons", stats["lessons"], "Build and review the weekly plan", "/app/timetable/builder"),
+            ]
+            progress_html = "".join(
+                f"<a class='tt-home-progress' href='{url}'><span class='tt-home-progress-icon'>{idx:02d}</span><span><b>{label}</b><small>{hint}</small></span><strong>{count}</strong></a>"
+                for idx,(label,count,hint,url) in enumerate(progress_items,1)
+            )
+            builder_href = f"/app/timetable/builder?profile_id={pid}"
+            setup_href = f"/app/timetable/setup?profile_id={pid}"
+            views_href = f"/app/timetable/views?profile_id={pid}"
+            auto_href = f"/app/timetable/automatic?profile_id={pid}"
+            publish_href = f"/app/timetable/publishing?profile_id={pid}"
+            profile_panel = f"""
+              <section class='tt-home-profile-card'>
+                <div class='tt-home-profile-top'><div><span class='tt-home-eyebrow'>CURRENT TIMETABLE PROFILE</span><h2>{profile_name}</h2><p>{profile_meta} <i></i> <span class='tt-home-status'>{status}</span></p></div><a class='tt-home-outline' href='{setup_href}'>Configure profile <span>↗</span></a></div>
+                <div class='tt-home-metrics'>
+                  <div><span>School days</span><b>{stats['days']}</b></div><div><span>Lesson periods</span><b>{stats['periods']}</b></div><div><span>Active rooms</span><b>{stats['rooms']}</b></div><div><span>Scheduled lessons</span><b>{stats['lessons']}</b></div>
+                </div>
+              </section>
+              <div class='tt-home-columns'>
+                <section class='tt-home-panel'><div class='tt-home-panel-head'><div><span class='tt-home-eyebrow'>WORKSPACE CHECKLIST</span><h3>Build your timetable</h3></div><a href='{setup_href}'>Open setup ↗</a></div>{progress_html}</section>
+                <section class='tt-home-panel tt-home-actions'><span class='tt-home-eyebrow'>QUICK ACCESS</span><h3>What would you like to do?</h3>
+                  <a class='tt-home-action tt-home-action-primary' href='{builder_href}'><span class='tt-home-action-icon'>▦</span><span><b>Open timetable builder</b><small>Create, adjust and arrange lessons</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='{auto_href}'><span class='tt-home-action-icon'>✳</span><span><b>Generate automatically</b><small>Build a schedule using your constraints</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='{views_href}'><span class='tt-home-action-icon'>▤</span><span><b>View timetables</b><small>School, class, teacher and room views</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='{publish_href}'><span class='tt-home-action-icon'>⇧</span><span><b>Review and publish</b><small>Manage timetable release and revisions</small></span><em>→</em></a>
+                </section>
+              </div>"""
+        else:
+            profile_control = ""
+            profile_panel = """
+              <section class='tt-home-empty'>
+                <div class='tt-home-empty-icon'>▦</div><span class='tt-home-eyebrow'>GET STARTED</span>
+                <h2>Create your first timetable profile</h2>
+                <p>Start by choosing the academic year and term. Then configure school days, lesson periods, rooms and teaching requirements before building your timetable.</p>
+                <a class='tt-home-primary' href='/app/timetable/setup'>Create timetable profile <span>→</span></a>
+              </section>"""
+        body = f"""
+        <style>
+          .tt-home{{color:#173b31;max-width:1500px;margin:0 auto;padding:8px 0 34px}}
+          .tt-home *{{box-sizing:border-box}}
+          .tt-home-hero{{position:relative;overflow:hidden;border-radius:22px;padding:30px 34px;background:linear-gradient(115deg,#123f32 0%,#17634a 62%,#23815d 100%);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;box-shadow:0 12px 30px rgba(17,70,51,.14)}}
+          .tt-home-hero:after{{content:'';position:absolute;width:260px;height:260px;border:1px solid rgba(255,255,255,.13);border-radius:50%;right:8%;top:-155px;box-shadow:0 0 0 28px rgba(255,255,255,.035),0 0 0 58px rgba(255,255,255,.025)}}
+          .tt-home-hero-copy{{position:relative;z-index:1}}.tt-home-eyebrow{{font-size:10px;letter-spacing:1.6px;font-weight:800;color:#638b79;display:block}}
+          .tt-home-hero .tt-home-eyebrow{{color:#b6ddc8}}.tt-home-hero h1{{font-size:clamp(25px,3vw,34px);line-height:1.15;margin:9px 0 8px;color:#fff;font-weight:800;letter-spacing:-.7px}}
+          .tt-home-hero p{{margin:0;color:rgba(255,255,255,.8);font-size:13px;max-width:560px;line-height:1.65}}
+          .tt-home-hero-mark{{position:relative;z-index:1;width:94px;height:94px;border-radius:25px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:grid;place-items:center;font-size:42px;flex:none}}
+          .tt-home-profile{{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:18px 2px 14px}}.tt-home-profile label{{font-size:12px;color:#61766d;font-weight:700}}.tt-home-profile select{{min-width:250px;max-width:100%;padding:10px 13px;border:1px solid #dce7e0;border-radius:10px;background:#fff;color:#234b3b;font-weight:650}}
+          .tt-home-profile-card,.tt-home-panel,.tt-home-empty{{background:#fff;border:1px solid #e3ece6;border-radius:18px;box-shadow:0 5px 18px rgba(24,67,47,.045)}}
+          .tt-home-profile-card{{padding:23px 25px;margin-bottom:18px}}.tt-home-profile-top{{display:flex;align-items:center;justify-content:space-between;gap:16px}}.tt-home-profile-top h2{{font-size:22px;margin:6px 0;color:#183e30}}.tt-home-profile-top p{{font-size:12px;color:#72857a;margin:0}}.tt-home-profile-top p i{{display:inline-block;width:4px;height:4px;border-radius:50%;background:#a6b7ad;margin:0 8px 2px}}
+          .tt-home-status{{font-size:10px;font-weight:800;letter-spacing:.7px;color:#18734e;background:#e8f5ed;padding:5px 9px;border-radius:20px}}.tt-home-outline{{text-decoration:none!important;border:1px solid #dce8e0;border-radius:9px;padding:9px 13px;color:#236348!important;font-size:12px;font-weight:750;white-space:nowrap}}
+          .tt-home-metrics{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:22px}}.tt-home-metrics div{{padding:13px 15px;background:#f5f9f6;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}}.tt-home-metrics span{{font-size:11px;color:#6c8175;font-weight:650}}.tt-home-metrics b{{font-size:22px;color:#1d5b40}}
+          .tt-home-columns{{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:18px}}.tt-home-panel{{padding:22px 23px;min-width:0}}.tt-home-panel-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:13px}}.tt-home-panel h3{{font-size:17px;margin:5px 0 0;color:#1a4031}}.tt-home-panel-head>a{{font-size:11px;color:#24734f;text-decoration:none;font-weight:750;white-space:nowrap}}
+          .tt-home-progress{{display:flex;align-items:center;gap:13px;padding:13px 2px;border-bottom:1px solid #edf2ee;text-decoration:none!important;color:inherit!important}}.tt-home-progress:last-child{{border-bottom:0}}.tt-home-progress-icon{{width:32px;height:32px;border-radius:10px;background:#edf6f0;color:#26734f;display:grid;place-items:center;font-size:10px;font-weight:800;flex:none}}.tt-home-progress span:nth-child(2){{display:flex;flex-direction:column;gap:3px;min-width:0}}.tt-home-progress b{{font-size:12px;color:#264b3a}}.tt-home-progress small{{font-size:10px;color:#839188}}.tt-home-progress strong{{margin-left:auto;font-size:18px;color:#1d6745}}
+          .tt-home-actions h3{{margin-bottom:14px}}.tt-home-action{{display:flex;align-items:center;gap:11px;padding:12px 11px;border:1px solid #e8efea;border-radius:12px;margin-top:9px;text-decoration:none!important;color:#254a39!important;transition:transform .15s,border-color .15s,background .15s}}.tt-home-action:hover{{transform:translateY(-1px);border-color:#b9d8c4;background:#f8fbf9}}.tt-home-action-primary{{background:#f0f7f2;border-color:#d9eade}}.tt-home-action-icon{{width:36px;height:36px;border-radius:10px;background:#e5f1e8;color:#216846;display:grid;place-items:center;font-size:19px;flex:none}}.tt-home-action>span:nth-child(2){{display:flex;flex-direction:column;gap:3px;min-width:0}}.tt-home-action b{{font-size:12px}}.tt-home-action small{{font-size:10px;color:#7a8c82}}.tt-home-action em{{margin-left:auto;font-style:normal;color:#43815f;font-size:18px}}
+          .tt-home-empty{{text-align:center;padding:54px 25px;margin-top:18px}}.tt-home-empty-icon{{width:66px;height:66px;border-radius:20px;background:#eaf4ed;color:#24704b;display:grid;place-items:center;margin:0 auto 18px;font-size:30px}}.tt-home-empty h2{{font-size:24px;color:#1b4935;margin:8px 0}}.tt-home-empty p{{max-width:600px;margin:0 auto 22px;color:#718379;font-size:13px;line-height:1.7}}.tt-home-primary{{display:inline-flex;gap:12px;align-items:center;background:#176344;color:white!important;text-decoration:none!important;padding:12px 18px;border-radius:10px;font-weight:750;font-size:12px}}
+          @media(max-width:800px){{.tt-home-hero{{padding:25px 22px}}.tt-home-hero-mark{{width:68px;height:68px;font-size:30px;border-radius:19px}}.tt-home-columns{{grid-template-columns:1fr}}.tt-home-metrics{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
+          @media(max-width:480px){{.tt-home-hero-mark{{display:none}}.tt-home-profile{{align-items:stretch;flex-direction:column;gap:7px}}.tt-home-profile select{{width:100%;min-width:0}}.tt-home-profile-card,.tt-home-panel{{padding:18px 16px}}.tt-home-profile-top{{align-items:flex-start;flex-direction:column}}.tt-home-metrics div{{padding:11px}}.tt-home-metrics span{{font-size:10px}}.tt-home-empty{{padding:38px 18px}}}}
+        </style>
+        <main class='tt-home'>
+          <section class='tt-home-hero'><div class='tt-home-hero-copy'><span class='tt-home-eyebrow'>DAVISCHOOL · ACADEMIC OPERATIONS</span><h1>Smart Timetable</h1><p>Plan, organise and publish a balanced school timetable. Manage teaching requirements, build schedules and keep every class and teacher in sync.</p></div><div class='tt-home-hero-mark'>▦</div></section>
+          {profile_control}
+          {profile_panel}
+        </main>"""
+        return module_page(request, "Smart Timetable", "timetable", body)
 
     @app.get("/app/timetable/setup", response_class=HTMLResponse)
     def timetable_setup_page(request: Request, profile_id: int = 0, message: str = "", error: int = 0):
