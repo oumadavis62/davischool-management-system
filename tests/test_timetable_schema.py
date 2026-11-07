@@ -56,6 +56,7 @@ class TimetableSchemaTests(unittest.TestCase):
             "ds_timetable_scheduling_requirement_teachers",
             "ds_timetable_scheduling_requirement_learners",
             "ds_timetable_scheduling_patterns",
+            "ds_timetable_constraints",
         })
         self.assertTrue(expected.issubset(tables))
 
