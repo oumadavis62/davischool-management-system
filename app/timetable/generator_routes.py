@@ -77,6 +77,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         if not selected:
             body = "<div class='ag-empty'><h2>No timetable profile found</h2><p>Create a profile and configure the school week before automatic generation.</p><a class='ag-btn' href='/app/timetable/setup'>Open Timetable Setup</a></div>"
             return module_page(request, "Automatic Timetabling", "timetable", body)
+        read_only = str(selected['status']) != 'draft'
         advanced_action = (
             f"""<form method='post' action='/app/timetable/automatic/generate-advanced'
                 onsubmit="return confirm('Generate normalized sessions, including combined classes and teaching teams?')">
@@ -96,7 +97,6 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             f"<tr><td>#{int(r['id'])}</td><td>{esc(r['created_at'])}</td><td><span class='ag-state {'good' if r['status']=='completed' else 'bad'}'>{esc(r['status'])}</span></td><td>{esc(r['engine_version'])}</td><td><a href='/app/timetable/automatic?profile_id={pid}&run_id={int(r['id'])}'>View result</a></td></tr>"
             for r in runs
         ) or "<tr><td colspan='5' class='ag-muted'>No generation runs yet.</td></tr>"
-        read_only = str(selected['status']) != 'draft'
         ready = bool(days and periods and requirements and int(allocations_count) == int(requirements) and not read_only)
         action_html = (
             f"""<form method='post' action='/app/timetable/automatic/generate' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.')"><input type='hidden' name='profile_id' value='{pid}'><button class='ag-btn'>⚡ Generate complete timetable</button></form>"""
