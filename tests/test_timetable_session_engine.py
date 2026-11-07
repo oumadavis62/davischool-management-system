@@ -4,7 +4,7 @@ import unittest
 
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, TimetableSetupError
-from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern
+from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
@@ -19,6 +19,8 @@ class TimetableSessionEngineTests(unittest.TestCase):
         ensure_timetable_schema(self.db)
         self.db.execute("CREATE TABLE classes (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
         self.db.execute("CREATE TABLE teachers (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
+        self.db.execute("CREATE TABLE subjects (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT)")
+        self.db.executemany("INSERT INTO subjects(id,school_id,name) VALUES(?,?,?)", [(5,8,"Science"),(9,8,"Mathematics")])
         self.db.execute("CREATE TABLE students (id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, class_id INTEGER)")
         self.db.executemany(
             "INSERT INTO classes(id,school_id,name) VALUES(?,?,?)",
@@ -97,6 +99,38 @@ class TimetableSessionEngineTests(unittest.TestCase):
                 class_ids=[2], teacher_ids=[12], day_id=self.day_id,
                 period_id=self.period_id, duration_periods=2,
             )
+
+    def test_teacher_period_constraint_blocks_manual_session(self):
+        save_timetable_constraint(
+            self.db, 8, self.profile_id, "Teacher A unavailable Monday P1",
+            teacher_id=11, day_id=self.day_id, period_id=self.period_id,
+            reason="Teacher has a departmental meeting.",
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "departmental meeting"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+                period_id=self.period_id,
+            )
+
+    def test_subject_time_constraint_blocks_session_but_not_other_subject(self):
+        save_timetable_constraint(
+            self.db, 8, self.profile_id, "No Science in first period",
+            subject_id=5, period_id=self.period_id,
+            reason="Laboratory is closed for maintenance.",
+        )
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                class_ids=[1], teacher_ids=[11], subject_id=5,
+                day_id=self.day_id, period_id=self.period_id,
+            )
+        session = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "08:40",
+            class_ids=[2], teacher_ids=[12], subject_id=9,
+            day_id=self.day_id, period_id=self.period_id,
+        )
+        self.assertGreater(session, 0)
 
     def test_teacher_and_class_conflicts_are_detected_across_layers(self):
         create_scheduled_session(
