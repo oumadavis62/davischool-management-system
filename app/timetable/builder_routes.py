@@ -40,7 +40,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             (school_id,),
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
-        days = periods = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = []
+        days = periods = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = advanced_sessions = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute(
@@ -92,6 +92,23 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                    JOIN ds_timetable_days d ON d.id=l.day_id AND d.profile_id=l.profile_id
                    WHERE l.school_id=? AND l.profile_id=? AND l.status='scheduled'
                    ORDER BY d.day_order,p.period_no,c.name,s.name""",
+                (school_id,pid),
+            ).fetchall()
+            advanced_sessions = cur.execute(
+                """SELECT s.*,sub.name subject_name,d.day_name,p.label period_label,
+                          GROUP_CONCAT(DISTINCT c.name || COALESCE(' ' || c.stream,'')) class_names,
+                          GROUP_CONCAT(DISTINCT t.name) teacher_names,rm.name room_name
+                   FROM ds_timetable_sessions s
+                   LEFT JOIN subjects sub ON sub.id=s.subject_id AND sub.school_id=s.school_id
+                   LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
+                   LEFT JOIN ds_timetable_periods p ON p.id=s.period_id AND p.profile_id=s.profile_id
+                   LEFT JOIN ds_timetable_rooms rm ON rm.id=s.room_id AND rm.school_id=s.school_id
+                   LEFT JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                   LEFT JOIN classes c ON c.id=sc.class_id AND c.school_id=sc.school_id
+                   LEFT JOIN ds_timetable_session_teachers st ON st.session_id=s.id AND st.school_id=s.school_id
+                   LEFT JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
+                   WHERE s.school_id=? AND s.profile_id=? AND s.status='scheduled'
+                   GROUP BY s.id ORDER BY d.day_order,p.period_no,s.start_time""",
                 (school_id,pid),
             ).fetchall()
             calendar_events = cur.execute(
@@ -190,6 +207,11 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             <label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Place advanced session</button></form></section>"""
             if not read_only and advanced_requirements and days and periods else ""
         )
+        advanced_session_rows = "".join(
+            f"<tr><td>{esc(x['day_name'] or x['session_date'] or '—')}</td><td>{esc(x['period_label'] or (str(x['start_time'])+'–'+str(x['end_time'])))}</td><td>{esc(x['subject_name'] or x['session_type'])}</td><td>{esc(x['class_names'] or 'Learner group')}</td><td>{esc(x['teacher_names'] or '—')}</td><td>{esc(x['room_name'] or 'No room')}</td></tr>"
+            for x in advanced_sessions
+        ) or "<tr><td colspan='6'>No advanced sessions placed yet.</td></tr>"
+        advanced_session_table = f"""<section class='tb-panel'><div><span class='tb-kicker'>NORMALIZED SESSIONS</span><h3>Combined classes and team-taught lessons</h3></div><div style='overflow:auto'><table><thead><tr><th>Day</th><th>Time</th><th>Subject / activity</th><th>Classes</th><th>Teaching team</th><th>Room</th></tr></thead><tbody>{advanced_session_rows}</tbody></table></div></section>"""
         body = f"""
         <style>
         .tb-wrap{{max-width:1700px;margin:auto;padding:24px;color:#234638;background:linear-gradient(145deg,#edf6ef 0%,#e3f0e5 45%,#f8fbf8 100%);border-radius:25px}}
@@ -218,7 +240,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         @media(max-width:900px){{.tb-add-form{{grid-template-columns:1fr 1fr}}.tb-add-form label.wide{{grid-column:1/-1}}}}
         @media(max-width:600px){{.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
         </style>
-        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{advanced_form}{grid}</div>
+        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{advanced_form}{advanced_session_table}{grid}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tb-wrap');if(!root)return;
