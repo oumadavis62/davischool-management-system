@@ -20209,6 +20209,13 @@ def _admission_table_html(rows, show_action=True):
             action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
         elif admission_no:
             action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>View letter</a>"
+        if show_action and not enrolled:
+            action += (
+                f"<a class='admit-btn' href='/app/admissions/{applicant_id}/edit'>Edit</a>"
+                f"<form method='post' action='/app/admissions/{applicant_id}/delete' class='inline-form' "
+                "onsubmit=\"return confirm('Delete this application? This cannot be undone.');\">"
+                "<button class='reject-btn' type='submit'>Delete</button></form>"
+            )
         out.append(
             "<tr>"
             f"<td>{applicant_id}</td><td>{escape(str(row['applicant_name'] or ''))}</td>"
@@ -20333,6 +20340,108 @@ def admissions_add_application(request: Request, applicant_name: str = Form(...)
     finally:
         con.close()
     return RedirectResponse("/app/admissions",303)
+
+
+@router.get("/app/admissions/{application_id}/edit", response_class=HTMLResponse)
+def admissions_edit_page(request: Request, application_id: int):
+    sid, denied = _admission_guard(request, "students.edit")
+    if denied: return denied
+    con = _db()
+    try:
+        cur = con.cursor()
+        _ensure_admissions_schema(cur)
+        row = cur.execute("SELECT * FROM admission_applications WHERE id=? AND school_id=?",
+                          (application_id, sid)).fetchone()
+        if not row: return HTMLResponse("Application not found.", 404)
+        if row["enrolled_student_id"] or str(row["status"] or "").lower() == "enrolled":
+            return HTMLResponse("Enrolled applications are locked. Edit the learner in Student Manager instead.", 409)
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",
+                              (sid,)).fetchall()
+    finally:
+        con.close()
+    options = "".join(
+        f"<option value='{int(c['id'])}' {'selected' if int(c['id']) == int(row['applying_class_id'] or 0) else ''}>"
+        f"{escape(str(c['name'] or '') + (' - ' + str(c['stream']) if c['stream'] else ''))}</option>"
+        for c in classes
+    )
+    body = f"""<div class='page adm-page'><div class='adm-card'><h1>Edit Admission Application</h1>
+      <form method='post' action='/app/admissions/{application_id}/edit' class='adm-form'>
+      <label>Applicant full name<input name='applicant_name' required maxlength='160' value='{escape(str(row['applicant_name'] or ''),quote=True)}'></label>
+      <label>Gender<select name='gender'><option value=''>Select gender</option>{''.join(f"<option value='{g}' {'selected' if str(row['gender'] or '')==g else ''}>{g}</option>" for g in ('Male','Female','Other'))}</select></label>
+      <label>Parent / Guardian name<input name='parent_name' maxlength='160' value='{escape(str(row['parent_name'] or ''),quote=True)}'></label>
+      <label>Parent / Guardian phone<input name='parent_phone' maxlength='40' value='{escape(str(row['parent_phone'] or ''),quote=True)}'></label>
+      <label>Parent email<input name='parent_email' type='email' maxlength='160' value='{escape(str(row['parent_email'] or ''),quote=True)}'></label>
+      <label>Previous school<input name='previous_school' maxlength='160' value='{escape(str(row['previous_school'] or ''),quote=True)}'></label>
+      <label>Applying class<select name='applying_class_id'><option value=''>Select class</option>{options}</select></label>
+      <label>Application date<input name='application_date' type='date' value='{escape(str(row['application_date'] or ''),quote=True)}'></label>
+      <label class='wide'>Notes<textarea name='notes' rows='3'>{escape(str(row['notes'] or ''))}</textarea></label>
+      <div class='wide'><button class='adm-submit' type='submit'>Save Changes</button> <a href='/app/admissions'>Cancel</a></div>
+      </form></div></div>
+      <style>.adm-page{{max-width:1100px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{color:#174b2b}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select,.adm-form textarea{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
+    return _school_page(request, "Edit Admission Application", body)
+
+
+@router.post("/app/admissions/{application_id}/edit")
+def admissions_edit_save(request: Request, application_id: int,
+    applicant_name: str = Form(...), gender: str = Form(""), parent_name: str = Form(""),
+    parent_phone: str = Form(""), parent_email: str = Form(""), previous_school: str = Form(""),
+    applying_class_id: str = Form(""), application_date: str = Form(""), notes: str = Form("")):
+    sid, denied = _admission_guard(request, "students.edit")
+    if denied: return denied
+    name = applicant_name.strip()
+    if not name: return HTMLResponse("Applicant name is required.", 400)
+    cid = int(applying_class_id) if str(applying_class_id).isdigit() else None
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        row = cur.execute("SELECT * FROM admission_applications WHERE id=? AND school_id=?",
+                          (application_id, sid)).fetchone()
+        if not row: return HTMLResponse("Application not found.", 404)
+        if row["enrolled_student_id"] or str(row["status"] or "").lower() == "enrolled":
+            return HTMLResponse("Enrolled applications are locked. Edit the learner in Student Manager instead.", 409)
+        if cid and not cur.execute("SELECT id FROM classes WHERE id=? AND school_id=?", (cid, sid)).fetchone():
+            return HTMLResponse("The selected class does not belong to this school.", 400)
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("""UPDATE admission_applications SET applicant_name=?,gender=?,parent_name=?,parent_phone=?,
+            parent_email=?,previous_school=?,applying_class_id=?,application_date=?,notes=?,updated_at=?
+            WHERE id=? AND school_id=? AND enrolled_student_id IS NULL""",
+            (name,gender.strip(),parent_name.strip(),parent_phone.strip(),parent_email.strip(),
+             previous_school.strip(),cid,application_date.strip(),notes.strip(),now,application_id,sid))
+        if cur.rowcount != 1: raise RuntimeError("Application could not be updated.")
+        _audit(cur,sid,request,"ADMISSION_APPLICATION_UPDATE",f"Updated admission application {application_id} for {name}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/admissions", 303)
+
+
+@router.post("/app/admissions/{application_id}/delete")
+def admissions_delete(request: Request, application_id: int):
+    sid, denied = _admission_guard(request, "students.edit")
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        row = cur.execute("SELECT applicant_name,status,enrolled_student_id FROM admission_applications WHERE id=? AND school_id=?",
+                          (application_id, sid)).fetchone()
+        if not row: return HTMLResponse("Application not found.", 404)
+        if row["enrolled_student_id"] or str(row["status"] or "").lower() == "enrolled":
+            return HTMLResponse("An enrolled application cannot be deleted. Manage the learner in Student Manager.", 409)
+        cur.execute("DELETE FROM admission_applications WHERE id=? AND school_id=? AND enrolled_student_id IS NULL",
+                    (application_id, sid))
+        if cur.rowcount != 1: raise RuntimeError("Application was not deleted.")
+        _audit(cur,sid,request,"ADMISSION_APPLICATION_DELETE",
+               f"Deleted admission application {application_id} for {row['applicant_name']}")
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    return RedirectResponse("/app/admissions", 303)
 
 
 @router.post("/app/admissions/{application_id}/decision")
