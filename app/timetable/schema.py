@@ -72,6 +72,17 @@ _TABLES = (
         is_active INTEGER NOT NULL DEFAULT 1,
         UNIQUE (school_id, room_code)
     )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_calendar_exceptions (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        exception_date TEXT NOT NULL,
+        label TEXT NOT NULL,
+        exception_type TEXT NOT NULL DEFAULT 'holiday',
+        notes TEXT,
+        is_instructional INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (school_id, profile_id, exception_date, label)
+    )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_teacher_availability (
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -156,6 +167,7 @@ _TABLES = (
 _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_school_year ON ds_timetable_profiles(school_id, academic_year, term)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_days_profile_order ON ds_timetable_days(school_id, profile_id, day_order)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_calendar_profile_date ON ds_timetable_calendar_exceptions(school_id, profile_id, exception_date)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_periods_profile_order ON ds_timetable_periods(school_id, profile_id, period_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_availability_lookup ON ds_timetable_teacher_availability(school_id, profile_id, teacher_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_requirements_class ON ds_timetable_class_requirements(school_id, profile_id, class_id, subject_id)",
