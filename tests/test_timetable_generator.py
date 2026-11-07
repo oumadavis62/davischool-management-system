@@ -112,6 +112,13 @@ class TimetableGeneratorTests(unittest.TestCase):
         ]
         self.assertEqual(current_ids, previous_ids)
 
+    def test_every_current_allocation_requires_a_weekly_requirement(self):
+        self.db.execute("INSERT INTO subjects VALUES(31,1,'English')")
+        self.db.execute("INSERT INTO teacher_allocations VALUES(2,1,10,31,20)")
+        self.db.commit()
+        with self.assertRaises(TimetableSetupError):
+            generate_timetable(self.db, 1, self.profile_id, "admin@test")
+
     def test_incompatible_teacher_constraints_return_explainable_failure(self):
         self.db.execute("INSERT INTO classes VALUES(21,1,'Grade 8','Green')")
         self.db.execute("INSERT INTO subjects VALUES(31,1,'English')")
