@@ -1,0 +1,129 @@
+"""Read-only timetable views for the whole school, classes, teachers and rooms."""
+from __future__ import annotations
+
+from html import escape
+
+from fastapi import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from app.timetable.views import get_timetable_view
+from app.timetable.setup import TimetableSetupError
+
+
+def register_timetable_view_routes(app, get_db, get_school_obj, module_page):
+    def school_for(request):
+        if not request.session.get("email") or request.session.get("role") not in ("school_admin", "registrar", "super_admin"):
+            return None
+        return get_school_obj(request)
+
+    @app.get("/school/timetable/views", response_class=HTMLResponse)
+    def timetable_views_page(
+        request: Request,
+        profile_id: int = 0,
+        view_type: str = "school",
+        class_id: int = 0,
+        teacher_id: int = 0,
+        room_id: int = 0,
+        message: str = "",
+    ):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        school_id = int(school["id"])
+        con = get_db()
+        cur = con.cursor()
+        profiles = cur.execute(
+            "SELECT * FROM ds_timetable_profiles WHERE school_id=? ORDER BY academic_year DESC,term,id DESC",
+            (school_id,),
+        ).fetchall()
+        selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
+        teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+        rooms = cur.execute("SELECT id,name,room_code FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
+        con.close()
+
+        esc = lambda value: escape(str(value if value is not None else ""))
+        pid = int(selected["id"]) if selected else 0
+        notice = f"<div class='tv-alert'>{esc(message)}</div>" if message else ""
+        profile_options = "".join(
+            f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])}</option>"
+            for p in profiles
+        )
+        class_options = "<option value='0'>Choose class / stream</option>" + "".join(
+            f"<option value='{int(x['id'])}' {'selected' if int(x['id'])==int(class_id) else ''}>{esc(x['name'])} {esc(x['stream'] or '')}</option>"
+            for x in classes
+        )
+        teacher_options = "<option value='0'>Choose teacher</option>" + "".join(
+            f"<option value='{int(x['id'])}' {'selected' if int(x['id'])==int(teacher_id) else ''}>{esc(x['name'])}</option>"
+            for x in teachers
+        )
+        room_options = "<option value='0'>Choose room</option>" + "".join(
+            f"<option value='{int(x['id'])}' {'selected' if int(x['id'])==int(room_id) else ''}>{esc(x['name'])} ({esc(x['room_code'])})</option>"
+            for x in rooms
+        )
+        result = None
+        view_error = ""
+        target_id = {"class":class_id,"teacher":teacher_id,"room":room_id}.get(view_type,0)
+        if selected and (view_type == "school" or target_id):
+            try:
+                result = get_timetable_view(con=get_db(), school_id=school_id, profile_id=pid, view_type=view_type, target_id=int(target_id))
+            except TimetableSetupError as exc:
+                view_error = str(exc)
+        elif selected and view_type not in ("school","class","teacher","room"):
+            view_error = "Choose a valid timetable view."
+        elif selected and view_type != "school":
+            view_error = "Choose the class, teacher or room you want to view."
+
+        grid = "<div class='tv-empty'>Select a timetable profile and view type to display a schedule.</div>"
+        lesson_count = 0
+        if result:
+            days = result["days"]
+            periods = result["periods"]
+            lessons = result["lessons"]
+            lesson_count = len(lessons)
+            period_index = {int(p["id"]):i for i,p in enumerate(periods)}
+            by_start = {}
+            occupied = {}
+            for lesson in lessons:
+                key = (int(lesson["day_id"]),int(lesson["period_id"]))
+                by_start.setdefault(key,[]).append(lesson)
+                start = period_index.get(int(lesson["period_id"]))
+                if start is not None:
+                    for offset in range(1,int(lesson["duration_periods"] or 1)):
+                        if start + offset < len(periods):
+                            occupied[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
+            rows = []
+            for period in periods:
+                cells = []
+                for day in days:
+                    key = (int(day["id"]),int(period["id"]))
+                    starts = by_start.get(key,[])
+                    if starts:
+                        cards = []
+                        for lesson in starts:
+                            class_name = esc(lesson["class_name"]) + ((" " + esc(lesson["stream"])) if lesson["stream"] else "")
+                            cards.append(
+                                f"<div class='tv-lesson'><b>{esc(lesson['subject_name'])}</b><span>{class_name}</span><small>{esc(lesson['teacher_name'])}</small><small>⌂ {esc(lesson['room_name'] or 'No room assigned')}</small></div>"
+                            )
+                        cells.append(f"<td class='tv-cell'>{''.join(cards)}</td>")
+                    elif key in occupied:
+                        cells.append(f"<td class='tv-cell tv-continued'>↳ {esc(occupied[key]['subject_name'])} continues</td>")
+                    else:
+                        cells.append("<td class='tv-cell tv-free'>—</td>")
+                rows.append(
+                    f"<tr><th class='tv-period'><b>{esc(period['label'])}</b><span>{esc(period['start_time'])}–{esc(period['end_time'])}</span></th>{''.join(cells)}</tr>"
+                )
+            day_headers = "".join("<th>" + esc(d["day_name"]) + "</th>" for d in days)
+            grid = f"<div class='tv-grid-scroll'><table class='tv-grid'><thead><tr><th>Period</th>{day_headers}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+
+        body = f"""
+        <style>
+        .tv-wrap{{max-width:1600px;margin:auto;padding:20px;color:#173d2b}}.tv-hero{{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}}.tv-hero h2{{font-size:25px;margin:3px 0 5px}}.tv-hero p{{font-size:12px;color:#64748b;margin:0}}.tv-kicker{{font-size:10px;font-weight:900;letter-spacing:.12em;color:#43845a}}.tv-actions{{display:flex;gap:8px;flex-wrap:wrap}}.tv-btn{{display:inline-flex;padding:10px 14px;border:0;border-radius:9px;background:#17633b;color:white;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}}.tv-btn.secondary{{background:#edf6ef;color:#17633b;border:1px solid #d5e8d8}}.tv-filter{{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:10px;align-items:end;background:white;border:1px solid #e1ebe3;border-radius:14px;padding:15px;margin-bottom:15px}}.tv-filter label{{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800;color:#334155}}.tv-filter select{{padding:10px;border:1px solid #dce7de;border-radius:9px;background:white;min-width:0;font-size:12px}}.tv-summary{{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;background:white;border:1px solid #e1ebe3;border-radius:12px;padding:13px 15px;margin-bottom:14px}}.tv-summary b{{font-size:16px}}.tv-summary span{{font-size:11px;color:#64748b}}.tv-grid-scroll{{overflow:auto;border:1px solid #dce7de;border-radius:13px;background:white}}.tv-grid{{width:100%;border-collapse:separate;border-spacing:0;min-width:850px}}.tv-grid thead th{{background:#17633b;color:white;padding:13px 10px;text-align:center;font-size:12px;position:sticky;top:0}}.tv-grid .tv-period{{min-width:115px;background:#f0f6f1;color:#315b3e;text-align:left;position:sticky;left:0;z-index:1}}.tv-period b,.tv-period span{{display:block}}.tv-period span{{font-size:10px;color:#64748b;font-weight:500;margin-top:4px}}.tv-cell{{height:104px;min-width:145px;vertical-align:top;padding:6px;border-right:1px solid #edf2ed;border-bottom:1px solid #edf2ed}}.tv-lesson{{background:#eaf5ec;border-left:3px solid #287447;border-radius:8px;padding:7px;margin-bottom:5px;font-size:10px;color:#173d2b}}.tv-lesson b,.tv-lesson span,.tv-lesson small{{display:block}}.tv-lesson span{{font-weight:800;margin-top:4px}}.tv-lesson small{{font-size:9px;color:#55705d;margin-top:3px}}.tv-free{{text-align:center;vertical-align:middle;color:#c0ccc1;font-size:12px}}.tv-continued{{text-align:center;vertical-align:middle;background:#f6faf6;color:#7b9480;font-size:10px}}.tv-alert{{padding:11px 14px;background:#fff7e8;color:#8b5b14;border-radius:9px;margin-bottom:12px;font-size:12px}}.tv-empty{{padding:30px;text-align:center;color:#64748b;background:white;border:1px dashed #cdddcf;border-radius:12px}}@media(max-width:900px){{.tv-filter{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:600px){{.tv-wrap{{padding:12px}}.tv-filter{{grid-template-columns:1fr}}.tv-hero h2{{font-size:22px}}}}@media print{{.tv-hero .tv-actions,.tv-filter,.tv-alert{{display:none!important}}.tv-wrap{{padding:0;max-width:none}}.tv-grid-scroll{{overflow:visible;border:1px solid #999}}.tv-grid{{min-width:0}}.tv-grid thead th{{position:static;background:#eaf5ec!important;color:#173d2b!important}}.tv-cell{{height:auto;min-width:0}}}}
+        </style>
+        <div class='tv-wrap'><div class='tv-hero'><div><span class='tv-kicker'>DAVISCHOOL · TIMETABLE VIEWS</span><h2>Timetable Views</h2><p>Inspect the published or draft timetable by school, class, teacher or room.</p></div><div class='tv-actions'><button class='tv-btn' onclick='window.print()'>Print view</button><a class='tv-btn secondary' href='/school/timetable/builder?profile_id={pid}'>Master Builder</a><a class='tv-btn secondary' href='/school/timetable/automatic?profile_id={pid}'>Automatic Generator</a></div></div>{notice}
+        <form method='get' action='/school/timetable/views' class='tv-filter'><label>Academic timetable<select name='profile_id'>{profile_options}</select></label><label>View type<select name='view_type'><option value='school' {'selected' if view_type=='school' else ''}>Whole school</option><option value='class' {'selected' if view_type=='class' else ''}>Class / stream</option><option value='teacher' {'selected' if view_type=='teacher' else ''}>Teacher</option><option value='room' {'selected' if view_type=='room' else ''}>Room / facility</option></select></label><label>Class / stream<select name='class_id'>{class_options}</select></label><label>Teacher<select name='teacher_id'>{teacher_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tv-btn'>View timetable</button></form>
+        {f"<div class='tv-alert'>{esc(view_error)}</div>" if view_error else ""}
+        {f"<div class='tv-summary'><div><b>{esc(result['title'])}</b><br><span>{esc(selected['academic_year'])} · {esc(selected['term'])}</span></div><span>{lesson_count} scheduled lessons</span></div>" if result else ""}
+        {grid}</div>
+        """
+        return module_page(request, "Timetable Views", "timetable", body)
