@@ -20193,6 +20193,102 @@ def _admission_guard(request, permission="students.view"):
     return sid, None
 
 
+def _admission_ui_enhancements():
+    return """
+    <style>
+    .adm-filterbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:12px;background:#f1f7f1;border:1px solid #dce9de;border-radius:12px}
+    .adm-filterbar input{flex:1;min-width:190px;padding:10px 12px;border:1px solid #cbdccb;border-radius:9px;background:#fff;color:#24432d}
+    .adm-filterbar button,.adm-popup-trigger{border:1px solid #c6d9c8;border-radius:9px;padding:10px 14px;background:#e3eee3;color:#285638;font-weight:850;cursor:pointer}
+    .adm-filter-count{font-size:11px;color:#617866;font-weight:800}
+    .adm-popup-backdrop{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(24,48,31,.42);backdrop-filter:blur(3px)}
+    .adm-popup-backdrop.is-open{display:flex}
+    .adm-popup{width:min(480px,100%);max-height:85vh;overflow:auto;background:#f1f7f0;border:1px solid #bfd3c0;border-radius:18px;padding:20px;box-shadow:0 24px 70px rgba(21,54,30,.28);color:#24432d}
+    .adm-popup h3{margin:0 0 7px;color:#1d512f;font-size:18px}.adm-popup p{margin:0 0 16px;color:#637866;font-size:13px;line-height:1.55}
+    .adm-popup label{display:grid;gap:6px;margin:12px 0;color:#46634b;font-size:12px;font-weight:850}
+    .adm-popup select{width:100%;padding:11px;border:1px solid #c7d9c8;border-radius:9px;background:#fff;color:#24432d}
+    .adm-popup-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+    .adm-popup-actions button{border:0;border-radius:9px;padding:10px 15px;font-weight:850;cursor:pointer}
+    .adm-popup-cancel{background:#e1eae1;color:#49634d}.adm-popup-apply{background:#28643c;color:#fff}
+    .adm-data-backdrop{position:fixed;inset:0;z-index:99998;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:4vh 14px;background:rgba(24,48,31,.46);backdrop-filter:blur(3px)}
+    .adm-data-backdrop.is-open{display:flex}.adm-data-backdrop .adm-form-card{width:min(1050px,100%);max-height:90vh;overflow:auto;background:#f1f7f0;border:1px solid #bfd3c0;border-radius:18px;padding:20px;box-shadow:0 24px 70px rgba(21,54,30,.28)}
+    .adm-data-close{float:right;border:0;border-radius:8px;padding:8px 11px;background:#dfeade;color:#315b3b;font-weight:850;cursor:pointer}
+    .adm-page .adm-card{box-shadow:0 6px 22px rgba(35,73,43,.06)}
+    @media(max-width:600px){.adm-filterbar{align-items:stretch}.adm-filterbar input{min-width:100%}.adm-popup-backdrop{padding:10px}.adm-popup{padding:16px}}
+    </style>
+    <script>
+    (function(){
+      const page=document.querySelector('.adm-page'); if(!page)return;
+      const backdrop=document.createElement('div'); backdrop.className='adm-popup-backdrop';
+      backdrop.innerHTML="<section class='adm-popup' role='dialog' aria-modal='true'><h3></h3><p></p><div class='adm-popup-fields'></div><div class='adm-popup-actions'><button type='button' class='adm-popup-cancel'>Cancel</button><button type='button' class='adm-popup-apply'>Apply</button></div></section>";
+      document.body.appendChild(backdrop);
+      const title=backdrop.querySelector('h3'), desc=backdrop.querySelector('p'), fields=backdrop.querySelector('.adm-popup-fields'), cancel=backdrop.querySelector('.adm-popup-cancel'), apply=backdrop.querySelector('.adm-popup-apply');
+      let mode='filter', activeForm=null, filterState={status:'',klass:''}, applyFilter=()=>{};
+      function close(){backdrop.classList.remove('is-open');activeForm=null;}
+      cancel.addEventListener('click',close);
+      backdrop.addEventListener('click',e=>{if(e.target===backdrop)close();});
+      function openFilter(){
+        mode='filter';activeForm=null;title.textContent='Filter admissions';desc.textContent='Narrow this list by application status or class. Use the search field for names, phone numbers and admission numbers.';
+        fields.innerHTML="<label>Application status<select id='adm-popup-status'><option value=''>All statuses</option></select></label><label>Class / Stream<select id='adm-popup-class'><option value=''>All classes</option></select></label>";
+        const table=page.querySelector('.adm-table');
+        if(table){
+          const rows=[...table.querySelectorAll('tbody tr')];
+          const statuses=[...new Set(rows.map(r=>(r.cells[5]?.innerText||'').trim()).filter(Boolean))].sort();
+          const classes=[...new Set(rows.map(r=>(r.cells[4]?.innerText||'').trim()).filter(Boolean))].sort();
+          statuses.forEach(v=>fields.querySelector('#adm-popup-status').add(new Option(v,v)));
+          classes.forEach(v=>fields.querySelector('#adm-popup-class').add(new Option(v,v)));
+        }
+        fields.querySelector('#adm-popup-status').value=filterState.status;
+        fields.querySelector('#adm-popup-class').value=filterState.klass;
+        apply.textContent='Apply filters';backdrop.classList.add('is-open');
+      }
+      apply.addEventListener('click',()=>{
+        if(mode==='confirm'&&activeForm){const f=activeForm;close();f.dataset.popupConfirmed='1';f.submit();return;}
+        filterState.status=fields.querySelector('#adm-popup-status')?.value||'';
+        filterState.klass=fields.querySelector('#adm-popup-class')?.value||'';
+        applyFilter();close();
+      });
+      const table=page.querySelector('.adm-table');
+      if(table){
+        const bar=document.createElement('div');bar.className='adm-filterbar';
+        bar.innerHTML="<input type='search' aria-label='Search admissions' placeholder='Search applicant, parent, phone or admission number'><button type='button'>Advanced filters</button><span class='adm-filter-count'></span>";
+        table.parentElement.parentElement.insertBefore(bar,table.parentElement);
+        const search=bar.querySelector('input'), count=bar.querySelector('.adm-filter-count');
+        applyFilter=()=>{
+          const q=search.value.trim().toLowerCase();let visible=0;
+          table.querySelectorAll('tbody tr').forEach(row=>{
+            const text=row.innerText.toLowerCase(), status=(row.cells[5]?.innerText||'').trim(), klass=(row.cells[4]?.innerText||'').trim();
+            const show=(!q||text.includes(q))&&(!filterState.status||status===filterState.status)&&(!filterState.klass||klass===filterState.klass);
+            row.style.display=show?'':'none';if(show)visible++;
+          });
+          count.textContent=visible+' record(s)';
+        };
+        search.addEventListener('input',applyFilter);bar.querySelector('button').addEventListener('click',openFilter);applyFilter();
+      }
+      page.querySelectorAll("form[method='post']").forEach(form=>{
+        form.addEventListener('submit',e=>{
+          if(form.dataset.popupConfirmed==='1')return;
+          e.preventDefault();mode='confirm';activeForm=form;
+          const action=(form.getAttribute('action')||'').toLowerCase();
+          title.textContent=action.includes('/decision')?'Confirm admission decision':action.includes('/reopen')?'Reopen application':action.includes('/enrolment')?'Confirm learner enrolment':'Confirm changes';
+          desc.textContent=action.includes('/decision')?'You are about to update this applicant’s admission status. Continue only after checking the applicant details.':action.includes('/reopen')?'This application will return to Admission Review with Pending status.':action.includes('/enrolment')?'Completing enrolment will register the learner and issue an admission number.':'Please confirm that you want to save these changes.';
+          fields.innerHTML="<div style='padding:13px;border-radius:10px;background:#e3eee3;color:#355c3d;font-size:13px'>This action will be recorded in the school admissions workflow.</div>";
+          apply.textContent='Confirm and continue';backdrop.classList.add('is-open');
+        });
+      });
+      const entry=page.querySelector('.adm-form-card');
+      if(entry){
+        const trigger=document.createElement('button');trigger.type='button';trigger.className='adm-popup-trigger';trigger.textContent='＋ New Application';
+        const heading=page.querySelector('.adm-heading');if(heading)heading.appendChild(trigger);
+        const dataBackdrop=document.createElement('div');dataBackdrop.className='adm-data-backdrop';dataBackdrop.appendChild(entry);document.body.appendChild(dataBackdrop);
+        const closeBtn=document.createElement('button');closeBtn.type='button';closeBtn.className='adm-data-close';closeBtn.textContent='Close';entry.prepend(closeBtn);
+        trigger.addEventListener('click',()=>dataBackdrop.classList.add('is-open'));
+        closeBtn.addEventListener('click',()=>dataBackdrop.classList.remove('is-open'));
+        dataBackdrop.addEventListener('click',e=>{if(e.target===dataBackdrop)dataBackdrop.classList.remove('is-open');});
+      }
+    })();
+    </script>
+    """
+
 def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_decision_actions=True):
     out = []
     for row in rows:
@@ -20255,6 +20351,7 @@ def _admission_workspace(request, title, description, rows, show_action=True, al
       .inline-form{{display:flex;gap:6px}}.admit-btn,.reject-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}
       .reject-btn{{background:#f8e9e7;color:#a13c32}}
       </style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request, title, body)
 
 
@@ -20303,6 +20400,7 @@ def admissions_register_page(request: Request):
       .inline-form{{display:flex;gap:6px}}.admit-btn,.reject-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.reject-btn{{background:#f8e9e7;color:#a13c32}}
       @media(max-width:900px){{.adm-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:520px){{.adm-form{{grid-template-columns:1fr}}}}
       </style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request, "Applications Register", body)
 
 
@@ -20386,6 +20484,7 @@ def admissions_edit_page(request: Request, application_id: int):
       <div class='wide'><button type='submit' class='adm-submit'>Save Changes</button> <a href='/app/admissions'>Cancel</a></div>
       </form></div></div>
       <style>.adm-page{{max-width:1100px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{color:#174b2b}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select,.adm-form textarea{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request, "Edit Admission Application", body)
 
 
@@ -20585,6 +20684,7 @@ def enrolment_form_page(request: Request, application_id: int):
       <div class='wide'><button type='submit' class='adm-submit'>Complete Enrolment &amp; Issue Admission Number</button></div>
       </form></div></div>
       <style>.adm-page{{max-width:1050px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{margin:0;color:#174b2b}}.adm-card p{{color:#687c6d;font-size:13px}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request,"Complete Learner Enrolment",body)
 
 
@@ -20783,6 +20883,7 @@ def admission_letter_print(request: Request, application_id: int):
       <p>Admission Number: <strong>{escape(str(row['issued_no'] or row['admission_no'] or ''))}</strong></p>
       <p>Please retain this number for all future school records and communication.</p><p>Yours faithfully,<br><strong>School Administration</strong></p></article></div>
       <style>.letter-page{{max-width:900px}}.letter-tools{{display:flex;justify-content:space-between;margin-bottom:15px}}.letter-tools a,.letter-tools button{{border:0;border-radius:8px;padding:10px 14px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-weight:800;cursor:pointer}}.letter-tools button{{background:#176b3a;color:#fff}}.letter-paper{{background:#fff;border:1px solid #dbe7dc;border-radius:12px;padding:45px;min-height:650px;color:#263d2b;line-height:1.8}}.letter-paper header{{text-align:center;border-bottom:2px solid #176b3a;padding-bottom:18px}}.letter-paper h1{{margin:0;color:#176b3a}}.letter-paper header p{{margin:4px 0;color:#718276;font-size:12px}}.letter-paper h2{{text-align:center;margin:35px 0}}@media print{{.letter-tools{{display:none}}.letter-paper{{border:0;border-radius:0;padding:20px;min-height:0}}}}</style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request,"Admission Letter",body)
 
 
