@@ -301,6 +301,50 @@ def _seed(con, sid):
     cur.execute("UPDATE timetable_profiles SET active=1 WHERE school_id=? AND id=?",(sid,pid))
     cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     cur.execute("UPDATE timetable_lessons SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
+    # Upgrade profiles duplicated by older releases, where slots had their
+    # own profile_id but still referenced the original shared lesson rows.
+    # The original/oldest profile remains the source; each populated profile
+    # receives its own copied cards and relationships exactly once.
+    source_row=cur.execute("SELECT id FROM timetable_profiles WHERE school_id=? ORDER BY id LIMIT 1",(sid,)).fetchone()
+    source_pid=int(source_row["id"]) if source_row else pid
+    target_profiles=cur.execute(
+        "SELECT DISTINCT profile_id FROM timetable_slots WHERE school_id=? AND profile_id<>?",
+        (sid,source_pid)
+    ).fetchall()
+    for target_row in target_profiles:
+        target_pid=int(target_row["profile_id"])
+        mismatched=cur.execute("""SELECT COUNT(*) c FROM timetable_slots s
+            JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.school_id=? AND s.profile_id=? AND l.profile_id<>?""",
+            (sid,target_pid,target_pid)).fetchone()
+        if not int(mismatched["c"] or 0):
+            continue
+        lesson_map={}
+        source_lessons=cur.execute(
+            "SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id",
+            (sid,source_pid)
+        ).fetchall()
+        for lesson in source_lessons:
+            cur.execute("""INSERT INTO timetable_lessons(
+                school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,
+                duration,cycle,locked,preferred_room,notes,profile_id
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                sid,lesson["class_id"],lesson["subject_id"],lesson["teacher_id"],lesson["room_id"],
+                lesson["group_name"],lesson["lessons_per_week"],lesson["duration"],lesson["cycle"],
+                lesson["locked"],lesson["preferred_room"],lesson["notes"],target_pid))
+            copied=cur.execute(
+                "SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 1",
+                (sid,target_pid)
+            ).fetchone()
+            new_lesson_id=int(copied["id"])
+            lesson_map[int(lesson["id"])]=new_lesson_id
+            for link in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(lesson["id"]))).fetchall():
+                cur.execute("INSERT INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,new_lesson_id,int(link["class_id"])))
+            for link in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(lesson["id"]))).fetchall():
+                cur.execute("INSERT INTO timetable_lesson_teachers(school_id,lesson_id,teacher_id) VALUES(?,?,?)",(sid,new_lesson_id,int(link["teacher_id"])))
+        for old_lesson_id,new_lesson_id in lesson_map.items():
+            cur.execute("UPDATE timetable_slots SET lesson_id=? WHERE school_id=? AND profile_id=? AND lesson_id=?",
+                (new_lesson_id,sid,target_pid,old_lesson_id))
     con.commit()
 
 
