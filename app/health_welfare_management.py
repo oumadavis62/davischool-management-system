@@ -82,7 +82,8 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
  function init(){scan(document);new MutationObserver(function(records){records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1){if(node.matches&&node.matches('dialog'))addClose(node);scan(node)}})})}).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('dialog');if(d&&e.target===d)d.close()});}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
-</script>"""    return _school_page(request, title, body + shared + dialog_close_support)
+</script>"""
+    return _school_page(request, title, body + shared + dialog_close_support)
 
 
 
