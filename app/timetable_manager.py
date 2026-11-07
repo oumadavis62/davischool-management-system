@@ -2392,7 +2392,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing,pr
         "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='teacher' AND allowed=0",(sid,pid)
     ).fetchall()}
     blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='subject' AND allowed=0",(sid,_active_profile_id(cur,sid))
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='subject' AND allowed=0",(sid,pid)
     ).fetchall()}
     constraints=_constraint_maps(cur,sid,pid)
 
