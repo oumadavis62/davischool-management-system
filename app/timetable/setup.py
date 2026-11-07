@@ -1,0 +1,259 @@
+"""Validated setup operations for DaviSchool timetable v2."""
+from __future__ import annotations
+
+from datetime import datetime
+import re
+from typing import Any
+
+
+_TIME_RE = re.compile(r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+
+
+class TimetableSetupError(ValueError):
+    """A user-correctable timetable configuration error."""
+
+
+def _now() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _profile(cursor: Any, school_id: int, profile_id: int):
+    row = cursor.execute(
+        "SELECT id,status FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    if not row:
+        raise TimetableSetupError("Select a timetable profile belonging to this school.")
+    if str(row["status"] or "draft").lower() in ("published", "archived"):
+        raise TimetableSetupError("This timetable profile is locked. Create or select a draft profile.")
+    return row
+
+
+def _time_range(start_time: str, end_time: str) -> tuple[str, str]:
+    start = (start_time or "").strip()
+    end = (end_time or "").strip()
+    if not _TIME_RE.fullmatch(start) or not _TIME_RE.fullmatch(end):
+        raise TimetableSetupError("Enter times in 24-hour HH:MM format.")
+    if start >= end:
+        raise TimetableSetupError("The end time must be later than the start time.")
+    return start, end
+
+
+def create_profile(connection: Any, school_id: int, name: str, academic_year: str, term: str, created_by: str = "") -> int:
+    name, academic_year, term = (name or "").strip(), (academic_year or "").strip(), (term or "").strip()
+    if not name or not academic_year or not term:
+        raise TimetableSetupError("Profile name, academic year and term are required.")
+    cur = connection.cursor()
+    exists = cur.execute(
+        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? AND status<>'archived'",
+        (school_id, academic_year, term),
+    ).fetchone()
+    if exists:
+        raise TimetableSetupError("A timetable profile already exists for this academic year and term.")
+    now = _now()
+    cur.execute(
+        """INSERT INTO ds_timetable_profiles
+           (school_id,name,academic_year,term,status,created_by,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (school_id, name, academic_year, term, "draft", created_by, now, now),
+    )
+    row = cur.execute(
+        "SELECT id FROM ds_timetable_profiles WHERE school_id=? AND academic_year=? AND term=? ORDER BY id DESC LIMIT 1",
+        (school_id, academic_year, term),
+    ).fetchone()
+    connection.commit()
+    return int(row["id"])
+
+
+def save_day(connection: Any, school_id: int, profile_id: int, day_code: str, day_name: str, day_order: int, instructional: bool = True) -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    code, name = (day_code or "").strip().upper(), (day_name or "").strip()
+    if not code or not name or not 1 <= int(day_order) <= 7:
+        raise TimetableSetupError("Choose a valid day name and an order from 1 to 7.")
+    existing = cur.execute(
+        "SELECT id FROM ds_timetable_days WHERE school_id=? AND profile_id=? AND day_code=?",
+        (school_id, profile_id, code),
+    ).fetchone()
+    if existing:
+        cur.execute(
+            "UPDATE ds_timetable_days SET day_name=?,day_order=?,is_instructional=? WHERE id=? AND school_id=?",
+            (name, int(day_order), 1 if instructional else 0, existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_days
+               (school_id,profile_id,day_code,day_name,day_order,is_instructional)
+               VALUES(?,?,?,?,?,?)""",
+            (school_id, profile_id, code, name, int(day_order), 1 if instructional else 0),
+        )
+    connection.commit()
+
+
+def save_period(connection: Any, school_id: int, profile_id: int, period_no: int, label: str, start_time: str, end_time: str, period_type: str = "lesson") -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    start, end = _time_range(start_time, end_time)
+    number, label = int(period_no), (label or "").strip()
+    if not 1 <= number <= 30 or not label:
+        raise TimetableSetupError("Period number must be 1–30 and its label is required.")
+    if period_type not in ("lesson", "study", "assembly"):
+        raise TimetableSetupError("Choose a valid period type.")
+    overlap = cur.execute(
+        """SELECT id FROM ds_timetable_periods
+           WHERE school_id=? AND profile_id=? AND period_no<>?
+             AND start_time < ? AND end_time > ? LIMIT 1""",
+        (school_id, profile_id, number, end, start),
+    ).fetchone()
+    if overlap:
+        raise TimetableSetupError("This period overlaps another configured period.")
+    existing = cur.execute(
+        "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=?",
+        (school_id, profile_id, number),
+    ).fetchone()
+    values = (label, start, end, period_type, (int(end[:2])*60+int(end[3:]))-(int(start[:2])*60+int(start[3:])))
+    if existing:
+        cur.execute(
+            """UPDATE ds_timetable_periods SET label=?,start_time=?,end_time=?,period_type=?,duration_minutes=?
+               WHERE id=? AND school_id=?""",
+            values + (existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_periods
+               (school_id,profile_id,period_no,label,start_time,end_time,period_type,duration_minutes)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (school_id, profile_id, number) + values,
+        )
+    connection.commit()
+
+
+def save_break(connection: Any, school_id: int, profile_id: int, break_no: int, label: str, start_time: str, end_time: str, applies_to: str = "all") -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    start, end = _time_range(start_time, end_time)
+    number, label = int(break_no), (label or "").strip()
+    if not 1 <= number <= 20 or not label:
+        raise TimetableSetupError("Break number and name are required.")
+    if applies_to not in ("all", "selected"):
+        raise TimetableSetupError("Choose a valid break scope.")
+    overlap = cur.execute(
+        """SELECT id FROM ds_timetable_periods
+           WHERE school_id=? AND profile_id=? AND start_time < ? AND end_time > ? LIMIT 1""",
+        (school_id, profile_id, end, start),
+    ).fetchone()
+    if overlap:
+        raise TimetableSetupError("A break cannot overlap a teaching period.")
+    existing = cur.execute(
+        "SELECT id FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? AND break_no=?",
+        (school_id, profile_id, number),
+    ).fetchone()
+    if existing:
+        cur.execute(
+            """UPDATE ds_timetable_breaks SET label=?,start_time=?,end_time=?,applies_to=?
+               WHERE id=? AND school_id=?""",
+            (label, start, end, applies_to, existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_breaks
+               (school_id,profile_id,break_no,label,start_time,end_time,applies_to)
+               VALUES(?,?,?,?,?,?,?)""",
+            (school_id, profile_id, number, label, start, end, applies_to),
+        )
+    connection.commit()
+
+
+def save_room(connection: Any, school_id: int, room_code: str, name: str, room_type: str = "classroom", capacity: int | None = None) -> None:
+    code, name = (room_code or "").strip().upper(), (name or "").strip()
+    if not code or not name:
+        raise TimetableSetupError("Room code and room name are required.")
+    if room_type not in ("classroom", "laboratory", "library", "hall", "workshop", "sports", "other"):
+        raise TimetableSetupError("Choose a valid room type.")
+    if capacity is not None and int(capacity) < 1:
+        raise TimetableSetupError("Room capacity must be at least one.")
+    cur = connection.cursor()
+    existing = cur.execute(
+        "SELECT id FROM ds_timetable_rooms WHERE school_id=? AND room_code=?",
+        (school_id, code),
+    ).fetchone()
+    if existing:
+        cur.execute(
+            """UPDATE ds_timetable_rooms SET name=?,room_type=?,capacity=?,is_active=1
+               WHERE id=? AND school_id=?""",
+            (name, room_type, capacity, existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_rooms(school_id,room_code,name,room_type,capacity)
+               VALUES(?,?,?,?,?)""",
+            (school_id, code, name, room_type, capacity),
+        )
+    connection.commit()
+
+
+def save_teacher_availability(connection: Any, school_id: int, profile_id: int, teacher_id: int, day_id: int, period_id: int, availability: str, reason: str = "") -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    if availability not in ("available", "unavailable", "preferred"):
+        raise TimetableSetupError("Choose available, unavailable or preferred.")
+    teacher = cur.execute("SELECT id FROM teachers WHERE id=? AND school_id=?", (teacher_id, school_id)).fetchone()
+    day = cur.execute("SELECT id FROM ds_timetable_days WHERE id=? AND profile_id=? AND school_id=?", (day_id, profile_id, school_id)).fetchone()
+    period = cur.execute("SELECT id FROM ds_timetable_periods WHERE id=? AND profile_id=? AND school_id=?", (period_id, profile_id, school_id)).fetchone()
+    if not teacher or not day or not period:
+        raise TimetableSetupError("Teacher, day or period does not belong to this school's selected timetable.")
+    old = cur.execute(
+        """SELECT id FROM ds_timetable_teacher_availability
+           WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=? AND period_id=?""",
+        (school_id, profile_id, teacher_id, day_id, period_id),
+    ).fetchone()
+    if old:
+        cur.execute(
+            "UPDATE ds_timetable_teacher_availability SET availability=?,reason=? WHERE id=? AND school_id=?",
+            (availability, (reason or "").strip(), old["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_teacher_availability
+               (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+               VALUES(?,?,?,?,?,?,?)""",
+            (school_id, profile_id, teacher_id, day_id, period_id, availability, (reason or "").strip()),
+        )
+    connection.commit()
+
+
+def save_class_requirement(connection: Any, school_id: int, profile_id: int, class_id: int, subject_id: int, teacher_id: int, lessons_per_week: int, duration_periods: int = 1, max_lessons_per_day: int | None = None, allow_double: bool = False) -> None:
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    if not 1 <= int(lessons_per_week) <= 30 or not 1 <= int(duration_periods) <= 4:
+        raise TimetableSetupError("Weekly lessons must be 1–30 and lesson duration must be 1–4 periods.")
+    if max_lessons_per_day is not None and not 1 <= int(max_lessons_per_day) <= 10:
+        raise TimetableSetupError("Maximum lessons per day must be 1–10.")
+    allocation = cur.execute(
+        """SELECT id FROM teacher_allocations
+           WHERE school_id=? AND class_id=? AND subject_id=? AND teacher_id=? LIMIT 1""",
+        (school_id, class_id, subject_id, teacher_id),
+    ).fetchone()
+    if not allocation:
+        raise TimetableSetupError("That teacher is not allocated to the selected class and subject.")
+    old = cur.execute(
+        """SELECT id FROM ds_timetable_class_requirements
+           WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=?""",
+        (school_id, profile_id, class_id, subject_id, teacher_id),
+    ).fetchone()
+    values = (int(lessons_per_week), int(duration_periods), max_lessons_per_day, 1 if allow_double else 0)
+    if old:
+        cur.execute(
+            """UPDATE ds_timetable_class_requirements
+               SET lessons_per_week=?,duration_periods=?,max_lessons_per_day=?,allow_double=?
+               WHERE id=? AND school_id=?""",
+            values + (old["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_class_requirements
+               (school_id,profile_id,class_id,subject_id,teacher_id,lessons_per_week,duration_periods,max_lessons_per_day,allow_double)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (school_id, profile_id, class_id, subject_id, teacher_id) + values,
+        )
+    connection.commit()
