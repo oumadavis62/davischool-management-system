@@ -2913,15 +2913,15 @@ def school_communication(request:Request):
             f"<td><b class='ann-title'>{title}</b><small class='ann-sub'>School announcement</small></td>"
             f"<td><span class='ann-audience'>{audience}</span></td>"
             f"<td class='ann-message'>{excerpt}</td>"
-            f"<td><label class='ann-view' for='ann-toggle-{rid}'>View details</label></td></tr>"
+            f"<td><a class='ann-view' href='#ann-view-{rid}'>View details</a></td></tr>"
         )
         details.append(
-            f"<input class='ann-toggle' type='checkbox' id='ann-toggle-{rid}'><label class='ann-overlay' for='ann-toggle-{rid}' aria-label='Close details'></label><div id='ann-view-{rid}' class='ann-pop ann-detail'>"
+            f"<div id='ann-view-{rid}' class='ann-pop ann-detail'>"
             f"<div class='ann-pop-head'><div><span class='ann-eyebrow'>ANNOUNCEMENT DETAILS</span><h2>{title}</h2></div>"
-            f"<label class='ann-close' for='ann-toggle-{rid}' aria-label='Close'>×</label></div>"
+            f"<a class='ann-close' href='#' aria-label='Close'>×</a></div>"
             f"<div class='ann-detail-meta'><span>{audience}</span><span>{created}</span></div>"
             f"<div class='ann-full-message'>{message}</div>"
-            f"<div class='ann-pop-actions'><label class='ann-secondary' for='ann-toggle-{rid}'>Close</label></div></div>"
+            f"<div class='ann-pop-actions'><a class='ann-secondary' href='#'>Close</a></div></div>"
         )
     tr="".join(cards) or "<tr><td colspan='5' class='ann-empty'><b>No announcements yet</b><small>Create your first announcement to keep the school community informed.</small></td></tr>"
     body=f"""
@@ -2958,9 +2958,9 @@ def school_communication(request:Request):
     .ann-view{{background:#f0f7f1;border:1px solid #d7e7da;color:#28613d;white-space:nowrap}}
     .ann-empty{{padding:30px!important;text-align:center!important;color:#42634c!important}}
     .ann-empty small{{display:block;margin-top:6px;color:#839087}}
-    .ann-toggle{{position:fixed;left:-10000px;opacity:0}}
-    .ann-overlay{{display:none;position:fixed;inset:0;z-index:9998;background:#14281dcc;backdrop-filter:blur(4px);cursor:pointer}}
-    .ann-pop{{display:none;position:fixed;z-index:9999;inset:0;margin:auto;width:min(680px,calc(100vw - 28px));max-height:min(88vh,820px);overflow:auto;padding:23px;border:1px solid #cfe1d1;border-radius:20px;background:linear-gradient(145deg,#edf6ee 0%,#fff 52%,#f4faf5 100%);color:#26372d;box-shadow:0 24px 80px #142f1e45}}
+    
+    
+    .ann-pop{{display:none;position:fixed;z-index:99999;inset:0;margin:auto;width:min(680px,calc(100vw - 28px));max-height:min(88vh,820px);overflow:auto;padding:23px;border:1px solid #cfe1d1;border-radius:20px;background:linear-gradient(145deg,#edf6ee 0%,#fff 52%,#f4faf5 100%);color:#26372d;box-shadow:0 0 0 100vmax #14281dcc,0 24px 80px #142f1e45}}.ann-pop:target{{display:block}}
     .ann-toggle:checked+.ann-overlay{{display:block}}
     .ann-toggle:checked~.ann-pop{{display:block}}
     .ann-pop-head{{position:relative;display:flex;justify-content:space-between;gap:14px;padding:4px 48px 15px 0;border-bottom:1px solid #d8e7da;margin-bottom:17px}}
@@ -2991,21 +2991,21 @@ def school_communication(request:Request):
       </div>
       <section class='ann-hero'>
         <div><span class='ann-eyebrow'>SCHOOL COMMUNITY • COMMUNICATIONS</span><h2>Keep everyone informed</h2><p>Create and share important school updates, reminders and notices with the right audience. Review previous announcements in the register below.</p></div>
-        <div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'><span class='ann-hero-icon'>✉</span><label class='ann-primary' for='ann-create-toggle'>＋ Create Announcement</label></div>
+        <div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'><span class='ann-hero-icon'>✉</span><a class='ann-primary' href='#ann-create-pop'>＋ Create Announcement</a></div>
       </section>
       <section class='card' style='padding:18px;border:1px solid #dce9de;border-radius:16px'>
         <div class='ann-toolbar'><div><h2>Announcement register</h2><p>{total} records · {audience_summary}</p></div><input id='ann-search' class='ann-search' type='search' placeholder='Search title, audience or message…' aria-label='Search announcements'></div>
         <div class='ann-table-wrap'><table class='ann-table'><thead><tr><th>Date</th><th>Announcement</th><th>Audience</th><th>Message preview</th><th>Action</th></tr></thead><tbody id='ann-table-body'>{tr}</tbody></table></div>
       </section>
     </div>
-    {''.join(details)}\n    <input class='ann-toggle' type='checkbox' id='ann-create-toggle'><label class='ann-overlay' for='ann-create-toggle' aria-label='Close announcement form'></label>\n    <div id='ann-create-pop' class='ann-pop'>
-      <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><label class='ann-close' for='ann-create-toggle' aria-label='Close popup' title='Close'>×</label></div>
+    {''.join(details)}\n    <div id='ann-create-pop' class='ann-pop'>
+      <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><a class='ann-close' href='#' aria-label='Close popup' title='Close'>×</a></div>
       <form method='post' action='/school/modules/announcements/add' class='ann-form'>
         <label class='ann-wide'>Announcement title *<input name='title' required maxlength='180' placeholder='Enter a clear announcement title'></label>
         <label>Audience<select name='audience' required><option value='All'>All</option><option value='Students'>Students</option><option value='Parents'>Parents</option><option value='Staff'>Staff</option></select></label>
         <label>Publication date<input type='text' value='{datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%d %b %Y")}' readonly></label>
         <label class='ann-wide'>Message *<textarea name='message' required maxlength='10000' placeholder='Write the announcement details…'></textarea></label>
-        <div class='ann-pop-actions ann-wide'><button type='submit' class='ann-primary'>Publish Announcement</button><label class='ann-secondary' for='ann-create-toggle'>Cancel</label></div>
+        <div class='ann-pop-actions ann-wide'><button type='submit' class='ann-primary'>Publish Announcement</button><a class='ann-secondary' href='#'>Cancel</a></div>
       </form>
     </div>
     <script>
