@@ -9,7 +9,7 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
-from app.timetable.generator import generate_timetable
+from app.timetable.generator import generate_timetable, generate_advanced_instructional_sessions
 
 
 def register_timetable_generator_routes(app, get_db, get_school_obj, module_page):
@@ -44,12 +44,16 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
         days = periods = requirements = rooms = runs = []
+        advanced_requirements = 0
         run_detail = None
         if selected:
             pid = int(selected["id"])
             days = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_days WHERE school_id=? AND profile_id=? AND is_instructional=1", (school_id,pid)).fetchone()["total"]
             periods = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson'", (school_id,pid)).fetchone()["total"]
             requirements = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?", (school_id,pid)).fetchone()["total"]
+            advanced_requirements = cur.execute("""SELECT COUNT(*) AS total FROM ds_timetable_scheduling_requirements
+                WHERE school_id=? AND profile_id=? AND is_active=1 AND schedule_layer='instructional'""",
+                (school_id,pid)).fetchone()["total"]
             allocations_count = cur.execute("""SELECT COUNT(*) AS total FROM (SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id FROM teacher_allocations ta JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id WHERE ta.school_id=?) a""", (school_id,)).fetchone()["total"]
             rooms = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_rooms WHERE school_id=? AND is_active=1", (school_id,)).fetchone()["total"]
             runs = cur.execute(
@@ -73,6 +77,13 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         if not selected:
             body = "<div class='ag-empty'><h2>No timetable profile found</h2><p>Create a profile and configure the school week before automatic generation.</p><a class='ag-btn' href='/app/timetable/setup'>Open Timetable Setup</a></div>"
             return module_page(request, "Automatic Timetabling", "timetable", body)
+        advanced_action = (
+            f"""<form method='post' action='/app/timetable/automatic/generate-advanced'
+                onsubmit="return confirm('Generate normalized sessions, including combined classes and teaching teams?')">
+                <input type='hidden' name='profile_id' value='{pid}'>
+                <button class='ag-btn secondary'>Generate advanced requirements ({int(advanced_requirements)})</button></form>"""
+            if advanced_requirements and not read_only else ""
+        )
         result_html = ""
         if run_detail:
             try:
@@ -100,9 +111,27 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         <div class='ag-wrap'><div class='ag-hero'><div><span class='ag-kicker'>DAVISCHOOL · CONSTRAINT SOLVER</span><h2>Automatic Timetable Generator</h2><p>Generate a complete weekly timetable while respecting school constraints.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='ag-btn secondary' href='/app/timetable/builder?profile_id={pid}'>Manual Builder</a><a class='ag-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Setup</a></div></div>{notice}{selector}
         <section class='ag-card'><span class='ag-kicker'>GENERATION READINESS</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])}. The generator preserves manual lessons and replaces an earlier automatic timetable only after it finds a complete solution.</p><div class='ag-checks'><div class='ag-check'><b>{int(days)}</b><span>Instructional days</span></div><div class='ag-check'><b>{int(periods)}</b><span>Teaching periods</span></div><div class='ag-check'><b>{int(requirements)}</b><span>Lesson requirements</span></div><div class='ag-check'><b>{int(allocations_count)}</b><span>Current allocations</span></div><div class='ag-check'><b>{int(rooms)}</b><span>Available rooms</span></div></div>
         {action_html}
+        {advanced_action}
         </section>{result_html}<section class='ag-history'><span class='ag-kicker'>AUDITABLE GENERATION HISTORY</span><h3>Previous runs</h3><div class='ag-table-scroll'><table><tr><th>Run</th><th>Created</th><th>Status</th><th>Engine</th><th>Result</th></tr>{run_rows}</table></div></section></div>
         """
         return module_page(request, "Automatic Timetabling", "timetable", body)
+
+    @app.post("/app/timetable/automatic/generate-advanced")
+    def run_advanced_generation(request: Request, profile_id: int = Form(...)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            result = generate_advanced_instructional_sessions(
+                con, int(school["id"]), profile_id, request.session.get("email", "")
+            )
+            return redirect_generator(profile_id, message=result.get("message", "Advanced generation completed."),
+                                      error=result.get("status") != "completed")
+        except TimetableSetupError as exc:
+            return redirect_generator(profile_id, message=str(exc), error=True)
+        finally:
+            con.close()
 
     @app.post("/app/timetable/automatic/generate")
     def run_automatic_generation(request: Request, profile_id: int = Form(...)):
