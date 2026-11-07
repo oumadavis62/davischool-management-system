@@ -20310,6 +20310,7 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
         applicant_id = int(row["id"])
         status = str(row["status"] or "pending").lower()
         class_name = str(row["class_name"] or "") if "class_name" in row.keys() else ""
+        class_stream = str(row["class_stream"] or "") if "class_stream" in row.keys() else ""
         admission_no = str(row["admission_no"] or "") if "admission_no" in row.keys() else ""
         enrolled = bool(row["enrolled_student_id"]) if "enrolled_student_id" in row.keys() else False
         action = ""
@@ -20340,10 +20341,10 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
             f"<td>{applicant_id}</td><td>{escape(str(row['applicant_name'] or ''))}</td>"
             f"<td>{escape(str(row['parent_name'] or ''))}</td>"
             f"<td>{escape(str(row['parent_phone'] or ''))}</td>"
-            f"<td>{escape(class_name)}</td><td><span class='status-pill status-{escape(status)}'>{escape(status.title())}</span></td>"
+            f"<td>{escape(class_name)}</td><td>{escape(class_stream)}</td><td><span class='status-pill status-{escape(status)}'>{escape(status.title())}</span></td>"
             f"<td>{escape(admission_no)}</td><td>{action}</td></tr>"
         )
-    return "".join(out) or "<tr><td colspan='8' class='empty-cell'>No applications found.</td></tr>"
+    return "".join(out) or "<tr><td colspan='9' class='empty-cell'>No applications found.</td></tr>"
 
 
 def _admission_workspace(request, title, description, rows, show_action=True, allow_edit_delete=True, show_decision_actions=True):
@@ -20351,7 +20352,7 @@ def _admission_workspace(request, title, description, rows, show_action=True, al
     body = f"""<div class='page adm-page'>
       <div class='adm-heading'><div><h1>{escape(title)}</h1><p>{escape(description)}</p></div></div>
       <div class='adm-card'><div class='adm-table-wrap'><table class='adm-table'>
-      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
+      <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Stream</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
       <tbody>{table}</tbody></table></div></div></div>
       <style>
       .adm-page{{max-width:1500px}}.adm-heading{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}}
@@ -20377,7 +20378,7 @@ def admissions_register_page(request: Request):
     con = _db(); cur = con.cursor()
     try:
         _ensure_admissions_schema(cur)
-        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+        rows = cur.execute("""SELECT a.*,c.name class_name,c.stream class_stream FROM admission_applications a
             LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
             WHERE a.school_id=? ORDER BY a.id DESC""", (sid,)).fetchall()
         con.commit()
@@ -20624,7 +20625,7 @@ def _admission_filtered_page(request, title, description, where_clause, params, 
     con = _db(); cur = con.cursor()
     try:
         _ensure_admissions_schema(cur)
-        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+        rows = cur.execute("""SELECT a.*,c.name class_name,c.stream class_stream FROM admission_applications a
             LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
             WHERE a.school_id=? AND """ + where_clause + " ORDER BY a.id DESC", [sid] + list(params)).fetchall()
         con.commit()
@@ -20660,7 +20661,7 @@ def enrolment_register_page(request: Request):
     con = _db(); cur = con.cursor()
     try:
         _ensure_admissions_schema(cur)
-        rows = cur.execute("""SELECT a.*,c.name class_name FROM admission_applications a
+        rows = cur.execute("""SELECT a.*,c.name class_name,c.stream class_stream FROM admission_applications a
             LEFT JOIN classes c ON c.id=a.applying_class_id AND c.school_id=a.school_id
             WHERE a.school_id=? AND lower(a.status)='accepted' ORDER BY a.id DESC""",(sid,)).fetchall()
         con.commit()
@@ -20894,7 +20895,7 @@ def admission_letter_print(request: Request, application_id: int):
       <article class='letter-paper'><header><h1>{escape(str(row['school_name'] or ''))}</h1><p>{escape(str(row['school_location'] or ''))} · {escape(str(row['school_phone'] or ''))}</p></header>
       <h2>ADMISSION LETTER</h2><p>Date: {escape(str(row['application_date'] or ''))}</p>
       <p>Dear {escape(str(row['parent_name'] or 'Parent / Guardian'))},</p>
-      <p>We are pleased to confirm the admission of <strong>{escape(str(row['applicant_name'] or ''))}</strong> to {escape(str(row['class_name'] or 'the selected class'))}.</p>
+      <p>We are pleased to confirm the admission of <strong>{escape(str(row['applicant_name'] or ''))}</strong> to {escape(str(row['class_name'] or 'the selected class'))}{(' - ' + escape(str(row['class_stream']))) if row['class_stream'] else ''}.</p>
       <p>Admission Number: <strong>{escape(str(row['issued_no'] or row['admission_no'] or ''))}</strong></p>
       <p>Please retain this number for all future school records and communication.</p><p>Yours faithfully,<br><strong>School Administration</strong></p></article></div>
       <style>.letter-page{{max-width:900px}}.letter-tools{{display:flex;justify-content:space-between;margin-bottom:15px}}.letter-tools a,.letter-tools button{{border:0;border-radius:8px;padding:10px 14px;background:#e4f3e7;color:#176b3a;text-decoration:none;font-weight:800;cursor:pointer}}.letter-tools button{{background:#176b3a;color:#fff}}.letter-paper{{background:#fff;border:1px solid #dbe7dc;border-radius:12px;padding:45px;min-height:650px;color:#263d2b;line-height:1.8}}.letter-paper header{{text-align:center;border-bottom:2px solid #176b3a;padding-bottom:18px}}.letter-paper h1{{margin:0;color:#176b3a}}.letter-paper header p{{margin:4px 0;color:#718276;font-size:12px}}.letter-paper h2{{text-align:center;margin:35px 0}}@media print{{.letter-tools{{display:none}}.letter-paper{{border:0;border-radius:0;padding:20px;min-height:0}}}}</style>"""
