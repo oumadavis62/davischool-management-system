@@ -141,7 +141,27 @@ def _page(request, title, description, body):
 })();
 </script>"""
     html = "<div class='page ps-page'><div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div>" + body + "</div>" + css
-    return _school_page(request, title, html)
+\n    dialog_close_support = """<style>
+.ds-modal-close{position:absolute!important;top:12px!important;right:12px!important;z-index:5;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;border:1px solid #cfe0d2!important;border-radius:50%!important;background:#eaf4ec!important;color:#205a38!important;font:700 24px/1 Arial,sans-serif!important;cursor:pointer!important;box-shadow:0 2px 8px #163b2418!important}
+.ds-modal-close:hover{background:#d9ecdd!important;transform:scale(1.04)}
+dialog:has(.ds-modal-close){position:relative}
+dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
+@media(max-width:560px){.ds-modal-close{top:10px!important;right:10px!important;width:34px!important;height:34px!important}}
+</style><script>
+(function(){
+ function addClose(dialog){
+  if(!dialog||dialog.dataset.dsCloseReady==='1')return;
+  dialog.dataset.dsCloseReady='1';
+  var existing=dialog.querySelector('button[aria-label*="close" i],button[title*="close" i],.lib-close,.inv-dialog-head button,.ps-dialog-close,.fac-dialog-close,.health-dialog-close,.tr-dialog-close,.ds-modal-close');
+  if(existing){existing.classList.add('ds-modal-close');if(!existing.getAttribute('aria-label'))existing.setAttribute('aria-label','Close dialog');if(!existing.getAttribute('title'))existing.setAttribute('title','Close');return;}
+  var close=document.createElement('button');close.type='button';close.className='ds-modal-close';close.textContent='×';close.setAttribute('aria-label','Close dialog');close.title='Close';close.addEventListener('click',function(){dialog.close()});
+  dialog.insertBefore(close,dialog.firstChild);
+ }
+ function scan(root){(root||document).querySelectorAll('dialog').forEach(addClose)}
+ function init(){scan(document);new MutationObserver(function(records){records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1){if(node.matches&&node.matches('dialog'))addClose(node);scan(node)}})})}).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('dialog');if(d&&e.target===d)d.close()});}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""    return _school_page(request, title, html + dialog_close_support)
 
 
 def _count(cur, table, sid):
