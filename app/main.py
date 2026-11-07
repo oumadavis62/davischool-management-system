@@ -3465,7 +3465,7 @@ async def custom_404_handler(request: Request, exc: StarletteHTTPException):
 # submit directly to /app/students; keep this handler in main.py so that route
 # remains functional even when an older new_ui.py is cached/deployed.
 @app.post("/app/students")
-def main_app_students_post(request: Request, admission_no: str = Form(...), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form("")):
+def main_app_students_post(request: Request, admission_no: str = Form(""), name: str = Form(""), student_name: str = Form(""), class_id: str = Form(""), gender: str = Form(""), parent_name: str = Form(""), parent_phone: str = Form(""), assessment_no: str = Form(""), guardian_name: str = Form("")):
     role = str(request.session.get("role", ""))
     if not request.session.get("email") or role not in {"school_admin", "teacher", "registrar"}:
         return RedirectResponse("/", 303)
@@ -3476,12 +3476,25 @@ def main_app_students_post(request: Request, admission_no: str = Form(...), name
         return HTMLResponse("You do not have permission to create students.", 403)
     admission = admission_no.strip()
     student_name = (name or student_name).strip()
-    if not admission or not student_name:
-        return HTMLResponse("Admission number and full name are required.", 400)
+    if not student_name:
+        return HTMLResponse("Full name is required.", 400)
     con = get_db()
     parent_access = None
     try:
         cur = con.cursor()
+        if not admission:
+            # Older Student Manager forms post to /app/students with a blank,
+            # read-only admission field. Use the same configured atomic sequence
+            # as the current Student Manager route instead of rejecting the POST.
+            from app.new_ui import _ensure_admissions_schema, _admission_academic_year, _next_admission_number
+            _ensure_admissions_schema(cur)
+            admission_year = _admission_academic_year(cur, int(school["id"]))
+            for _ in range(100):
+                admission = _next_admission_number(cur, int(school["id"]), admission_year)
+                if not cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
+                    break
+            else:
+                raise RuntimeError("Could not issue a unique admission number. Review Admission Number Settings.")
         if cur.execute("SELECT id FROM students WHERE school_id=? AND lower(admission_no)=lower(?)", (school["id"], admission)).fetchone():
             return HTMLResponse("Admission number already exists. <a href='/app/students'>Back to Students</a>", 400)
         cid = int(class_id) if class_id.strip().isdigit() else None
