@@ -359,6 +359,7 @@ def _modern_icon(name, size=20):
         "clipboard-check": '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4.5V3h6v1.5M8 13l2.5 2.5L16 10"/>',
         "heart-pulse": '<path d="M20.8 8.8c0 5.2-8.8 11-8.8 11S3.2 14 3.2 8.8A4.8 4.8 0 0 1 12 6.1a4.8 4.8 0 0 1 8.8 2.7Z"/><path d="M3 12h4l2-3 3 6 2-3h7"/>',
         "circle": '<circle cx="12" cy="12" r="8"/>',
+        "graduation-cap": '<path d="m2 10 10-5 10 5-10 5-10-5Z"/><path d="M6 12v5c3.5 2.5 8.5 2.5 12 0v-5M22 10v6"/>',
         "correction": '<path d="M4 4h16v16H4z"/><path d="m8 14 2-2 5-5 2 2-5 5-2 2H8zM15 7l2 2"/>'
     }
     path = paths.get(name, paths["dashboard"])
@@ -723,7 +724,35 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 active = request_path == route and not request.query_params.get("status")
             elif label == "Transferred/Inactive List":
                 active = request_path == route and request.query_params.get("status") == "inactive,transferred"
-            icons = {"Students List":"students", "Transferred/Inactive List":"users", "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"attendance", "Alumni List":"students", "Staff List":"staff", "Former Staff":"users", "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam", "Grade and Points":"grading", "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion":"allocation", "Class MarkSheets":"marks", "Class MarkSheet Analysis":"analysis", "Marks Entry":"marks", "Report Cards":"report", "SBA/CBA":"subject", "Classes and Streams":"school"}
+            icons = {
+                "Students List":"students", "Transferred/Inactive List":"users", "Accepted Applicants":"users",
+                "Applications Register":"clipboard-check", "Admission Review":"clipboard-check", "Enrolment & Registration":"students",
+                "Admission Letters":"report", "Admission Reports":"chart", "Admission Number Settings":"settings",
+                "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"clipboard-check",
+                "Alumni List":"graduation-cap", "Staff List":"staff", "Former Staff":"users", "Leave Management":"calendar",
+                "Payroll Processing":"finance", "Payslips":"report", "Staff Appraisals":"chart", "HR Reports":"analysis",
+                "Subjects":"subject", "Teacher Allocations":"allocation", "Subject Allocations":"school", "Examination":"exam",
+                "Grade and Points":"grading", "Subject Grading and Points":"grading", "Overall Grading and Points":"grading",
+                "Examination Tracker":"audit", "Marks Correction":"correction", "Promotion":"allocation", "Class MarkSheets":"marks",
+                "Class MarkSheet Analysis":"analysis", "Exam Analysis":"chart", "Marks Entry":"marks", "Report Cards":"report",
+                "SBA/CBA":"book-open", "Classes and Streams":"school",
+                "Book Catalogue":"book-open", "Book Register":"book-open", "Issue Books":"book-open", "Book Returns":"book-open",
+                "Overdue Books":"calendar", "Library Members":"users", "Library Reports":"chart",
+                "Inventory Register":"report", "Stock Receipts & Issues":"clipboard-check", "Stock Requisitions & Approvals":"clipboard-check",
+                "Stock Reports":"chart", "Vehicle Register":"bus", "Routes & Stops":"globe",
+                "Student Transport Allocation":"allocation", "Transport Attendance & Trip Logs":"calendar", "Transport Reports":"chart",
+                "Student Health Profiles":"heart-pulse", "Clinic Visits":"heart-pulse", "Student Welfare Cases":"shield",
+                "Health & Welfare Reports":"chart", "Facilities Register":"building-2", "Classrooms & Room Allocation":"school",
+                "Furniture & Equipment Register":"building-2", "Maintenance Requests & Work Orders":"clipboard-check",
+                "Repairs & Maintenance History":"calendar", "Facilities & Assets Reports":"chart",
+                "Finance Overview":"finance", "Fees & Billing":"accounting", "Collections & Receipting":"finance",
+                "Accounts Payable":"accounting", "General Accounting":"accounting", "Cash & Banking":"finance",
+                "Budgets & Planning":"chart", "Financial Reports":"analysis",
+                "Parent & Guardian Register":"users", "Parent–Learner Linking":"allocation", "Parent Portal Access":"key",
+                "School Notices":"announcement", "Parent Meetings":"calendar", "Service Requests":"clipboard-check",
+                "Parent & Student Reports":"chart", "Announcements":"announcement", "Users":"users",
+                "Roles & Permissions":"shield", "School Settings":"settings", "Audit Trail":"audit"
+            }
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
         admissions_group = (
@@ -927,25 +956,16 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/parent-services/reports", "Parent & Student Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
-        communication_group = (
-            "<details class='nav-group' id='communicationNav' "
-            + ("open" if request_path.startswith("/app/announcements") else "") + ">"
-            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('announcement')}</span><b>Communication</b><span class='nav-chevron'>▾</span></summary>"
-            + "<div class='nav-submenu'>"
-            + _nav_sub("/app/announcements", "Announcements")
-            + "</div></details>"
-        ) if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "communications.view") else ""
-        administration_governance_group = (
-            "<details class='nav-group' id='administrationGovernanceNav' "
-            + ("open" if request_path.startswith(("/app/users", "/app/roles", "/app/school-settings", "/app/audit")) else "") + ">"
-            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('shield')}</span><b>Administration and Governance</b><span class='nav-chevron'>▾</span></summary>"
-            + "<div class='nav-submenu'>"
-            + (_nav_sub("/app/users", "Users") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "users.manage") else "")
+        communication_links = (
+            _nav_sub("/app/announcements", "Announcements")
+            if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "communications.view") else ""
+        )
+        administration_governance_links = (
+            (_nav_sub("/app/users", "Users") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "users.manage") else "")
             + (_nav_sub("/app/roles", "Roles & Permissions") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "settings.manage") else "")
             + (_nav_sub("/app/school-settings", "School Settings") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "settings.view") else "")
             + (_nav_sub("/app/audit", "Audit Trail") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "audit.view") else "")
-            + "</div></details>"
-        ) if role in ("school_admin", "registrar") or any(_require_permission(request, int(school_id or 0), p) for p in ("users.manage", "settings.manage", "settings.view", "audit.view")) else ""
+        )
         nav_markup = []
         for u, i, l, _permission in nav:
             if u == "/app":
@@ -969,10 +989,12 @@ def _shell(title, name, role, body, school_id=None, request=None):
         if any(service_groups):
             nav_markup.append("<div class='nav-section-label'>SCHOOL SERVICES</div>")
             nav_markup.extend(service_groups)
-        if communication_group:
-            nav_markup.append(communication_group)
-        if administration_governance_group:
-            nav_markup.append(administration_governance_group)
+        if communication_links:
+            nav_markup.append("<div class='nav-section-label'>COMMUNICATION</div>")
+            nav_markup.append(communication_links)
+        if administration_governance_links:
+            nav_markup.append("<div class='nav-section-label'>ADMINISTRATION AND GOVERNANCE</div>")
+            nav_markup.append(administration_governance_links)
         links = "".join(nav_markup)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
