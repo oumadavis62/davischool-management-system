@@ -20384,7 +20384,7 @@ def admissions_register_page(request: Request):
     finally:
         con.close()
     table = _admission_table_html(rows, show_action=True, allow_edit_delete=False, show_decision_actions=False)
-    body = f"""<div class='page adm-page'>
+    body = f"""<div class='page adm-page adm-register-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
       <form method='post' action='/app/admissions/add' class='adm-form' data-native-post='1'>
@@ -20399,11 +20399,11 @@ def admissions_register_page(request: Request):
         <label class='wide'>Notes<textarea name='notes' rows='2'></textarea></label>
         <div class='wide'><button type='submit' class='adm-submit'>Save Application</button></div>
       </form></div>
-      <div class='adm-card'><h2>All Applications</h2><div class='adm-table-wrap'><table class='adm-table'>
+      <div class='adm-card adm-register-table-card'><h2>All Applications</h2><div class='adm-table-wrap adm-register-table-wrap'><table class='adm-table'>
       <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
       <tbody>{table}</tbody></table></div></div></div>
       <style>
-      .adm-page{{max-width:1500px;display:grid;gap:16px}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{margin:5px 0 0;color:#687c6d;font-size:13px}}
+      .adm-page{{max-width:1500px;display:grid;gap:16px}}.adm-register-page{{height:calc(100dvh - 145px);min-height:340px;max-height:900px;grid-template-rows:auto minmax(0,1fr);overflow:hidden}}.adm-register-page>.adm-heading{{min-height:0}}.adm-register-page>.adm-register-table-card{{min-height:0;display:flex;flex-direction:column;overflow:hidden}}.adm-register-table-wrap{{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-gutter:stable}}.adm-register-table-wrap .adm-table{{min-width:1050px}}.adm-register-table-wrap .adm-table thead th{{position:sticky;top:0;z-index:2}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{margin:5px 0 0;color:#687c6d;font-size:13px}}
       .adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:16px;box-shadow:0 5px 20px #163b2410}}
       .adm-card h2{{margin:0 0 13px;color:#245235;font-size:16px}}.adm-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}
       .adm-form label{{display:grid;gap:5px;font-size:11px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select,.adm-form textarea{{width:100%;padding:10px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb;font:inherit;font-size:13px;color:#213b29}}
@@ -20413,7 +20413,7 @@ def admissions_register_page(request: Request):
       .empty-cell{{text-align:center;color:#7b8b7e;padding:25px!important}}.status-pill{{display:inline-block;padding:5px 9px;border-radius:99px;background:#edf3ed;color:#526b57;font-size:10px;font-weight:900}}
       .status-accepted{{background:#e2f5e8;color:#176b3a}}.status-rejected{{background:#fcebea;color:#a13c32}}
       .inline-form{{display:flex;gap:6px}}.admit-btn,.reject-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:8px 10px;background:#176b3a;color:#fff;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}}.reject-btn{{background:#f8e9e7;color:#a13c32}}
-      @media(max-width:900px){{.adm-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:520px){{.adm-form{{grid-template-columns:1fr}}}}
+      @media(max-width:900px){{.adm-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:520px){{.adm-form{{grid-template-columns:1fr}}.adm-register-page{{height:calc(100dvh - 125px);min-height:300px}}.adm-register-page .adm-card{{padding:12px}}.adm-register-table-wrap .adm-table{{min-width:1000px}}}}
       </style>"""
     body += _admission_ui_enhancements()
     return _school_page(request, "Applications Register", body)
