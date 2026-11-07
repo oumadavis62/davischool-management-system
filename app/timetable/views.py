@@ -3,14 +3,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.setup import TimetableSetupError
 
 
 def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_type: str = "school", target_id: int = 0) -> dict:
     if view_type not in ("school", "class", "teacher", "room"):
         raise TimetableSetupError("Choose a valid timetable view.")
     cur = connection.cursor()
-    _profile(cur, school_id, profile_id)
+    profile = cur.execute(
+        "SELECT id FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        (profile_id, school_id),
+    ).fetchone()
+    if not profile:
+        raise TimetableSetupError("Select a timetable profile belonging to this school.")
     days = cur.execute(
         """SELECT * FROM ds_timetable_days
            WHERE school_id=? AND profile_id=? AND is_instructional=1 ORDER BY day_order,id""",
