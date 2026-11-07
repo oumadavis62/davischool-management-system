@@ -1804,9 +1804,11 @@ def _save_timetable_snapshot(con,sid,pid,label):
             lesson_teachers.append({"lesson_id":lesson_id,"teacher_id":int(link["teacher_id"])})
     fields=("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")
     lesson_fields=("id","class_id","subject_id","teacher_id","room_id","group_name","lessons_per_week","duration","cycle","locked","preferred_room","notes")
-    payload={"version":2,"profile":{k:profile[k] for k in fields},
+    constraints=con.execute("SELECT scope,constraint_type,target_id,value,priority,enabled,notes FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+    payload={"version":3,"profile":{k:profile[k] for k in fields},
         "lessons":[{k:lesson[k] for k in lesson_fields} for lesson in lessons],
         "lesson_classes":lesson_classes,"lesson_teachers":lesson_teachers,
+        "constraints":[{k:r[k] for k in ("scope","constraint_type","target_id","value","priority","enabled","notes")} for r in constraints],
         "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked","generated_run")} for r in slots]}
     now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     con.execute("INSERT INTO timetable_snapshots(school_id,profile_id,label,snapshot_json,created_at) VALUES(?,?,?,?,?)",(sid,pid,str(label)[:100],json.dumps(payload),now))
@@ -1838,12 +1840,18 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
         profile=payload.get("profile") or {}
         slots=payload.get("slots") or []
         lessons=payload.get("lessons") or []
+        constraints=payload.get("constraints") or []
         lesson_map={}
         _save_timetable_snapshot(con,sid,pid,"Safety copy before restore")
         for field in ("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation"):
             if field in profile:
                 con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
+        if "constraints" in payload:
+            con.execute("DELETE FROM timetable_constraints WHERE school_id=? AND profile_id=?",(sid,pid))
+            for item in constraints:
+                con.execute("""INSERT INTO timetable_constraints(school_id,profile_id,scope,constraint_type,target_id,value,priority,enabled,notes)
+                    VALUES(?,?,?,?,?,?,?,?,?)""",(sid,pid,item.get("scope","Other"),item.get("constraint_type",""),item.get("target_id"),item.get("value"),item.get("priority","preferred"),int(item.get("enabled",1)),item.get("notes")))
         if "lessons" in payload:
             con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
             con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
@@ -1944,6 +1952,9 @@ def timetable_profile_duplicate(request:Request,pid:int):
             str(source["complexity"] or "normal"),str(source["relaxation"] or "relaxed"),now,now))
         new_id=int(con.execute("SELECT id FROM timetable_profiles WHERE school_id=? AND name=?",(sid,name)).fetchone()["id"])
         lesson_map={}
+        for item in con.execute("SELECT * FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall():
+            con.execute("""INSERT INTO timetable_constraints(school_id,profile_id,scope,constraint_type,target_id,value,priority,enabled,notes)
+                VALUES(?,?,?,?,?,?,?,?,?)""",(sid,new_id,item["scope"],item["constraint_type"],item["target_id"],item["value"],item["priority"],item["enabled"],item["notes"]))
         source_lessons=con.execute("SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
         for lesson in source_lessons:
             con.execute("""INSERT INTO timetable_lessons(
