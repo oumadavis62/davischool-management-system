@@ -59,6 +59,66 @@ def _library_page(request, title, body):
 .lib-dialog .lib-dialog-head h2{color:#28543a;font-size:19px}
 @media(max-width:700px){.library-page .lib-heading{align-items:flex-start;flex-direction:column}.library-page .lib-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.library-page .lib-kpis>div{padding:12px}.library-page .lib-kpis strong{font-size:22px}.library-page .card.lib-table-card{padding:11px}.library-page .lib-table-scroll table{min-width:680px}.lib-filter-dialog .lib-filter-dialog-content form{grid-template-columns:1fr}.lib-filter-dialog .lib-filter-dialog-content form>*{grid-column:1!important}}
 @media print{.lib-filter-trigger,.lib-filter-dialog,.library-page .lib-heading button{display:none!important}}
+
+/* Premium Library workspace refinement */
+.library-page{--lib-forest:#174b32;--lib-green:#26734a;--lib-sage:#eaf3eb;--lib-line:#dce9de;--lib-ink:#233b2d;position:relative}
+.library-page:before{content:"";display:block;height:5px;margin:-2px 0 18px;border-radius:99px;background:linear-gradient(90deg,#174b32 0%,#39845a 42%,#b8d8bd 100%);box-shadow:0 2px 8px #174b321c}
+.library-page .lib-heading{position:relative;overflow:hidden;isolation:isolate;padding:22px 24px 21px;margin:0 0 17px;border:1px solid #dce9de;border-radius:19px;background:linear-gradient(115deg,#f5faf5 0%,#fff 58%,#edf6ee 100%);box-shadow:0 8px 24px #214c2d0b}
+.library-page .lib-heading:after{content:"";position:absolute;z-index:-1;width:190px;height:190px;right:3%;top:-118px;border:28px solid #dcecdf70;border-radius:50%;box-shadow:0 0 0 24px #eaf3eb55,0 0 0 52px #eaf3eb30}
+.library-page .lib-heading h1{font-size:clamp(25px,3vw,33px);letter-spacing:-.8px;line-height:1.15;color:#174b32;margin:7px 0 8px}
+.library-page .lib-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#397653;font-size:10px;letter-spacing:1.7px}
+.library-page .lib-eyebrow:before{content:"";width:7px;height:7px;border-radius:2px;background:#4c9665;box-shadow:0 0 0 4px #e2f0e4}
+.library-page .lib-muted{color:#718278}
+.library-page .lib-heading>.btn,.library-page .lib-heading>a.btn{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 17px;border:1px solid #1e5b3b;border-radius:11px;background:linear-gradient(135deg,#1d5b3b,#2f8050);color:#fff!important;font-size:12px;font-weight:800;box-shadow:0 5px 12px #1c59321f;transition:transform .18s ease,box-shadow .18s ease}
+.library-page .lib-heading>.btn:hover,.library-page .lib-heading>a.btn:hover{transform:translateY(-2px);box-shadow:0 9px 18px #1c59332b}
+.library-page .lib-kpis{grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:13px;margin:0 0 17px}
+.library-page .lib-kpis>div{position:relative;overflow:hidden;min-height:102px;padding:17px 18px 15px 20px;border:1px solid #e0ebe1;border-radius:16px;background:linear-gradient(145deg,#fff 0%,#f8fbf8 100%);box-shadow:0 5px 17px #183d2609;transition:transform .18s ease,box-shadow .18s ease}
+.library-page .lib-kpis>div:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#367c50,#a6c9a9)}
+.library-page .lib-kpis>div:after{content:"";position:absolute;width:75px;height:75px;right:-28px;bottom:-39px;border:12px solid #e7f1e8;border-radius:50%}
+.library-page .lib-kpis>div:nth-child(2):before{background:linear-gradient(180deg,#4d8e78,#b2d6c2)}
+.library-page .lib-kpis>div:nth-child(3):before{background:linear-gradient(180deg,#77965a,#d1dfb7)}
+.library-page .lib-kpis>div:hover{transform:translateY(-2px);box-shadow:0 9px 22px #183d2613}
+.library-page .lib-kpis span{position:relative;z-index:1;color:#718176;font-size:11px;font-weight:750;letter-spacing:.15px}
+.library-page .lib-kpis strong{position:relative;z-index:1;color:#1e5b3a;font-size:28px;line-height:1.15;letter-spacing:-.6px;margin-top:9px}
+.library-page .card.lib-table-card,.library-page .card.lib-filter-card{border:1px solid #e1ebe2;border-radius:17px;background:#fff;box-shadow:0 6px 22px #193d2609}
+.library-page .card.lib-table-card{padding:18px}
+.library-page .lib-table-card>.page-heading{padding:0 1px 13px;margin-bottom:13px;border-bottom:1px solid #edf2ed}
+.library-page .lib-table-card h2{font-size:15px;letter-spacing:-.2px;color:#214d34}
+.library-page .lib-table-scroll{border:1px solid #e5ede6;border-radius:13px;box-shadow:inset 0 1px 2px #183d2605}
+.library-page .lib-table-scroll th{padding:13px 14px;background:linear-gradient(180deg,#f2f8f2,#eaf3eb);color:#42634c;font-size:10px;letter-spacing:.8px}
+.library-page .lib-table-scroll td{padding:13px 14px;color:#3c5143;font-size:12px}
+.library-page .lib-table-scroll tbody tr{transition:background .15s ease}
+.library-page .lib-table-scroll tbody tr:nth-child(even){background:#fbfdfb}
+.library-page .lib-table-scroll tbody tr:hover{background:#f0f7f1}
+.library-page .lib-table-scroll td b{color:#234b32;font-weight:800}
+.library-page .lib-status{padding:5px 10px;border:1px solid #d7eadb;background:#eaf5ec;color:#28623e;font-size:10px;letter-spacing:.1px}
+.library-page .lib-inactive{border-color:#e7e9e6;background:#f2f3f1;color:#68736b}
+.library-page .lib-edit{padding:8px 12px;border:1px solid #d5e5d8;border-radius:9px;background:#f2f8f3;color:#245b39;transition:all .15s ease}
+.library-page .lib-edit:hover{background:#245b39;border-color:#245b39;color:#fff;transform:translateY(-1px)}
+.library-page .btn{min-height:39px;padding:9px 14px;border:1px solid #1f5b3b;border-radius:10px;background:linear-gradient(135deg,#205f3e,#317b4d);color:#fff!important;font-size:12px;font-weight:800;transition:all .16s ease}
+.library-page .btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
+.library-page .btn.btn-light{border-color:#dce8de;background:#f4f8f4;color:#3f6249!important}
+.library-page .lib-filter-trigger{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid #cfe0d1;border-radius:11px;background:#fff;color:#245b39;box-shadow:0 3px 10px #214c2d0b;transition:all .16s ease}
+.library-page .lib-filter-trigger:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#4b9562;box-shadow:0 0 0 4px #e7f2e8}
+.library-page .lib-filter-trigger:hover{border-color:#8fb99a;background:#f4faf4;transform:translateY(-1px)}
+.lib-filter-dialog{border-radius:21px;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.lib-filter-dialog .lib-filter-dialog-head{padding:17px 20px;background:linear-gradient(110deg,#f0f7f1,#fff);border-bottom:1px solid #e4ede5}
+.lib-filter-dialog .lib-filter-dialog-head strong{font-size:16px;letter-spacing:-.2px;color:#1d5033}
+.lib-filter-dialog .lib-filter-dialog-head button{transition:background .15s ease,transform .15s ease}
+.lib-filter-dialog .lib-filter-dialog-head button:hover{background:#d8e9db;transform:rotate(90deg)}
+.lib-filter-dialog .lib-filter-dialog-content{padding:20px}
+.lib-filter-dialog .lib-filter-dialog-content form{gap:15px}
+.lib-filter-dialog .lib-filter-dialog-content form label{gap:7px;color:#3d5946;font-size:11px}
+.library-page .field,.lib-filter-dialog .field,.lib-dialog .field{min-height:42px;border:1px solid #dce7de;border-radius:10px;background:#fcfefc;color:#294534;box-shadow:inset 0 1px 2px #193d2605;transition:border-color .15s ease,box-shadow .15s ease}
+.library-page .field:focus,.lib-filter-dialog .field:focus,.lib-dialog .field:focus{outline:0;border-color:#78a985;box-shadow:0 0 0 3px #e4f1e6}
+.library-page .lib-empty{padding:42px 18px!important;color:#78877d!important;background:linear-gradient(180deg,#fff,#fafcfa)}
+.lib-dialog{border:1px solid #dce8de;border-radius:21px;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.lib-dialog .lib-dialog-head{padding-bottom:15px;border-bottom:1px solid #edf2ed}
+.lib-dialog .lib-dialog-head h2{font-size:21px;letter-spacing:-.5px;color:#1d5033}
+.lib-dialog .lib-dialog-actions{padding-top:15px;border-top:1px solid #edf2ed}
+@media(max-width:700px){.library-page:before{margin-bottom:12px}.library-page .lib-heading{padding:18px 16px;border-radius:16px}.library-page .lib-heading>.btn,.library-page .lib-heading>a.btn{width:100%}.library-page .lib-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.library-page .lib-kpis>div{min-height:88px;padding:13px 12px 12px 15px;border-radius:13px}.library-page .lib-kpis strong{font-size:23px}.library-page .card.lib-table-card{padding:12px;border-radius:14px}.library-page .lib-table-scroll{border-radius:10px}.library-page .lib-table-scroll table{min-width:680px}.lib-filter-dialog{width:calc(100% - 18px);max-height:88vh;border-radius:17px}.lib-filter-dialog .lib-filter-dialog-content{padding:15px}.lib-dialog{width:calc(100% - 18px);max-height:90vh;border-radius:17px}.lib-dialog form{padding:17px}}
+@media(prefers-reduced-motion:reduce){.library-page *, .lib-filter-dialog *, .lib-dialog *{transition:none!important;scroll-behavior:auto!important}}
+
 </style>
 <script>
 (function(){function setup(){document.querySelectorAll('.library-page').forEach(function(page){var panel=page.querySelector('.lib-filter-card');if(!panel||panel.dataset.popupReady==='1')return;var heading=page.querySelector('.lib-heading');if(!heading)return;panel.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='lib-filter-dialog';var head=document.createElement('div');head.className='lib-filter-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='lib-filter-dialog-content';content.appendChild(panel);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);var trigger=document.createElement('button');trigger.type='button';trigger.className='lib-filter-trigger';trigger.innerHTML='&#9881; Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
