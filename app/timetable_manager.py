@@ -299,7 +299,7 @@ def _seed(con, sid):
     pid=int(profile["id"])
     cur.execute("UPDATE timetable_profiles SET active=0 WHERE school_id=? AND id<>?",(sid,pid))
     cur.execute("UPDATE timetable_profiles SET active=1 WHERE school_id=? AND id=?",(sid,pid))
-    cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND (profile_id IS NULL OR profile_id=1)",(pid,sid))
+    cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     cur.execute("UPDATE timetable_lessons SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     con.commit()
 
@@ -699,7 +699,7 @@ def _subjects(con, sid):
                 END
             ),0) total
             FROM timetable_lessons l
-            WHERE l.school_id=? AND l.subject_id=?""", (sid,r["id"])).fetchone()
+            WHERE l.school_id=? AND l.profile_id=timetable_active_profile(l.school_id) AND l.subject_id=?""", (sid,r["id"])).fetchone()
         html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['code'] or ''))}</td><td>{escape(str(r['initial'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
     html="".join(html_parts)
     return f"""<div class='tt-card'><h2>📚 Subjects</h2><div class='tt-muted'>The weekly subject load is calculated directly from every saved Lesson Card allocation: Lessons per week × duration, with a multiplier for every participating class/stream in a combined lesson. Each allocation is therefore reflected in the subject total.</div><div class='tt-scroll' style='margin-top:12px'><table class='tt-table'><thead><tr><th>ID</th><th>Subject</th><th>Code</th><th>Initial</th><th>No. of Lessons / Week</th></tr></thead><tbody>{html or '<tr><td colspan=5>No subjects found.</td></tr>'}</tbody></table></div></div>"""
@@ -722,7 +722,7 @@ def _teachers(con, sid):
                 END
             ),0) total
             FROM timetable_lessons l
-            WHERE l.school_id=? AND (l.teacher_id=? OR l.id IN
+            WHERE l.school_id=? AND l.profile_id=timetable_active_profile(l.school_id) AND (l.teacher_id=? OR l.id IN
                 (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))""",
             (sid,r["id"],sid,r["id"])).fetchone()
         html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['email'] or ''))}</td><td>{escape(str(r['phone'] or ''))}</td><td>{escape(str(r['department'] or r['role'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
@@ -736,7 +736,7 @@ def _classes(con, sid):
     for r in rows:
         total = con.execute("""SELECT COALESCE(SUM(l.lessons_per_week * l.duration),0) total
             FROM timetable_lessons l
-            WHERE l.school_id=? AND (l.class_id=? OR l.id IN
+            WHERE l.school_id=? AND l.profile_id=timetable_active_profile(l.school_id) AND (l.class_id=? OR l.id IN
                 (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?))""",
             (sid,r["id"],sid,r["id"])).fetchone()
         html_parts.append(f"<tr><td>{r['id']}</td><td><b>{escape(str(r['name'] or ''))}</b></td><td>{escape(str(r['level'] or ''))}</td><td>{escape(str(r['stream'] or ''))}</td><td><b>{int(total['total'] or 0)}</b></td></tr>")
@@ -878,7 +878,7 @@ def _weekly_period_capacity(con, sid):
 def _generate(con, sid):
     settings=_profile_settings(con,sid)
     classes=con.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (sid,)).fetchall()
-    lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=?", (sid,)).fetchone()["c"]
+    lesson_count=con.execute("SELECT COUNT(*) c FROM timetable_lessons WHERE school_id=? AND profile_id=?", (sid,_active_profile_id(con,sid))).fetchone()["c"]
     slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)", (sid,)).fetchone()["c"]
     weekly_capacity=_weekly_period_capacity(con,sid)
     latest_run=con.execute("""SELECT status,placed,requested,message,created_at
@@ -906,7 +906,7 @@ def _verify(con, sid):
     pmap={int(x["period_no"]):x for x in periods}
     breaks=_profile_breaks(con,sid)
     lessons=con.execute(
-        "SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?",(sid,)
+        "SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,_active_profile_id(con,sid))
     ).fetchall()
     rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id,l.lessons_per_week
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
@@ -1067,7 +1067,7 @@ def _publication_fingerprint(con, sid):
         FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY lesson_id,day_name,period_no,id""",
         (sid,int(profile["id"]))).fetchall()
     lessons=con.execute("""SELECT id,class_id,subject_id,teacher_id,room_id,lessons_per_week,duration,locked,preferred_room
-        FROM timetable_lessons WHERE school_id=? ORDER BY id""",(sid,)).fetchall()
+        FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id""",(sid,int(profile["id"]))).fetchall()
     lesson_classes=con.execute("SELECT lesson_id,class_id FROM timetable_lesson_classes WHERE school_id=? ORDER BY lesson_id,class_id",(sid,)).fetchall()
     lesson_teachers=con.execute("SELECT lesson_id,teacher_id FROM timetable_lesson_teachers WHERE school_id=? ORDER BY lesson_id,teacher_id",(sid,)).fetchall()
     availability=con.execute("""SELECT resource_type,resource_id,day_name,period_no,allowed
@@ -1474,7 +1474,7 @@ def _lesson_placard_platform(con, sid):
         c.name class_name,c.stream,sub.name subject,sub.code subject_code,sub.initial subject_initial,t.name teacher
         FROM timetable_lessons l JOIN classes c ON c.id=l.class_id
         JOIN subjects sub ON sub.id=l.subject_id LEFT JOIN teachers t ON t.id=l.teacher_id
-        WHERE l.school_id=? ORDER BY c.name,c.stream,sub.name,l.id""",(sid,)).fetchall()
+        WHERE l.school_id=? AND l.profile_id=timetable_active_profile(l.school_id) ORDER BY c.name,c.stream,sub.name,l.id""",(sid,)).fetchall()
     placed={int(x["lesson_id"]):int(x["c"] or 0) for x in con.execute(
         "SELECT lesson_id,COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) GROUP BY lesson_id",(sid,)
     ).fetchall()}
@@ -1765,7 +1765,7 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
         profile=payload.get("profile") or {}
         slots=payload.get("slots") or []
         for slot in slots:
-            if not con.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=?",(int(slot["lesson_id"]),sid)).fetchone():
+            if not con.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=?",(int(slot["lesson_id"]),sid,pid)).fetchone():
                 return RedirectResponse("/app/timetable?tab=profiles&error=Version+references+a+missing+lesson.+Nothing+was+changed",303)
         _save_timetable_snapshot(con,sid,pid,"Safety copy before restore")
         for field in ("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation"):
@@ -2049,6 +2049,8 @@ async def timetable_lesson_save(request:Request):
         primary_teacher=valid_teacher_ids[0] if valid_teacher_ids else None
         vals=(primary_class,subject_id,primary_teacher,room,group_name,lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",locked,preferred_room,notes)
         if lesson_id:
+            owned=cur.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)",(lesson_id,sid)).fetchone()
+            if not owned:return RedirectResponse("/app/timetable?tab=lessons&error=Lesson+card+not+found+in+this+timetable",303)
             cur.execute("""UPDATE timetable_lessons SET class_id=?,subject_id=?,teacher_id=?,room_id=?,group_name=?,lessons_per_week=?,duration=?,cycle=?,locked=?,preferred_room=?,notes=? WHERE id=? AND school_id=? AND profile_id=timetable_active_profile(school_id)""",vals+(lesson_id,sid))
             cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
             cur.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
@@ -2234,7 +2236,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         if class_filter:
             cur.execute("""DELETE FROM timetable_slots
                 WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
-                    SELECT id FROM timetable_lessons WHERE school_id=? AND class_id=?
+                    SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND class_id=?
                     UNION
                     SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?
                 )""",(sid,sid,class_filter,sid,class_filter))
