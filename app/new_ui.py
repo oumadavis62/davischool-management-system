@@ -20471,7 +20471,7 @@ def admissions_decision(request: Request, application_id: int, decision: str = F
     return RedirectResponse("/app/admissions",303)
 
 
-def _admission_filtered_page(request, title, description, where_clause, params, show_action=True):
+def _admission_filtered_page(request, title, description, where_clause, params, show_action=True, allow_edit_delete=True, show_decision_actions=True):
     sid, denied = _admission_guard(request)
     if denied: return denied
     con = _db(); cur = con.cursor()
@@ -20483,12 +20483,12 @@ def _admission_filtered_page(request, title, description, where_clause, params, 
         con.commit()
     finally:
         con.close()
-    return _admission_workspace(request,title,description,rows,show_action)
+    return _admission_workspace(request,title,description,rows,show_action,allow_edit_delete=allow_edit_delete,show_decision_actions=show_decision_actions)
 
 
 @router.get("/app/admissions/review", response_class=HTMLResponse)
 def admissions_review_page(request: Request):
-    return _admission_filtered_page(request,"Admission Review","Review pending applications and record an admission decision.","lower(a.status)='pending'",[])
+    return _admission_filtered_page(request,"Admission Review","Review pending applications and record an admission decision.","lower(a.status)='pending'",[],allow_edit_delete=False)
 
 
 @router.get("/app/admissions/accepted", response_class=HTMLResponse)
