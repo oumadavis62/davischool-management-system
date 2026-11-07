@@ -1330,18 +1330,21 @@ def transport_reports(request: Request, date_from: str = "", date_to: str = ""):
         body = f"""
 <div class="page transport-page">
 <style>
+.transport-page{{width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden}}
+.transport-page *{{box-sizing:border-box}}
 .transport-page .tr-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}}
-.transport-page .tr-kpis>div,.transport-page .tr-panel{{background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:16px;margin-bottom:16px}}
+.transport-page .tr-kpis>div,.transport-page .tr-panel{{min-width:0;background:#fff;border:1px solid #e3ebe5;border-radius:15px;padding:16px;margin-bottom:16px}}
 .transport-page .tr-kpis span,.transport-page .tr-muted{{display:block;color:#718078;font-size:12px}}
 .transport-page .tr-kpis strong{{display:block;font-size:24px;color:#174b35;margin-top:5px}}
 .transport-page .tr-toolbar{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px}}
 .transport-page label{{display:grid;gap:6px;font-size:12px;color:#53665b;flex:1;min-width:150px}}
 .transport-page input{{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce6df;border-radius:9px;background:#fff}}
-.transport-page .tr-scroll{{overflow:auto;width:100%}}.transport-page table{{width:100%;min-width:620px;border-collapse:collapse}}
-.transport-page th,.transport-page td{{padding:11px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px}}
+.transport-page .tr-scroll{{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;scrollbar-width:thin}}
+.transport-page table{{width:100%;min-width:620px;border-collapse:collapse}}
+.transport-page th,.transport-page td{{padding:11px 10px;text-align:left;border-bottom:1px solid #edf1ee;font-size:13px;white-space:normal}}
 .transport-page th{{color:#607267;background:#f7faf8;font-weight:650}}.transport-page .tr-empty{{text-align:center;padding:25px;color:#7b8981}}
-.transport-page .tr-report-grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
-@media(max-width:760px){{.transport-page .tr-kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.transport-page .tr-report-grid{{grid-template-columns:1fr}}}}
+.transport-page .tr-report-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-width:0}}
+@media(max-width:760px){{.transport-page .tr-kpis{{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}}.transport-page .tr-kpis>div,.transport-page .tr-panel{{padding:12px;border-radius:12px}}.transport-page .tr-kpis strong{{font-size:21px}}.transport-page .tr-report-grid{{grid-template-columns:minmax(0,1fr)}}.transport-page .tr-scroll{{margin-right:-2px}}}}
 @media print{{.transport-page .tr-toolbar,.transport-page .no-print{{display:none!important}}.transport-page .tr-panel{{break-inside:avoid;box-shadow:none}}}}
 </style>
 <div class="page-heading"><div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / ANALYTICS</div><h1>Transport Reports</h1><div class="tr-muted">Fleet, route allocation and trip activity summary.</div></div><button class="btn no-print" type="button" onclick="window.print()">Print / Save PDF</button></div>
