@@ -216,3 +216,45 @@ def delete_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: i
         (lesson_id, school_id, profile_id),
     )
     connection.commit()
+
+
+
+def place_advanced_requirement_session(connection: Any, school_id: int, profile_id: int,
+                                       requirement_id: int, session_no: int,
+                                       day_id: int, period_id: int,
+                                       room_id: int | None = None,
+                                       created_by: str = "") -> int:
+    """Manually place one normalized requirement pattern through the shared validator."""
+    from app.timetable.session_engine import create_scheduled_session
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+    pattern = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_patterns
+           WHERE school_id=? AND profile_id=? AND requirement_id=? AND session_no=?""",
+        (school_id, profile_id, requirement_id, session_no),
+    ).fetchone()
+    if not pattern:
+        raise TimetableSetupError("Select a configured session number from this requirement's weekly pattern.")
+    if requirement["schedule_layer"] != "instructional":
+        raise TimetableSetupError("This manual period-grid action supports instructional sessions; use the programme scheduler for additional learning and activities.")
+    span = _period_span(cur, school_id, profile_id, period_id, int(pattern["duration_periods"] or 1))
+    if pattern["preferred_day_id"] is not None and int(pattern["preferred_day_id"]) != int(day_id):
+        raise TimetableSetupError("This session pattern is assigned to a different preferred day.")
+    return create_scheduled_session(
+        connection, school_id, profile_id,
+        str(span[0]["start_time"]), str(span[-1]["end_time"]),
+        schedule_layer="instructional", session_type=str(requirement["session_type"]),
+        room_id=room_id, day_id=day_id, period_id=period_id,
+        subject_id=int(requirement["subject_id"]) if requirement["subject_id"] is not None else None,
+        programme_id=int(requirement["programme_id"]) if requirement["programme_id"] is not None else None,
+        teaching_group_id=int(requirement["teaching_group_id"]) if requirement["teaching_group_id"] is not None else None,
+        duration_periods=len(span), scheduling_requirement_id=requirement_id,
+        pattern_session_no=session_no, created_by=created_by,
+    )
