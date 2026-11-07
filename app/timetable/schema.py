@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SCHEMA_VERSION = "001"
+SCHEMA_VERSION = "002"
 
 
 _TABLES = (
@@ -134,6 +134,181 @@ _TABLES = (
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_schedule_templates (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        template_type TEXT NOT NULL DEFAULT 'instructional',
+        notes TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (school_id, profile_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_schedule_slots (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        template_id INTEGER NOT NULL,
+        slot_no INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        slot_type TEXT NOT NULL DEFAULT 'instructional',
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        instructional_period_no INTEGER,
+        UNIQUE (school_id, profile_id, template_id, slot_no)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_day_templates (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        day_id INTEGER NOT NULL,
+        template_id INTEGER NOT NULL,
+        cycle_week INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (school_id, profile_id, day_id, cycle_week)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_rotation_cycles (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        cycle_length_weeks INTEGER NOT NULL,
+        anchor_date TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (school_id, profile_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_rotation_weeks (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        cycle_id INTEGER NOT NULL,
+        week_number INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        department_code TEXT,
+        programme_id INTEGER,
+        UNIQUE (school_id, profile_id, cycle_id, week_number)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_learning_programmes (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        programme_type TEXT NOT NULL DEFAULT 'remedial',
+        schedule_layer TEXT NOT NULL DEFAULT 'additional_learning',
+        recurrence_type TEXT NOT NULL DEFAULT 'weekly',
+        recurrence_json TEXT NOT NULL DEFAULT '{}',
+        rotation_cycle_id INTEGER,
+        department_code TEXT,
+        counts_toward_curriculum INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (school_id, profile_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_teaching_groups (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        group_type TEXT NOT NULL DEFAULT 'combined_class',
+        subject_id INTEGER,
+        notes TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (school_id, profile_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_teaching_group_classes (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        teaching_group_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        UNIQUE (school_id, profile_id, teaching_group_id, class_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_requirement_patterns (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        requirement_id INTEGER NOT NULL,
+        session_no INTEGER NOT NULL,
+        duration_periods INTEGER NOT NULL DEFAULT 1,
+        preferred_day_id INTEGER,
+        preferred_slot_id INTEGER,
+        session_label TEXT,
+        UNIQUE (school_id, profile_id, requirement_id, session_no)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_programme_sessions (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        programme_id INTEGER NOT NULL,
+        subject_id INTEGER,
+        teaching_group_id INTEGER,
+        day_id INTEGER,
+        cycle_week INTEGER NOT NULL DEFAULT 0,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        recurrence_json TEXT NOT NULL DEFAULT '{}',
+        required_teacher_count INTEGER NOT NULL DEFAULT 1,
+        room_type TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_sessions (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        schedule_layer TEXT NOT NULL DEFAULT 'instructional',
+        session_type TEXT NOT NULL DEFAULT 'lesson',
+        subject_id INTEGER,
+        programme_id INTEGER,
+        teaching_group_id INTEGER,
+        day_id INTEGER,
+        session_date TEXT,
+        period_id INTEGER,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        duration_periods INTEGER NOT NULL DEFAULT 0,
+        room_id INTEGER,
+        generation_run_id INTEGER,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_session_classes (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        session_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        UNIQUE (school_id, profile_id, session_id, class_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_session_teachers (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        session_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        role TEXT NOT NULL DEFAULT 'lead',
+        UNIQUE (school_id, profile_id, session_id, teacher_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_session_learners (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        session_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        attendance_status TEXT,
+        UNIQUE (school_id, profile_id, session_id, student_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_activity_types (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        requires_teacher INTEGER NOT NULL DEFAULT 0,
+        requires_room INTEGER NOT NULL DEFAULT 0,
+        tracks_attendance INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (school_id, code)
+    )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_versions (
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -185,6 +360,17 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_teacher_grid ON ds_timetable_lessons(school_id, profile_id, teacher_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_room_grid ON ds_timetable_lessons(school_id, profile_id, room_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_generation ON ds_timetable_lessons(school_id, profile_id, generation_run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_slots_template ON ds_timetable_schedule_slots(school_id, profile_id, template_id, slot_no)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_day_templates ON ds_timetable_day_templates(school_id, profile_id, day_id, cycle_week)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_rotation_weeks ON ds_timetable_rotation_weeks(school_id, profile_id, cycle_id, week_number)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_programmes_rotation ON ds_timetable_learning_programmes(school_id, profile_id, rotation_cycle_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_group_classes ON ds_timetable_teaching_group_classes(school_id, profile_id, teaching_group_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_requirement_patterns ON ds_timetable_requirement_patterns(school_id, profile_id, requirement_id, session_no)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_programme_sessions ON ds_timetable_programme_sessions(school_id, profile_id, programme_id, day_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_sessions_time ON ds_timetable_sessions(school_id, profile_id, session_date, day_id, start_time, end_time)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_session_classes ON ds_timetable_session_classes(school_id, profile_id, class_id, session_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_session_teachers ON ds_timetable_session_teachers(school_id, profile_id, teacher_id, session_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_session_learners ON ds_timetable_session_learners(school_id, profile_id, student_id, session_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_versions_profile ON ds_timetable_versions(school_id, profile_id, version_no)",
 )
 
