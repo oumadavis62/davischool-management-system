@@ -293,6 +293,26 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
+          // Make every setup POST form carry the active tab session explicitly.
+          // These forms are moved into modal containers below; this local guard
+          // keeps their session identity even if the shared tab-session script
+          // is delayed or unavailable on a mobile browser.
+          function attachTabSession(form){{
+            try{{
+              const tabId=sessionStorage.getItem('davischool_tab_id')||'';
+              if(!tabId) return;
+              let field=form.querySelector('input[name="ds_tab"]');
+              if(!field){{field=document.createElement('input');field.type='hidden';field.name='ds_tab';form.appendChild(field);}}
+              field.value=tabId;
+              const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
+              if(action.origin===window.location.origin){{action.searchParams.set('ds_tab',tabId);form.action=action.pathname+action.search+action.hash;}}
+            }}catch(_){{}}
+          }}
+          root.querySelectorAll('form[method="post" i]').forEach(attachTabSession);
+          root.addEventListener('submit',event=>{{
+            const form=event.target;
+            if(form&&form.matches&&form.matches('form[method="post" i]')) attachTabSession(form);
+          }},true);
           let serial=0;
           root.querySelectorAll('.tt-section').forEach(section=>{{
             const form=section.querySelector('.tt-form.compact'); if(!form) return;
