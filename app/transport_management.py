@@ -498,7 +498,6 @@ def transport_routes_register(request: Request, q: str = "", status: str = "Acti
 <div class="tr-scroll"><table><thead><tr><th>Route / Code</th><th>Direction</th><th>Start → End</th><th>Stops</th><th>Status</th><th>Actions</th></tr></thead><tbody>{route_rows}</tbody></table></div>
 </section>
 {selected_panel}
-</div>
 <dialog id="transportRouteDialog" class="tr-dialog tr-route-dialog"><form method="post" action="/app/transport/routes/save" id="transportRouteForm">
  <div class="tr-route-head"><span class="tr-route-eyebrow">TRANSPORT MANAGEMENT · ROUTE SETUP</span><button class="tr-route-close" type="button" aria-label="Close route dialog" title="Close" onclick="document.getElementById('transportRouteDialog').close()">×</button><h2 id="transportRouteTitle">Add route</h2><p>Set the route identity, travel direction and terminal points for school transport.</p></div>
  <input type="hidden" name="route_id" value="0">
@@ -507,6 +506,7 @@ def transport_routes_register(request: Request, q: str = "", status: str = "Acti
  <section class="tr-route-section"><h3><span>03</span> Route status &amp; notes</h3><div class="tr-form"><label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label><label style="grid-column:1/-1">Notes<textarea name="notes" rows="2" maxlength="500" placeholder="Optional route instructions or details"></textarea></label></div></section>
  <div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportRouteDialog').close()">Cancel</button><button class="btn" type="submit">Save Route</button></div>
  </form></dialog>
+</div>
 <script>
 function openTransportRoute(){{const f=document.getElementById('transportRouteForm');f.reset();f.elements.route_id.value='0';document.getElementById('transportRouteTitle').textContent='Add route';document.getElementById('transportRouteDialog').showModal();}}
 function editTransportRoute(b){{const f=document.getElementById('transportRouteForm');f.elements.route_id.value=b.dataset.id;f.elements.route_name.value=b.dataset.name;f.elements.route_code.value=b.dataset.code;f.elements.direction.value=b.dataset.direction;f.elements.start_point.value=b.dataset.start;f.elements.end_point.value=b.dataset.end;f.elements.status.value=b.dataset.status;f.elements.notes.value=b.dataset.notes;document.getElementById('transportRouteTitle').textContent='Edit route';document.getElementById('transportRouteDialog').showModal();}}
@@ -740,7 +740,7 @@ def transport_student_allocations(request: Request, q: str = "", status: str = "
 <section class="tr-panel">
 <form method="get" class="tr-toolbar"><label>Search allocations<input name="q" value="{escape(q,quote=True)}" placeholder="Learner, admission no., route, stop or vehicle"></label><label>Status<select name="status"><option value="Active" {'selected' if status=='Active' else ''}>Active</option><option value="Inactive" {'selected' if status=='Inactive' else ''}>Inactive</option><option value="All" {'selected' if status=='All' else ''}>All</option></select></label><button class="btn" type="submit">Apply</button><a class="btn btn-light" href="/app/transport/allocations">Clear</a></form>
 <div class="tr-scroll"><table><thead><tr><th>Learner</th><th>Route / Stop</th><th>Vehicle</th><th>Effective from</th><th>Effective to</th><th>Status</th><th>Action</th></tr></thead><tbody>{table_rows}</tbody></table></div>
-</section></div>
+</section>
 <dialog id="transportAllocationDialog" class="tr-dialog tr-allocation-dialog"><form method="post" action="/app/transport/allocations/save" id="transportAllocationForm">
 <div class="tr-allocation-head"><span class="tr-allocation-eyebrow">TRANSPORT MANAGEMENT · LEARNER SETUP</span><button class="tr-allocation-close" type="button" aria-label="Close allocation dialog" title="Close" onclick="document.getElementById('transportAllocationDialog').close()">×</button><h2 id="transportAllocationTitle">Allocate learner</h2><p>Choose the learner, assign an active route and stop, and set the transport service period.</p></div>
 <input type="hidden" name="allocation_id" value="0">
@@ -764,6 +764,7 @@ def transport_student_allocations(request: Request, q: str = "", status: str = "
 </div></section>
 <div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportAllocationDialog').close()">Cancel</button><button class="btn" type="submit">Save Allocation</button></div>
 </form></dialog>
+</div>
 <script>
 const trAllocStops=Array.from(document.getElementById('trAllocStop').options).map(o=>({{value:o.value,route:o.dataset.route||''}}));
 function filterTransportStops(){{const route=document.getElementById('trAllocRoute').value;const sel=document.getElementById('trAllocStop');Array.from(sel.options).forEach(o=>{{if(!o.value){{o.hidden=false;return;}}o.hidden=!!route&&o.dataset.route!==route;}});if(sel.selectedOptions[0]&&sel.selectedOptions[0].hidden)sel.value='';}}
