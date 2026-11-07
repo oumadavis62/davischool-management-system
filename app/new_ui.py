@@ -20208,6 +20208,11 @@ def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_d
                 "<button name='decision' value='accepted' class='admit-btn'>Accept</button>"
                 "<button name='decision' value='rejected' class='reject-btn'>Reject</button></form>"
             )
+        elif show_action and status == "rejected" and show_decision_actions:
+            action = (
+                f"<form method='post' action='/app/admissions/{applicant_id}/reopen' class='inline-form' data-native-post='1'>"
+                "<button type='submit' class='admit-btn'>Reopen for review</button></form>"
+            )
         elif show_action and status == "accepted" and not enrolled:
             action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
         elif admission_no:
@@ -20469,6 +20474,34 @@ def admissions_decision(request: Request, application_id: int, decision: str = F
     finally:
         con.close()
     return RedirectResponse("/app/admissions",303)
+
+
+@router.post("/app/admissions/{application_id}/reopen")
+def admissions_reopen(request: Request, application_id: int):
+    sid, denied = _admission_guard(request, "students.edit")
+    if denied: return denied
+    con = _db(); cur = con.cursor()
+    try:
+        _ensure_admissions_schema(cur)
+        row = cur.execute(
+            "SELECT * FROM admission_applications WHERE id=? AND school_id=?",
+            (application_id, sid)
+        ).fetchone()
+        if not row:
+            return HTMLResponse("Application not found.", 404)
+        if str(row["status"] or "").lower() != "rejected" or row["enrolled_student_id"]:
+            return HTMLResponse("Only rejected, not-yet-enrolled applications can be reopened.", 409)
+        now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute(
+            "UPDATE admission_applications SET status='pending',updated_at=? WHERE id=? AND school_id=?",
+            (now, application_id, sid)
+        )
+        _audit(cur, sid, request, "ADMISSION_REOPENED",
+               f"Reopened rejected application {application_id}: {row['applicant_name']}")
+        con.commit()
+    finally:
+        con.close()
+    return RedirectResponse("/app/admissions/status/rejected", 303)
 
 
 def _admission_filtered_page(request, title, description, where_clause, params, show_action=True, allow_edit_delete=True, show_decision_actions=True):
