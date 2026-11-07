@@ -105,6 +105,14 @@ def _ensure_tables(con):
         locked INTEGER NOT NULL DEFAULT 0,
         generated_run TEXT
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_publications(
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        fingerprint TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        UNIQUE(school_id,profile_id)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_edit_history(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -393,7 +401,7 @@ def _guard(request, permission="timetable.view"):
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print"}
+    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print","publish"}
     return tab if tab in allowed else "timetable"
 
 
@@ -402,7 +410,7 @@ def _tabs(active):
         ("profiles","🗂️ Timetable Profiles"),("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
         ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
-        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print")
+        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print"),("publish","📣 Publish")
     ]
     return "<div class='tt-tabs'>" + "".join(
         f"<a class='tt-tab {'active' if k==active else ''}' href='/app/timetable?tab={k}'>{label}</a>" for k,label in labels
@@ -551,6 +559,7 @@ def timetable_manager(request: Request):
 <div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='printTeacherSheet("teacher-sheet-{selected_id}")'>🖨️ Print This Teacher Sheet</button></div>
 <div class='tt-print-sheets'>{_teacher_sheets(con, sid, selected_id) if selected_id is not None else "<div class='tt-notice bad'>No teachers found.</div>"}</div></div>"""
         elif tab == "print": body = _print_view(con, sid)
+        elif tab == "publish": body = _publish_view(con, sid)
         else:
             try:
                 body = _timetable(request, con, sid)
@@ -972,6 +981,47 @@ def _verify(con, sid):
 <div class='tt-muted'>Audits the active profile's lesson coverage, enabled days, period boundaries, breaks, teacher and subject availability, repeated subjects, class/stream clashes, teacher clashes and room clashes.</div>
 <div class='tt-stat' style='margin:12px 0'><b>{len(issues)}</b>{'Issues found' if issues else 'All timetable checks passed'}</div>
 <div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{issue_rows if issues else '<tr><td>✅</td><td>Verification passed. No incomplete requirements or scheduling conflicts were detected.</td></tr>'}</tbody></table></div></div>"""
+
+
+def _publication_fingerprint(con, sid):
+    """Fingerprint the active profile and placements to detect post-publication edits."""
+    profile=_active_profile(con,sid)
+    if not profile:
+        return ""
+    slots=con.execute("""SELECT lesson_id,day_name,period_no,start_time,end_time,room_id,locked
+        FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY lesson_id,day_name,period_no,id""",
+        (sid,int(profile["id"]))).fetchall()
+    payload={
+        "profile":{k:profile[k] for k in ("id","days_json","periods_json","breaks_json")},
+        "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked")} for r in slots]
+    }
+    import hashlib
+    return hashlib.sha256(json.dumps(payload,sort_keys=True,default=str).encode("utf-8")).hexdigest()
+
+
+def _publish_view(con, sid):
+    pid=_active_profile_id(con,sid)
+    profile=_active_profile(con,sid)
+    saved=con.execute("SELECT * FROM timetable_publications WHERE school_id=? AND profile_id=?",(sid,pid)).fetchone()
+    current=_publication_fingerprint(con,sid)
+    published=bool(saved)
+    stale=published and str(saved["fingerprint"])!=current
+    if not published:
+        status="<div class='tt-notice bad'>This timetable has not been published. It remains an editable working draft.</div>"
+    elif stale:
+        status=f"<div class='tt-notice bad'>Published on {escape(str(saved['published_at']))}, but the timetable has changed since publication. Republish after verification.</div>"
+    else:
+        status=f"<div class='tt-notice ok'>Published and current. Release date: {escape(str(saved['published_at']))}.</div>"
+    release_state="Published" if published and not stale else "Draft" if not published else "Out of date"
+    return f"""<div class='tt-card'><h2>📣 Timetable Publishing</h2>
+<div class='tt-muted'>Publish the active timetable profile as the school's current official timetable. Publishing is blocked until all verification checks pass. Changes to timetable placements or profile settings make the publication visibly out of date.</div>
+{status}
+<div class='tt-grid' style='margin-top:12px'><div class='tt-stat'><b>{release_state}</b>Release status</div><div class='tt-stat'><b>{escape(str(profile['name']))}</b>Active timetable</div></div>
+<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:14px'>
+<form method='post' action='/app/timetable/publish'><button class='tt-btn' type='submit'>📣 Verify &amp; Publish</button></form>
+<form method='post' action='/app/timetable/unpublish'><button class='tt-btn alt' type='submit'>↩ Withdraw publication</button></form>
+<a class='tt-btn alt' href='/app/timetable?tab=verify'>✅ Review verification</a>
+<a class='tt-btn alt' href='/app/timetable?tab=print'>🖨️ Print official sheets</a></div></div>"""
 
 
 def _class_grid_data(con, sid, class_id=None):
@@ -1557,6 +1607,38 @@ def _print_view(con, sid):
 <div class='tt-muted'>Every class/stream is printed as a separate timetable using the school's exact saved period and break times, with days vertically and periods horizontally.</div>
 <div class='no-print' style='margin:12px 0'><button class='tt-btn' onclick='printClassTimetables()'>🖨️ Open Print Preview</button></div>
 <div class='tt-print-sheets'>{''.join(sheets) or '<div class="tt-notice bad">No timetable placements yet.</div>'}</div></div>"""
+
+
+@router.post("/app/timetable/publish")
+def timetable_publish(request:Request):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        report=_verify(con,sid)
+        if "All timetable checks passed" not in report:
+            return RedirectResponse("/app/timetable?tab=verify&error=Resolve+all+verification+issues+before+publishing",303)
+        pid=_active_profile_id(con,sid)
+        fingerprint=_publication_fingerprint(con,sid)
+        now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        con.execute("""INSERT INTO timetable_publications(school_id,profile_id,fingerprint,published_at)
+            VALUES(?,?,?,?) ON CONFLICT(school_id,profile_id) DO UPDATE SET
+            fingerprint=excluded.fingerprint,published_at=excluded.published_at""",
+            (sid,pid,fingerprint,now))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=publish&msg=Timetable+verified+and+published",303)
+    finally:con.close()
+
+
+@router.post("/app/timetable/unpublish")
+def timetable_unpublish(request:Request):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        con.execute("DELETE FROM timetable_publications WHERE school_id=? AND profile_id=?",
+            (sid,_active_profile_id(con,sid)))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=publish&msg=Publication+withdrawn",303)
+    finally:con.close()
 
 
 @router.post("/app/timetable/profile/switch-select")
