@@ -77,12 +77,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=6.5, leading=8)
         header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER)
+        def pdf_text(value):
+            return pdf_text(str(value).encode("latin-1", "replace").decode("latin-1"))
         school_name = xml_escape(str(school["name"] or "School"))
         address = xml_escape(str(school["address"] or ""))
         story = [Paragraph(school_name, school_style)]
         if address:
             story.append(Paragraph(address, styles["Normal"]))
-        profile_meta = str(result["profile"]["academic_year"]) + " · " + str(result["profile"]["term"])
+        profile_meta = str(result["profile"]["academic_year"]) + " | " + str(result["profile"]["term"])
         story.extend([
             Spacer(1,5),
             Paragraph(xml_escape(result["title"]).upper(), title_style),
@@ -93,7 +95,7 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(xml_escape(str(d["day_name"])), header_style) for d in result["days"]]
         data = [headers]
         for period in result["periods"]:
-            row = [Paragraph(xml_escape(str(period["label"])), cell_style), Paragraph(xml_escape(str(period["start_time"])) + "–" + xml_escape(str(period["end_time"])), cell_style)]
+            row = [Paragraph(xml_escape(str(period["label"])), cell_style), Paragraph(xml_escape(str(period["start_time"])) + " - " + xml_escape(str(period["end_time"])), cell_style)]
             for day in result["days"]:
                 key = (int(day["id"]),int(period["id"]))
                 if key in starts:
