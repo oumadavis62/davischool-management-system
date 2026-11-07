@@ -8,6 +8,67 @@ from app.new_ui import _audit, _db, _require_permission, _school_page, _school_s
 
 router = APIRouter()
 
+def _transport_page(request, title, body):
+    shared = """
+<style>
+.transport-page.inv-workspace{--inv-forest:#174b32;--inv-green:#26734a;color:#233b2d;width:100%;max-width:none!important;padding-bottom:28px}
+.transport-page.inv-workspace:before{content:"";display:block;height:5px;margin:-2px 0 16px;border-radius:99px;background:linear-gradient(90deg,#174b32,#39845a 48%,#b8d8bd);box-shadow:0 2px 8px #174b321c}
+.transport-page.inv-workspace .page-heading{position:relative;overflow:hidden;isolation:isolate;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:22px 24px 21px;margin:0 0 17px;border:1px solid #dce9de;border-radius:19px;background:linear-gradient(115deg,#f5faf5 0%,#fff 58%,#edf6ee 100%);box-shadow:0 8px 24px #214c2d0b}
+.transport-page.inv-workspace .page-heading h1{font-size:clamp(25px,3vw,33px);font-weight:800;letter-spacing:-.8px;line-height:1.15;color:#174b32;margin:7px 0 8px}
+.transport-page.inv-workspace .page-heading>div>div:last-child{color:#718278;font-size:12px;line-height:1.55}
+.transport-page.inv-workspace .lib-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#397653;font-size:10px;font-weight:800;letter-spacing:1.7px}
+.transport-page.inv-workspace .lib-eyebrow:before{content:"";width:7px;height:7px;border-radius:2px;background:#4c9665;box-shadow:0 0 0 4px #e2f0e4}
+.transport-page.inv-workspace .tr-kpis{grid-template-columns:repeat(auto-fit,minmax(175px,1fr))!important;gap:13px!important;margin:0 0 17px!important}
+.transport-page.inv-workspace .tr-kpis>div{position:relative;overflow:hidden;min-height:100px;padding:17px 18px 15px 20px!important;border:1px solid #e0ebe1!important;border-radius:16px!important;background:linear-gradient(145deg,#fff,#f8fbf8)!important;box-shadow:0 5px 17px #183d2609!important}
+.transport-page.inv-workspace .tr-kpis>div:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#367c50,#a6c9a9)}
+.transport-page.inv-workspace .tr-kpis span{color:#718176!important;font-size:11px!important;font-weight:750}
+.transport-page.inv-workspace .tr-kpis strong{color:#1e5b3a!important;font-size:27px!important;letter-spacing:-.6px}
+.transport-page.inv-workspace .tr-panel{padding:18px!important;margin:0 0 14px!important;border:1px solid #e1ebe2!important;border-radius:17px!important;background:#fff!important;box-shadow:0 6px 22px #193d2609!important}
+.transport-page.inv-workspace .tr-scroll{max-width:100%;border:1px solid #e5ede6;border-radius:13px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.transport-page.inv-workspace table{border-collapse:separate!important;border-spacing:0!important;width:100%;min-width:760px}
+.transport-page.inv-workspace th{padding:13px 14px!important;background:linear-gradient(180deg,#f2f8f2,#eaf3eb)!important;color:#42634c!important;font-size:10px!important;font-weight:800;letter-spacing:.7px;text-transform:uppercase;white-space:nowrap}
+.transport-page.inv-workspace td{padding:12px 14px!important;border-bottom:1px solid #edf2ed!important;color:#3c5143;font-size:12px!important;vertical-align:middle}
+.transport-page.inv-workspace tbody tr:nth-child(even){background:#fbfdfb}
+.transport-page.inv-workspace tbody tr:hover{background:#f0f7f1}
+.transport-page.inv-workspace .tr-muted,.transport-page.inv-workspace small{color:#718278!important}
+.transport-page.inv-workspace label{color:#3d5946;font-size:11px!important;font-weight:750;line-height:1.35}
+.transport-page.inv-workspace input,.transport-page.inv-workspace select,.transport-page.inv-workspace textarea{min-height:42px!important;padding:10px 11px!important;border:1px solid #dce7de!important;border-radius:10px!important;background:#fcfefc!important;color:#294534}
+.transport-page.inv-workspace input:focus,.transport-page.inv-workspace select:focus,.transport-page.inv-workspace textarea:focus{outline:0;border-color:#78a985!important;box-shadow:0 0 0 3px #e4f1e6}
+.transport-page.inv-workspace .btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 15px;border:1px solid #1f5b3b;border-radius:10px;background:linear-gradient(135deg,#205f3e,#317b4d);color:#fff!important;font-size:12px;font-weight:800;box-shadow:none;transition:all .16s ease}
+.transport-page.inv-workspace .btn:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 5px 12px #205f3e20}
+.transport-page.inv-workspace .btn.btn-light{border-color:#dce8de;background:#f4f8f4;color:#3f6249!important}
+.transport-page.inv-workspace .tr-dialog,.transport-page.inv-workspace dialog.tr-dialog{width:min(760px,calc(100% - 18px));max-height:90vh;overflow:auto;border:1px solid #dce8de;border-radius:20px;padding:22px;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.transport-page.inv-workspace dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.transport-page.inv-workspace .tr-dialog h2{margin:0 0 15px;color:#1d5033;font-size:20px}
+.transport-page.inv-workspace .tr-form{gap:13px}
+.transport-page.inv-workspace .tr-form label{display:grid;gap:7px}
+.transport-page.inv-workspace .tr-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.transport-page.inv-workspace .tr-filter-trigger{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 15px;border:1px solid #cfe0d1;border-radius:11px;background:#fff;color:#245b39;font-size:12px;font-weight:800;box-shadow:0 3px 10px #214c2d0b}
+.transport-page.inv-workspace .tr-filter-trigger:before{content:"";width:7px;height:7px;border-radius:50%;background:#4b9562;box-shadow:0 0 0 4px #e7f2e8}
+.transport-filter-dialog{width:min(760px,calc(100% - 18px));max-height:88vh;overflow:auto;border:1px solid #dce8de;border-radius:21px;padding:0;background:#fff;box-shadow:0 28px 90px #102d1c55}
+.transport-filter-dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.transport-filter-dialog .tr-dialog-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:17px 20px;background:linear-gradient(110deg,#f0f7f1,#fff);border-bottom:1px solid #e4ede5}
+.transport-filter-dialog .tr-dialog-head strong{font-size:16px;color:#1d5033}
+.transport-filter-dialog .tr-dialog-head button{width:36px;height:36px;border:0;border-radius:50%;background:#e5efe6;color:#315b3e;font-size:22px}
+.transport-filter-dialog .tr-dialog-content{padding:20px}
+.transport-filter-dialog form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;align-items:end}
+.transport-filter-dialog form label{display:grid;grid-template-columns:1fr;gap:7px;min-width:0}
+.transport-filter-dialog form button,.transport-filter-dialog form a{min-height:42px}
+.transport-filter-dialog form a.tr-clear{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border:1px solid #b9d4bf;border-radius:10px;background:#f0f7f1;color:#174b32!important;font-size:12px;font-weight:850;text-decoration:none!important;text-align:center}
+@media(max-width:700px){.transport-page.inv-workspace .page-heading{align-items:flex-start;flex-direction:column;padding:18px 16px;border-radius:16px}.transport-page.inv-workspace .page-heading>.btn,.transport-page.inv-workspace .page-heading>a.btn{width:100%}.transport-page.inv-workspace .tr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.transport-page.inv-workspace .tr-kpis>div{min-height:88px;padding:13px 12px 12px 15px!important}.transport-page.inv-workspace .tr-kpis strong{font-size:23px!important}.transport-page.inv-workspace .tr-panel{padding:12px!important;border-radius:14px!important}.transport-page.inv-workspace .tr-scroll{border-radius:10px}.transport-page.inv-workspace table{min-width:760px}.transport-page.inv-workspace .tr-dialog{padding:17px;border-radius:17px}.transport-page.inv-workspace .tr-form{grid-template-columns:1fr!important}.transport-filter-dialog{border-radius:17px}.transport-filter-dialog .tr-dialog-content{padding:15px}.transport-filter-dialog form{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.transport-page.inv-workspace *,.transport-filter-dialog *{transition:none!important;scroll-behavior:auto!important}}
+@media print{.transport-page.inv-workspace .tr-toolbar,.transport-page.inv-workspace .tr-filter-trigger,.transport-filter-dialog,.transport-page.inv-workspace .no-print{display:none!important}.transport-page.inv-workspace .tr-panel{break-inside:avoid;box-shadow:none}}
+</style>
+<script>
+(function(){function setup(){document.querySelectorAll('.transport-page').forEach(function(page){page.classList.add('inv-workspace');var heading=page.querySelector('.page-heading');if(!heading)return;
+var filter=page.querySelector('form[method="get"]');if(filter&&!filter.dataset.popupReady){filter.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='transport-filter-dialog';var head=document.createElement('div');head.className='tr-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='tr-dialog-content';filter.parentNode.insertBefore(dialog,filter);content.appendChild(filter);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);filter.querySelectorAll('a.btn-light').forEach(function(a){a.classList.add('tr-clear');if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='tr-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}
+var stopForm=page.querySelector('form[action="/app/transport/routes/stops/save"]');if(stopForm&&!stopForm.dataset.popupReady){stopForm.dataset.popupReady='1';var stopDialog=document.createElement('dialog');stopDialog.className='tr-dialog';var stopTitle=document.createElement('h2');stopTitle.textContent='Add route stop';stopDialog.appendChild(stopTitle);stopForm.parentNode.insertBefore(stopDialog,stopForm);stopDialog.appendChild(stopForm);page.appendChild(stopDialog);var stopTrigger=document.createElement('button');stopTrigger.type='button';stopTrigger.className='btn';stopTrigger.textContent='Add Stop';var section=stopForm.closest('section.tr-panel');var sectionHead=section&&section.querySelector('.page-heading');if(sectionHead)sectionHead.appendChild(stopTrigger);else if(section)section.insertBefore(stopTrigger,section.firstChild);stopTrigger.addEventListener('click',function(){stopDialog.showModal()})}
+})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
+</script>
+"""
+    return _school_page(request, title, body + shared)
+
+
 
 def _transport_guard(request, permission="transport.view"):
     sid = _school_session(request)
@@ -147,7 +208,7 @@ function editTransportVehicle(b){{const f=document.getElementById('transportVehi
 </script>
 """
     try:
-        return _school_page(request, "Vehicle Register", body)
+        return _transport_page(request, "Vehicle Register", body)
     finally:
         con.close()
 
@@ -359,7 +420,7 @@ function editTransportRoute(b){{const f=document.getElementById('transportRouteF
 </script>
 """
     try:
-        return _school_page(request, "Routes & Stops", body)
+        return _transport_page(request, "Routes & Stops", body)
     finally:
         con.close()
 
@@ -610,7 +671,7 @@ function openTransportAllocation(){{const f=document.getElementById('transportAl
 function editTransportAllocation(b){{const f=document.getElementById('transportAllocationForm');f.reset();f.elements.allocation_id.value=b.dataset.id;f.elements.student_id.value=b.dataset.student;f.elements.route_id.value=b.dataset.route;filterTransportStops();f.elements.stop_id.value=b.dataset.stop;f.elements.vehicle_id.value=b.dataset.vehicle;f.elements.effective_from.value=b.dataset.from;f.elements.effective_to.value=b.dataset.to;f.elements.status.value=b.dataset.status;f.elements.notes.value=b.dataset.notes;f.elements.pickup_required.checked=b.dataset.pickup==='1';f.elements.dropoff_required.checked=b.dataset.dropoff==='1';document.getElementById('transportAllocationTitle').textContent='Edit allocation';document.getElementById('transportAllocationDialog').showModal();}}
 </script>
 """
-        return _school_page(request, "Student Transport Allocation", body)
+        return _transport_page(request, "Student Transport Allocation", body)
     finally:
         con.close()
 
@@ -820,7 +881,7 @@ def transport_trip_logs(request: Request, q: str = "", date_from: str = "", date
 </form></dialog>
 </div>
 """
-        return _school_page(request, "Transport Attendance & Trip Logs", body)
+        return _transport_page(request, "Transport Attendance & Trip Logs", body)
     finally:
         con.close()
 
@@ -1030,6 +1091,6 @@ def transport_reports(request: Request, date_from: str = "", date_to: str = ""):
 <section class="tr-panel"><h2>Recent transport activity</h2><div class="tr-muted">Up to 50 latest records within the selected period.</div><div class="tr-scroll"><table><thead><tr><th>Date / Period</th><th>Event / Details</th><th>Learner</th><th>Route</th><th>Vehicle</th></tr></thead><tbody>{recent_rows}</tbody></table></div></section>
 </div>
 """
-        return _school_page(request, "Transport Reports", body)
+        return _transport_page(request, "Transport Reports", body)
     finally:
         con.close()
