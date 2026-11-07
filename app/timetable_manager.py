@@ -206,6 +206,17 @@ def _ensure_tables(con):
         lesson_columns = {str(x["name"]) for x in lesson_rows}
     if "profile_id" not in lesson_columns:
         cur.execute("ALTER TABLE timetable_lessons ADD COLUMN profile_id INTEGER")
+    # Profile-own scheduling constraints and generation history.
+    for table in ("timetable_constraints", "timetable_generation_runs"):
+        if hasattr(con, "create_function"):
+            info = cur.execute(f"PRAGMA table_info({table})").fetchall()
+            columns = {str(x["name"]) for x in info}
+        else:
+            info = cur.execute("""SELECT column_name AS name FROM information_schema.columns
+                WHERE table_schema=current_schema() AND table_name=?""", (table,)).fetchall()
+            columns = {str(x["name"]) for x in info}
+        if "profile_id" not in columns:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER")
     return cur
 
 
@@ -301,6 +312,8 @@ def _seed(con, sid):
     cur.execute("UPDATE timetable_profiles SET active=1 WHERE school_id=? AND id=?",(sid,pid))
     cur.execute("UPDATE timetable_slots SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     cur.execute("UPDATE timetable_lessons SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
+    cur.execute("UPDATE timetable_constraints SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
+    cur.execute("UPDATE timetable_generation_runs SET profile_id=? WHERE school_id=? AND profile_id IS NULL",(pid,sid))
     # Upgrade profiles duplicated by older releases, where slots had their
     # own profile_id but still referenced the original shared lesson rows.
     # The original/oldest profile remains the source; each populated profile
@@ -889,7 +902,7 @@ def _availability(request, con, sid):
 <div class='tt-card'><h3>🧩 aSc-style scheduling controls</h3><div class='tt-muted'>Use this grid before generation to define teacher working availability and subject time restrictions. The generator will not place a lesson in an unticked cell for its teacher or subject. You can still use Lesson Cards, locked placements, rooms, breaks and normal collision checking.</div></div>"""
 
 def _constraints(con, sid):
-    rows = con.execute("SELECT * FROM timetable_constraints WHERE school_id=? ORDER BY id DESC", (sid,)).fetchall()
+    rows = con.execute("SELECT * FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id DESC", (sid,_active_profile_id(con,sid))).fetchall()
     html = "".join(
         f"<tr><td>{escape(str(r['scope']))}</td><td>{escape(str(r['constraint_type']))}</td><td>{escape(str(r['value'] or ''))}</td><td>{escape(str(r['priority']))}</td><td>{'On' if int(r['enabled'] or 0) else 'Off'}</td><td><form method='post' action='/app/timetable/constraint/delete/{r['id']}' onsubmit='return confirm(&quot;Delete this constraint?&quot;)'><button class='tt-btn danger'>🗑️</button></form></td></tr>"
         for r in rows
@@ -926,7 +939,7 @@ def _generate(con, sid):
     slot_count=con.execute("SELECT COUNT(*) c FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id)", (sid,)).fetchone()["c"]
     weekly_capacity=_weekly_period_capacity(con,sid)
     latest_run=con.execute("""SELECT status,placed,requested,message,created_at
-        FROM timetable_generation_runs WHERE school_id=? ORDER BY id DESC LIMIT 1""",(sid,)).fetchone()
+        FROM timetable_generation_runs WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 1""",(sid,_active_profile_id(con,sid))).fetchone()
     opts="".join(f"<option value='{c['id']}'>{escape(str(c['name']))} {escape(str(c['stream'] or ''))}</option>" for c in classes)
     complexity=str(settings["complexity"] or "normal")
     relaxation=str(settings["relaxation"] or "relaxed")
@@ -2209,7 +2222,7 @@ def timetable_constraint_save(request:Request,scope:str=Form(...),constraint_typ
     try:
         target=int(target_id) if str(target_id).isdigit() else None
         if priority not in ("preferred","important","strict"):priority="preferred"
-        con.execute("INSERT INTO timetable_constraints(school_id,scope,constraint_type,target_id,value,priority,enabled) VALUES(?,?,?,?,?,?,1)",(sid,scope.strip(),constraint_type.strip(),target,value.strip(),priority));con.commit()
+        con.execute("INSERT INTO timetable_constraints(school_id,profile_id,scope,constraint_type,target_id,value,priority,enabled) VALUES(?,?,?,?,?,?,?,1)",(sid,_active_profile_id(con,sid),scope.strip(),constraint_type.strip(),target,value.strip(),priority));con.commit()
         return RedirectResponse("/app/timetable?tab=constraints&msg=Constraint+saved",303)
     finally:con.close()
 
@@ -2219,7 +2232,7 @@ def timetable_constraint_delete(request:Request,rid:int):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
     try:
-        con.execute("DELETE FROM timetable_constraints WHERE id=? AND school_id=?",(rid,sid));con.commit();return RedirectResponse("/app/timetable?tab=constraints&msg=Constraint+deleted",303)
+        con.execute("DELETE FROM timetable_constraints WHERE id=? AND school_id=? AND profile_id=?",(rid,sid,_active_profile_id(con,sid)));con.commit();return RedirectResponse("/app/timetable?tab=constraints&msg=Constraint+deleted",303)
     finally:con.close()
 
 
@@ -2233,9 +2246,9 @@ def _overlaps(a,b):
     return int(a["period_no"]) <= int(b["period_no"])+int(b.get("duration",1))-1 and int(b["period_no"]) <= int(a["period_no"])+int(a.get("duration",1))-1
 
 
-def _constraint_maps(cur,sid):
+def _constraint_maps(cur,sid,pid):
     out={}
-    for r in cur.execute("SELECT * FROM timetable_constraints WHERE school_id=? AND enabled=1",(sid,)).fetchall():
+    for r in cur.execute("SELECT * FROM timetable_constraints WHERE school_id=? AND profile_id=? AND enabled=1",(sid,pid)).fetchall():
         out.setdefault(str(r["constraint_type"]),[]).append(r)
     return out
 
@@ -2326,7 +2339,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
         "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
     ).fetchall()}
-    constraints=_constraint_maps(cur,sid)
+    constraints=_constraint_maps(cur,sid,_active_profile_id(con,sid))
 
     if replace_existing:
         if class_filter:
@@ -3022,9 +3035,9 @@ def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,clas
         cur=con.cursor()
         cur.execute(
             """INSERT INTO timetable_generation_runs(
-                school_id,created_at,mode,complexity,status,placed,requested,message
-            ) VALUES(?,?,?,?,?,?,?,?)""",
-            (sid,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
+                school_id,profile_id,created_at,mode,complexity,status,placed,requested,message
+            ) VALUES(?,?,?,?,?,?,?,?,?)""",
+            (sid,_active_profile_id(con,sid),datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
              "running",0,0,"Generation started in background")
         )
         run_id=cur.lastrowid
