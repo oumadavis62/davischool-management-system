@@ -68,7 +68,7 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
 
 
 def register_timetable_portal_routes(app, get_db):
-    @app.get("/app/timetable", response_class=HTMLResponse)
+    @app.get("/app/timetable/my", response_class=HTMLResponse)
     def published_portal_timetable(request: Request):
         role = str(request.session.get("role") or "").strip().lower()
         if not request.session.get("email") or role not in PORTAL_ROLES:
