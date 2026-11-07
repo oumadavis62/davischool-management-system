@@ -34,9 +34,9 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             parts.append("message=" + quote(str(message)))
         if error:
             parts.append("error=1")
-        return RedirectResponse("/school/timetable/publishing" + (("?" + "&".join(parts)) if parts else ""), 303)
+        return RedirectResponse("/app/timetable/publishing" + (("?" + "&".join(parts)) if parts else ""), 303)
 
-    @app.get("/school/timetable/publishing", response_class=HTMLResponse)
+    @app.get("/app/timetable/publishing", response_class=HTMLResponse)
     def timetable_publishing_page(
         request: Request,
         profile_id: int = 0,
@@ -79,9 +79,9 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
             f"<option value='{int(p['id'])}' {'selected' if selected and int(p['id'])==pid else ''}>{esc(p['academic_year'])} · {esc(p['term'])} — {esc(p['name'])} ({esc(p['status'])})</option>"
             for p in profiles
         )
-        selector = f"<form method='get' action='/school/timetable/publishing' class='pub-select'><label>Timetable profile</label><select name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
+        selector = f"<form method='get' action='/app/timetable/publishing' class='pub-select'><label>Timetable profile</label><select name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
         if not selected:
-            body = "<div class='pub-empty'><h2>No timetable profile found</h2><p>Create and configure a timetable profile first.</p><a class='pub-btn' href='/school/timetable/setup'>Open Timetable Setup</a></div>"
+            body = "<div class='pub-empty'><h2>No timetable profile found</h2><p>Create and configure a timetable profile first.</p><a class='pub-btn' href='/app/timetable/setup'>Open Timetable Setup</a></div>"
             return module_page(request,"Publishing & Versions","timetable",body)
 
         status = str(selected["status"] or "draft")
@@ -95,15 +95,15 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         action_html = ""
         if status == "draft":
             action_html = (
-                f"""<form method='post' action='/school/timetable/publishing/submit' onsubmit="return confirm('Submit this timetable for approval? Editing will be locked until a revision is created.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Submit for approval</button></form>"""
+                f"""<form method='post' action='/app/timetable/publishing/submit' onsubmit="return confirm('Submit this timetable for approval? Editing will be locked until a revision is created.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Submit for approval</button></form>"""
             )
         elif status == "pending_approval":
             action_html = (
-                f"""<form method='post' action='/school/timetable/publishing/publish' onsubmit="return confirm('Approve and publish this timetable? The previously published revision will be archived.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Approve & Publish</button></form>"""
+                f"""<form method='post' action='/app/timetable/publishing/publish' onsubmit="return confirm('Approve and publish this timetable? The previously published revision will be archived.')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn' {'disabled' if not readiness or not readiness['ready'] else ''}>Approve & Publish</button></form>"""
             )
         elif status in ("published","archived"):
             action_html = (
-                f"""<form method='post' action='/school/timetable/publishing/revision' onsubmit="return confirm('Create an editable draft revision from this published timetable?')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>＋ Create new revision</button></form>"""
+                f"""<form method='post' action='/app/timetable/publishing/revision' onsubmit="return confirm('Create an editable draft revision from this published timetable?')"><input type='hidden' name='profile_id' value='{pid}'><button class='pub-btn'>＋ Create new revision</button></form>"""
             )
         version_rows = "".join(
             f"<tr><td>{esc(v['label'])}</td><td>{esc(v['profile_name'])}</td><td>R{int(v['revision_no'] or 1)}</td><td>{esc(v['created_at'])}</td><td>{esc(v['created_by'])}</td></tr>"
@@ -120,18 +120,18 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
                 f"<div class='pub-compare-result'><b>{len(comparison['added'])} lessons added</b><b>{len(comparison['removed'])} lessons removed</b><b>{comparison['unchanged']} unchanged</b></div>"
                 if comparison else ""
             )
-            compare_html = f"""<section class='pub-card'><span class='pub-kicker'>VERSION COMPARISON</span><h3>Compare published versions</h3><form method='get' action='/school/timetable/publishing' class='pub-compare'><input type='hidden' name='profile_id' value='{pid}'><label>First version<select name='compare_first'>{version_options}</select></label><label>Second version<select name='compare_second'>{version_options}</select></label><button class='pub-btn secondary'>Compare</button></form>{compare_error_html}{comparison_html}</section>"""
+            compare_html = f"""<section class='pub-card'><span class='pub-kicker'>VERSION COMPARISON</span><h3>Compare published versions</h3><form method='get' action='/app/timetable/publishing' class='pub-compare'><input type='hidden' name='profile_id' value='{pid}'><label>First version<select name='compare_first'>{version_options}</select></label><label>Second version<select name='compare_second'>{version_options}</select></label><button class='pub-btn secondary'>Compare</button></form>{compare_error_html}{comparison_html}</section>"""
         body = f"""
         <style>
         .pub-wrap{{max-width:1250px;margin:auto;padding:20px;color:#173d2b}}.pub-hero{{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}}.pub-hero h2{{font-size:25px;margin:3px 0 5px}}.pub-hero p{{font-size:12px;color:#64748b;margin:0}}.pub-kicker{{font-size:10px;font-weight:900;letter-spacing:.12em;color:#43845a}}.pub-actions{{display:flex;gap:8px;flex-wrap:wrap}}.pub-btn{{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border:0;border-radius:9px;background:#17633b;color:white;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}}.pub-btn.secondary{{background:#edf6ef;color:#17633b;border:1px solid #d5e8d8}}.pub-btn:disabled{{opacity:.45;cursor:not-allowed}}.pub-select{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}}.pub-select label{{font-size:12px;font-weight:800}}.pub-select select,.pub-compare select{{padding:10px;border:1px solid #dce7de;border-radius:9px;background:white;min-width:260px}}.pub-card{{background:white;border:1px solid #e1ebe3;border-radius:15px;padding:17px;margin-bottom:15px;box-shadow:0 3px 12px #173d2b08}}.pub-card h3{{font-size:17px;margin:4px 0 12px}}.pub-card-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}}.pub-state{{font-size:10px;font-weight:900;padding:6px 10px;border-radius:20px}}.pub-state.good{{background:#eaf5ec;color:#17633b}}.pub-state.bad{{background:#fff1f0;color:#a12828}}.pub-metrics{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}}.pub-metrics span{{background:#f4f8f4;padding:12px;border-radius:9px;color:#64748b;font-size:10px}}.pub-metrics b{{display:block;font-size:22px;color:#173d2b}}.pub-errors{{margin:10px 0;padding:12px 14px 12px 32px;background:#fff5f4;color:#9f2929;border-radius:9px;font-size:11px;line-height:1.8}}.pub-ok{{font-size:12px;color:#17633b}}.pub-alert{{padding:11px 14px;border-radius:9px;margin-bottom:12px;font-size:12px;font-weight:700}}.pub-alert.success{{background:#eaf5ec;color:#17633b}}.pub-alert.error{{background:#fff1f0;color:#a12828}}.pub-compare{{display:flex;align-items:end;gap:10px;flex-wrap:wrap}}.pub-compare label{{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:800}}.pub-compare-result{{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}}.pub-compare-result b{{background:#f4f8f4;padding:10px 12px;border-radius:8px;font-size:11px}}.pub-table-scroll{{overflow:auto}}.pub-card table{{width:100%;border-collapse:collapse;min-width:580px}}.pub-card th,.pub-card td{{padding:11px;border-bottom:1px solid #edf2ed;text-align:left;font-size:11px}}.pub-card th{{background:#f0f6f1;color:#315b3e}}.pub-muted{{text-align:center;color:#94a3a0;padding:18px}}.pub-empty{{padding:30px;text-align:center;background:white;border-radius:14px}}@media(max-width:650px){{.pub-wrap{{padding:12px}}.pub-metrics{{grid-template-columns:repeat(2,minmax(0,1fr))}}.pub-hero h2{{font-size:22px}}}}
         </style>
-        <div class='pub-wrap'><div class='pub-hero'><div><span class='pub-kicker'>DAVISCHOOL · APPROVAL & VERSION CONTROL</span><h2>Publishing & Versions</h2><p>Validate, approve, publish and preserve immutable timetable revisions.</p></div><div class='pub-actions'><a class='pub-btn secondary' href='/school/timetable/builder?profile_id={pid}'>Master Builder</a><a class='pub-btn secondary' href='/school/timetable/views?profile_id={pid}'>Timetable Views</a><a class='pub-btn secondary' href='/school/timetable/export/pdf?profile_id={pid}'>Export PDF</a><a class='pub-btn secondary' href='/school/timetable/export/xlsx?profile_id={pid}'>Export Excel</a></div></div>{notice}{selector}
+        <div class='pub-wrap'><div class='pub-hero'><div><span class='pub-kicker'>DAVISCHOOL · APPROVAL & VERSION CONTROL</span><h2>Publishing & Versions</h2><p>Validate, approve, publish and preserve immutable timetable revisions.</p></div><div class='pub-actions'><a class='pub-btn secondary' href='/app/timetable/builder?profile_id={pid}'>Master Builder</a><a class='pub-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='pub-btn secondary' href='/app/timetable/export/pdf?profile_id={pid}'>Export PDF</a><a class='pub-btn secondary' href='/app/timetable/export/xlsx?profile_id={pid}'>Export Excel</a></div></div>{notice}{selector}
         <section class='pub-card'><div class='pub-card-head'><div><span class='pub-kicker'>SELECTED PROFILE</span><h3>{esc(selected['name'])}</h3><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · Revision {int(selected['revision_no'] or 1)}</p></div><span class='pub-state {'good' if status=='published' else 'bad' if status=='pending_approval' else ''}'>{esc(status.replace('_',' ').upper())}</span></div><div class='pub-actions'>{action_html}</div></section>{readiness_html}{compare_html}
         <section class='pub-card'><span class='pub-kicker'>IMMUTABLE HISTORY</span><h3>Published timetable versions</h3><div class='pub-table-scroll'><table><tr><th>Version</th><th>Profile</th><th>Revision</th><th>Published at</th><th>Published by</th></tr>{version_rows}</table></div></section></div>
         """
         return module_page(request,"Publishing & Versions","timetable",body)
 
-    @app.post("/school/timetable/publishing/submit")
+    @app.post("/app/timetable/publishing/submit")
     def timetable_submit_for_approval(request: Request, profile_id: int = Form(...)):
         school = school_for(request)
         if not school: return RedirectResponse("/",303)
@@ -144,7 +144,7 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         finally:
             con.close()
 
-    @app.post("/school/timetable/publishing/publish")
+    @app.post("/app/timetable/publishing/publish")
     def timetable_approve_and_publish(request: Request, profile_id: int = Form(...)):
         school = school_for(request)
         if not school: return RedirectResponse("/",303)
@@ -157,14 +157,14 @@ def register_timetable_publishing_routes(app, get_db, get_school_obj, module_pag
         finally:
             con.close()
 
-    @app.post("/school/timetable/publishing/revision")
+    @app.post("/app/timetable/publishing/revision")
     def timetable_create_revision(request: Request, profile_id: int = Form(...)):
         school = school_for(request)
         if not school: return RedirectResponse("/",303)
         con = get_db()
         try:
             revision_id = create_revision(con,int(school["id"]),profile_id,request.session.get("email",""))
-            return RedirectResponse("/school/timetable/builder?profile_id="+str(revision_id),303)
+            return RedirectResponse("/app/timetable/builder?profile_id="+str(revision_id),303)
         except TimetableSetupError as exc:
             return redirect_publishing(profile_id,str(exc),True)
         finally:
