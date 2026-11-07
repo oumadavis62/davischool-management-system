@@ -21148,14 +21148,14 @@ def admission_reports_page(request: Request, year: str = "", class_id: str = "")
         where = "school_id=?"
         params = [sid]
         if year:
-            where += " AND substr(COALESCE(application_date,''),1,4)=?"
+            where += " AND substr(CAST(COALESCE(application_date,'') AS TEXT),1,4)=?"
             params.append(year)
         if class_id:
             where += " AND applying_class_id=?"
             params.append(int(class_id))
         counts = cur.execute("SELECT lower(status) status,COUNT(*) total FROM admission_applications WHERE " + where + " GROUP BY lower(status)",params).fetchall()
         classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
-        years = cur.execute("SELECT DISTINCT substr(application_date,1,4) year FROM admission_applications WHERE school_id=? AND application_date IS NOT NULL AND application_date<>'' ORDER BY year DESC",(sid,)).fetchall()
+        years = cur.execute("SELECT DISTINCT substr(CAST(application_date AS TEXT),1,4) year FROM admission_applications WHERE school_id=? AND application_date IS NOT NULL AND CAST(application_date AS TEXT)<>'' ORDER BY year DESC",(sid,)).fetchall()
         con.commit()
     finally:
         con.close()
