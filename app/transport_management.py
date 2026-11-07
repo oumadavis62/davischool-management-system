@@ -188,6 +188,28 @@ def transport_vehicle_register(request: Request, q: str = "", status: str = "Act
 .transport-page .tr-form input,.transport-page .tr-form select,.transport-page .tr-form textarea{{width:100%;min-height:40px;padding:9px;border:1px solid #dce6df;border-radius:9px}}
 .transport-page .tr-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}}
 @media(max-width:650px){{.transport-page .tr-kpis{{grid-template-columns:1fr}}.transport-page .tr-form{{grid-template-columns:1fr}}}}
+.tr-allocation-dialog{{width:min(820px,calc(100% - 20px))!important;max-height:92vh!important;overflow:auto!important;padding:0!important;border:1px solid #cbdccb!important;border-radius:25px!important;background:linear-gradient(145deg,#eff7ee,#e3f0e2 48%,#f8fbf6)!important;box-shadow:0 28px 90px #173d2852!important}}
+.tr-allocation-dialog::backdrop{{background:rgba(18,39,27,.62);backdrop-filter:blur(5px)}}
+.tr-allocation-dialog form{{padding:0!important;background:transparent!important}}
+.tr-allocation-dialog .tr-allocation-head{{position:relative;padding:29px 35px 25px;background:radial-gradient(ellipse at 90% 0%,#ffffff94,transparent 43%),linear-gradient(125deg,#c9e0c9,#dcebd9 48%,#eef6eb);border-bottom:1px solid #c8ddc9}}
+.tr-allocation-dialog .tr-allocation-eyebrow{{display:inline-flex;margin-bottom:12px;padding:7px 12px;border:1px solid #b7d0b9;border-radius:999px;background:#ffffffb8;color:#356847;font-size:9px;font-weight:900;letter-spacing:1.3px}}
+.tr-allocation-dialog .tr-allocation-head h2{{margin:0 52px 7px 0!important;color:#174b32!important;font-size:25px!important;font-weight:900!important}}
+.tr-allocation-dialog .tr-allocation-head p{{margin:0;color:#4f6d56;font-size:12px;line-height:1.6}}
+.tr-allocation-dialog .tr-allocation-close{{position:absolute;top:18px;right:20px;width:39px;height:39px;border:1px solid #b6cfb8;border-radius:13px;background:#ffffffd9;color:#245638;font-size:24px;cursor:pointer}}
+.tr-allocation-dialog .tr-allocation-section{{margin:16px 23px 0;padding:18px 20px 20px;border:1px solid #b7cfb8cc;border-radius:17px;background:linear-gradient(135deg,#ffffffdf,#edf6ebdf);box-shadow:0 5px 15px #234e2d0b}}
+.tr-allocation-dialog .tr-allocation-section h3{{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding-bottom:11px;border-bottom:1px solid #e1ece0;color:#28583a;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}}
+.tr-allocation-dialog .tr-allocation-section h3 span{{display:grid;place-items:center;width:29px;height:29px;border-radius:10px;background:linear-gradient(145deg,#d9ebd7,#bcd8bc);color:#285b39}}
+.tr-allocation-dialog .tr-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 17px}}
+.tr-allocation-dialog .tr-form label{{display:grid;gap:7px;min-width:0;color:#35583d;font-size:11px;font-weight:850}}
+.tr-allocation-dialog .tr-form input,.tr-allocation-dialog .tr-form select,.tr-allocation-dialog .tr-form textarea{{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid #d0e0d0;border-radius:11px;background:linear-gradient(180deg,#fff,#f9fcf8);color:#294534;font-size:13px}}
+.tr-allocation-dialog .tr-check-options{{display:flex;gap:12px;flex-wrap:wrap}}
+.tr-allocation-dialog .tr-check-options label{{display:flex;align-items:center;gap:10px;flex:1;min-width:190px;padding:13px 14px;border:1px solid #d5e4d5;border-radius:12px;background:#ffffffbd;color:#35583d;font-size:12px;font-weight:800}}
+.tr-allocation-dialog .tr-check-options input{{width:17px;height:17px;min-height:17px;margin:0;accent-color:#34794b}}
+.tr-allocation-dialog .tr-actions{{position:sticky;bottom:0;padding:15px 24px 18px;margin:16px 0 0;border-top:1px solid #cbdccb;background:linear-gradient(110deg,#e1eee0,#f4f8f1 55%,#dcebd9)}}
+.tr-allocation-dialog .tr-actions .btn{{min-width:145px;min-height:44px;border-radius:11px;font-weight:850}}
+.tr-allocation-dialog .tr-actions .btn-light{{background:#ffffffd1!important;color:#3c6047!important;border:1px solid #c8dcc9!important}}
+@media(max-width:650px){{.tr-allocation-dialog{{max-height:95vh!important;border-radius:19px!important}}.tr-allocation-dialog .tr-allocation-head{{padding:24px 20px 21px}}.tr-allocation-dialog .tr-allocation-section{{margin:12px 12px 0;padding:15px}}.tr-allocation-dialog .tr-form{{grid-template-columns:1fr!important}}.tr-allocation-dialog .tr-check-options{{display:grid;grid-template-columns:1fr}}.tr-allocation-dialog .tr-actions{{padding:13px}}.tr-allocation-dialog .tr-actions .btn{{flex:1;min-width:0}}}}
+
 .tr-route-dialog{{width:min(780px,calc(100% - 20px))!important;max-height:92vh!important;overflow:auto!important;padding:0!important;border:1px solid #cbdccb!important;border-radius:25px!important;background:linear-gradient(145deg,#eff7ee,#e3f0e2 48%,#f8fbf6)!important;box-shadow:0 28px 90px #173d2852!important}}
 .tr-route-dialog::backdrop{{background:rgba(18,39,27,.62);backdrop-filter:blur(5px)}}
 .tr-route-dialog form{{padding:0!important;background:transparent!important}}
@@ -719,19 +741,27 @@ def transport_student_allocations(request: Request, q: str = "", status: str = "
 <form method="get" class="tr-toolbar"><label>Search allocations<input name="q" value="{escape(q,quote=True)}" placeholder="Learner, admission no., route, stop or vehicle"></label><label>Status<select name="status"><option value="Active" {'selected' if status=='Active' else ''}>Active</option><option value="Inactive" {'selected' if status=='Inactive' else ''}>Inactive</option><option value="All" {'selected' if status=='All' else ''}>All</option></select></label><button class="btn" type="submit">Apply</button><a class="btn btn-light" href="/app/transport/allocations">Clear</a></form>
 <div class="tr-scroll"><table><thead><tr><th>Learner</th><th>Route / Stop</th><th>Vehicle</th><th>Effective from</th><th>Effective to</th><th>Status</th><th>Action</th></tr></thead><tbody>{table_rows}</tbody></table></div>
 </section></div>
-<dialog id="transportAllocationDialog" class="tr-dialog"><form method="post" action="/app/transport/allocations/save" id="transportAllocationForm">
-<h2 id="transportAllocationTitle">Allocate learner</h2><input type="hidden" name="allocation_id" value="0">
-<div class="tr-form">
+<dialog id="transportAllocationDialog" class="tr-dialog tr-allocation-dialog"><form method="post" action="/app/transport/allocations/save" id="transportAllocationForm">
+<div class="tr-allocation-head"><span class="tr-allocation-eyebrow">TRANSPORT MANAGEMENT · LEARNER SETUP</span><button class="tr-allocation-close" type="button" aria-label="Close allocation dialog" title="Close" onclick="document.getElementById('transportAllocationDialog').close()">×</button><h2 id="transportAllocationTitle">Allocate learner</h2><p>Choose the learner, assign an active route and stop, and set the transport service period.</p></div>
+<input type="hidden" name="allocation_id" value="0">
+<section class="tr-allocation-section"><h3><span>01</span> Learner &amp; route assignment</h3><div class="tr-form">
 <label>Learner *<select name="student_id" required><option value="">Select learner</option>{student_options}</select></label>
 <label>Route *<select name="route_id" id="trAllocRoute" required><option value="">Select route</option>{route_options}</select></label>
 <label>Pickup / drop-off stop *<select name="stop_id" id="trAllocStop" required><option value="">Select stop</option>{stop_options}</select></label>
 <label>Vehicle<select name="vehicle_id">{vehicle_options}</select></label>
+</div></section>
+<section class="tr-allocation-section"><h3><span>02</span> Allocation period &amp; status</h3><div class="tr-form">
 <label>Effective from *<input type="date" name="effective_from" required></label>
 <label>Effective to<input type="date" name="effective_to"></label>
 <label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
-<label>Notes<input name="notes" maxlength="500"></label>
-</div>
-<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="pickup_required" value="1" checked style="width:auto;min-height:0">Pickup required</label><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="dropoff_required" value="1" checked style="width:auto;min-height:0">Drop-off required</label></div>
+</div></section>
+<section class="tr-allocation-section"><h3><span>03</span> Pickup &amp; drop-off preferences</h3><div class="tr-check-options">
+<label><input type="checkbox" name="pickup_required" value="1" checked> Pickup required</label>
+<label><input type="checkbox" name="dropoff_required" value="1" checked> Drop-off required</label>
+</div></section>
+<section class="tr-allocation-section"><h3><span>04</span> Additional information</h3><div class="tr-form">
+<label style="grid-column:1/-1">Notes<input name="notes" maxlength="500" placeholder="Optional learner transport instructions"></label>
+</div></section>
 <div class="tr-actions"><button class="btn btn-light" type="button" onclick="document.getElementById('transportAllocationDialog').close()">Cancel</button><button class="btn" type="submit">Save Allocation</button></div>
 </form></dialog>
 <script>
