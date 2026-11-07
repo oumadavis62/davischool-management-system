@@ -251,6 +251,61 @@ _TABLES = (
         room_type TEXT,
         is_active INTEGER NOT NULL DEFAULT 1
     )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_scheduling_requirements (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        schedule_layer TEXT NOT NULL DEFAULT 'instructional',
+        session_type TEXT NOT NULL DEFAULT 'lesson',
+        subject_id INTEGER,
+        programme_id INTEGER,
+        teaching_group_id INTEGER,
+        weekly_occurrences INTEGER NOT NULL DEFAULT 1,
+        counts_toward_curriculum INTEGER NOT NULL DEFAULT 1,
+        min_teacher_count INTEGER NOT NULL DEFAULT 1,
+        room_type TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE (school_id, profile_id, name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_scheduling_requirement_classes (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        requirement_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        UNIQUE (school_id, profile_id, requirement_id, class_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_scheduling_requirement_teachers (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        requirement_id INTEGER NOT NULL,
+        teacher_id INTEGER NOT NULL,
+        role TEXT NOT NULL DEFAULT 'lead',
+        UNIQUE (school_id, profile_id, requirement_id, teacher_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_scheduling_requirement_learners (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        requirement_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL,
+        UNIQUE (school_id, profile_id, requirement_id, student_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_scheduling_patterns (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        requirement_id INTEGER NOT NULL,
+        session_no INTEGER NOT NULL,
+        duration_periods INTEGER NOT NULL DEFAULT 1,
+        duration_minutes INTEGER,
+        preferred_day_id INTEGER,
+        preferred_slot_id INTEGER,
+        session_label TEXT,
+        UNIQUE (school_id, profile_id, requirement_id, session_no)
+    )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_sessions (
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -367,6 +422,10 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_group_classes ON ds_timetable_teaching_group_classes(school_id, profile_id, teaching_group_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_requirement_patterns ON ds_timetable_requirement_patterns(school_id, profile_id, requirement_id, session_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_programme_sessions ON ds_timetable_programme_sessions(school_id, profile_id, programme_id, day_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_sched_req_layer ON ds_timetable_scheduling_requirements(school_id, profile_id, schedule_layer, is_active)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_sched_req_classes ON ds_timetable_scheduling_requirement_classes(school_id, profile_id, class_id, requirement_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_sched_req_teachers ON ds_timetable_scheduling_requirement_teachers(school_id, profile_id, teacher_id, requirement_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_sched_patterns ON ds_timetable_scheduling_patterns(school_id, profile_id, requirement_id, session_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_sessions_time ON ds_timetable_sessions(school_id, profile_id, session_date, day_id, start_time, end_time)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_session_classes ON ds_timetable_session_classes(school_id, profile_id, class_id, session_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_session_teachers ON ds_timetable_session_teachers(school_id, profile_id, teacher_id, session_id)",
