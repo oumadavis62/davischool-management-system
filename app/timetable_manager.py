@@ -853,54 +853,105 @@ def _generate(con, sid):
 
 
 def _verify(con, sid):
-    lessons=con.execute("SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?", (sid,)).fetchall()
-    placements=con.execute("""SELECT s.lesson_id,l.lessons_per_week,l.duration
+    """Audit the active profile's actual timetable against its lesson requirements."""
+    days={str(x["name"]) for x in _profile_days(con,sid) if int(x["enabled"] or 0)}
+    periods=_profile_periods(con,sid)
+    pmap={int(x["period_no"]):x for x in periods}
+    breaks=_profile_breaks(con,sid)
+    lessons=con.execute(
+        "SELECT id,lessons_per_week,duration FROM timetable_lessons WHERE school_id=?",(sid,)
+    ).fetchall()
+    rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id,l.lessons_per_week
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()
-    placed_occurrences={}
-    placed_periods={}
-    for r in placements:
-        lid=int(r["lesson_id"])
-        placed_occurrences[lid]=placed_occurrences.get(lid,0)+1
-        placed_periods[lid]=placed_periods.get(lid,0)+max(1,int(r["duration"] or 1))
+        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)
+        ORDER BY s.day_name,s.period_no""",(sid,)).fetchall()
     issues=[]
-    for l in lessons:
-        lid=int(l["id"])
-        required_occurrences=int(l["lessons_per_week"] or 0)
-        required_periods=required_occurrences*max(1,int(l["duration"] or 1))
-        actual_occurrences=int(placed_occurrences.get(lid,0))
-        actual_periods=int(placed_periods.get(lid,0))
-        missing_occ=max(0,required_occurrences-actual_occurrences)
-        missing_periods=max(0,required_periods-actual_periods)
-        if missing_occ or missing_periods:
-            issues.append(
-                f"Lesson card {lid}: {actual_occurrences} of {required_occurrences} weekly occurrences "
-                f"placed ({actual_periods} of {required_periods} periods); "
-                f"{missing_occ} occurrence(s) / {missing_periods} period(s) missing."
-            )
-    # Hard collision checks.
-    rows=con.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
-        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) ORDER BY s.day_name,s.period_no""",(sid,)).fetchall()
-    for i,a in enumerate(rows):
-        for b in rows[i+1:]:
-            if a["day_name"]!=b["day_name"]: continue
-            a_end=int(a["period_no"])+int(a["duration"])-1
-            b_end=int(b["period_no"])+int(b["duration"])-1
-            if a_end < int(b["period_no"]) or b_end < int(a["period_no"]): continue
-            a_classes={int(x["class_id"]) for x in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,a["lesson_id"])).fetchall()} or {int(a["class_id"])}
-            b_classes={int(x["class_id"]) for x in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,b["lesson_id"])).fetchall()} or {int(b["class_id"])}
-            a_teachers={int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,a["lesson_id"])).fetchall()} or ({int(a["teacher_id"])} if a["teacher_id"] else set())
-            b_teachers={int(x["teacher_id"]) for x in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,b["lesson_id"])).fetchall()} or ({int(b["teacher_id"])} if b["teacher_id"] else set())
+    placed={}
+    class_map={}
+    teacher_map={}
+    subject_day=set()
+    blocked_teacher={(str(x["day_name"]),int(x["period_no"]),int(x["resource_id"])) for x in con.execute(
+        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND allowed=0",(sid,)
+    ).fetchall()}
+    blocked_subject={(str(x["day_name"]),int(x["period_no"]),int(x["resource_id"])) for x in con.execute(
+        "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
+    ).fetchall()}
+
+    for lesson in lessons:
+        placed[int(lesson["id"])]=0
+    for raw in rows:
+        row=dict(raw)
+        lid=int(row["lesson_id"])
+        placed[lid]=placed.get(lid,0)+1
+        class_map[lid]={int(x["class_id"]) for x in con.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or {int(row["class_id"])}
+        teacher_map[lid]={int(x["teacher_id"]) for x in con.execute(
+            "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)
+        ).fetchall()} or ({int(row["teacher_id"])} if row["teacher_id"] else set())
+
+        day=str(row["day_name"])
+        start=int(row["period_no"])
+        duration=max(1,int(row["duration"] or 1))
+        if day not in days:
+            issues.append(f"Lesson {lid} is scheduled on disabled or unconfigured day {day}.")
+        for pno in range(start,start+duration):
+            period=pmap.get(pno)
+            if not period:
+                issues.append(f"Lesson {lid} extends into missing period {pno} on {day}.")
+                continue
+            st=str(period["start_time"]);et=str(period["end_time"])
+            if any(_time_to_min(st)<_time_to_min(str(br["end_time"])) and _time_to_min(et)>_time_to_min(str(br["start_time"])) for br in breaks):
+                issues.append(f"Lesson {lid} overlaps a configured break on {day}, period {pno}.")
+            if any((day,pno,tid) in blocked_teacher for tid in teacher_map[lid]):
+                issues.append(f"Lesson {lid} uses a teacher's unavailable slot on {day}, period {pno}.")
+            if (day,pno,int(row["subject_id"])) in blocked_subject:
+                issues.append(f"Lesson {lid} uses a subject's blocked slot on {day}, period {pno}.")
+
+        for cid in class_map[lid]:
+            key=(cid,day)
+            subject_key=(cid,day,int(row["subject_id"]))
+            if subject_key in subject_day:
+                issues.append(f"Subject {row['subject_id']} is scheduled more than once for class {cid} on {day}.")
+            subject_day.add(subject_key)
+
+    for lesson in lessons:
+        lid=int(lesson["id"])
+        required=max(0,int(lesson["lessons_per_week"] or 0))
+        actual=int(placed.get(lid,0))
+        duration=max(1,int(lesson["duration"] or 1))
+        if actual<required:
+            issues.append(f"Lesson card {lid}: {actual} of {required} weekly occurrences placed ({actual*duration} of {required*duration} periods).")
+        elif actual>required:
+            issues.append(f"Lesson card {lid}: {actual} occurrences placed, exceeding its weekly requirement of {required}.")
+
+    # Compare every pair of overlapping placements, including combined classes
+    # and all co-teachers, rather than checking only the primary lesson fields.
+    for i,a_raw in enumerate(rows):
+        a=dict(a_raw); a_lid=int(a["lesson_id"])
+        a_start=int(a["period_no"]);a_end=a_start+max(1,int(a["duration"] or 1))-1
+        for b_raw in rows[i+1:]:
+            b=dict(b_raw)
+            if str(a["day_name"])!=str(b["day_name"]): continue
+            b_start=int(b["period_no"]);b_end=b_start+max(1,int(b["duration"] or 1))-1
+            if a_end<b_start or b_end<a_start: continue
+            b_lid=int(b["lesson_id"])
+            a_classes=class_map.get(a_lid,{int(a["class_id"])})
+            b_classes=class_map.get(b_lid,{int(b["class_id"])})
+            a_teachers=teacher_map.get(a_lid,({int(a["teacher_id"])} if a["teacher_id"] else set()))
+            b_teachers=teacher_map.get(b_lid,({int(b["teacher_id"])} if b["teacher_id"] else set()))
             if a_classes.intersection(b_classes):
-                issues.append(f"Class/stream conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
+                issues.append(f"Class/stream conflict on {a['day_name']} periods {max(a_start,b_start)}: lessons {a_lid} / {b_lid}.")
             if a_teachers.intersection(b_teachers):
-                issues.append(f"Teacher conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
-            if a["room_id"] and b["room_id"] and a["room_id"]==b["room_id"]:
-                issues.append(f"Room conflict on {a['day_name']} period {a['period_no']}: lesson {a['lesson_id']} / {b['lesson_id']}.")
-    return f"""<div class='tt-card'><h2>✅ Timetable Verification</h2><div class='tt-muted'>Checks incomplete cards, class conflicts, teacher conflicts and room conflicts before publication.</div>
-<div class='tt-stat' style='margin:12px 0'><b>{len(issues)}</b>{'Issues found' if issues else 'No basic conflicts found'}</div>
-<div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{''.join(f"<tr><td>⚠️</td><td>{escape(x)}</td></tr>" for x in issues) if issues else '<tr><td>✅</td><td>Verification passed for the current basic checks.</td></tr>'}</tbody></table></div></div>"""
+                issues.append(f"Teacher conflict on {a['day_name']} periods {max(a_start,b_start)}: lessons {a_lid} / {b_lid}.")
+            if a["room_id"] and b["room_id"] and int(a["room_id"])==int(b["room_id"]):
+                issues.append(f"Room conflict on {a['day_name']} periods {max(a_start,b_start)}: lessons {a_lid} / {b_lid}.")
+
+    issue_rows="".join(f"<tr><td>⚠️</td><td>{escape(x)}</td></tr>" for x in issues)
+    return f"""<div class='tt-card'><h2>✅ Timetable Verification</h2>
+<div class='tt-muted'>Audits the active profile's lesson coverage, enabled days, period boundaries, breaks, teacher and subject availability, repeated subjects, class/stream clashes, teacher clashes and room clashes.</div>
+<div class='tt-stat' style='margin:12px 0'><b>{len(issues)}</b>{'Issues found' if issues else 'All timetable checks passed'}</div>
+<div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{issue_rows if issues else '<tr><td>✅</td><td>Verification passed. No incomplete requirements or scheduling conflicts were detected.</td></tr>'}</tbody></table></div></div>"""
 
 
 def _class_grid_data(con, sid, class_id=None):
