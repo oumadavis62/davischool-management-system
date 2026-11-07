@@ -178,7 +178,7 @@ def move_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: int
     before = dict(existing)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     cur.execute(
-        "UPDATE ds_timetable_lessons SET day_id=?,period_id=?,room_id=?,duration_periods=?,updated_at=? WHERE id=? AND school_id=? AND profile_id=?",
+        "UPDATE ds_timetable_lessons SET day_id=?,period_id=?,room_id=?,duration_periods=?,generation_run_id=NULL,updated_at=? WHERE id=? AND school_id=? AND profile_id=?",
         (day_id, period_id, room_id if room_id is not None else existing["room_id"], len(span), now, lesson_id, school_id, profile_id),
     )
     after = cur.execute("SELECT * FROM ds_timetable_lessons WHERE id=? AND school_id=?", (lesson_id, school_id)).fetchone()
