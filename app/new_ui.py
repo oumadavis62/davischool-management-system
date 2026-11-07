@@ -21630,7 +21630,7 @@ def finance_workspace_section(request: Request, section: str):
     content += _finance_interaction_enhancements()
     # The page template below uses %-formatting; escape percent signs in dynamic
     # workspace HTML (including CSS widths) so they remain literal in the output.
-    body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
+    body_template = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
     <style>
     .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
     .fx-eyebrow{font-size:11px;letter-spacing:1.2px;color:#27734c;font-weight:800}
@@ -21656,7 +21656,15 @@ def finance_workspace_section(request: Request, section: str):
     .fx-kpis>div{background:#fff;border:1px solid #e2eae3;border-radius:12px;padding:14px;display:grid;gap:7px}
     .fx-kpis small{color:#718078;font-size:12px}.fx-kpis b{font-size:19px;color:#214d34}
     @media(max-width:700px){.fx-two{grid-template-columns:1fr}.fx-heading h1{font-size:22px}.fx-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
-    </style>""" % (escape(title),"",content)
+    </style>"""
+    # Protect interpolation slots, then escape every literal percent sign in
+    # the static template (including CSS widths and media-query percentages).
+    _slot = "\uE000"
+    _percent = "\uE001"
+    body_template = (body_template.replace("%%", _percent)
+                     .replace("%s", _slot).replace("%", "%%")
+                     .replace(_percent, "%%").replace(_slot, "%s"))
+    body = body_template % (escape(title), "", content)
     return _school_page(request,title,body)
 
 
