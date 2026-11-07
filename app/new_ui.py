@@ -20201,7 +20201,7 @@ def _admission_table_html(rows, show_action=True):
         action = ""
         if show_action and status == "pending":
             action = (
-                f"<form method='post' action='/app/admissions/{applicant_id}/decision' class='inline-form'>"
+                f"<form method='post' action='/app/admissions/{applicant_id}/decision' class='inline-form' data-native-post='1'>"
                 "<button name='decision' value='accepted' class='admit-btn'>Accept</button>"
                 "<button name='decision' value='rejected' class='reject-btn'>Reject</button></form>"
             )
@@ -20212,7 +20212,7 @@ def _admission_table_html(rows, show_action=True):
         if show_action and not enrolled:
             action += (
                 f"<a class='admit-btn' href='/app/admissions/{applicant_id}/edit'>Edit</a>"
-                f"<form method='post' action='/app/admissions/{applicant_id}/delete' class='inline-form' "
+                f"<form method='post' action='/app/admissions/{applicant_id}/delete' class='inline-form' data-native-post='1' "
                 "onsubmit=\"return confirm('Delete this application? This cannot be undone.');\">"
                 "<button class='reject-btn' type='submit'>Delete</button></form>"
             )
@@ -20267,7 +20267,7 @@ def admissions_register_page(request: Request):
     body = f"""<div class='page adm-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
-      <form method='post' action='/app/admissions/add' class='adm-form'>
+      <form method='post' action='/app/admissions/add' class='adm-form' data-native-post='1'>
         <label>Applicant full name<input name='applicant_name' required maxlength='160'></label>
         <label>Gender<select name='gender'><option value=''>Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></label>
         <label>Parent / Guardian name<input name='parent_name' maxlength='160'></label>
@@ -20277,7 +20277,7 @@ def admissions_register_page(request: Request):
         <label>Applying class<select name='applying_class_id'><option value=''>Select class</option>{_admission_class_options(sid)}</select></label>
         <label>Application date<input name='application_date' type='date' value='{datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")}'></label>
         <label class='wide'>Notes<textarea name='notes' rows='2'></textarea></label>
-        <div class='wide'><button class='adm-submit'>Save Application</button></div>
+        <div class='wide'><button type='submit' class='adm-submit'>Save Application</button></div>
       </form></div>
       <div class='adm-card'><h2>All Applications</h2><div class='adm-table-wrap'><table class='adm-table'>
       <thead><tr><th>Application</th><th>Applicant</th><th>Parent / Guardian</th><th>Phone</th><th>Applying Class</th><th>Status</th><th>Admission No.</th><th>Action</th></tr></thead>
@@ -20365,7 +20365,7 @@ def admissions_edit_page(request: Request, application_id: int):
         for c in classes
     )
     body = f"""<div class='page adm-page'><div class='adm-card'><h1>Edit Admission Application</h1>
-      <form method='post' action='/app/admissions/{application_id}/edit' class='adm-form'>
+      <form method='post' action='/app/admissions/{application_id}/edit' class='adm-form' data-native-post='1'>
       <label>Applicant full name<input name='applicant_name' required maxlength='160' value='{escape(str(row['applicant_name'] or ''),quote=True)}'></label>
       <label>Gender<select name='gender'><option value=''>Select gender</option>{''.join(f"<option value='{g}' {'selected' if str(row['gender'] or '')==g else ''}>{g}</option>" for g in ('Male','Female','Other'))}</select></label>
       <label>Parent / Guardian name<input name='parent_name' maxlength='160' value='{escape(str(row['parent_name'] or ''),quote=True)}'></label>
@@ -20375,7 +20375,7 @@ def admissions_edit_page(request: Request, application_id: int):
       <label>Applying class<select name='applying_class_id'><option value=''>Select class</option>{options}</select></label>
       <label>Application date<input name='application_date' type='date' value='{escape(str(row['application_date'] or ''),quote=True)}'></label>
       <label class='wide'>Notes<textarea name='notes' rows='3'>{escape(str(row['notes'] or ''))}</textarea></label>
-      <div class='wide'><button class='adm-submit' type='submit'>Save Changes</button> <a href='/app/admissions'>Cancel</a></div>
+      <div class='wide'><button type='submit' class='adm-submit'>Save Changes</button> <a href='/app/admissions'>Cancel</a></div>
       </form></div></div>
       <style>.adm-page{{max-width:1100px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{color:#174b2b}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select,.adm-form textarea{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
     return _school_page(request, "Edit Admission Application", body)
@@ -20529,14 +20529,14 @@ def enrolment_form_page(request: Request, application_id: int):
     options = "".join(f"<option value='{int(c['id'])}' {'selected' if int(c['id'])==int(app_row['applying_class_id'] or 0) else ''}>{escape(str(c['name'] or '') + (' - ' + str(c['stream']) if c['stream'] else ''))}</option>" for c in classes)
     body = f"""<div class='page adm-page'><div class='adm-card'><h1>Complete Learner Enrolment</h1>
       <p>Confirm the accepted applicant's details. DaviSchool will issue the admission number when you complete enrolment.</p>
-      <form method='post' action='/app/enrolment/{application_id}' class='adm-form'>
+      <form method='post' action='/app/enrolment/{application_id}' class='adm-form' data-native-post='1'>
       <label>Learner name<input value='{escape(str(app_row['applicant_name'] or ''),quote=True)}' disabled></label>
       <label>Gender<input value='{escape(str(app_row['gender'] or ''),quote=True)}' disabled></label>
       <label>Parent / Guardian<input value='{escape(str(app_row['parent_name'] or ''),quote=True)}' disabled></label>
       <label>Parent phone<input value='{escape(str(app_row['parent_phone'] or ''),quote=True)}' disabled></label>
       <label>Class / Stream<select name='class_id' required>{options}</select></label>
       <label>Assessment number (optional)<input name='assessment_no' maxlength='80'></label>
-      <div class='wide'><button class='adm-submit'>Complete Enrolment &amp; Issue Admission Number</button></div>
+      <div class='wide'><button type='submit' class='adm-submit'>Complete Enrolment &amp; Issue Admission Number</button></div>
       </form></div></div>
       <style>.adm-page{{max-width:1050px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{margin:0;color:#174b2b}}.adm-card p{{color:#687c6d;font-size:13px}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.adm-form label{{display:grid;gap:5px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input,.adm-form select{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .wide{{grid-column:1/-1}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
     return _school_page(request,"Complete Learner Enrolment",body)
@@ -20649,14 +20649,14 @@ def admission_number_settings_page(request: Request):
     example = escape(separator.join(parts))
     body = f"""<div class='page adm-page'><div class='adm-card'>
       <h1>Admission Number Settings</h1><p>Choose the numbering format used by this school. The sequence is isolated per school and is issued automatically during enrolment.</p>
-      <form method='post' action='/app/admission-number-settings' class='adm-form'>
+      <form method='post' action='/app/admission-number-settings' class='adm-form' data-native-post='1'>
       <label>Prefix (optional)<input name='prefix' maxlength='12' value='{prefix}' placeholder='e.g. DAV'></label>
       <label>Separator<input name='separator' maxlength='3' value='{separator}' placeholder='/'></label>
       <label>Starting number<input name='start_number' type='number' min='1' max='999999999' value='{start}' required></label>
       <label>Number of digits<input name='digits' type='number' min='1' max='8' value='{digits}' required></label>
       <label class='adm-check'><input type='checkbox' name='include_year' value='1' {'checked' if include_year else ''}> Include academic year in admission number</label>
       <label class='adm-check'><input type='checkbox' name='reset_annually' value='1' {'checked' if reset_annually else ''}> Reset sequence each academic year</label>
-      <div class='wide'><div class='adm-preview'><small>Example next format</small><strong>{example}</strong></div><button class='adm-submit'>Save Numbering Preferences</button></div>
+      <div class='wide'><div class='adm-preview'><small>Example next format</small><strong>{example}</strong></div><button type='submit' class='adm-submit'>Save Numbering Preferences</button></div>
       </form></div></div>
       <style>.adm-page{{max-width:1000px}}.adm-card{{background:#fff;border:1px solid #dce9de;border-radius:15px;padding:20px}}.adm-card h1{{margin:0;color:#174b2b}}.adm-card p{{color:#687c6d;font-size:13px}}.adm-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}.adm-form label{{display:grid;gap:6px;font-size:12px;font-weight:800;color:#48634e}}.adm-form input{{width:100%;padding:11px;border:1px solid #d7e4d9;border-radius:8px;background:#fbfefb}}.adm-form .adm-check{{display:flex;align-items:center;gap:9px}}.adm-form .adm-check input{{width:auto}}.adm-form .wide{{grid-column:1/-1}}.adm-preview{{display:grid;gap:6px;padding:15px;border:1px dashed #b7d6be;border-radius:10px;background:#f3faf4;margin-bottom:14px}}.adm-preview small{{color:#66806a;font-weight:800}}.adm-preview strong{{font-size:23px;color:#176b3a;letter-spacing:.03em}}.adm-submit{{border:0;border-radius:9px;padding:12px 18px;background:#176b3a;color:#fff;font-weight:900;cursor:pointer}}@media(max-width:600px){{.adm-form{{grid-template-columns:1fr}}}}</style>"""
     return _school_page(request,"Admission Number Settings",body)
