@@ -24,6 +24,13 @@ _TABLES = (
         week_end TEXT,
         academic_start_date TEXT,
         academic_end_date TEXT,
+        approved_by TEXT,
+        approved_at TEXT,
+        published_by TEXT,
+        published_at TEXT,
+        current_version_id INTEGER,
+        revision_no INTEGER NOT NULL DEFAULT 1,
+        revision_of_profile_id INTEGER,
         settings_json TEXT NOT NULL DEFAULT '{}',
         created_by TEXT,
         created_at TEXT NOT NULL,
@@ -167,6 +174,7 @@ _TABLES = (
 
 _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_school_year ON ds_timetable_profiles(school_id, academic_year, term)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_profiles_revision ON ds_timetable_profiles(school_id, revision_of_profile_id, revision_no)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_days_profile_order ON ds_timetable_days(school_id, profile_id, day_order)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_calendar_profile_date ON ds_timetable_calendar_exceptions(school_id, profile_id, exception_date)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_periods_profile_order ON ds_timetable_periods(school_id, profile_id, period_no)",
@@ -197,9 +205,20 @@ def ensure_timetable_schema(connection: Any) -> None:
         str(col.name if hasattr(col, "name") else col[0]).lower()
         for col in (cursor.description or [])
     }
-    for column in ("academic_start_date", "academic_end_date"):
+    profile_column_types = {
+        "academic_start_date": "TEXT",
+        "academic_end_date": "TEXT",
+        "approved_by": "TEXT",
+        "approved_at": "TEXT",
+        "published_by": "TEXT",
+        "published_at": "TEXT",
+        "current_version_id": "INTEGER",
+        "revision_no": "INTEGER NOT NULL DEFAULT 1",
+        "revision_of_profile_id": "INTEGER",
+    }
+    for column, column_type in profile_column_types.items():
         if column not in columns:
-            cursor.execute("ALTER TABLE ds_timetable_profiles ADD COLUMN " + column + " TEXT")
+            cursor.execute("ALTER TABLE ds_timetable_profiles ADD COLUMN " + column + " " + column_type)
     cursor.execute("SELECT * FROM ds_timetable_lessons LIMIT 0")
     lesson_columns = {
         str(col.name if hasattr(col, "name") else col[0]).lower()
