@@ -3642,6 +3642,10 @@ app.include_router(health_welfare_management_router)
 from app.facilities_management import router as facilities_management_router
 app.include_router(facilities_management_router)
 
+# Parent and student services workspace.
+from app.parent_student_services import router as parent_student_services_router
+app.include_router(parent_student_services_router)
+
 
 # Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
 from app.legacy_redirect import install_legacy_school_redirect
