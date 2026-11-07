@@ -22,6 +22,7 @@ from app.tab_session import DaviSchoolTabSessionMiddleware
 import random
 from datetime import datetime, timedelta
 from app.schema_compat import ensure_schema_compatibility
+from app.timetable.schema import ensure_timetable_schema
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -189,6 +190,13 @@ def _initialize_database_background():
         try:
             init_db()
             init_extended_db()
+            # Timetable v2 owns a fresh ds_timetable_* schema; this is additive
+            # and intentionally runs only after legacy timetable retirement.
+            timetable_con = get_db()
+            try:
+                ensure_timetable_schema(timetable_con)
+            finally:
+                timetable_con.close()
             # Subject-reference repair is intentionally not run during every startup.
             # It is a one-time maintenance task and can scan many academic tables,
             # causing unnecessary startup/database load on production replicas.
