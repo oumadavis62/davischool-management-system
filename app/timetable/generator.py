@@ -375,6 +375,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                VALUES(?,?,?,?,?,?,?,?)""",
             (school_id, profile_id, lesson_id, "AUTO_GENERATE", None, json.dumps(dict(after), default=str, sort_keys=True), created_by, _now()),
         )
+    day_loads = {}
+    for placement in placements:
+        day_key = int(placement["day_id"])
+        day_loads[day_key] = day_loads.get(day_key, 0) + 1
+    load_spread = (max(day_loads.values()) - min(day_loads.values())) if day_loads else 0
+    search_penalty = min(30, nodes // max(1, len(tasks) * 20))
+    balance_penalty = min(40, load_spread * 5)
+    quality_score = max(0, 100 - search_penalty - balance_penalty)
     summary = {
         "status": "completed",
         "message": "Automatic timetable generated successfully. Existing manual lessons were preserved.",
@@ -383,7 +391,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         "generated_lessons": len(generated),
         "total_scheduled_lessons": len(manual) + len(generated),
         "search_nodes": nodes,
-        "quality_score": max(0, 100 - min(100, int(sum(_score(tasks[order[i]], placements[-1]) for i in range(min(len(generated), len(order)))) / max(1, len(generated))))),
+        "quality_score": quality_score,
     }
     cur.execute(
         "UPDATE ds_timetable_generation_runs SET status='completed',result_summary_json=?,finished_at=? WHERE id=? AND school_id=?",
