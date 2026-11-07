@@ -86,7 +86,7 @@ def _layout(request, title, eyebrow, description, body):
 .fac-page .fac-pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#edf5ef;color:#245638;font-size:11px;font-weight:800}
 .fac-page .fac-empty{text-align:center;padding:26px;color:#718078}
 @media(max-width:760px){.fac-page .fac-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.fac-page .fac-form{grid-template-columns:1fr}.fac-page .wide{grid-column:auto}.fac-page .fac-card{padding:12px}}}
+@media(max-width:560px){.fac-page .fac-form{grid-template-columns:1fr}.fac-page .wide{grid-column:auto}.fac-page .fac-card{padding:12px}}
 
 .fac-page{--fac-forest:#174b32;gap:17px!important;padding-bottom:28px!important}
 .fac-page:before{content:"";display:block;height:5px;margin:-2px 0 0;border-radius:99px;background:linear-gradient(90deg,#174b32,#39845a 48%,#b8d8bd);box-shadow:0 2px 8px #174b321c}
@@ -126,13 +126,13 @@ def _layout(request, title, eyebrow, description, body):
 @media(max-width:700px){.fac-page .fac-head{align-items:flex-start;flex-direction:column;padding:18px 16px}.fac-page .fac-head>.fac-btn{width:100%}.fac-page .fac-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.fac-page .fac-kpis>div{min-height:86px;padding:13px 12px 12px 15px!important}.fac-page .fac-kpis strong{font-size:23px}.fac-page .fac-card{padding:12px!important}.fac-page .fac-scroll{border-radius:10px}.fac-page table{min-width:760px}.fac-filter-dialog{border-radius:17px}.fac-filter-dialog .fac-dialog-content{padding:15px}.fac-form-dialog{padding:17px;border-radius:17px}.fac-form-dialog .fac-form{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.fac-page *,.fac-filter-dialog *,.fac-form-dialog *{transition:none!important;scroll-behavior:auto!important}}
 @media print{.fac-page .fac-filter-trigger,.fac-filter-dialog,.fac-form-dialog,.fac-page .no-print{display:none!important}.fac-page .fac-card{break-inside:avoid;box-shadow:none}}
+</style>
 <script>
 (function(){function setup(){document.querySelectorAll('.fac-page').forEach(function(page){var head=page.querySelector('.fac-head');if(!head)return;
 var filter=page.querySelector('form[method="get"]');if(filter&&!filter.dataset.popupReady){filter.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='fac-filter-dialog';var bar=document.createElement('div');bar.className='fac-dialog-head';bar.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';bar.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='fac-dialog-content';filter.parentNode.insertBefore(dialog,filter);content.appendChild(filter);dialog.appendChild(bar);dialog.appendChild(content);page.appendChild(dialog);filter.querySelectorAll('a.fac-btn.light').forEach(function(a){if(/^(Clear|Clear filters)$/i.test(a.textContent.trim()))a.textContent='Clear filters'});var trigger=document.createElement('button');trigger.type='button';trigger.className='fac-filter-trigger';trigger.textContent='Filters';trigger.addEventListener('click',function(){dialog.showModal()});head.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})}
 var entry=page.querySelector('.fac-card form.fac-form');if(entry&&!entry.dataset.popupReady){entry.dataset.popupReady='1';var card=entry.closest('.fac-card');var h=card&&card.querySelector('h2');var title=h?h.textContent.trim():'Add facility or asset record';var modal=document.createElement('dialog');modal.className='fac-form-dialog';var mh=document.createElement('h2');mh.textContent=title;modal.appendChild(mh);entry.parentNode.insertBefore(modal,entry);modal.appendChild(entry);page.appendChild(modal);var add=document.createElement('button');add.type='button';add.className='fac-btn';add.textContent=title;add.addEventListener('click',function(){modal.showModal()});head.appendChild(add)}
 })}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
-</script>
-</style>"""
+</script>"""
 </style>"""
     return _school_page(request, title, "<div class='page fac-page'><div class='fac-head'><div><div class='lib-eyebrow'>" + escape(eyebrow) + "</div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div></div>" + body + "</div>" + styles)
 
