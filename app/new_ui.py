@@ -879,6 +879,19 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/health/reports", "Health & Welfare Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
+        facilities_group = (
+            "<details class='nav-group' id='facilitiesAssetsNav' "
+            + ("open" if request_path.startswith("/app/facilities") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('building-2')}</span><b>Facilities &amp; Assets</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/facilities/register", "Facilities Register")
+            + _nav_sub("/app/facilities/rooms", "Classrooms & Room Allocation")
+            + _nav_sub("/app/facilities/assets", "Furniture & Equipment Register")
+            + _nav_sub("/app/facilities/maintenance", "Maintenance Requests & Work Orders")
+            + _nav_sub("/app/facilities/history", "Repairs & Maintenance History")
+            + _nav_sub("/app/facilities/reports", "Facilities & Assets Reports")
+            + "</div></details>"
+        ) if role in ("school_admin", "registrar") else ""
         links = "".join(
             admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
             else students_group if u == "/app/students" and role in ("school_admin", "registrar")
@@ -886,7 +899,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
             else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             for u,i,l,_ in nav
-        ) + library_group + inventory_group + transport_group + health_welfare_group
+        ) + library_group + inventory_group + transport_group + health_welfare_group + facilities_group
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
         avatar_html = "<div class='avatar-wrap' id='teacherProfileMenu'><button type='button' class='avatar' id='teacherAvatarButton' aria-label='Open account menu' aria-expanded='false' onclick='toggleTeacherProfileMenu(event)'>" + escape(initials) + "</button><div class='logout-tab' id='teacherLogoutTab'><a href='/logout'>Log out</a></div></div>"
