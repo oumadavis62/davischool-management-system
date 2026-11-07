@@ -2867,15 +2867,15 @@ def timetable_placement_swap(request:Request,rid:int,other_slot_id:int=Form(...)
             lid=int(row["lesson_id"])
             cls={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or {int(row["class_id"])}
             tch={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or ({int(row["teacher_id"])} if row["teacher_id"] else set())
-            for n in range(p,p+duration):
-                if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(row["subject_id"]),d,n)).fetchone():
-                    return RedirectResponse("/app/timetable?tab=timetable&error=Subject+availability+blocks+this+swap",303)
-                if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,t,d,n)).fetchone() for t in tch):
-                    return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+availability+blocks+this+swap",303)
             resources[int(row["id"])]=(cls,tch)
         for moving,target in ((a,b),(b,a)):
             cls,tch=resources[int(moving["id"])]
             day=str(target["day_name"]);period=int(target["period_no"])
+            for n in range(period,period+da):
+                if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(moving["subject_id"]),day,n)).fetchone():
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Subject+availability+blocks+this+swap",303)
+                if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,t,day,n)).fetchone() for t in tch):
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+availability+blocks+this+swap",303)
             for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
                 FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
                 WHERE s.school_id=? AND s.profile_id=? AND s.day_name=? AND s.id NOT IN (?,?)""",
