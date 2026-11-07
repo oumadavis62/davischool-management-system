@@ -2900,6 +2900,7 @@ def school_communication(request:Request):
         audience_counts[key]=audience_counts.get(key,0)+1
     audience_summary=" · ".join(f"{escape(k)}: {v}" for k,v in sorted(audience_counts.items())) or "No audience groups yet"
     cards=[]
+    details=[]
     for r in rows:
         rid=int(r["id"])
         title=escape(str(r["title"] or "Untitled announcement"))
@@ -2913,6 +2914,8 @@ def school_communication(request:Request):
             f"<td><span class='ann-audience'>{audience}</span></td>"
             f"<td class='ann-message'>{excerpt}</td>"
             f"<td><button type='button' class='ann-view' popovertarget='ann-view-{rid}'>View details</button></td></tr>"
+        )
+        details.append(
             f"<div id='ann-view-{rid}' class='ann-pop ann-detail' popover='manual'>"
             f"<div class='ann-pop-head'><div><span class='ann-eyebrow'>ANNOUNCEMENT DETAILS</span><h2>{title}</h2></div>"
             f"<button type='button' class='ann-close' popovertarget='ann-view-{rid}' popovertargetaction='hide' aria-label='Close'>×</button></div>"
@@ -2993,7 +2996,7 @@ def school_communication(request:Request):
         <div class='ann-table-wrap'><table class='ann-table'><thead><tr><th>Date</th><th>Announcement</th><th>Audience</th><th>Message preview</th><th>Action</th></tr></thead><tbody id='ann-table-body'>{tr}</tbody></table></div>
       </section>
     </div>
-    <div id='ann-create-pop' class='ann-pop' popover='manual'>
+    {''.join(details)}\n    <div id='ann-create-pop' class='ann-pop' popover='manual'>
       <div class='ann-pop-head'><div><span class='ann-eyebrow'>NEW SCHOOL NOTICE</span><h2>Create Announcement</h2><p style='margin:5px 0 0;color:#718078;font-size:12px'>Compose your message and select who should receive it.</p></div><button type='button' class='ann-close' popovertarget='ann-create-pop' popovertargetaction='hide' aria-label='Close popup' title='Close'>×</button></div>
       <form method='post' action='/school/modules/announcements/add' class='ann-form'>
         <label class='ann-wide'>Announcement title *<input name='title' required maxlength='180' placeholder='Enter a clear announcement title'></label>
