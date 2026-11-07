@@ -36,6 +36,24 @@ class TimetableSchemaTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(tables))
 
+    def test_existing_profile_schema_gets_academic_date_columns_additively(self):
+        self.connection.execute(
+            """CREATE TABLE ds_timetable_profiles (
+                id INTEGER PRIMARY KEY, school_id INTEGER NOT NULL, name TEXT NOT NULL,
+                academic_year TEXT NOT NULL, term TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
+                week_start TEXT, week_end TEXT, settings_json TEXT NOT NULL DEFAULT '{}',
+                created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )"""
+        )
+        ensure_timetable_schema(self.connection)
+        columns = {
+            row[1] for row in self.connection.execute(
+                "PRAGMA table_info(ds_timetable_profiles)"
+            ).fetchall()
+        }
+        self.assertIn("academic_start_date", columns)
+        self.assertIn("academic_end_date", columns)
+
     def test_profile_is_tenant_scoped_and_insertable(self):
         ensure_timetable_schema(self.connection)
         self.connection.execute(
