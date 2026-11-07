@@ -166,32 +166,14 @@ _INDEXES = (
 
 
 def ensure_timetable_schema(connection: Any) -> None:
-    """Create the new timetable schema idempotently on SQLite or PostgreSQL."""
-    cursor = connection.cursor()
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS ds_timetable_schema_migrations (
-            migration_key TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL
-        )"""
-    )
-    cursor.execute(
-        "SELECT 1 FROM ds_timetable_schema_migrations WHERE migration_key=?",
-        (SCHEMA_VERSION,),
-    )
-    already_applied = cursor.fetchone() is not None
+    """Create the new timetable schema idempotently on SQLite or PostgreSQL.
 
-    # CREATE IF NOT EXISTS is deliberately still run on every startup. It
-    # repairs a partially-created schema without altering any existing rows.
+    The schema deliberately uses only CREATE IF NOT EXISTS statements. There
+    is no destructive migration and no startup-time rewrite of existing data.
+    """
+    cursor = connection.cursor()
     for statement in _TABLES:
         cursor.execute(statement)
     for statement in _INDEXES:
         cursor.execute(statement)
-
-    if not already_applied:
-        from datetime import datetime, timezone
-
-        cursor.execute(
-            "INSERT OR IGNORE INTO ds_timetable_schema_migrations (migration_key, applied_at) VALUES (?, ?)",
-            (SCHEMA_VERSION, datetime.now(timezone.utc).isoformat()),
-        )
     connection.commit()
