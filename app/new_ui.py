@@ -21161,7 +21161,7 @@ def admission_reports_page(request: Request, year: str = "", class_id: str = "")
         available_years = set()
         for date_row in date_rows:
             date_value = str(date_row["application_date"] or "").strip()
-            match = re.match(r"^(\\d{4})", date_value)
+            match = re.match(r"^(\d{4})", date_value)
             if match:
                 available_years.add(match.group(1))
         years = [{"year": value} for value in sorted(available_years, reverse=True)]
