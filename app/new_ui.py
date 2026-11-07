@@ -870,13 +870,13 @@ def _shell(title, name, role, body, school_id=None, request=None):
         ) if role in ("school_admin", "registrar") else ""
         health_welfare_group = (
             "<details class='nav-group' id='healthWelfareNav' "
-            + ("open" if request_path.startswith("/app/health-welfare") else "") + ">"
+            + ("open" if (request_path.startswith("/app/health/") or request_path.startswith("/app/welfare/")) else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('heart-pulse')}</span><b>Health &amp; Welfare</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
-            + _nav_sub("/app/health-welfare/profiles", "Student Health Profiles")
-            + _nav_sub("/app/health-welfare/visits", "Clinic Visits")
-            + _nav_sub("/app/health-welfare/cases", "Student Welfare Cases")
-            + _nav_sub("/app/health-welfare/reports", "Health & Welfare Reports")
+            + _nav_sub("/app/health/profiles", "Student Health Profiles")
+            + _nav_sub("/app/health/visits", "Clinic Visits")
+            + _nav_sub("/app/welfare/cases", "Student Welfare Cases")
+            + _nav_sub("/app/health/reports", "Health & Welfare Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
         links = "".join(
