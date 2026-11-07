@@ -10,6 +10,7 @@ from app.timetable.session_engine import (
     create_teaching_group,
     find_session_conflicts,
 )
+from app.timetable.generator import generate_advanced_instructional_sessions
 
 
 class TimetableSessionEngineTests(unittest.TestCase):
@@ -131,6 +132,34 @@ class TimetableSessionEngineTests(unittest.TestCase):
             day_id=self.day_id, period_id=self.period_id,
         )
         self.assertGreater(session, 0)
+
+    def test_advanced_generator_places_combined_class_and_team_once(self):
+        group = create_teaching_group(
+            self.db, 8, self.profile_id, "Combined Grade 7 Science", [1, 2],
+            subject_id=5,
+        )
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Shared Science",
+            class_ids=[1, 2], teacher_ids=[11, 12], learner_ids=[101, 102, 103],
+            subject_id=5, teaching_group_id=group,
+            weekly_occurrences=1, weekly_periods=1, min_teacher_count=2,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1, "preferred_day_id": self.day_id}],
+        )
+        result = generate_advanced_instructional_sessions(
+            self.db, 8, self.profile_id, "admin@test"
+        )
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["generated_sessions"], 1)
+        session_id = result["session_ids"][0]
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_classes WHERE session_id=?",
+                            (session_id,)).fetchone()[0], 2)
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
+                            (session_id,)).fetchone()[0], 2)
 
     def test_teacher_and_class_conflicts_are_detected_across_layers(self):
         create_scheduled_session(
