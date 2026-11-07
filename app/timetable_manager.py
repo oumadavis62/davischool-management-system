@@ -2075,7 +2075,6 @@ def timetable_profile_delete(request:Request,pid:int):
         con.execute("DELETE FROM timetable_profile_availability WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_constraints WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_generation_runs WHERE school_id=? AND profile_id=?",(sid,pid))
-        con.execute("DELETE FROM timetable_profile_migrations WHERE school_id=?",(sid,))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+profile+and+its+lesson+cards+deleted",303)
