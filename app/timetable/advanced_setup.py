@@ -626,6 +626,8 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
         raise TimetableSetupError("Choose a valid timetable layer.")
     if (start_time is None) != (end_time is None):
         raise TimetableSetupError("Enter both start and end times for a time-window constraint.")
+    if constraint_type == "require" and day_id is None and period_id is None and start_time is None:
+        raise TimetableSetupError("A required-time rule must specify a day, period or time window.")
     if start_time is not None:
         start_time, end_time, _ = _time_range(start_time, end_time)
     for value in (effective_from, effective_to):
