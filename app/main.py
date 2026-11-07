@@ -25,6 +25,7 @@ from app.schema_compat import ensure_schema_compatibility
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.routes import register_timetable_setup_routes
 from app.timetable.builder_routes import register_timetable_builder_routes
+from app.timetable.generator_routes import register_timetable_generator_routes
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -4117,6 +4118,7 @@ def exit_super_admin_portal_preview(request: Request):
 # Register the isolated timetable configuration workspace after shared helpers exist.
 register_timetable_setup_routes(app, get_db, get_school_obj, module_page)
 register_timetable_builder_routes(app, get_db, get_school_obj, module_page)
+register_timetable_generator_routes(app, get_db, get_school_obj, module_page)
 
 # Install tab-scoped signed sessions around the fully configured ASGI app.
 # This must wrap the app only after every route and FastAPI middleware has been registered.
