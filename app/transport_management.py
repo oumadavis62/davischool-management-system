@@ -148,7 +148,7 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
 .tr-event-dialog .tr-form input,.tr-event-dialog .tr-form select,.tr-event-dialog .tr-form textarea{
  box-sizing:border-box!important;width:100%!important;min-width:0!important;min-height:44px!important;
  padding:10px 12px!important;border:1px solid #d6e4d4!important;border-radius:10px!important;
- background:#fff!important;color:#294b34!important;font:500 13px/1.35 inherit!important;
+ background:#fff!important;color:#294b34!important;font-family:inherit!important;font-size:13px!important;font-weight:500!important;line-height:1.35!important;
  box-shadow:inset 0 1px 2px #1e4a2908!important
 }
 .tr-allocation-dialog .tr-form input:focus,.tr-allocation-dialog .tr-form select:focus,.tr-allocation-dialog .tr-form textarea:focus,
