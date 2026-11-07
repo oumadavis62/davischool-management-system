@@ -10,6 +10,7 @@ from app.timetable.advanced_setup import (
     create_schedule_template,
     save_rotation_week,
     save_schedule_slot,
+    save_requirement_session_pattern,
 )
 from app.timetable.setup import create_profile, save_day, TimetableSetupError
 
@@ -98,6 +99,44 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
             [(r["week_number"], r["department_code"]) for r in rows],
             [(1, "SCI"), (2, "LANG"), (3, "HUM")],
         )
+
+
+    def test_weekly_pattern_must_exactly_match_allocated_periods(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_class_requirements
+               (school_id,profile_id,class_id,subject_id,teacher_id,lessons_per_week)
+               VALUES(12,?,?,101,201,5)""",
+            (self.profile_id, 1),
+        )
+        requirement_id = self.db.execute(
+            "SELECT id FROM ds_timetable_class_requirements WHERE profile_id=?",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        save_requirement_session_pattern(
+            self.db, 12, self.profile_id, requirement_id,
+            [
+                {"duration_periods": 2, "session_label": "Double"},
+                {"duration_periods": 1, "session_label": "Single 1"},
+                {"duration_periods": 1, "session_label": "Single 2"},
+                {"duration_periods": 1, "session_label": "Single 3"},
+            ],
+        )
+        rows = self.db.execute(
+            """SELECT duration_periods FROM ds_timetable_requirement_patterns
+               WHERE requirement_id=? ORDER BY session_no""",
+            (requirement_id,),
+        ).fetchall()
+        self.assertEqual([row["duration_periods"] for row in rows], [2, 1, 1, 1])
+        with self.assertRaises(TimetableSetupError):
+            save_requirement_session_pattern(
+                self.db, 12, self.profile_id, requirement_id,
+                [{"duration_periods": 2}, {"duration_periods": 2}],
+            )
+        preserved = self.db.execute(
+            "SELECT COUNT(*) AS n FROM ds_timetable_requirement_patterns WHERE requirement_id=?",
+            (requirement_id,),
+        ).fetchone()["n"]
+        self.assertEqual(preserved, 4)
 
     def test_rotation_programme_requires_a_cycle(self):
         with self.assertRaises(TimetableSetupError):
