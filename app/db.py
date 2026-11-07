@@ -11,6 +11,7 @@ import threading
 import atexit
 import psycopg
 from psycopg_pool import ConnectionPool
+from urllib.parse import urlsplit, urlunsplit
 
 
 class CompatRow(dict):
@@ -237,6 +238,32 @@ def _pool_size(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+def _supabase_transaction_pooler_conninfo(database_url: str) -> str:
+    """Use Supavisor transaction mode for the horizontally scaled web app.
+
+    Supabase shared-pooler port 5432 is session mode: every application-side
+    pooled connection holds one of the project's small session slots even
+    while idle. Port 6543 is transaction mode and releases the database
+    backend between transactions. DaviSchool commits or rolls back each
+    request's work, so it does not depend on session affinity.
+    """
+    try:
+        parsed = urlsplit(database_url)
+        if (
+            parsed.hostname
+            and parsed.hostname.lower().endswith(".pooler.supabase.com")
+            and parsed.port == 5432
+        ):
+            userinfo, separator, _hostport = parsed.netloc.rpartition("@")
+            authority = (userinfo + separator if separator else "") + parsed.hostname + ":6543"
+            return urlunsplit((parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment))
+    except ValueError:
+        # Preserve non-URL/keyword conninfo and malformed values for psycopg's
+        # normal validation rather than hiding the original configuration error.
+        pass
+    return database_url
+
+
 def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
     """Return one process-local PostgreSQL connection pool.
 
@@ -261,8 +288,9 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
             # concurrent DB request per process; do not let env overrides
             # accidentally exhaust the shared Supavisor session quota.
             max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 2, min_size, 2)
+            pool_conninfo = _supabase_transaction_pooler_conninfo(key)
             pool = ConnectionPool(
-                conninfo=key,
+                conninfo=pool_conninfo,
                 min_size=min_size,
                 max_size=max_size,
                 timeout=connect_timeout,
@@ -271,6 +299,9 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
                     "row_factory": _row_factory,
                     "connect_timeout": connect_timeout,
                     "application_name": "DaviSchool",
+                    # Transaction-mode Supavisor does not preserve named
+                    # prepared statements between transactions.
+                    "prepare_threshold": None,
                 },
                 open=True,
             )
