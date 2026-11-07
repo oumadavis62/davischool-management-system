@@ -512,9 +512,24 @@ def _guard(request, permission="timetable.view"):
     if not require_permission(request, sid, permission):
         return sid, None, HTMLResponse("You do not have permission to use the Timetable Manager.", 403)
     con = db()
-    _ensure_tables(con)
-    _seed(con, sid)
-    _install_profile_sql_function(con, sid)
+    try:
+        _ensure_tables(con)
+        _seed(con, sid)
+        _install_profile_sql_function(con, sid)
+    except Exception:
+        # Initialization happens before each timetable handler's main try/finally.
+        # Release the pooled connection here as well, otherwise one failed
+        # migration/profile lookup can strand a connection and make later
+        # timetable requests wait until PoolTimeout.
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        try:
+            con.close()
+        except Exception:
+            pass
+        raise
     return sid, con, None
 
 
