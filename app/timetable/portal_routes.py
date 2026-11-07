@@ -30,8 +30,7 @@ def get_portal_timetable_targets(connection, school_id: int, role: str,
             "SELECT id,name FROM teachers WHERE id=? AND school_id=?",
             (int(teacher_id), int(school_id)),
         ).fetchone()
-        return [("teacher", int(teacher["id"]), str(teacher["name"]))]
-        if teacher else []
+        return [("teacher", int(teacher["id"]), str(teacher["name"]))] if teacher else []
     if role == "student":
         if not student_id:
             return []
