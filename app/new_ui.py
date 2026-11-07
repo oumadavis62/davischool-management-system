@@ -21527,6 +21527,7 @@ def finance_workspace_section(request: Request, section: str):
                 _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),sopts,
                 _finance_table(["Supplier","Phone","Email","KRA PIN"],sr,"No suppliers yet."),
                 _finance_table(["Supplier","Invoice","Due date","Amount","Status","Action"],br,"No supplier bills yet."))
+            content = "<div class='fx-payables-page'>" + content + "</div>"
         elif section == "ledger":
             accounts = cur.execute("SELECT * FROM ds_fin_accounts WHERE school_id=? AND active=1 ORDER BY code",(sid,)).fetchall()
             journals = cur.execute("SELECT * FROM ds_fin_journals WHERE school_id=? ORDER BY created_at DESC LIMIT 100",(sid,)).fetchall()
@@ -21647,6 +21648,10 @@ def finance_workspace_section(request: Request, section: str):
     .fx-table-wrap th,.fx-table-wrap td{padding:10px;border-bottom:1px solid #edf1ed;text-align:left;white-space:nowrap}
     .fx-table-wrap th{color:#315342;background:#f6faf6;font-weight:800}.fx-empty{text-align:center;color:#829087;padding:20px!important}
     .fx-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .fx-payables-page{width:100%;max-width:1080px;min-width:0;margin:0 auto;box-sizing:border-box}
+    .fx-payables-page .fx-card{min-width:0;box-sizing:border-box}
+    .fx-payables-page .fx-table-wrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+    .fx-payables-page .fx-form{min-width:0}
     .fx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}
     .fx-kpis>div{background:#fff;border:1px solid #e2eae3;border-radius:12px;padding:14px;display:grid;gap:7px}
     .fx-kpis small{color:#718078;font-size:12px}.fx-kpis b{font-size:19px;color:#214d34}
