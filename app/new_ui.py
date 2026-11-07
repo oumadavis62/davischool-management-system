@@ -683,7 +683,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
             *([("/app/admissions",_modern_icon("clipboard-check"),"Admissions & Enrolment","students.view")] if role in ("school_admin","registrar") else []),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
-            ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
             ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
             ("/app/finance",_modern_icon("finance"),"Finance & Accounts","fees.view"),
