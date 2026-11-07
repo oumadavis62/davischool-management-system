@@ -1314,7 +1314,7 @@ def _master_timetable_html(classes, periods, days, grids):
                         subject = escape(_subject_initial(lesson))
                         duration_label = " · DOUBLE" if duration == 2 else (" · TRIPLE" if duration >= 3 else "")
                         cells.append(
-                            f"<td class='tt-master-cell tt-master-occupied'><div class='tt-master-placard tt-draggable-lesson tt-placed-card' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Click lesson card for options'>"
+                            f"<td class='tt-master-cell tt-master-occupied tt-drop-slot' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' title='Drop another lesson here to swap placements'><div class='tt-master-placard tt-draggable-lesson tt-placed-card' draggable='true' data-slot-id='{lid}' data-class-id='{cid}' data-day='{escape(str(day))}' data-period='{pno}' style='background:{_teacher_placard_color(teacher_id)}' title='Click lesson card for options'>"
                             f"<b>{subject}</b><em>{duration_label}</em></div></td>"
                         )
                 else:
@@ -1440,9 +1440,13 @@ def _timetable(request, con, sid):
     fd.append('day_name',slot.dataset.day);
     fd.append('period_no',slot.dataset.period);
     fd.append('class_id',slot.dataset.classId||card.dataset.classId||'');
-    fetch('/app/timetable/placement/move/'+encodeURIComponent(card.dataset.slotId),{
-      method:'POST',body:fd,credentials:'same-origin'
-    }).then(function(response){window.location.href=response.url||'/app/timetable?tab=timetable';})
+    var occupiedId=slot.dataset.slotId;
+    var endpoint=occupiedId&&occupiedId!==card.dataset.slotId
+      ?'/app/timetable/placement/swap/'+encodeURIComponent(card.dataset.slotId)
+      :'/app/timetable/placement/move/'+encodeURIComponent(card.dataset.slotId);
+    if(occupiedId&&occupiedId!==card.dataset.slotId)fd.append('other_slot_id',occupiedId);
+    fetch(endpoint,{method:'POST',body:fd,credentials:'same-origin'})
+      .then(function(response){window.location.href=response.url||'/app/timetable?tab=timetable';})
       .catch(function(){alert('Unable to move this lesson. Please try again.');});
   });
   document.querySelectorAll('.tt-draggable-lesson').forEach(function(card){
@@ -1502,7 +1506,10 @@ def _timetable(request, con, sid):
       if(!id){const raw=e.dataTransfer.getData('text/plain');if(raw.indexOf('tray:')===0){type='tray';id=raw.slice(5);}else{type='placed';id=raw;}}
       if(!id)return;
       const fd=new FormData();fd.append('day_name',this.dataset.day);fd.append('period_no',this.dataset.period);fd.append('class_id',this.dataset.classId);
-      const endpoint=type==='tray'?'/app/timetable/placement/place/'+encodeURIComponent(id):'/app/timetable/placement/move/'+encodeURIComponent(id);
+      const occupiedId=this.dataset.slotId;
+      const endpoint=type==='tray'?'/app/timetable/placement/place/'+encodeURIComponent(id)
+        :(occupiedId&&occupiedId!==id?'/app/timetable/placement/swap/'+encodeURIComponent(id):'/app/timetable/placement/move/'+encodeURIComponent(id));
+      if(type==='placed'&&occupiedId&&occupiedId!==id)fd.append('other_slot_id',occupiedId);
       try{const res=await fetch(endpoint,{method:'POST',body:fd,credentials:'same-origin'});window.location.href=res.url||'/app/timetable?tab=timetable';}
       catch(err){alert('Unable to place this lesson.');}
     });
@@ -2822,6 +2829,83 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
         return RedirectResponse("/app/timetable?tab=timetable&msg=Placement+moved",303)
     finally:
         con.close()
+
+@router.post("/app/timetable/placement/swap/{rid}")
+def timetable_placement_swap(request:Request,rid:int,other_slot_id:int=Form(...)):
+    sid,con,response=_guard(request,"timetable.edit")
+    if response:return response
+    try:
+        cur=con.cursor()
+        profile_id=_active_profile_id(con,sid)
+        rows=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
+            FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.school_id=? AND s.profile_id=? AND s.id IN (?,?)""",
+            (sid,profile_id,rid,other_slot_id)).fetchall()
+        by_id={int(x["id"]):x for x in rows}
+        if rid==other_slot_id or len(by_id)!=2:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Select+two+different+placed+lessons",303)
+        a,b=by_id[rid],by_id[other_slot_id]
+        if int(a["locked"] or 0) or int(b["locked"] or 0):
+            return RedirectResponse("/app/timetable?tab=timetable&error=Locked+lessons+cannot+be+swapped",303)
+        da=max(1,int(a["duration"] or 1));db=max(1,int(b["duration"] or 1))
+        if da!=db:
+            return RedirectResponse("/app/timetable?tab=timetable&error=Swap+requires+lessons+with+the+same+duration",303)
+        if str(a["day_name"])==str(b["day_name"]) and _overlaps({"period_no":int(a["period_no"]),"duration":da},{"period_no":int(b["period_no"]),"duration":db}):
+            return RedirectResponse("/app/timetable?tab=timetable&error=These+lesson+blocks+overlap+and+cannot+be+swapped",303)
+        days={str(x["name"]) for x in _profile_days(cur,sid) if int(x["enabled"] or 0)}
+        pmap={int(x["period_no"]):x for x in _profile_periods(cur,sid)}
+        breaks=_profile_breaks(cur,sid)
+        resources={}
+        for row in (a,b):
+            d=str(row["day_name"]);p=int(row["period_no"]);duration=max(1,int(row["duration"] or 1))
+            if d not in days or any(n not in pmap for n in range(p,p+duration)):
+                return RedirectResponse("/app/timetable?tab=timetable&error=Swap+target+is+outside+the+active+timetable+profile",303)
+            for n in range(p,p+duration):
+                st=str(pmap[n]["start_time"]);et=str(pmap[n]["end_time"])
+                if any(_time_to_min(st)<_time_to_min(str(br["end_time"])) and _time_to_min(et)>_time_to_min(str(br["start_time"])) for br in breaks):
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Swap+target+overlaps+a+break",303)
+            lid=int(row["lesson_id"])
+            cls={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or {int(row["class_id"])}
+            tch={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or ({int(row["teacher_id"])} if row["teacher_id"] else set())
+            for n in range(p,p+duration):
+                if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(row["subject_id"]),d,n)).fetchone():
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Subject+availability+blocks+this+swap",303)
+                if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,t,d,n)).fetchone() for t in tch):
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+availability+blocks+this+swap",303)
+            resources[int(row["id"])]=(cls,tch)
+        for moving,target in ((a,b),(b,a)):
+            cls,tch=resources[int(moving["id"])]
+            day=str(target["day_name"]);period=int(target["period_no"])
+            for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
+                FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+                WHERE s.school_id=? AND s.profile_id=? AND s.day_name=? AND s.id NOT IN (?,?)""",
+                (sid,profile_id,day,rid,other_slot_id)).fetchall():
+                if not _overlaps({"period_no":period,"duration":da},other):continue
+                lid=int(other["lesson_id"])
+                oc={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or {int(other["class_id"])}
+                ot={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lid)).fetchall()} or ({int(other["teacher_id"])} if other["teacher_id"] else set())
+                if cls.intersection(oc) or tch.intersection(ot):
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Swap+would+cause+a+class+or+teacher+clash",303)
+                if moving["room_id"] and other["room_id"] and int(moving["room_id"])==int(other["room_id"]):
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Swap+would+cause+a+room+clash",303)
+            for cid in cls:
+                if cur.execute("""SELECT 1 FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+                    WHERE s.school_id=? AND s.profile_id=? AND s.day_name=? AND s.id NOT IN (?,?)
+                    AND l.subject_id=? AND (l.class_id=? OR l.id IN
+                    (SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?)) LIMIT 1""",
+                    (sid,profile_id,day,rid,other_slot_id,int(moving["subject_id"]),cid,sid,cid)).fetchone():
+                    return RedirectResponse("/app/timetable?tab=timetable&error=Swap+would+repeat+a+subject+for+a+class+that+day",303)
+        for row,target in ((a,b),(b,a)):
+            p=int(target["period_no"]);d=str(target["day_name"])
+            cur.execute("""UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?
+                WHERE id=? AND school_id=? AND profile_id=? AND locked=0""",
+                (d,p,pmap[p]["start_time"],pmap[p+da-1]["end_time"],int(row["id"]),sid,profile_id))
+        cur.execute("DELETE FROM timetable_edit_history WHERE school_id=? AND profile_id=? AND undone=1",(sid,profile_id))
+        con.commit()
+        return RedirectResponse("/app/timetable?tab=timetable&msg=Lesson+placements+swapped",303)
+    finally:con.close()
+
+
 def _restore_timetable_move(request:Request, direction:str):
     sid,con,response=_guard(request,"timetable.edit")
     if response:return response
