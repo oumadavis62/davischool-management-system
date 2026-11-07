@@ -18,6 +18,55 @@ def _library_guard(request, permission="library.view"):
     return sid, None
 
 
+def _library_page(request, title, body):
+    shared = """
+<style>
+.library-page{max-width:none!important;width:100%;padding-bottom:28px;color:#243b2d}
+.library-page .lib-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:8px 2px 17px;margin-bottom:8px;border-bottom:1px solid #e3ece4}
+.library-page .lib-heading h1{font-size:clamp(23px,3vw,30px);font-weight:800;color:#214d34;margin:5px 0}
+.library-page .lib-eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:800;color:#528263}
+.library-page .lib-muted{color:#78877c;font-size:12px;line-height:1.5}
+.library-page .lib-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:17px 0}
+.library-page .lib-kpis>div{background:linear-gradient(145deg,#fff,#f8fbf8);border:1px solid #e1ebe2;border-radius:14px;padding:15px 17px;box-shadow:0 3px 12px #1d4b2b0b}
+.library-page .lib-kpis span{display:block;color:#718176;font-size:11px;font-weight:650}
+.library-page .lib-kpis strong{display:block;color:#245b39;font-size:25px;margin-top:7px;font-weight:800}
+.library-page .card.lib-table-card,.library-page .card.lib-filter-card{background:#fff;border:1px solid #e4ece5;border-radius:15px;box-shadow:0 4px 18px #1840250b;padding:16px;margin:0 0 14px}
+.library-page .lib-table-card>.page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+.library-page .lib-table-card h2{font-size:15px;font-weight:800;color:#2c5038;margin:0}
+.library-page .lib-table-scroll{overflow:auto;max-width:100%;width:100%;border:1px solid #e8eee9;border-radius:10px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.library-page .lib-table-scroll table{border-collapse:separate;border-spacing:0;width:100%;min-width:720px}
+.library-page .lib-table-scroll th{background:#f0f6f0;color:#496451;font-size:10px;text-transform:uppercase;letter-spacing:.55px;font-weight:800;padding:12px 13px;white-space:nowrap;border-bottom:1px solid #dfe9e0}
+.library-page .lib-table-scroll td{padding:11px 13px;border-bottom:1px solid #edf1ed;color:#405448;font-size:12px;vertical-align:middle}
+.library-page .lib-table-scroll tbody tr:last-child td{border-bottom:0}
+.library-page .lib-table-scroll tbody tr:hover{background:#f8fbf8}
+.library-page .lib-status{display:inline-flex;padding:4px 9px;border-radius:30px;background:#e8f4e9;color:#28613d;font-size:10px;font-weight:800;white-space:nowrap}
+.library-page .lib-inactive{background:#f1f2ef;color:#6e766f}
+.library-page .lib-empty{text-align:center!important;padding:32px 16px!important;color:#879389!important}
+.library-page .lib-edit{border:1px solid #d6e5d8;background:#f3f8f3;color:#28613e;border-radius:8px;padding:7px 11px;font-size:11px;font-weight:800;cursor:pointer}
+.library-page .btn{border-radius:9px;font-weight:750;box-shadow:none}
+.library-page .lib-filter-trigger{border:1px solid #d5e4d7;background:#f2f8f2;color:#285a3a;padding:9px 13px;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer}
+.lib-filter-dialog{width:min(760px,calc(100% - 24px));max-height:85vh;overflow:auto;border:1px solid #dce8de;border-radius:17px;padding:0;box-shadow:0 24px 80px #0f281a47}
+.lib-filter-dialog::backdrop,.lib-dialog::backdrop{background:#0d1f1385;backdrop-filter:blur(3px)}
+.lib-filter-dialog .lib-filter-dialog-head{position:sticky;top:0;background:#f5faf5;border-bottom:1px solid #e1ebe2;padding:15px 18px;display:flex;justify-content:space-between;align-items:center}
+.lib-filter-dialog .lib-filter-dialog-head strong{font-size:15px;color:#28543a}
+.lib-filter-dialog .lib-filter-dialog-head button{border:0;border-radius:50%;width:31px;height:31px;background:#e5efe6;color:#315b3e;font-size:21px;cursor:pointer}
+.lib-filter-dialog .lib-filter-dialog-content{padding:17px}
+.lib-filter-dialog .lib-filter-dialog-content .lib-filter-card{display:block!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;background:transparent!important}
+.lib-filter-dialog .lib-filter-dialog-content form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:end}
+.lib-filter-dialog .lib-filter-dialog-content form label{min-width:0;display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:750;color:#40594a}
+.lib-filter-dialog .field,.lib-dialog .field{width:100%;border:1px solid #dce6dd;border-radius:8px;padding:10px 11px;background:#fff;min-height:39px}
+.lib-dialog{max-width:calc(100% - 24px);max-height:88vh;overflow:auto;border:1px solid #dce8de;border-radius:17px}
+.lib-dialog .lib-dialog-head h2{color:#28543a;font-size:19px}
+@media(max-width:700px){.library-page .lib-heading{align-items:flex-start;flex-direction:column}.library-page .lib-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.library-page .lib-kpis>div{padding:12px}.library-page .lib-kpis strong{font-size:22px}.library-page .card.lib-table-card{padding:11px}.library-page .lib-table-scroll table{min-width:680px}.lib-filter-dialog .lib-filter-dialog-content form{grid-template-columns:1fr}.lib-filter-dialog .lib-filter-dialog-content form>*{grid-column:1!important}}
+@media print{.lib-filter-trigger,.lib-filter-dialog,.library-page .lib-heading button{display:none!important}}
+</style>
+<script>
+(function(){function setup(){document.querySelectorAll('.library-page').forEach(function(page){var panel=page.querySelector('.lib-filter-card');if(!panel||panel.dataset.popupReady==='1')return;var heading=page.querySelector('.lib-heading');if(!heading)return;panel.dataset.popupReady='1';var dialog=document.createElement('dialog');dialog.className='lib-filter-dialog';var head=document.createElement('div');head.className='lib-filter-dialog-head';head.innerHTML='<strong>Filter this page</strong><button type="button" aria-label="Close filters">×</button>';head.querySelector('button').addEventListener('click',function(){dialog.close()});var content=document.createElement('div');content.className='lib-filter-dialog-content';content.appendChild(panel);dialog.appendChild(head);dialog.appendChild(content);page.appendChild(dialog);var trigger=document.createElement('button');trigger.type='button';trigger.className='lib-filter-trigger';trigger.innerHTML='&#9881; Filters';trigger.addEventListener('click',function(){dialog.showModal()});heading.appendChild(trigger);dialog.addEventListener('click',function(e){if(e.target===dialog)dialog.close()})})}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
+</script>
+"""
+    return _school_page(request, title, body + shared)
+
+
 def _ensure_book_catalogue(cur):
     cur.execute("""CREATE TABLE IF NOT EXISTS library_books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +196,7 @@ document.getElementById('libraryBookForm').addEventListener('submit',function(e)
 </style>
 """
     con.close()
-    return _school_page(request, "Book Catalogue", body)
+    return _library_page(request, "Book Catalogue", body)
 
 
 @router.post("/app/library/catalogue/save")
@@ -285,7 +334,7 @@ def library_book_register(request: Request, q: str = "", status: str = ""):
 <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('copyDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not books else ''}>Save Copy</button></div></form></dialog>
 """
         con.close()
-        return _school_page(request, "Book Register", body)
+        return _library_page(request, "Book Register", body)
     except Exception:
         con.close()
         raise
@@ -430,7 +479,7 @@ def library_issue_books(request: Request, q: str = "", borrower_type: str = "", 
 <div class="lib-form-grid"><label>Available book copy *<select class="field" name="copy_id" required>{copy_options}</select></label><label>Borrower type *<select class="field" name="borrower_type" required><option>Student</option><option>Staff</option></select></label><label>Borrower full name *<input class="field" name="borrower_name" required maxlength="180"></label><label>Admission / Staff number<input class="field" name="borrower_ref" maxlength="80"></label><label>Issue date *<input class="field" type="date" name="issue_date" value="{datetime.now().date().isoformat()}" required></label><label>Due date *<input class="field" type="date" name="due_date" min="{datetime.now().date().isoformat()}" required></label><label class="lib-notes">Notes<textarea class="field" name="notes" rows="2"></textarea></label></div>
 <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="document.getElementById('issueDialog').close()">Cancel</button><button class="btn" type="submit" {'disabled' if not available_copies else ''}>Confirm Issue</button></div></form></dialog>
 """
-        return _school_page(request, "Issue Books", body)
+        return _library_page(request, "Issue Books", body)
     finally:
         con.close()
 
@@ -559,7 +608,7 @@ def library_book_returns(request: Request, q: str = ""):
 </div>
 {dialogs}
 """
-        return _school_page(request, "Book Returns", body)
+        return _library_page(request, "Book Returns", body)
     finally:
         con.close()
 
@@ -685,7 +734,7 @@ def library_overdue_books(request: Request, q: str = "", borrower_type: str = ""
  <section class="card lib-table-card"><div class="page-heading"><h2>Overdue loan register</h2><span class="lib-muted">{len(rows)} overdue record(s)</span></div><div class="lib-table-scroll"><table style="min-width:900px"><thead><tr><th>Book / Accession</th><th>Borrower</th><th>Issue date</th><th>Due date</th><th>Overdue duration</th></tr></thead><tbody>{table}</tbody></table></div></section>
 </div>
 """
-        return _school_page(request, "Overdue Books", body)
+        return _library_page(request, "Overdue Books", body)
     finally:
         con.close()
 
@@ -771,7 +820,7 @@ def library_members(request: Request, q: str = "", member_type: str = "", status
  <div class="lib-dialog-actions"><button type="button" class="btn btn-light" onclick="this.closest('dialog').close()">Cancel</button><button class="btn" type="submit">Save Member</button></div>
 </form></dialog>
 """
-        return _school_page(request, "Library Members", body)
+        return _library_page(request, "Library Members", body)
     finally:
         con.close()
 
@@ -918,6 +967,6 @@ def library_reports(request: Request, date_from: str = "", date_to: str = ""):
 </div>
 <style>@media print{{.nav,.sidebar,.lib-filter-card,.lib-heading button{{display:none!important}}.page{{width:100%!important;max-width:none!important;margin:0!important}}.card{{break-inside:avoid;box-shadow:none!important}}body{{background:#fff!important}}}}</style>
 """
-        return _school_page(request, "Library Reports", body)
+        return _library_page(request, "Library Reports", body)
     finally:
         con.close()
