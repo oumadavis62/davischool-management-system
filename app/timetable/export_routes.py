@@ -78,37 +78,37 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         cell_style = ParagraphStyle("TimetableCell", parent=styles["BodyText"], fontSize=6.5, leading=8)
         header_style = ParagraphStyle("TimetableHeader", parent=styles["BodyText"], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER)
         def pdf_text(value):
-            return pdf_text(str(value).encode("latin-1", "replace").decode("latin-1"))
-        school_name = xml_escape(str(school["name"] or "School"))
-        address = xml_escape(str(school["address"] or ""))
+            return xml_escape(str(value).encode("latin-1", "replace").decode("latin-1"))
+        school_name = pdf_text(str(school["name"] or "School"))
+        address = pdf_text(str(school["address"] or ""))
         story = [Paragraph(school_name, school_style)]
         if address:
             story.append(Paragraph(address, styles["Normal"]))
         profile_meta = str(result["profile"]["academic_year"]) + " | " + str(result["profile"]["term"])
         story.extend([
             Spacer(1,5),
-            Paragraph(xml_escape(result["title"]).upper(), title_style),
-            Paragraph(xml_escape(profile_meta), styles["Normal"]),
+            Paragraph(pdf_text(result["title"]).upper(), title_style),
+            Paragraph(pdf_text(profile_meta), styles["Normal"]),
             Spacer(1,10),
         ])
         starts, continued = cell_map(result)
-        headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(xml_escape(str(d["day_name"])), header_style) for d in result["days"]]
+        headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(pdf_text(str(d["day_name"])), header_style) for d in result["days"]]
         data = [headers]
         for period in result["periods"]:
-            row = [Paragraph(xml_escape(str(period["label"])), cell_style), Paragraph(xml_escape(str(period["start_time"])) + " - " + xml_escape(str(period["end_time"])), cell_style)]
+            row = [Paragraph(pdf_text(str(period["label"])), cell_style), Paragraph(pdf_text(str(period["start_time"])) + " - " + pdf_text(str(period["end_time"])), cell_style)]
             for day in result["days"]:
                 key = (int(day["id"]),int(period["id"]))
                 if key in starts:
                     lines = []
                     for lesson in starts[key]:
                         class_label = str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else "")
-                        line = "<b>" + xml_escape(str(lesson["subject_name"])) + "</b><br/>" + xml_escape(class_label) + "<br/>" + xml_escape(str(lesson["teacher_name"]))
+                        line = "<b>" + pdf_text(str(lesson["subject_name"])) + "</b><br/>" + pdf_text(class_label) + "<br/>" + pdf_text(str(lesson["teacher_name"]))
                         if lesson["room_name"]:
-                            line += "<br/>" + xml_escape(str(lesson["room_name"]))
+                            line += "<br/>" + pdf_text(str(lesson["room_name"]))
                         lines.append(line)
                     cell = "<br/><br/>".join(lines)
                 elif key in continued:
-                    cell = "Continues: " + xml_escape(str(continued[key]["subject_name"]))
+                    cell = "Continues: " + pdf_text(str(continued[key]["subject_name"]))
                 else:
                     cell = "—"
                 row.append(Paragraph(cell, cell_style))
