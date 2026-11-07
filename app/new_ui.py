@@ -954,8 +954,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 else staff_group if u == "/app/staff"
                 else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
                 else finance_accounts_group if u == "/app/finance" and role in ("school_admin", "registrar")
-                else communication_group if u == "/app/announcements"
-                else "" if u in ("/app/users", "/app/roles", "/app/school-settings", "/app/audit")
+                else "" if u in ("/app/announcements", "/app/users", "/app/roles", "/app/school-settings", "/app/audit")
                 else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             )
             nav_markup.append(item_html)
@@ -963,6 +962,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
         if any(service_groups):
             nav_markup.append("<div class='nav-section-label'>SCHOOL SERVICES</div>")
             nav_markup.extend(service_groups)
+        if communication_group:
+            nav_markup.append(communication_group)
         if administration_governance_group:
             nav_markup.append(administration_governance_group)
         links = "".join(nav_markup)
