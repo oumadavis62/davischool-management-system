@@ -260,6 +260,38 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
         start_time, end_time, day_id, session_date, period_id,
         schedule_layer, session_type,
     )
+    if programme_id is not None:
+        programme = cur.execute(
+            """SELECT id,schedule_layer FROM ds_timetable_learning_programmes
+               WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+            (int(programme_id), school_id, profile_id),
+        ).fetchone()
+        if not programme:
+            raise TimetableSetupError("Select an active programme belonging to this timetable profile.")
+        if str(programme["schedule_layer"]) != schedule_layer:
+            raise TimetableSetupError("The session layer must match the selected learning programme.")
+        definitions = cur.execute(
+            """SELECT required_teacher_count,room_type FROM ds_timetable_programme_sessions
+               WHERE school_id=? AND profile_id=? AND programme_id=? AND is_active=1
+                 AND (day_id IS NULL OR day_id=?) AND start_time=? AND end_time=?""",
+            (school_id, profile_id, int(programme_id), day_id, start_time, end_time),
+        ).fetchall()
+        if definitions:
+            required_count = max(int(row["required_teacher_count"] or 1) for row in definitions)
+            if len(teachers) < required_count:
+                raise TimetableSetupError(
+                    f"This programme session requires at least {required_count} teachers."
+                )
+            required_room_types = {str(row["room_type"]) for row in definitions if row["room_type"]}
+            if required_room_types:
+                room = cur.execute(
+                    "SELECT room_type FROM ds_timetable_rooms WHERE id=? AND school_id=? AND is_active=1",
+                    (room_id, school_id),
+                ).fetchone() if room_id is not None else None
+                if not room or str(room["room_type"]) not in required_room_types:
+                    raise TimetableSetupError(
+                        "This programme session requires a venue of type " + " or ".join(sorted(required_room_types)) + "."
+                    )
     if teaching_group_id is not None:
         group = cur.execute(
             "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
