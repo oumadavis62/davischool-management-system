@@ -584,8 +584,6 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         options = []
         for day in days:
             day_id = int(day["id"])
-            if task["preferred_day_id"] and day_id != task["preferred_day_id"]:
-                continue
             for index, period in enumerate(periods):
                 span = span_for(index, task["duration"])
                 if not span:
@@ -597,13 +595,35 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         day_id, int(period["id"]), start, end, None)
                 except TimetableSetupError:
                     continue
-                rooms = cur.execute(
-                    """SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1
-                       AND (? IS NULL OR room_type=?) ORDER BY capacity DESC,id""",
-                    (school_id, task["room_type"], task["room_type"]),
-                ).fetchall()
-                room_ids = [int(r["id"]) for r in rooms] if rooms else ([None] if not task["room_type"] else [])
+                unavailable = cur.execute(
+                    """SELECT 1 FROM ds_timetable_teacher_availability
+                       WHERE school_id=? AND profile_id=? AND day_id=?
+                         AND availability='unavailable' AND teacher_id IN (
+                           SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers
+                           WHERE school_id=? AND profile_id=? AND requirement_id=?
+                         ) AND period_id IN (""" + ",".join("?" for _ in span) + ") LIMIT 1",
+                    (school_id, profile_id, day_id, school_id, profile_id,
+                     task["requirement_id"], *[int(p["id"]) for p in span]),
+                ).fetchone()
+                if unavailable:
+                    continue
+                if task["room_type"]:
+                    rooms = cur.execute(
+                        """SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1
+                           AND room_type=? ORDER BY capacity DESC,id""",
+                        (school_id, task["room_type"]),
+                    ).fetchall()
+                    room_ids = [int(r["id"]) for r in rooms]
+                else:
+                    room_ids = [None]
                 for room_id in room_ids:
+                    if _validate_constraints:
+                        try:
+                            _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
+                                task["subject_id"], task["classes"], task["teachers"], room_id,
+                                day_id, int(period["id"]), start, end, None)
+                        except TimetableSetupError:
+                            continue
                     if find_session_conflicts(connection, school_id, profile_id, start, end,
                         task["classes"], task["teachers"], task["learners"], room_id, day_id):
                         continue
@@ -612,6 +632,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         "duration": task["duration"], "period_no": int(period["period_no"])})
         if not options:
             raise TimetableSetupError("No valid slot is available for normalized requirement '" + task["name"] + "'. Check constraints, teacher availability, rooms and period patterns.")
+        options.sort(key=lambda option: (0 if task["preferred_day_id"] == option["day_id"] else 1,
+                                          option["period_no"], option["day_id"]))
         candidates.append(options)
 
     order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -tasks[i]["duration"], tasks[i]["requirement_id"], tasks[i]["session_no"]))
