@@ -2519,9 +2519,39 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             need=int(l.get("lessons_per_week") or 0)
             got=existing_by.get(lid,0)+new_by.get(lid,0)
             if got<need:
+                duration=max(1,int(l.get("duration") or 1))
+                valid_starts=[
+                    (day,pno)
+                    for day in days
+                    for pno in pmap
+                    if valid_duration_start(pno,duration)
+                    and pno+duration-1<=max(pmap)
+                    and not crosses_break(pno,duration)
+                ]
+                teachers=lesson_teachers.get(lid,set())
+                subject_id=int(l.get("subject_id") or 0)
+                availability_starts=[
+                    (day,pno) for day,pno in valid_starts
+                    if all(
+                        (day,xp,tid) not in blocked_teacher
+                        for xp in range(pno,pno+duration) for tid in teachers
+                    )
+                    and all(
+                        (day,xp,subject_id) not in blocked_subject
+                        for xp in range(pno,pno+duration)
+                    )
+                ]
+                if need>len(days):
+                    reason=f"requires {need} weekly occurrences but only {len(days)} teaching days are enabled; the same subject is limited to once per class per day"
+                elif not valid_starts:
+                    reason=f"no valid {duration}-period block fits the active periods and breaks"
+                elif not availability_starts:
+                    reason="teacher or subject availability blocks every otherwise valid period block"
+                else:
+                    reason="no conflict-free slot remained after balancing class and teacher loads; review competing locked placements, room assignments and weekly requirements"
                 unplaced.append((
                     lid,
-                    f"{got}/{need} occurrences placed; automatic solver exhausted its search"
+                    f"{got}/{need} occurrences placed; {reason}"
                 ))
 
     status="complete" if complete else ("relaxed" if mode!="strict" and placed else "incomplete")
