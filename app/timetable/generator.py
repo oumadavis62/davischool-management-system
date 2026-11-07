@@ -236,10 +236,43 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         "period_no": int(period["period_no"]),
                     })
         if not candidates:
-            raise TimetableSetupError(
+            message = (
                 "No valid time slots are available for class ID " + str(task["class_id"]) +
                 ", subject ID " + str(task["subject_id"]) + ". Check teacher availability, periods and breaks."
             )
+            now = _now()
+            summary = {
+                "status": "failed",
+                "message": message,
+                "required_lessons": total_required,
+                "manual_lessons_kept": len(manual),
+                "unscheduled_lessons": len(tasks),
+                "search_nodes": 0,
+                "search_limit": int(node_limit),
+            }
+            snapshot = {
+                "profile_id": profile_id,
+                "engine_version": ENGINE_VERSION,
+                "reason": message,
+                "manual_lesson_ids": [int(l["id"]) for l in manual],
+                "previous_generated_ids": [int(l["id"]) for l in previous_generated],
+            }
+            cur.execute(
+                """INSERT INTO ds_timetable_generation_runs
+                   (school_id,profile_id,status,engine_version,input_snapshot_json,result_summary_json,started_at,finished_at,created_by,created_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, "failed", ENGINE_VERSION, json.dumps(snapshot, sort_keys=True),
+                 json.dumps(summary, sort_keys=True), now, now, created_by, now),
+            )
+            run_id = int(cur.lastrowid or 0)
+            if not run_id:
+                row = cur.execute(
+                    "SELECT id FROM ds_timetable_generation_runs WHERE school_id=? AND profile_id=? AND created_at=? ORDER BY id DESC LIMIT 1",
+                    (school_id, profile_id, now),
+                ).fetchone()
+                run_id = int(row["id"])
+            connection.commit()
+            return {"run_id": run_id, **summary}
         candidates_by_task.append((task_index, candidates))
 
     # Most-constrained-first reduces search. Stable ordering keeps generation
