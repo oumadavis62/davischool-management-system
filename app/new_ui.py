@@ -20120,8 +20120,32 @@ def _ensure_admissions_schema(cur):
         enrolled_student_id INTEGER,
         admission_no TEXT
     )""")
+    # Older installations may already have admission_applications from an
+    # earlier module version. CREATE TABLE IF NOT EXISTS does not add newer
+    # columns, so migrate them before report queries or indexes reference them.
+    admission_columns = {
+        "gender": "TEXT",
+        "parent_name": "TEXT",
+        "parent_phone": "TEXT",
+        "parent_email": "TEXT",
+        "previous_school": "TEXT",
+        "applying_class_id": "INTEGER",
+        "application_date": "TEXT",
+        "status": "TEXT NOT NULL DEFAULT 'pending'",
+        "notes": "TEXT",
+        "created_at": "TEXT",
+        "updated_at": "TEXT",
+        "enrolled_student_id": "INTEGER",
+        "admission_no": "TEXT",
+    }
+    existing_admission_columns = {
+        str(row["name"]) for row in cur.execute("PRAGMA table_info(admission_applications)").fetchall()
+    }
+    for column_name, column_type in admission_columns.items():
+        if column_name not in existing_admission_columns:
+            cur.execute(f"ALTER TABLE admission_applications ADD COLUMN {column_name} {column_type}")
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_admission_applications_school_status
-        ON admission_applications(school_id,status,id)""")
+        ON admission_applications(school_id,status,id)")
     cur.execute("""CREATE TABLE IF NOT EXISTS admission_number_settings(
         school_id INTEGER PRIMARY KEY,
         prefix TEXT NOT NULL DEFAULT 'DAV',
