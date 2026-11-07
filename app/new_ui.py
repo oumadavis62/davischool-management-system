@@ -21045,7 +21045,7 @@ def admission_letter_print(request: Request, application_id: int):
       <div class='letter-tools'><a href='/app/admission-letters'>Back to Admission Letters</a><button type='button' onclick='openAdmissionPrintPreview()'>Open Print Preview / Save PDF</button></div>
       <article class='letter-paper'>
         <header class='letter-header'>
-          <div class='letter-brand'>{logo_html}<div><h1>{escape(school_name)}</h1><p>{escape(school_contacts)}</p></div></div>
+          <div class='letter-brand'><div class='letter-logo-left'>{logo_html}</div><div class='letter-school-name'><h1>{escape(school_name)}</h1><p>{escape(school_contacts)}</p></div><div class='letter-logo-right'>{logo_html}</div></div>
           <div class='letter-rule'></div>
           <div class='letter-meta'><span>OFFICIAL SCHOOL COMMUNICATION</span><span>DATE: {escape(letter_date)}</span></div>
         </header>
@@ -21079,7 +21079,7 @@ def admission_letter_print(request: Request, application_id: int):
       .letter-tools button{{background:#176b3a;color:#fff}}
       .letter-paper{{box-sizing:border-box;background:#fff;color:#263d2b;width:210mm;min-height:297mm;margin:0 auto;padding:17mm 18mm 15mm;border:1px solid #dbe7dc;box-shadow:0 5px 24px rgba(20,65,35,.10);font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.48;display:flex;flex-direction:column}}
       .letter-header{{border-bottom:2px solid #176b3a;padding-bottom:7mm}}
-      .letter-brand{{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}}
+      .letter-brand{{display:grid;grid-template-columns:22mm minmax(0,1fr) 22mm;align-items:center;gap:8mm;text-align:center}}\n      .letter-logo-left,.letter-logo-right{{display:flex;align-items:center;justify-content:center;min-width:0}}\n      .letter-school-name{{min-width:0}}
       .school-logo{{width:22mm;height:22mm;object-fit:contain}}
       .logo-placeholder{{width:22mm;height:22mm;border-radius:50%;background:#e7f1e7;color:#176b3a;display:flex;align-items:center;justify-content:center;font-size:18pt;font-weight:900}}
       .letter-brand h1{{font-size:20pt;color:#176b3a;margin:0 0 3px;line-height:1.15}}
@@ -21105,7 +21105,7 @@ def admission_letter_print(request: Request, application_id: int):
       .stamp-space{{width:34mm;height:27mm;border:1px dashed #9eb5a2;border-radius:4px;display:flex;align-items:center;justify-content:center;text-align:center;color:#8a9c8e;font-size:8pt;font-weight:800;letter-spacing:1px}}
       .letter-footer{{border-top:1px solid #cbdccc;margin-top:7mm;padding-top:3mm;text-align:center;color:#718276;font-size:7.5pt}}
       @page{{size:A4 portrait;margin:0}}
-      @media(max-width:760px){{.letter-paper{{width:100%;min-height:0;padding:24px 20px}}.letter-brand h1{{font-size:17pt}}.letter-grid{{gap:8px 12px}}}}
+      @media(max-width:760px){{.letter-paper{{width:100%;min-height:0;padding:24px 20px}}.letter-brand{{grid-template-columns:16mm minmax(0,1fr) 16mm;gap:3mm}}.school-logo,.logo-placeholder{{width:16mm;height:16mm}}.letter-brand h1{{font-size:17pt}}.letter-grid{{gap:8px 12px}}}}
       @media print{{
         html,body{{margin:0!important;padding:0!important;background:#fff!important}}
         .letter-page{{margin:0!important;padding:0!important;max-width:none!important}}
