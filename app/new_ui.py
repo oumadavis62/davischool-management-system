@@ -21089,6 +21089,111 @@ def finance_bank_line_add(request: Request,account_id:str=Form(...),line_date:st
     return RedirectResponse("/app/finance/banking",303)
 
 
+
+@router.post("/app/finance/banking/import")
+async def finance_bank_statement_import(request: Request, account_id:str=Form(...), statement_file:UploadFile=File(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    raw=await statement_file.read()
+    if len(raw)>5*1024*1024:return HTMLResponse("Statement file exceeds the 5 MB limit.",400)
+    try:
+        text_data=raw.decode("utf-8-sig")
+        reader=csv.DictReader(io.StringIO(text_data))
+        if not reader.fieldnames:raise ValueError("CSV header row is missing.")
+        fields={str(x).strip().lower():x for x in reader.fieldnames}
+        date_col=next((fields[x] for x in ("date","transaction date","value date") if x in fields),None)
+        ref_col=next((fields[x] for x in ("reference","ref","transaction id") if x in fields),None)
+        desc_col=next((fields[x] for x in ("description","details","narration") if x in fields),None)
+        amount_col=next((fields[x] for x in ("amount","transaction amount") if x in fields),None)
+        direction_col=next((fields[x] for x in ("direction","type","debit/credit") if x in fields),None)
+        debit_col=fields.get("debit");credit_col=fields.get("credit")
+        if not date_col or not amount_col and not (debit_col or credit_col):
+            raise ValueError("CSV must include Date and Amount columns, or Date, Debit and Credit columns.")
+        rows=list(reader)
+    except Exception as exc:
+        return HTMLResponse("Could not read statement CSV: "+escape(str(exc)),400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    if not cur.execute("SELECT id FROM ds_fin_bank_accounts WHERE id=? AND school_id=?",(account_id,sid)).fetchone():
+        con.close();return HTMLResponse("Select a bank account belonging to this school.",404)
+    imported=0;duplicates=0
+    try:
+        for row in rows:
+            day=str(row.get(date_col) or "").strip()[:10]
+            ref=str(row.get(ref_col) or "").strip() if ref_col else ""
+            desc=str(row.get(desc_col) or "").strip() if desc_col else ""
+            if debit_col or credit_col:
+                debit=float(str(row.get(debit_col) or "0").replace(",","") or 0) if debit_col else 0
+                credit=float(str(row.get(credit_col) or "0").replace(",","") or 0) if credit_col else 0
+                if debit>0 and credit>0:raise ValueError("A row cannot contain both debit and credit values.")
+                amount=debit or credit;direction="Debit" if debit>0 else "Credit"
+            else:
+                raw_amount=str(row.get(amount_col) or "0").replace(",","").replace("KES","").strip()
+                amount=float(raw_amount)
+                direction=(str(row.get(direction_col) or "").strip().title() if direction_col else ("Debit" if amount<0 else "Credit"))
+                amount=abs(amount)
+            if not day or amount<=0 or direction not in ("Debit","Credit"):continue
+            exists=cur.execute("SELECT id FROM ds_fin_bank_lines WHERE school_id=? AND account_id=? AND line_date=? AND COALESCE(reference,'')=? AND amount=? AND direction=? LIMIT 1",(sid,account_id,day,ref,amount,direction)).fetchone()
+            if exists:duplicates+=1;continue
+            cur.execute("INSERT INTO ds_fin_bank_lines(id,school_id,account_id,line_date,reference,description,amount,direction) VALUES(?,?,?,?,?,?,?,?)",
+                (_finance_uid(),sid,account_id,day,ref,desc,amount,direction))
+            imported+=1
+        cur.execute("INSERT INTO ds_fin_bank_imports(id,school_id,account_id,filename,imported_rows,duplicate_rows,imported_by,imported_at) VALUES(?,?,?,?,?,?,?,?)",
+            (_finance_uid(),sid,account_id,statement_file.filename or "statement.csv",imported,duplicates,str(request.session.get("email","")),_finance_now()))
+        _audit(cur,sid,request,"BANK_STATEMENT_IMPORT","Imported %s statement rows; %s duplicates skipped"%(imported,duplicates))
+        con.commit()
+    except Exception as exc:
+        con.rollback();con.close();return HTMLResponse("Statement import failed without saving the batch: "+escape(str(exc)),400)
+    con.close()
+    return RedirectResponse("/app/finance/banking?imported=%s&duplicates=%s"%(imported,duplicates),303)
+
+
+@router.post("/app/finance/periods/close")
+def finance_period_close(request: Request, period_start:str=Form(...), period_end:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",period_start) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",period_end) or period_start>period_end:
+        return HTMLResponse("Enter a valid accounting period date range.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    drafts=cur.execute("SELECT COUNT(*) n FROM ds_fin_journals WHERE school_id=? AND status='Draft' AND journal_date BETWEEN ? AND ?",(sid,period_start,period_end)).fetchone()["n"]
+    if int(drafts or 0):
+        con.close();return HTMLResponse("This period still contains draft journals. Post or cancel them before closing.",409)
+    cur.execute("INSERT INTO ds_fin_periods(school_id,period_start,period_end,status,closed_by,closed_at) VALUES(?,?,?,'Closed',?,?) ON CONFLICT(school_id,period_start,period_end) DO UPDATE SET status='Closed',closed_by=excluded.closed_by,closed_at=excluded.closed_at RETURNING period_start",
+        (sid,period_start,period_end,str(request.session.get("email","")),_finance_now()))
+    _audit(cur,sid,request,"FINANCE_PERIOD_CLOSE",period_start+" to "+period_end)
+    con.commit();con.close()
+    return RedirectResponse("/app/finance/ledger",303)
+
+
+@router.post("/app/finance/ledger/reverse")
+def finance_journal_reverse(request: Request, journal_id:str=Form(...), reason:str=Form(...)):
+    sid=_finance_access(request)
+    if not sid:return RedirectResponse("/",303)
+    if not reason.strip():return HTMLResponse("A reversal reason is required.",400)
+    con=_db();cur=con.cursor();_finance_prepare(cur,sid)
+    original=cur.execute("SELECT * FROM ds_fin_journals WHERE id=? AND school_id=?",(journal_id,sid)).fetchone()
+    if not original:con.close();return HTMLResponse("Journal not found.",404)
+    if original["status"]!="Posted":con.close();return HTMLResponse("Only posted journals can be reversed.",409)
+    if cur.execute("SELECT 1 FROM ds_fin_reversals WHERE school_id=? AND original_journal_id=?",(sid,journal_id)).fetchone():
+        con.close();return HTMLResponse("This journal has already been reversed.",409)
+    day=datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d")
+    if not _finance_period_open(cur,sid,day):
+        con.close();return HTMLResponse("The current accounting period is closed.",409)
+    lines=cur.execute("SELECT * FROM ds_fin_journal_lines WHERE school_id=? AND journal_id=?",(sid,journal_id)).fetchall()
+    if len(lines)<2:con.close();return HTMLResponse("Journal lines are incomplete.",409)
+    rid=_finance_uid();stamp=_finance_now()
+    cur.execute("INSERT INTO ds_fin_journals(id,school_id,journal_date,reference,description,status,created_by,created_at,approved_by,posted_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (rid,sid,day,"REV-"+str(original["reference"] or journal_id),"Reversal: "+str(original["description"])+" · "+reason.strip(),"Posted",str(request.session.get("email","")),stamp,str(request.session.get("email","")),stamp))
+    for line in lines:
+        cur.execute("INSERT INTO ds_fin_journal_lines(id,school_id,journal_id,account_code,debit,credit,memo) VALUES(?,?,?,?,?,?,?)",
+            (_finance_uid(),sid,rid,line["account_code"],float(line["credit"] or 0),float(line["debit"] or 0),"Reversal of "+str(journal_id)))
+    cur.execute("INSERT INTO ds_fin_reversals(school_id,original_journal_id,reversal_journal_id,reason,created_at) VALUES(?,?,?,?,?) RETURNING original_journal_id",
+        (sid,journal_id,rid,reason.strip(),stamp))
+    cur.execute("UPDATE ds_fin_journals SET status='Reversed' WHERE id=? AND school_id=?",(journal_id,sid))
+    _audit(cur,sid,request,"FINANCE_JOURNAL_REVERSE",str(journal_id)+" · "+reason.strip())
+    con.commit();con.close()
+    return RedirectResponse("/app/finance/ledger",303)
+
+
 @router.post("/app/finance/banking/reconcile")
 def finance_bank_line_reconcile(request: Request,line_id:str=Form(...)):
     sid=_finance_access(request)
