@@ -3816,6 +3816,10 @@ def main_app_student_edit(request: Request, student_id: int, admission_no: str =
 from app.new_ui import router as new_ui_router
 app.include_router(new_ui_router)
 
+# Register the dedicated Smart Timetable workspace after shared school UI helpers.
+from app.timetable_manager import router as timetable_manager_router
+app.include_router(timetable_manager_router)
+
 # HR workspace routes are registered after the shared school UI helpers.
 from app.hr_management import router as hr_management_router
 app.include_router(hr_management_router)
