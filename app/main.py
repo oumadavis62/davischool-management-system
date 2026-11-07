@@ -627,7 +627,7 @@ def init_extended_db():
     # One-time destructive retirement migration. The marker prevents this
     # legacy cleanup from ever touching tables introduced by the new timetable.
     cur.execute("CREATE TABLE IF NOT EXISTS davischool_schema_migrations (migration_key TEXT PRIMARY KEY, applied_at TEXT)")
-    cur.execute("SELECT 1 FROM davischool_schema_migrations WHERE migration_key=?", ("retire_legacy_timetable_v1",))
+    cur.execute("SELECT 1 FROM davischool_schema_migrations WHERE migration_key=?", ("retire_all_legacy_timetable_v2",))
     if not cur.fetchone():
         if os.environ.get("DATABASE_URL", "").strip():
             try:
@@ -641,6 +641,7 @@ def init_extended_db():
             "timetable_generation_runs", "timetable_profile_availability",
             "timetable_availability", "timetable_lesson_classes", "timetable_lesson_teachers",
             "timetable_slots", "timetable_lessons", "timetable_constraints",
+            "timetable_teacher_availability", "timetable_subjects", "timetable_classes", "timetable_teachers",
             "timetable_rooms", "timetable_days", "timetable_periods", "timetable_breaks",
             "timetable_profiles", "timetable_profile_migrations", "timetable_manager_settings",
             "timetable_settings", "timetable",
