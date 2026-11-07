@@ -730,7 +730,8 @@ def _lesson_form(con, sid, existing=None):
 <label class='wide'><span class='tt-label'>Teachers — select multiple for co-teaching</span><select class='tt-field' name='teacher_ids' multiple size='5'>{"".join(f"<option value='{r['id']}' {'selected' if int(r['id']) in selected_teacher_ids else ''}>{escape(str(r['name'] or ''))}</option>" for r in teachers)}</select><small class='tt-muted'>Select 2 or more teachers when they co-teach the same lesson.</small></label>
 <label><span class='tt-label'>Lessons per week</span><input class='tt-field' name='lessons_per_week' type='number' min='1' max='30' value='{e.get("lessons_per_week",1)}' required></label>
 <label><span class='tt-label'>Duration (periods)</span><select class='tt-field' name='duration'><option value='1' {'selected' if str(e.get('duration',1))=='1' else ''}>Single</option><option value='2' {'selected' if str(e.get('duration',1))=='2' else ''}>Double</option><option value='3' {'selected' if str(e.get('duration',1))=='3' else ''}>Triple</option></select></label>
-<label><span class='tt-label'>Room</span><select class='tt-field' name='room_id'><option value=''>Any available room</option>{opts(rooms,'id','name')}</select></label>
+<label><span class='tt-label'>Required room</span><select class='tt-field' name='room_id'><option value=''>No fixed room</option>{opts(rooms,'id','name')}</select><small class='tt-muted'>A required room is reserved exclusively for this lesson.</small></label>
+<label><span class='tt-label'>Preferred room</span><select class='tt-field' name='preferred_room'><option value=''>No preference</option>{opts(rooms,'preferred_room','name')}</select><small class='tt-muted'>The generator tries this room first, then another available room.</small></label>
 <label><span class='tt-label'>Group / Division</span><input class='tt-field' name='group_name' value='{escape(str(e.get("group_name") or ""))}' placeholder='Entire class / Boys / Group A'></label>
 <label><span class='tt-label'>Cycle / Term</span><select class='tt-field' name='cycle'><option>Every week</option><option {'selected' if e.get('cycle')=='Alternate weeks' else ''}>Alternate weeks</option></select></label>
 <label class='tt-check'><input type='checkbox' name='locked' value='1' {'checked' if int(e.get('locked',0) or 0) else ''}> Locked card</label>
@@ -1731,6 +1732,8 @@ async def timetable_lesson_save(request:Request):
         locked=1 if form.get("locked") else 0
         room_value=str(form.get("room_id") or "")
         room=int(room_value) if room_value.isdigit() else None
+        preferred_value=str(form.get("preferred_room") or "")
+        preferred_room=int(preferred_value) if preferred_value.isdigit() else None
         if not class_ids or not subject_id or not 1<=lessons_per_week<=30 or not 1<=duration<=3:
             return RedirectResponse("/app/timetable?tab=lessons&error=Select+at+least+one+class+and+valid+lesson+details",303)
         valid_classes=cur.execute("SELECT id FROM classes WHERE school_id=? AND id IN ("+(",".join(["?"]*len(class_ids)))+")",(sid,*class_ids)).fetchall()
@@ -1741,9 +1744,10 @@ async def timetable_lesson_save(request:Request):
         if len(valid_class_ids)!=len(class_ids) or not valid_subject or len(valid_teacher_ids)!=len(teacher_ids):
             return RedirectResponse("/app/timetable?tab=lessons&error=Invalid+class%2C+subject+or+teacher+selection",303)
         if room and not cur.execute("SELECT id FROM timetable_rooms WHERE id=? AND school_id=?",(room,sid)).fetchone(): room=None
+        if preferred_room and not cur.execute("SELECT id FROM timetable_rooms WHERE id=? AND school_id=?",(preferred_room,sid)).fetchone(): preferred_room=None
         primary_class=valid_class_ids[0]
         primary_teacher=valid_teacher_ids[0] if valid_teacher_ids else None
-        vals=(primary_class,subject_id,primary_teacher,room,group_name,lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",locked,room,notes)
+        vals=(primary_class,subject_id,primary_teacher,room,group_name,lessons_per_week,duration,cycle if cycle in ("Every week","Alternate weeks") else "Every week",locked,preferred_room,notes)
         if lesson_id:
             cur.execute("""UPDATE timetable_lessons SET class_id=?,subject_id=?,teacher_id=?,room_id=?,group_name=?,lessons_per_week=?,duration=?,cycle=?,locked=?,preferred_room=?,notes=? WHERE id=? AND school_id=?""",vals+(lesson_id,sid))
             cur.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id))
@@ -2325,7 +2329,12 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
                     return fixed
 
                 if rooms:
-                    for room in rooms:
+                    preferred=int(lesson.get("preferred_room") or 0)
+                    ordered_rooms=sorted(
+                        rooms,
+                        key=lambda room:(0 if int(room["id"])==preferred and preferred else 1,int(room["id"]))
+                    )
+                    for room in ordered_rooms:
                         rid=int(room["id"])
                         if all((day,xp,rid) not in room_slot for xp in range(int(pno),int(pno)+duration)):
                             return rid
