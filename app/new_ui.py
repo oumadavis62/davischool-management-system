@@ -891,6 +891,21 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/facilities/reports", "Facilities & Assets Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
+        finance_accounts_group = (
+            "<details class='nav-group' id='financeAccountsNav' "
+            + ("open" if request_path.startswith("/app/finance") or request_path.startswith("/app/accounting") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('finance')}</span><b>Finance &amp; Accounts</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/finance", "Finance Overview")
+            + _nav_sub("/app/finance/billing", "Fees & Billing")
+            + _nav_sub("/app/finance/collections", "Collections & Receipting")
+            + _nav_sub("/app/finance/payables", "Accounts Payable")
+            + _nav_sub("/app/finance/ledger", "General Accounting")
+            + _nav_sub("/app/finance/banking", "Cash & Banking")
+            + _nav_sub("/app/finance/budgets", "Budgets & Planning")
+            + _nav_sub("/app/finance/reports", "Financial Reports")
+            + "</div></details>"
+        ) if role in ("school_admin", "registrar") else ""
         parent_student_services_group = (
             "<details class='nav-group' id='parentStudentServicesNav' "
             + ("open" if request_path.startswith("/app/parent-services") else "") + ">"
@@ -910,6 +925,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             else students_group if u == "/app/students" and role in ("school_admin", "registrar")
             else staff_group if u == "/app/staff"
             else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
+            else finance_accounts_group if u == "/app/finance" and role in ("school_admin", "registrar")
             else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             for u,i,l,_ in nav
         ) + library_group + inventory_group + transport_group + health_welfare_group + facilities_group + parent_student_services_group
@@ -6433,12 +6449,12 @@ def finance_page(request: Request):
     expected=float(fee["expected"] or 0); collected=float(fee["paid"] or 0); outstanding=expected-collected
     rows="".join(f"<tr><td>{escape(str(p['student_name'] or ''))}</td><td>KES {float(p['amount'] or 0):,.2f}</td><td>{escape(str(p['date'] or ''))}</td><td>{escape(str(p['reference'] or ''))}</td><td>{escape(str(p['method'] or ''))}</td></tr>" for p in payments)
     body=f"""<div class='page finance-hub'><div class='fin-heading'><div><div class='eyebrow'>SCHOOL FINANCIAL CONTROL</div><h1>Finance & Accounts</h1><div class='muted'>One connected workspace for learner billing, collections, expenditure and accounting.</div></div><div class='fin-currency'>KES · Kenya Shilling</div></div>
-<div class='fin-tabs'><a class='fin-tab' href='/app/finance'><b>Overview</b><small>Financial position and activity</small></a><a class='fin-tab' href='/app/finance/billing'><b>Fees & Billing</b><small>Learner charges and balances</small></a><a class='fin-tab' href='/app/finance/collections'><b>Collections & Receipting</b><small>Payments and receipt register</small></a><a class='fin-tab' href='/app/finance/payables'><b>Accounts Payable</b><small>Expenses, vouchers and LPOs</small></a><a class='fin-tab' href='/app/finance/ledger'><b>General Accounting</b><small>Accounting records and trial balance</small></a><a class='fin-tab' href='/app/finance/banking'><b>Cash & Banking</b><small>Cashbook and cash movement</small></a><a class='fin-tab' href='/app/finance/reports'><b>Financial Reports</b><small>Current finance summaries</small></a></div>
+{_finance_tabs("overview")}
 <div class='grid'><div class='card'><div class='label'>Fees billed</div><div class='kpi'>KES {expected:,.2f}</div></div><div class='card'><div class='label'>Fees collected</div><div class='kpi'>KES {collected:,.2f}</div></div><div class='card'><div class='label'>Fee receivables</div><div class='kpi'>KES {outstanding:,.2f}</div></div><div class='card'><div class='label'>Recorded expenditure</div><div class='kpi'>KES {float(exp or 0):,.2f}</div></div></div>
 <div class='fin-columns'><div class='card section'><div class='fin-card-head'><div><h2>Income & collections</h2><p>Recent learner fee receipts</p></div><a class='fin-link' href='/app/finance/fees'>Open fee register →</a></div><div class='table-scroll'><table><thead><tr><th>Learner</th><th>Amount</th><th>Date</th><th>Receipt / Ref</th><th>Method</th></tr></thead><tbody>{rows or '<tr><td colspan=5>No fee payments recorded.</td></tr>'}</tbody></table></div></div>
 <div class='card section'><h2>Accounting activity</h2><div class='fin-stat'><span>Payment vouchers</span><b>{int(voucher_count)}</b></div><div class='fin-stat'><span>Purchase orders / LPOs</span><b>{int(lpo_count)}</b></div><div class='fin-stat'><span>Cashbook debits</span><b>KES {float(cash['debit'] or 0):,.2f}</b></div><div class='fin-stat'><span>Cashbook credits</span><b>KES {float(cash['credit'] or 0):,.2f}</b></div><a class='fin-link' href='/app/accounting'>Open accounting workspace →</a></div></div>
 <div class='fin-note'><b>Record protection:</b> Existing fees, payments, expenses, vouchers, LPOs and cashbook entries are retained. This landing page unifies access without rewriting historical transactions. Full double-entry posting, bank reconciliation and period closing are separate ledger stages; cashbook totals are not represented as a certified trial balance.</div></div>
-<style>.finance-hub .fin-heading{{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}}.finance-hub .eyebrow{{font-size:11px;letter-spacing:1.4px;font-weight:800;color:#27734c}}.finance-hub h1{{margin:5px 0;font-size:27px}}.fin-currency{{padding:9px 13px;border-radius:20px;background:#edf6ef;color:#21613f;font-weight:800;font-size:12px}}.fin-tabs{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}}.fin-tab{{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px solid #dce8df;border-radius:12px;background:#fff;color:#183b2b;text-decoration:none;min-height:74px}}.fin-tab:hover{{border-color:#39865c;box-shadow:0 5px 16px #1c593014;transform:translateY(-1px)}}.fin-tab small,.fin-card-head p{{color:#718078;font-size:12px}}.fin-columns{{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:14px;margin-top:15px}}.fin-card-head{{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}}.fin-card-head h2{{margin:0}}.fin-link{{color:#246b45;font-weight:800;text-decoration:none;font-size:13px}}.fin-stat{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #edf1ed;font-size:13px}}.fin-stat b{{font-variant-numeric:tabular-nums}}.table-scroll{{overflow:auto}}.fin-note{{margin-top:14px;padding:14px;border:1px solid #e4ebe5;border-radius:10px;background:#f8fbf8;color:#526258;font-size:12px;line-height:1.6}}@media(max-width:900px){{.fin-tabs{{grid-template-columns:repeat(2,minmax(0,1fr))}}.fin-columns{{grid-template-columns:1fr}}}}@media(max-width:520px){{.fin-tabs{{grid-template-columns:1fr 1fr}}.finance-hub h1{{font-size:22px}}}}</style>"""
+<style>.finance-hub .fin-heading{{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}}.finance-hub .eyebrow{{font-size:11px;letter-spacing:1.4px;font-weight:800;color:#27734c}}.finance-hub h1{{margin:5px 0;font-size:27px}}.fin-currency{{padding:9px 13px;border-radius:20px;background:#edf6ef;color:#21613f;font-weight:800;font-size:12px}}.fin-tabs{{display:flex;align-items:center;gap:7px;overflow-x:auto;padding:5px 2px 12px;margin:16px 0 20px;border-bottom:1px solid #dce8df;scrollbar-width:thin}}.fin-tabs a{{flex:0 0 auto;padding:11px 14px;border:1px solid #dce8df;border-radius:9px 9px 0 0;background:#fff;color:#315342;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}}.fin-tabs a:hover,.fin-tabs a.active{{background:#e8f3eb;border-color:#74a88a;color:#185333;box-shadow:inset 0 -3px 0 #267247}}.fin-card-head p{{color:#718078;font-size:12px}}.fin-columns{{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:14px;margin-top:15px}}.fin-card-head{{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}}.fin-card-head h2{{margin:0}}.fin-link{{color:#246b45;font-weight:800;text-decoration:none;font-size:13px}}.fin-stat{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #edf1ed;font-size:13px}}.fin-stat b{{font-variant-numeric:tabular-nums}}.table-scroll{{overflow:auto}}.fin-note{{margin-top:14px;padding:14px;border:1px solid #e4ebe5;border-radius:10px;background:#f8fbf8;color:#526258;font-size:12px;line-height:1.6}}@media(max-width:900px){{.fin-columns{{grid-template-columns:1fr}}}}@media(max-width:520px){{.fin-tabs{{gap:5px}}.fin-tabs a{{padding:10px 11px;font-size:11px}}.finance-hub h1{{font-size:22px}}}}</style>"""
     return _school_page(request,"Finance & Accounts",body)
 
 
@@ -20604,13 +20620,17 @@ def _finance_prepare(cur, sid):
 
 def _finance_tabs(active):
     items = [
-        ("overview","Overview"),("billing","Fees & Billing"),("collections","Collections & Receipting"),
-        ("payables","Accounts Payable"),("ledger","General Accounting"),("banking","Cash & Banking"),
-        ("budgets","Budgets & Planning"),("reports","Financial Reports")
+        ("overview","Overview","/app/finance"),("billing","Fees & Billing","/app/finance/billing"),
+        ("collections","Collections & Receipting","/app/finance/collections"),
+        ("payables","Accounts Payable","/app/finance/payables"),
+        ("ledger","General Accounting","/app/finance/ledger"),
+        ("banking","Cash & Banking","/app/finance/banking"),
+        ("budgets","Budgets & Planning","/app/finance/budgets"),
+        ("reports","Financial Reports","/app/finance/reports")
     ]
-    return "<nav class='fx-tabs'>" + "".join(
-        "<a class='%s' href='/app/finance/%s'>%s</a>" % ("active" if key==active else "",key,label)
-        for key,label in items
+    return "<nav class='fx-tabs' aria-label='Finance and Accounts workspaces'>" + "".join(
+        "<a class='%s' href='%s'>%s</a>" % ("active" if key==active else "",url,label)
+        for key,label,url in items
     ) + "</nav>"
 
 
