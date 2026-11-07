@@ -139,7 +139,7 @@ def register_timetable_portal_routes(app, get_db):
 
         body = (
             "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
-            "<title>My Timetable · DaviSchool</title><style>"
+            "<title>My Timetable · DaviSchool</title><meta http-equiv='refresh' content='60'><style>"
             "body{margin:0;background:#f1f7f1;color:#173d2b;font:14px Arial,sans-serif}"
             ".tp-wrap{max-width:1250px;margin:auto;padding:22px}.tp-hero{margin-bottom:18px}"
             ".tp-hero h1{margin:0 0 6px;font-size:26px}.tp-hero p,.tp-head p{color:#64748b;margin:0;font-size:12px}"
