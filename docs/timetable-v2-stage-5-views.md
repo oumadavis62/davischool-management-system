@@ -26,3 +26,7 @@
 ## Tests
 
 SQLite tests cover whole-school, class, teacher and room filtering, plus cross-school target rejection.
+
+## CI execution
+
+The repository workflow compiles application and test modules and runs the full unittest suite for pull requests targeting `main`.
