@@ -136,6 +136,8 @@ def health_profiles_page(request: Request, q: str = ""):
             LEFT JOIN classes c ON c.id=s.class_id AND c.school_id=s.school_id
             WHERE """ + " AND ".join(where) + " ORDER BY s.name", tuple(params)).fetchall()
         total = cur.execute("SELECT COUNT(*) n FROM student_health_profiles WHERE school_id=?", (sid,)).fetchone()
+        visits_total = cur.execute("SELECT COUNT(*) n FROM student_clinic_visits WHERE school_id=?", (sid,)).fetchone()
+        welfare_total = cur.execute("SELECT COUNT(*) n FROM student_welfare_cases WHERE school_id=?", (sid,)).fetchone()
         con.commit()
     finally:
         con.close()
@@ -164,8 +166,8 @@ def health_profiles_page(request: Request, q: str = ""):
     <section class='health-card'><form method='get' class='filter-row'><label>Search learner / medical alert<input name='q' value='%s' placeholder='Name, admission number, allergy or condition'></label><button class='health-btn'>Search</button><a class='health-btn secondary' href='/app/health/profiles'>Clear</a></form>
     <div class='health-table-wrap'><table><thead><tr><th>Learner</th><th>Class</th><th>Blood group</th><th>Allergies</th><th>Medical conditions</th><th>Emergency phone</th></tr></thead><tbody>%s</tbody></table></div></section></div>%s""" % (
         int(total["n"] or 0), len(students),
-        int(cur_count_placeholder) if False else 0,
-        int(welfare_count_placeholder) if False else 0,
+        int(visits_total["n"] or 0),
+        int(welfare_total["n"] or 0),
         options, escape(q, quote=True), rows_html, _health_styles()
     )
     return _school_page(request, "Student Health Profiles", body)
