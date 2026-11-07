@@ -1777,8 +1777,23 @@ def _save_timetable_snapshot(con,sid,pid,label):
     profile=con.execute("SELECT * FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid)).fetchone()
     if not profile: raise ValueError("Timetable profile not found")
     slots=con.execute("SELECT lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run FROM timetable_slots WHERE school_id=? AND profile_id=? ORDER BY day_name,period_no,id",(sid,pid)).fetchall()
+    lessons=con.execute("SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+    lesson_ids=[int(x["id"]) for x in lessons]
+    lesson_classes=[];lesson_teachers=[]
+    for lesson_id in lesson_ids:
+        lesson_classes.extend(dict(x) for x in con.execute(
+            "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall())
+        lesson_classes[-len(con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()):] if False else None
+        for link in con.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall():
+            lesson_classes[-1]["lesson_id"]=lesson_id if lesson_classes else None
+        for link in con.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall():
+            lesson_teachers.append({"lesson_id":lesson_id,"teacher_id":int(link["teacher_id"])})
     fields=("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")
-    payload={"profile":{k:profile[k] for k in fields},"slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked","generated_run")} for r in slots]}
+    lesson_fields=("id","class_id","subject_id","teacher_id","room_id","group_name","lessons_per_week","duration","cycle","locked","preferred_room","notes")
+    payload={"version":2,"profile":{k:profile[k] for k in fields},
+        "lessons":[{k:lesson[k] for k in lesson_fields} for lesson in lessons],
+        "lesson_classes":lesson_classes,"lesson_teachers":lesson_teachers,
+        "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked","generated_run")} for r in slots]}
     now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     con.execute("INSERT INTO timetable_snapshots(school_id,profile_id,label,snapshot_json,created_at) VALUES(?,?,?,?,?)",(sid,pid,str(label)[:100],json.dumps(payload),now))
 
@@ -1808,16 +1823,45 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
         payload=json.loads(str(snap["snapshot_json"] or "{}"))
         profile=payload.get("profile") or {}
         slots=payload.get("slots") or []
-        for slot in slots:
-            if not con.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=?",(int(slot["lesson_id"]),sid,pid)).fetchone():
-                return RedirectResponse("/app/timetable?tab=profiles&error=Version+references+a+missing+lesson.+Nothing+was+changed",303)
+        lessons=payload.get("lessons") or []
+        lesson_map={}
         _save_timetable_snapshot(con,sid,pid,"Safety copy before restore")
         for field in ("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation"):
             if field in profile:
                 con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+        con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+        con.execute("DELETE FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,pid))
+        for lesson in lessons:
+            con.execute("""INSERT INTO timetable_lessons(
+                school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,
+                duration,cycle,locked,preferred_room,notes,profile_id
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                sid,lesson["class_id"],lesson["subject_id"],lesson.get("teacher_id"),lesson.get("room_id"),
+                lesson.get("group_name"),int(lesson.get("lessons_per_week") or 1),int(lesson.get("duration") or 1),
+                lesson.get("cycle") or "Every week",int(lesson.get("locked") or 0),lesson.get("preferred_room"),
+                lesson.get("notes"),pid))
+            inserted=con.execute("SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id DESC LIMIT 1",(sid,pid)).fetchone()
+            lesson_map[int(lesson["id"])]=int(inserted["id"])
+        for link in payload.get("lesson_classes") or []:
+            mapped=lesson_map.get(int(link["lesson_id"]))
+            if mapped is not None:
+                con.execute("INSERT INTO timetable_lesson_classes(school_id,lesson_id,class_id) VALUES(?,?,?)",(sid,mapped,int(link["class_id"])))
+        for link in payload.get("lesson_teachers") or []:
+            mapped=lesson_map.get(int(link["lesson_id"]))
+            if mapped is not None:
+                con.execute("INSERT INTO timetable_lesson_teachers(school_id,lesson_id,teacher_id) VALUES(?,?,?)",(sid,mapped,int(link["teacher_id"])))
         for slot in slots:
-            con.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,int(slot["lesson_id"]),slot["day_name"],int(slot["period_no"]),slot["start_time"],slot["end_time"],slot.get("room_id"),int(slot.get("locked") or 0),slot.get("generated_run"),pid))
+            mapped=lesson_map.get(int(slot["lesson_id"]))
+            if mapped is None:
+                # Legacy snapshots only stored placements. Restore those only
+                # when their original lesson still belongs to this profile.
+                existing=con.execute("SELECT id FROM timetable_lessons WHERE id=? AND school_id=? AND profile_id=?",(int(slot["lesson_id"]),sid,pid)).fetchone()
+                if existing: mapped=int(existing["id"])
+            if mapped is None:
+                raise ValueError("This older snapshot does not contain the lesson definitions required for a complete restore")
+            con.execute("INSERT INTO timetable_slots(school_id,lesson_id,day_name,period_no,start_time,end_time,room_id,locked,generated_run,profile_id) VALUES(?,?,?,?,?,?,?,?,?,?)",(sid,mapped,slot["day_name"],int(slot["period_no"]),slot["start_time"],slot["end_time"],slot.get("room_id"),int(slot.get("locked") or 0),slot.get("generated_run"),pid))
         con.execute("UPDATE timetable_profiles SET updated_at=? WHERE id=? AND school_id=?",(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Saved+version+restored.+Safety+copy+created",303)
