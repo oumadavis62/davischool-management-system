@@ -47,7 +47,9 @@ class TimetableViewTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_school_view_contains_all_lessons(self):
+    def test_school_view_contains_all_lessons_in_published_profile(self):
+        self.db.execute("UPDATE ds_timetable_profiles SET status='published' WHERE id=?", (self.profile_id,))
+        self.db.commit()
         result = get_timetable_view(self.db, 1, self.profile_id, "school")
         self.assertEqual(len(result["lessons"]), 2)
         self.assertEqual(result["title"], "School-wide timetable")
