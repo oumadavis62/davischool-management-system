@@ -99,6 +99,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 <section class='tt-home-panel tt-home-actions'><span class='tt-home-eyebrow'>QUICK ACCESS</span><h3>What would you like to do?</h3>
                   <a class='tt-home-action tt-home-action-primary' href='{builder_href}'><span class='tt-home-action-icon'>▦</span><span><b>Open timetable builder</b><small>Create, adjust and arrange lessons</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{auto_href}'><span class='tt-home-action-icon'>✳</span><span><b>Generate automatically</b><small>Build a schedule using your constraints</small></span><em>→</em></a>
+                  <a class='tt-home-action' href='/app/timetable/constraints?profile_id={pid}'><span class='tt-home-action-icon'>⌁</span><span><b>Scheduling constraints</b><small>Set subject, teacher, class and time restrictions</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{views_href}'><span class='tt-home-action-icon'>▤</span><span><b>View timetables</b><small>School, class, teacher and room views</small></span><em>→</em></a>
                   <a class='tt-home-action' href='{publish_href}'><span class='tt-home-action-icon'>⇧</span><span><b>Review and publish</b><small>Manage timetable release and revisions</small></span><em>→</em></a>
                 </section>
