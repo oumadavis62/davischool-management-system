@@ -1826,10 +1826,12 @@ def _save_timetable_snapshot(con,sid,pid,label):
     fields=("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation")
     lesson_fields=("id","class_id","subject_id","teacher_id","room_id","group_name","lessons_per_week","duration","cycle","locked","preferred_room","notes")
     constraints=con.execute("SELECT scope,constraint_type,target_id,value,priority,enabled,notes FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
-    payload={"version":3,"profile":{k:profile[k] for k in fields},
+    availability=con.execute("SELECT resource_type,resource_id,day_name,period_no,allowed FROM timetable_profile_availability WHERE school_id=? AND profile_id=? ORDER BY resource_type,resource_id,day_name,period_no",(sid,pid)).fetchall()
+    payload={"version":4,"profile":{k:profile[k] for k in fields},
         "lessons":[{k:lesson[k] for k in lesson_fields} for lesson in lessons],
         "lesson_classes":lesson_classes,"lesson_teachers":lesson_teachers,
         "constraints":[{k:r[k] for k in ("scope","constraint_type","target_id","value","priority","enabled","notes")} for r in constraints],
+        "availability":[{k:r[k] for k in ("resource_type","resource_id","day_name","period_no","allowed")} for r in availability],
         "slots":[{k:r[k] for k in ("lesson_id","day_name","period_no","start_time","end_time","room_id","locked","generated_run")} for r in slots]}
     now=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     con.execute("INSERT INTO timetable_snapshots(school_id,profile_id,label,snapshot_json,created_at) VALUES(?,?,?,?,?)",(sid,pid,str(label)[:100],json.dumps(payload),now))
@@ -1862,12 +1864,18 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
         slots=payload.get("slots") or []
         lessons=payload.get("lessons") or []
         constraints=payload.get("constraints") or []
+        availability=payload.get("availability") or []
         lesson_map={}
         _save_timetable_snapshot(con,sid,pid,"Safety copy before restore")
         for field in ("days_json","periods_json","breaks_json","periods_per_day","period_minutes","periods_per_week","complexity","relaxation"):
             if field in profile:
                 con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
+        if "availability" in payload:
+            con.execute("DELETE FROM timetable_profile_availability WHERE school_id=? AND profile_id=?",(sid,pid))
+            for item in availability:
+                con.execute("""INSERT INTO timetable_profile_availability(school_id,profile_id,resource_type,resource_id,day_name,period_no,allowed)
+                    VALUES(?,?,?,?,?,?,?)""",(sid,pid,item["resource_type"],int(item["resource_id"]),item["day_name"],int(item["period_no"]),int(item.get("allowed",1))))
         if "constraints" in payload:
             con.execute("DELETE FROM timetable_constraints WHERE school_id=? AND profile_id=?",(sid,pid))
             for item in constraints:
@@ -1976,6 +1984,9 @@ def timetable_profile_duplicate(request:Request,pid:int):
         for item in con.execute("SELECT * FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall():
             con.execute("""INSERT INTO timetable_constraints(school_id,profile_id,scope,constraint_type,target_id,value,priority,enabled,notes)
                 VALUES(?,?,?,?,?,?,?,?,?)""",(sid,new_id,item["scope"],item["constraint_type"],item["target_id"],item["value"],item["priority"],item["enabled"],item["notes"]))
+        for item in con.execute("SELECT * FROM timetable_profile_availability WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall():
+            con.execute("""INSERT INTO timetable_profile_availability(school_id,profile_id,resource_type,resource_id,day_name,period_no,allowed)
+                VALUES(?,?,?,?,?,?,?)""",(sid,new_id,item["resource_type"],item["resource_id"],item["day_name"],item["period_no"],item["allowed"]))
         source_lessons=con.execute("SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
         for lesson in source_lessons:
             con.execute("""INSERT INTO timetable_lessons(
@@ -2034,6 +2045,9 @@ def timetable_profile_delete(request:Request,pid:int):
         con.execute("DELETE FROM timetable_publications WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_snapshots WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_edit_history WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_profile_availability WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_constraints WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_generation_runs WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+profile+and+its+lesson+cards+deleted",303)
@@ -2276,6 +2290,13 @@ def _time_to_min(value):
 
 def _overlaps(a,b):
     return int(a["period_no"]) <= int(b["period_no"])+int(b.get("duration",1))-1 and int(b["period_no"]) <= int(a["period_no"])+int(a.get("duration",1))-1
+
+
+def _profile_availability_blocked(cur,sid,pid,kind,resource_id,day_name,period_no):
+    return bool(cur.execute("""SELECT 1 FROM timetable_profile_availability
+        WHERE school_id=? AND profile_id=? AND resource_type=? AND resource_id=?
+        AND day_name=? AND period_no=? AND allowed=0 LIMIT 1""",
+        (sid,pid,kind,resource_id,day_name,period_no)).fetchone())
 
 
 def _constraint_maps(cur,sid,pid):
@@ -3114,9 +3135,9 @@ def timetable_placement_place(request: Request, lesson_id: int, day_name: str=Fo
         teacher_ids={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)).fetchall()}
         if not teacher_ids and lesson["teacher_id"]:teacher_ids={int(lesson["teacher_id"])}
         for pno in range(int(period_no),int(period_no)+duration):
-            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,day_name,pno)).fetchone() for tid in teacher_ids):
+            if any(_profile_availability_blocked(cur,sid,_active_profile_id(cur,sid),"teacher",tid,day_name,pno) for tid in teacher_ids):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+unavailable+for+this+slot",303)
-            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(lesson["subject_id"]),day_name,pno)).fetchone():
+            if _profile_availability_blocked(cur,sid,_active_profile_id(cur,sid),"subject",int(lesson["subject_id"]),day_name,pno):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Subject+unavailable+for+this+slot",303)
         room_id=int(lesson["room_id"]) if lesson["room_id"] else None
         others=cur.execute("SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.day_name=?",(sid,day_name)).fetchall()
@@ -3179,9 +3200,9 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             moving_classes={int(target_class_id)}
         moving_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or ({int(moving["teacher_id"])} if moving["teacher_id"] else set())
         for pno in range(int(period_no),int(period_no)+max(1,int(moving["duration"] or 1))):
-            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,day_name,pno)).fetchone() for tid in moving_teachers):
+            if any(_profile_availability_blocked(cur,sid,_active_profile_id(cur,sid),"teacher",tid,day_name,pno) for tid in moving_teachers):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+unavailable+for+this+slot",303)
-            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(moving["subject_id"]),day_name,pno)).fetchone():
+            if _profile_availability_blocked(cur,sid,_active_profile_id(cur,sid),"subject",int(moving["subject_id"]),day_name,pno):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Subject+unavailable+for+this+slot",303)
         others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
             WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
@@ -3267,9 +3288,9 @@ def timetable_placement_swap(request:Request,rid:int,other_slot_id:int=Form(...)
             cls,tch=resources[int(moving["id"])]
             day=str(target["day_name"]);period=int(target["period_no"])
             for n in range(period,period+da):
-                if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,int(moving["subject_id"]),day,n)).fetchone():
+                if _profile_availability_blocked(cur,sid,profile_id,"subject",int(moving["subject_id"]),day,n):
                     return RedirectResponse("/app/timetable?tab=timetable&error=Subject+availability+blocks+this+swap",303)
-                if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,t,day,n)).fetchone() for t in tch):
+                if any(_profile_availability_blocked(cur,sid,profile_id,"teacher",t,day,n) for t in tch):
                     return RedirectResponse("/app/timetable?tab=timetable&error=Teacher+availability+blocks+this+swap",303)
             for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
                 FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
@@ -3343,7 +3364,7 @@ def _restore_timetable_move(request:Request, direction:str):
         lesson_id=int(slot["lesson_id"])
         subject_id=int(slot["subject_id"])
         for pno in range(target_period,target_period+duration):
-            if cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,subject_id,target_day,pno)).fetchone():
+            if _profile_availability_blocked(cur,sid,profile_id,"subject",subject_id,target_day,pno):
                 return RedirectResponse("/app/timetable?tab=timetable&error=The+subject+is+unavailable+in+the+original+slot",303)
         classes={int(x["class_id"]) for x in cur.execute(
             "SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
@@ -3352,7 +3373,7 @@ def _restore_timetable_move(request:Request, direction:str):
             "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,lesson_id)
         ).fetchall()} or ({int(slot["teacher_id"])} if slot["teacher_id"] else set())
         for pno in range(target_period,target_period+duration):
-            if any(cur.execute("SELECT 1 FROM timetable_availability WHERE school_id=? AND resource_type='teacher' AND resource_id=? AND day_name=? AND period_no=? AND allowed=0 LIMIT 1",(sid,tid,target_day,pno)).fetchone() for tid in teachers):
+            if any(_profile_availability_blocked(cur,sid,profile_id,"teacher",tid,target_day,pno) for tid in teachers):
                 return RedirectResponse("/app/timetable?tab=timetable&error=A+teacher+is+unavailable+in+the+original+slot",303)
         for other in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id
             FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
