@@ -535,7 +535,7 @@ def _guard(request, permission="timetable.view"):
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print","publish","reports"}
+    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","constraints","generate","verify","timetable","teacher_sheets","print","publish","reports"}
     return tab if tab in allowed else "timetable"
 
 
@@ -543,7 +543,7 @@ def _tabs(active):
     labels = [
         ("profiles","🗂️ Timetable Profiles"),("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
-        ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
+        ("lessons","📝 Lessons"),("availability","🎯 Availability"),("constraints","🧩 Constraints"),("generate","🚀 Generate"),
         ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print"),("publish","📣 Publish"),("reports","📊 Reports")
     ]
     return "<div class='tt-tabs'>" + "".join(
@@ -673,6 +673,7 @@ def timetable_manager(request: Request):
         elif tab == "rooms": body = _rooms(con, sid)
         elif tab == "lessons": body = _lessons(request, con, sid)
         elif tab == "availability": body = _availability(request, con, sid)
+        elif tab == "constraints": body = _constraints(con, sid)
         elif tab == "generate": body = _generate(con, sid)
         elif tab == "verify": body = _verify(con, sid)
         elif tab == "teacher_sheets":
