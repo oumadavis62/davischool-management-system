@@ -189,26 +189,26 @@ def transport_vehicle_register(request: Request, q: str = "", status: str = "Act
 .transport-page .tr-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}}
 @media(max-width:650px){{.transport-page .tr-kpis{{grid-template-columns:1fr}}.transport-page .tr-form{{grid-template-columns:1fr}}}}
 
-.tr-vehicle-dialog{width:min(780px,calc(100% - 20px))!important;max-height:92vh!important;overflow:auto!important;padding:0!important;border:1px solid #cbdccb!important;border-radius:25px!important;background:linear-gradient(145deg,#eff7ee 0%,#e3f0e2 48%,#f8fbf6 100%)!important;box-shadow:0 28px 90px #173d2852!important;scrollbar-width:thin;scrollbar-color:#a8c4aa #edf4ec}
-.tr-vehicle-dialog::backdrop{background:rgba(18,39,27,.62);backdrop-filter:blur(5px)}
-.tr-vehicle-dialog form{padding:0!important;background:transparent!important}
-.tr-vehicle-dialog .tr-vehicle-head{position:relative;padding:29px 35px 25px;background:radial-gradient(ellipse at 90% 0%,rgba(255,255,255,.58),transparent 43%),linear-gradient(125deg,#c9e0c9,#dcebd9 48%,#eef6eb);border-bottom:1px solid #c8ddc9}
-.tr-vehicle-dialog .tr-vehicle-eyebrow{display:inline-flex;margin-bottom:12px;padding:7px 12px;border:1px solid #b7d0b9;border-radius:999px;background:#ffffffb8;color:#356847;font-size:9px;font-weight:900;letter-spacing:1.3px}
-.tr-vehicle-dialog .tr-vehicle-head h2{margin:0 52px 7px 0!important;color:#174b32!important;font-size:25px!important;font-weight:900!important;letter-spacing:-.7px}
-.tr-vehicle-dialog .tr-vehicle-head p{margin:0;color:#4f6d56;font-size:12px;line-height:1.6}
-.tr-vehicle-dialog .tr-vehicle-close{position:absolute;top:18px;right:20px;display:grid;place-items:center;width:39px;height:39px;border:1px solid #b6cfb8;border-radius:13px;background:#ffffffd9;color:#245638;font-size:24px;line-height:1;cursor:pointer;box-shadow:0 4px 12px #244e2d16}
-.tr-vehicle-dialog .tr-vehicle-section{margin:16px 23px 0;padding:18px 20px 20px;border:1px solid #b7cfb8cc;border-radius:17px;background:linear-gradient(135deg,#ffffffdf,#edf6ebdf);box-shadow:0 5px 15px #234e2d0b}
-.tr-vehicle-dialog .tr-vehicle-section h3{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding-bottom:11px;border-bottom:1px solid #e1ece0;color:#28583a;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}
-.tr-vehicle-dialog .tr-vehicle-section h3 span{display:grid;place-items:center;width:29px;height:29px;border-radius:10px;background:linear-gradient(145deg,#d9ebd7,#bcd8bc);color:#285b39;font-size:11px}
-.tr-vehicle-dialog .tr-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 17px;padding:0 0 2px}
-.tr-vehicle-dialog .tr-form label{display:grid;align-content:start;gap:7px;min-width:0;color:#35583d;font-size:11px;font-weight:850}
-.tr-vehicle-dialog .tr-form input,.tr-vehicle-dialog .tr-form select,.tr-vehicle-dialog .tr-form textarea{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid #d0e0d0;border-radius:11px;background:linear-gradient(180deg,#fff,#f9fcf8);color:#294534;font-size:13px;box-shadow:0 2px 5px #21482a09}
-.tr-vehicle-dialog .tr-form textarea{min-height:76px;resize:vertical}
-.tr-vehicle-dialog .tr-form input:focus,.tr-vehicle-dialog .tr-form select:focus,.tr-vehicle-dialog .tr-form textarea:focus{outline:0;border-color:#72a77b;box-shadow:0 0 0 3px #6fa3772e}
-.tr-vehicle-dialog .tr-actions{position:sticky;bottom:0;padding:15px 24px 18px;margin:16px 0 0;border-top:1px solid #cbdccb;background:linear-gradient(110deg,#e1eee0,#f4f8f1 55%,#dcebd9);backdrop-filter:blur(12px)}
-.tr-vehicle-dialog .tr-actions .btn{min-width:140px;min-height:44px;border-radius:11px;font-weight:850}
-.tr-vehicle-dialog .tr-actions .btn-light{background:#ffffffd1!important;color:#3c6047!important;border:1px solid #c8dcc9!important}
-@media(max-width:650px){.tr-vehicle-dialog{max-height:95vh!important;border-radius:19px!important}.tr-vehicle-dialog .tr-vehicle-head{padding:24px 20px 21px}.tr-vehicle-dialog .tr-vehicle-head h2{font-size:22px!important}.tr-vehicle-dialog .tr-vehicle-close{top:14px;right:14px;width:35px;height:35px}.tr-vehicle-dialog .tr-vehicle-section{margin:12px 12px 0;padding:15px}.tr-vehicle-dialog .tr-form{grid-template-columns:1fr!important}.tr-vehicle-dialog .tr-actions{padding:13px 13px 16px}.tr-vehicle-dialog .tr-actions .btn{flex:1;min-width:0}}
+.tr-vehicle-dialog{{width:min(780px,calc(100% - 20px))!important;max-height:92vh!important;overflow:auto!important;padding:0!important;border:1px solid #cbdccb!important;border-radius:25px!important;background:linear-gradient(145deg,#eff7ee 0%,#e3f0e2 48%,#f8fbf6 100%)!important;box-shadow:0 28px 90px #173d2852!important;scrollbar-width:thin;scrollbar-color:#a8c4aa #edf4ec}}
+.tr-vehicle-dialog::backdrop{{background:rgba(18,39,27,.62);backdrop-filter:blur(5px)}}
+.tr-vehicle-dialog form{{padding:0!important;background:transparent!important}}
+.tr-vehicle-dialog .tr-vehicle-head{{position:relative;padding:29px 35px 25px;background:radial-gradient(ellipse at 90% 0%,rgba(255,255,255,.58),transparent 43%),linear-gradient(125deg,#c9e0c9,#dcebd9 48%,#eef6eb);border-bottom:1px solid #c8ddc9}}
+.tr-vehicle-dialog .tr-vehicle-eyebrow{{display:inline-flex;margin-bottom:12px;padding:7px 12px;border:1px solid #b7d0b9;border-radius:999px;background:#ffffffb8;color:#356847;font-size:9px;font-weight:900;letter-spacing:1.3px}}
+.tr-vehicle-dialog .tr-vehicle-head h2{{margin:0 52px 7px 0!important;color:#174b32!important;font-size:25px!important;font-weight:900!important;letter-spacing:-.7px}}
+.tr-vehicle-dialog .tr-vehicle-head p{{margin:0;color:#4f6d56;font-size:12px;line-height:1.6}}
+.tr-vehicle-dialog .tr-vehicle-close{{position:absolute;top:18px;right:20px;display:grid;place-items:center;width:39px;height:39px;border:1px solid #b6cfb8;border-radius:13px;background:#ffffffd9;color:#245638;font-size:24px;line-height:1;cursor:pointer;box-shadow:0 4px 12px #244e2d16}}
+.tr-vehicle-dialog .tr-vehicle-section{{margin:16px 23px 0;padding:18px 20px 20px;border:1px solid #b7cfb8cc;border-radius:17px;background:linear-gradient(135deg,#ffffffdf,#edf6ebdf);box-shadow:0 5px 15px #234e2d0b}}
+.tr-vehicle-dialog .tr-vehicle-section h3{{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding-bottom:11px;border-bottom:1px solid #e1ece0;color:#28583a;font-size:11px;font-weight:900;letter-spacing:.6px;text-transform:uppercase}}
+.tr-vehicle-dialog .tr-vehicle-section h3 span{{display:grid;place-items:center;width:29px;height:29px;border-radius:10px;background:linear-gradient(145deg,#d9ebd7,#bcd8bc);color:#285b39;font-size:11px}}
+.tr-vehicle-dialog .tr-form{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 17px;padding:0 0 2px}}
+.tr-vehicle-dialog .tr-form label{{display:grid;align-content:start;gap:7px;min-width:0;color:#35583d;font-size:11px;font-weight:850}}
+.tr-vehicle-dialog .tr-form input,.tr-vehicle-dialog .tr-form select,.tr-vehicle-dialog .tr-form textarea{{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid #d0e0d0;border-radius:11px;background:linear-gradient(180deg,#fff,#f9fcf8);color:#294534;font-size:13px;box-shadow:0 2px 5px #21482a09}}
+.tr-vehicle-dialog .tr-form textarea{{min-height:76px;resize:vertical}}
+.tr-vehicle-dialog .tr-form input:focus,.tr-vehicle-dialog .tr-form select:focus,.tr-vehicle-dialog .tr-form textarea:focus{{outline:0;border-color:#72a77b;box-shadow:0 0 0 3px #6fa3772e}}
+.tr-vehicle-dialog .tr-actions{{position:sticky;bottom:0;padding:15px 24px 18px;margin:16px 0 0;border-top:1px solid #cbdccb;background:linear-gradient(110deg,#e1eee0,#f4f8f1 55%,#dcebd9);backdrop-filter:blur(12px)}}
+.tr-vehicle-dialog .tr-actions .btn{{min-width:140px;min-height:44px;border-radius:11px;font-weight:850}}
+.tr-vehicle-dialog .tr-actions .btn-light{{background:#ffffffd1!important;color:#3c6047!important;border:1px solid #c8dcc9!important}}
+@media(max-width:650px){{.tr-vehicle-dialog{{max-height:95vh!important;border-radius:19px!important}}.tr-vehicle-dialog .tr-vehicle-head{{padding:24px 20px 21px}}.tr-vehicle-dialog .tr-vehicle-head h2{{font-size:22px!important}}.tr-vehicle-dialog .tr-vehicle-close{{top:14px;right:14px;width:35px;height:35px}}.tr-vehicle-dialog .tr-vehicle-section{{margin:12px 12px 0;padding:15px}}.tr-vehicle-dialog .tr-form{{grid-template-columns:1fr!important}}.tr-vehicle-dialog .tr-actions{{padding:13px 13px 16px}}.tr-vehicle-dialog .tr-actions .btn{{flex:1;min-width:0}}}}
 </style>
   <div class="page-heading">
     <div><div class="lib-eyebrow">TRANSPORT MANAGEMENT / FLEET</div><h1>Vehicle Register</h1>
