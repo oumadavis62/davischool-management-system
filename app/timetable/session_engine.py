@@ -69,6 +69,12 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
             (day_id, school_id, profile_id),
         ).fetchone():
             raise TimetableSetupError("The selected day is outside this timetable profile.")
+    for learner_id in learner_ids:
+        if not cur.execute(
+            "SELECT id FROM students WHERE id=? AND school_id=?",
+            (learner_id, school_id),
+        ).fetchone():
+            raise TimetableSetupError("A selected learner does not belong to this school.")
     if period_id is not None:
         period = cur.execute(
             "SELECT id,start_time,end_time FROM ds_timetable_periods WHERE id=? AND school_id=? AND profile_id=?",
@@ -78,6 +84,15 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
             raise TimetableSetupError("The selected period is outside this timetable profile.")
         if (start, end) != (str(period["start_time"]), str(period["end_time"])):
             raise TimetableSetupError("Session times must match the selected configured period.")
+        if day_id is not None:
+            for teacher_id in teacher_ids:
+                availability = cur.execute(
+                    """SELECT availability FROM ds_timetable_teacher_availability
+                       WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=? AND period_id=?""",
+                    (school_id, profile_id, teacher_id, day_id, period_id),
+                ).fetchone()
+                if availability and str(availability["availability"]).lower() == "unavailable":
+                    raise TimetableSetupError(f"Teacher {teacher_id} is marked unavailable for this day and period.")
     if session_date:
         try:
             parsed = date.fromisoformat(session_date)
