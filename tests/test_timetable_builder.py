@@ -95,6 +95,18 @@ class TimetableBuilderTests(unittest.TestCase):
         with self.assertRaises(TimetableSetupError):
             place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_wed, self.p1)
 
+    def test_configured_daily_subject_limit_is_enforced(self):
+        self.db.execute(
+            """UPDATE ds_timetable_class_requirements
+               SET lessons_per_week=3,duration_periods=1,max_lessons_per_day=1
+               WHERE school_id=1 AND profile_id=? AND class_id=20 AND subject_id=30 AND teacher_id=10""",
+            (self.profile_id,),
+        )
+        self.db.commit()
+        place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        with self.assertRaises(TimetableSetupError):
+            place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p3)
+
     def test_unavailable_teacher_cannot_be_scheduled(self):
         save_teacher_availability(self.db, 1, self.profile_id, 10, self.day_mon, self.p1, "unavailable", "Meeting")
         with self.assertRaises(TimetableSetupError):
