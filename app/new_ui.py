@@ -725,7 +725,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             elif label == "Transferred/Inactive List":
                 active = request_path == route and request.query_params.get("status") == "inactive,transferred"
             icons = {
-                "Students List":"students", "Transferred/Inactive List":"users", "Accepted Applicants":"users",
+                "Students List":"students", "Transferred/Inactive List":"users", "Accepted Applicants":"users", "Rejected Applicants":"users", "Admission Status":"clipboard-check",
                 "Applications Register":"clipboard-check", "Admission Review":"clipboard-check", "Enrolment & Registration":"students",
                 "Admission Letters":"report", "Admission Reports":"chart", "Admission Number Settings":"settings",
                 "Attendance Sheet":"calendar", "Attendance Report":"analysis", "ID Cards":"report", "Clearance List":"clipboard-check",
@@ -762,8 +762,11 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/admissions", "Applications Register")
             + _nav_sub("/app/admissions/review", "Admission Review")
-            + _nav_sub("/app/admissions/accepted", "Accepted Applicants")
             + _nav_sub("/app/enrolment", "Enrolment & Registration")
+            + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/admissions/status/") else "") + "><summary class='nav-sub'><span class='nav-sub-icon'>" + _modern_icon("clipboard-check") + "</span><span>Admission Status</span><span class='nav-chevron'>▾</span></summary><div class='nav-submenu'>"
+            + _nav_sub("/app/admissions/status/accepted", "Accepted Applicants")
+            + _nav_sub("/app/admissions/status/rejected", "Rejected Applicants")
+            + "</div></details>"
             + _nav_sub("/app/admission-letters", "Admission Letters")
             + _nav_sub("/app/admission-reports", "Admission Reports")
             + _nav_sub("/app/admission-number-settings", "Admission Number Settings")
@@ -20190,7 +20193,7 @@ def _admission_guard(request, permission="students.view"):
     return sid, None
 
 
-def _admission_table_html(rows, show_action=True):
+def _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_decision_actions=True):
     out = []
     for row in rows:
         applicant_id = int(row["id"])
@@ -20199,7 +20202,7 @@ def _admission_table_html(rows, show_action=True):
         admission_no = str(row["admission_no"] or "") if "admission_no" in row.keys() else ""
         enrolled = bool(row["enrolled_student_id"]) if "enrolled_student_id" in row.keys() else False
         action = ""
-        if show_action and status == "pending":
+        if show_action and show_decision_actions and status == "pending":
             action = (
                 f"<form method='post' action='/app/admissions/{applicant_id}/decision' class='inline-form' data-native-post='1'>"
                 "<button name='decision' value='accepted' class='admit-btn'>Accept</button>"
@@ -20209,7 +20212,7 @@ def _admission_table_html(rows, show_action=True):
             action = f"<a class='admit-btn' href='/app/enrolment/{applicant_id}'>Complete enrolment</a>"
         elif admission_no:
             action = f"<a class='admit-btn' href='/app/admission-letters/{applicant_id}'>View letter</a>"
-        if show_action and not enrolled:
+        if show_action and allow_edit_delete and not enrolled:
             action += (
                 f"<a class='admit-btn' href='/app/admissions/{applicant_id}/edit'>Edit</a>"
                 f"<form method='post' action='/app/admissions/{applicant_id}/delete' class='inline-form' data-native-post='1' "
@@ -20227,8 +20230,8 @@ def _admission_table_html(rows, show_action=True):
     return "".join(out) or "<tr><td colspan='8' class='empty-cell'>No applications found.</td></tr>"
 
 
-def _admission_workspace(request, title, description, rows, show_action=True):
-    table = _admission_table_html(rows, show_action)
+def _admission_workspace(request, title, description, rows, show_action=True, allow_edit_delete=True, show_decision_actions=True):
+    table = _admission_table_html(rows, show_action, allow_edit_delete=allow_edit_delete, show_decision_actions=show_decision_actions)
     body = f"""<div class='page adm-page'>
       <div class='adm-heading'><div><h1>{escape(title)}</h1><p>{escape(description)}</p></div></div>
       <div class='adm-card'><div class='adm-table-wrap'><table class='adm-table'>
@@ -20263,7 +20266,7 @@ def admissions_register_page(request: Request):
         con.commit()
     finally:
         con.close()
-    table = _admission_table_html(rows)
+    table = _admission_table_html(rows, show_action=True, allow_edit_delete=True, show_decision_actions=False)
     body = f"""<div class='page adm-page'>
       <div class='adm-heading'><div><h1>Applications Register</h1><p>Capture prospective learners and track each admission application.</p></div></div>
       <div class='adm-card adm-form-card'><h2>New Application</h2>
@@ -20489,8 +20492,18 @@ def admissions_review_page(request: Request):
 
 
 @router.get("/app/admissions/accepted", response_class=HTMLResponse)
+def admissions_accepted_legacy_page(request: Request):
+    return RedirectResponse("/app/admissions/status/accepted", status_code=303)
+
+
+@router.get("/app/admissions/status/accepted", response_class=HTMLResponse)
 def admissions_accepted_page(request: Request):
-    return _admission_filtered_page(request,"Accepted Applicants","Accepted applicants awaiting enrolment.","lower(a.status)='accepted' AND a.enrolled_student_id IS NULL",[])
+    return _admission_filtered_page(request,"Accepted Applicants","Applicants approved for admission, including those already enrolled.","lower(a.status) IN ('accepted','enrolled')",[])
+
+
+@router.get("/app/admissions/status/rejected", response_class=HTMLResponse)
+def admissions_rejected_page(request: Request):
+    return _admission_filtered_page(request,"Rejected Applicants","Applications declined during admission review.","lower(a.status)='rejected'",[])
 
 
 @router.get("/app/enrolment", response_class=HTMLResponse)
@@ -20506,7 +20519,7 @@ def enrolment_register_page(request: Request):
         con.commit()
     finally:
         con.close()
-    return _admission_workspace(request,"Enrolment & Registration","Complete registration for accepted applicants. Admission numbers are assigned automatically when enrolment is saved.",rows)
+    return _admission_workspace(request,"Enrolment & Registration","Track accepted applicants awaiting registration and complete their enrolment. Admission numbers are assigned automatically when enrolment is saved.",rows,allow_edit_delete=False,show_decision_actions=False)
 
 
 @router.get("/app/enrolment/{application_id}", response_class=HTMLResponse)
