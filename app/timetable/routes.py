@@ -307,6 +307,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         """
         return module_page(request, "Timetable Setup", "timetable", body)
 
+    # Compatibility endpoint: older cached setup pages submitted to the page URL.
+    # Keep this alias so profile creation cannot fail with 405 on stale markup.
+    @app.post("/app/timetable/setup")
     @app.post("/app/timetable/setup/profile")
     def create_timetable_profile(request: Request, name: str = Form(...), academic_year: str = Form(...), term: str = Form(...), academic_start_date: str = Form(""), academic_end_date: str = Form("")):
         school = school_for(request)
