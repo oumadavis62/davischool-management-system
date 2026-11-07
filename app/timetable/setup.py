@@ -19,7 +19,7 @@ def _now() -> str:
 
 def _profile(cursor: Any, school_id: int, profile_id: int):
     row = cursor.execute(
-        "SELECT id,status FROM ds_timetable_profiles WHERE id=? AND school_id=?",
+        "SELECT id,status,academic_start_date,academic_end_date FROM ds_timetable_profiles WHERE id=? AND school_id=?",
         (profile_id, school_id),
     ).fetchone()
     if not row:
@@ -178,6 +178,47 @@ def save_break(connection: Any, school_id: int, profile_id: int, break_no: int, 
                (school_id,profile_id,break_no,label,start_time,end_time,applies_to)
                VALUES(?,?,?,?,?,?,?)""",
             (school_id, profile_id, number, label, start, end, applies_to),
+        )
+    connection.commit()
+
+
+
+def save_calendar_exception(connection: Any, school_id: int, profile_id: int, exception_date: str, label: str, exception_type: str = "holiday", notes: str = "", instructional: bool = False) -> None:
+    cur = connection.cursor()
+    profile = _profile(cur, school_id, profile_id)
+    date_value, label = (exception_date or "").strip(), (label or "").strip()
+    try:
+        from datetime import date
+        parsed_date = date.fromisoformat(date_value)
+    except ValueError:
+        raise TimetableSetupError("Choose a valid calendar date.")
+    if not label:
+        raise TimetableSetupError("Calendar event name is required.")
+    if exception_type not in ("holiday", "school_closure", "special_instructional_day", "event"):
+        raise TimetableSetupError("Choose a valid calendar event type.")
+    start_date, end_date = profile["academic_start_date"], profile["academic_end_date"]
+    if start_date and parsed_date < date.fromisoformat(str(start_date)):
+        raise TimetableSetupError("Calendar event is before the academic start date.")
+    if end_date and parsed_date > date.fromisoformat(str(end_date)):
+        raise TimetableSetupError("Calendar event is after the academic end date.")
+    existing = cur.execute(
+        """SELECT id FROM ds_timetable_calendar_exceptions
+           WHERE school_id=? AND profile_id=? AND exception_date=? AND label=?""",
+        (school_id, profile_id, date_value, label),
+    ).fetchone()
+    values = (exception_type, (notes or "").strip(), 1 if instructional else 0)
+    if existing:
+        cur.execute(
+            """UPDATE ds_timetable_calendar_exceptions
+               SET exception_type=?,notes=?,is_instructional=? WHERE id=? AND school_id=?""",
+            values + (existing["id"], school_id),
+        )
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_calendar_exceptions
+               (school_id,profile_id,exception_date,label,exception_type,notes,is_instructional)
+               VALUES(?,?,?,?,?,?,?)""",
+            (school_id, profile_id, date_value, label) + values,
         )
     connection.commit()
 
