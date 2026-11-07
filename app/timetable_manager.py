@@ -2350,7 +2350,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
         "SELECT day_name,period_no,resource_id FROM timetable_availability WHERE school_id=? AND resource_type='subject' AND allowed=0",(sid,)
     ).fetchall()}
-    constraints=_constraint_maps(cur,sid,_active_profile_id(con,sid))
+    constraints=_constraint_maps(cur,sid,_active_profile_id(cur,sid))
 
     if replace_existing:
         if class_filter:
