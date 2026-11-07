@@ -21079,7 +21079,9 @@ def admission_letter_print(request: Request, application_id: int):
       .letter-tools button{{background:#176b3a;color:#fff}}
       .letter-paper{{box-sizing:border-box;background:#fff;color:#263d2b;width:210mm;min-height:297mm;margin:0 auto;padding:17mm 18mm 15mm;border:1px solid #dbe7dc;box-shadow:0 5px 24px rgba(20,65,35,.10);font-family:Arial,sans-serif;font-size:10.5pt;line-height:1.48;display:flex;flex-direction:column}}
       .letter-header{{border-bottom:2px solid #176b3a;padding-bottom:7mm}}
-      .letter-brand{{display:grid;grid-template-columns:22mm minmax(0,1fr) 22mm;align-items:center;gap:8mm;text-align:center}}\n      .letter-logo-left,.letter-logo-right{{display:flex;align-items:center;justify-content:center;min-width:0}}\n      .letter-school-name{{min-width:0}}
+      .letter-brand{{display:grid;grid-template-columns:22mm minmax(0,1fr) 22mm;align-items:center;gap:8mm;text-align:center}}
+      .letter-logo-left,.letter-logo-right{{display:flex;align-items:center;justify-content:center;min-width:0}}
+      .letter-school-name{{min-width:0}}
       .school-logo{{width:22mm;height:22mm;object-fit:contain}}
       .logo-placeholder{{width:22mm;height:22mm;border-radius:50%;background:#e7f1e7;color:#176b3a;display:flex;align-items:center;justify-content:center;font-size:18pt;font-weight:900}}
       .letter-brand h1{{font-size:20pt;color:#176b3a;margin:0 0 3px;line-height:1.15}}
