@@ -95,10 +95,10 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
         # styles in the body, but moving them avoids inconsistent popup styling
         # when dialogs are promoted into the browser top layer.
         html = response.body.decode("utf-8")
-        style_blocks = re.findall(r"<style\\b[^>]*>.*?</style>", html, flags=re.IGNORECASE | re.DOTALL)
+        style_blocks = re.findall(r"<style\b[^>]*>.*?</style>", html, flags=re.IGNORECASE | re.DOTALL)
         if style_blocks:
-            html = re.sub(r"<style\\b[^>]*>.*?</style>", "", html, flags=re.IGNORECASE | re.DOTALL)
-            html = html.replace("</head>", "\\n".join(style_blocks) + "</head>", 1)
+            html = re.sub(r"<style\b[^>]*>.*?</style>", "", html, flags=re.IGNORECASE | re.DOTALL)
+            html = html.replace("</head>", "\n".join(style_blocks) + "</head>", 1)
             response.body = html.encode("utf-8")
             response.headers["content-length"] = str(len(response.body))
         # Transport registers are operational pages; always serve their current
