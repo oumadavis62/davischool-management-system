@@ -253,15 +253,25 @@ def _get_pool(database_url: str, connect_timeout: int = 10) -> ConnectionPool:
             # connections to the whole project. This pool is per process, so
             # a large per-process default can exhaust that shared limit when
             # the host runs multiple workers or instances.
-            min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 1, 1, 2)
-            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 8, min_size, 8)
+            min_size = _pool_size("DAVISCHOOL_DB_POOL_MIN", 1, 1, 1)
+            # Supabase shared session-mode poolers have a small per-project
+            # client limit (15 in the affected deployment). This pool is
+            # process-local, so each worker/replica multiplies the limit.
+            # Keep one warm connection and permit at most one additional
+            # concurrent DB request per process; do not let env overrides
+            # accidentally exhaust the shared Supavisor session quota.
+            max_size = _pool_size("DAVISCHOOL_DB_POOL_MAX", 2, min_size, 2)
             pool = ConnectionPool(
                 conninfo=key,
                 min_size=min_size,
                 max_size=max_size,
                 timeout=connect_timeout,
-                max_idle=300,
-                kwargs={"row_factory": _row_factory, "connect_timeout": connect_timeout},
+                max_idle=30,
+                kwargs={
+                    "row_factory": _row_factory,
+                    "connect_timeout": connect_timeout,
+                    "application_name": "DaviSchool",
+                },
                 open=True,
             )
             _pools[key] = pool
