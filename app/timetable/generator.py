@@ -94,6 +94,13 @@ def _score(task, candidate, placements) -> float:
 def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
+    active_run = cur.execute(
+        """SELECT id FROM ds_timetable_generation_runs
+           WHERE school_id=? AND profile_id=? AND status='running' ORDER BY id DESC LIMIT 1""",
+        (school_id, profile_id),
+    ).fetchone()
+    if active_run:
+        raise TimetableSetupError("Automatic timetable generation is already running for this profile.")
     days = cur.execute(
         """SELECT * FROM ds_timetable_days
            WHERE school_id=? AND profile_id=? AND is_instructional=1 ORDER BY day_order,id""",
