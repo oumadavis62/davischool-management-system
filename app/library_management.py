@@ -66,7 +66,7 @@ def library_book_catalogue(
         filters.append("status=?")
         params.append(status)
     rows = cur.execute(
-        "SELECT * FROM library_books WHERE " + " AND ".join(filters) + " ORDER BY title COLLATE NOCASE, author COLLATE NOCASE",
+        "SELECT * FROM library_books WHERE " + " AND ".join(filters) + " ORDER BY LOWER(title), LOWER(author)",
         tuple(params),
     ).fetchall()
     categories = cur.execute(
