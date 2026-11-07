@@ -335,6 +335,7 @@ def _seed(con, sid):
         WHERE p.school_id=a.school_id AND p.profile_id=?
         AND p.resource_type=a.resource_type AND p.resource_id=a.resource_id
         AND p.day_name=a.day_name AND p.period_no=a.period_no)""",(pid,sid,pid))
+    cur.execute("DELETE FROM timetable_availability WHERE school_id=?",(sid,))
     # Upgrade profiles duplicated by older releases, where slots had their
     # own profile_id but still referenced the original shared lesson rows.
     # The original/oldest profile remains the source; each populated profile
@@ -389,13 +390,13 @@ def _active_profile_id(con,sid):
     return int(row["id"]) if row else 0
 
 
-def _active_profile(con,sid):
-    pid=_active_profile_id(con,sid)
+def _active_profile(con,sid,profile_id=None):
+    pid=int(profile_id) if profile_id is not None else _active_profile_id(con,sid)
     return con.execute("SELECT * FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid)).fetchone()
 
 
-def _profile_days(db,sid):
-    row=_active_profile(db,sid)
+def _profile_days(db,sid,profile_id=None):
+    row=_active_profile(db,sid,profile_id)
     if not row:return []
     try:values=json.loads(str(row["days_json"] or "[]"))
     except Exception:values=[]
@@ -407,8 +408,8 @@ def _profile_days(db,sid):
     ]
 
 
-def _profile_periods(db,sid):
-    row=_active_profile(db,sid)
+def _profile_periods(db,sid,profile_id=None):
+    row=_active_profile(db,sid,profile_id)
     if not row:return []
     try:values=json.loads(str(row["periods_json"] or "[]"))
     except Exception:values=[]
@@ -422,8 +423,8 @@ def _profile_periods(db,sid):
     ]
 
 
-def _profile_breaks(db,sid):
-    row=_active_profile(db,sid)
+def _profile_breaks(db,sid,profile_id=None):
+    row=_active_profile(db,sid,profile_id)
     if not row:return []
     try:values=json.loads(str(row["breaks_json"] or "[]"))
     except Exception:values=[]
@@ -2335,7 +2336,7 @@ def _is_available_slot(cur,sid,lesson,day,pno,duration,occupied,rooms,strict):
     return True,room_id
 
 
-def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
+def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing,profile_id=None):
     """Automatically solve the timetable with deterministic backtracking.
 
     Hard rules are never relaxed: class/stream collisions, teacher collisions,
@@ -2344,22 +2345,23 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     A lesson occurrence occupies its full duration, so double/triple lessons
     consume 2/3 physical periods while remaining one occurrence.
     """
-    # The active profile is the single source of truth. Never mix its displayed
-    # schedule with legacy school-wide days/periods during generation.
-    days=[str(r["name"]) for r in _profile_days(cur,sid) if int(r["enabled"] or 0)]
-    periods=[dict(r) for r in _profile_periods(cur,sid)]
+    # Capture the profile when the generation job is queued; switching the
+    # UI to another academic year must not redirect a running solver.
+    pid=int(profile_id) if profile_id is not None else _active_profile_id(cur,sid)
+    days=[str(r["name"]) for r in _profile_days(cur,sid,pid) if int(r["enabled"] or 0)]
+    periods=[dict(r) for r in _profile_periods(cur,sid,pid)]
     rooms=[dict(r) for r in cur.execute(
         "SELECT * FROM timetable_rooms WHERE school_id=? AND active=1 ORDER BY id",(sid,)
     ).fetchall()]
 
-    lesson_sql="SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=timetable_active_profile(school_id)"
-    params=(sid,)
+    lesson_sql="SELECT * FROM timetable_lessons WHERE school_id=? AND profile_id=?"
+    params=(sid,pid)
     if class_filter:
         lesson_sql += """ AND (class_id=? OR id IN (
             SELECT lesson_id FROM timetable_lesson_classes
             WHERE school_id=? AND class_id=?
         ))"""
-        params=(sid,class_filter,sid,class_filter)
+        params=(sid,pid,class_filter,sid,class_filter)
     lessons=[dict(r) for r in cur.execute(
         lesson_sql+" ORDER BY duration DESC,lessons_per_week DESC,id",params
     ).fetchall()]
@@ -2371,7 +2373,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         return datetime.now().strftime("%Y%m%d%H%M%S%f"),0,0,[],"complete"
 
     pmap={int(p["period_no"]):p for p in periods}
-    breaks=[dict(r) for r in _profile_breaks(cur,sid)]
+    breaks=[dict(r) for r in _profile_breaks(cur,sid,pid)]
 
     lesson_classes={}
     lesson_teachers={}
@@ -2387,27 +2389,27 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
         lesson_teachers[lid]=tea
 
     blocked_teacher={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
-        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='teacher' AND allowed=0",(sid,_active_profile_id(cur,sid))
+        "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='teacher' AND allowed=0",(sid,pid)
     ).fetchall()}
     blocked_subject={(str(r["day_name"]),int(r["period_no"]),int(r["resource_id"])) for r in cur.execute(
         "SELECT day_name,period_no,resource_id FROM timetable_profile_availability WHERE school_id=? AND profile_id=? AND resource_type='subject' AND allowed=0",(sid,_active_profile_id(cur,sid))
     ).fetchall()}
-    constraints=_constraint_maps(cur,sid,_active_profile_id(cur,sid))
+    constraints=_constraint_maps(cur,sid,pid)
 
     if replace_existing:
         if class_filter:
             cur.execute("""DELETE FROM timetable_slots
-                WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0 AND lesson_id IN (
-                    SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND class_id=?
+                WHERE school_id=? AND profile_id=? AND locked=0 AND lesson_id IN (
+                    SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=? AND class_id=?
                     UNION
                     SELECT lesson_id FROM timetable_lesson_classes WHERE school_id=? AND class_id=?
-                )""",(sid,sid,class_filter,sid,class_filter))
+                 )""",(sid,pid,sid,pid,class_filter,sid,class_filter))
         else:
-            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=timetable_active_profile(school_id) AND locked=0",(sid,))
+            cur.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=? AND locked=0",(sid,pid))
 
     base=[dict(r) for r in cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.room_id,l.duration,l.subject_id
         FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-        WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id)""",(sid,)).fetchall()]
+        WHERE s.school_id=? AND s.profile_id=?""",(sid,pid)).fetchall()]
     # Include combined-class and co-teacher relationships for every existing
     # placement, including lessons outside a class-filtered generation run.
     for row in base:
@@ -2972,7 +2974,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
             sid,row["lesson_id"],row["day_name"],row["period_no"],
             p["start_time"],
             pmap[int(row["period_no"])+duration-1]["end_time"],
-            row["room_id"],0,run,_active_profile_id(cur,sid)
+            row["room_id"],0,run,pid
         ))
 
     requested=sum(
@@ -3039,7 +3041,7 @@ def _generate_algorithm(cur,sid,class_filter,mode,complexity,replace_existing):
     return run,requested,placed,unplaced,status
 
 
-def _run_generation_job(sid,class_filter,mode,complexity,replace_existing,run_id):
+def _run_generation_job(sid,class_filter,mode,complexity,replace_existing,run_id,profile_id):
     """Run generation outside the HTTP request so the Generate tab never waits."""
     from app.new_ui import _db
     con=_db()
@@ -3049,7 +3051,7 @@ def _run_generation_job(sid,class_filter,mode,complexity,replace_existing,run_id
         _install_profile_sql_function(con,sid)
         try:
             run,requested,placed,unplaced,status=_generate_algorithm(
-                con.cursor(),sid,class_filter,mode,complexity,replace_existing
+                con.cursor(),sid,class_filter,mode,complexity,replace_existing,profile_id
             )
             message=(("Unplaced lesson cards: "+",".join(
                 f"{lid} ({reason})" for lid,reason in unplaced
@@ -3082,6 +3084,7 @@ def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,clas
         if complexity not in ("normal","large","huge"):
             complexity="normal"
         cf=int(class_id) if str(class_id).isdigit() else None
+        profile_id=_active_profile_id(con,sid)
 
         # Register the job before returning. The actual solver runs as a
         # background task, so the browser receives a response immediately.
@@ -3090,13 +3093,13 @@ def timetable_generate_new(request:Request,background_tasks:BackgroundTasks,clas
             """INSERT INTO timetable_generation_runs(
                 school_id,profile_id,created_at,mode,complexity,status,placed,requested,message
             ) VALUES(?,?,?,?,?,?,?,?,?)""",
-            (sid,_active_profile_id(con,sid),datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
+            (sid,profile_id,datetime.now().strftime("%Y-%m-%d %H:%M:%S"),mode,complexity,
              "running",0,0,"Generation started in background")
         )
         run_id=cur.lastrowid
         con.commit()
         background_tasks.add_task(
-            _run_generation_job,sid,cf,mode,complexity,bool(replace_existing),run_id
+            _run_generation_job,sid,cf,mode,complexity,bool(replace_existing),run_id,profile_id
         )
         return RedirectResponse(
             "/app/timetable?tab=generate&msg="+quote("Generation started. You can remain on this tab; it will not stall."),
