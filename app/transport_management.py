@@ -1289,6 +1289,14 @@ def transport_reports(request: Request, date_from: str = "", date_to: str = ""):
             "ORDER BY events DESC,learners DESC,v.registration_no",
             tuple(([date_from.strip()] if date_from.strip() else []) + ([date_to.strip()] if date_to.strip() else []) + [sid])
         ).fetchall()
+        recent_where = ["l.school_id=?"]
+        recent_params = [sid]
+        if date_from.strip():
+            recent_where.append("l.trip_date>=?")
+            recent_params.append(date_from.strip())
+        if date_to.strip():
+            recent_where.append("l.trip_date<=?")
+            recent_params.append(date_to.strip())
         recent = cur.execute(
             "SELECT l.trip_date,l.trip_period,l.event_type,l.event_time,l.details,"
             "s.name AS student_name,s.admission_no,r.route_name,v.registration_no "
@@ -1296,8 +1304,8 @@ def transport_reports(request: Request, date_from: str = "", date_to: str = ""):
             "LEFT JOIN students s ON s.id=l.student_id AND s.school_id=l.school_id "
             "LEFT JOIN transport_routes r ON r.id=l.route_id AND r.school_id=l.school_id "
             "LEFT JOIN transport_vehicles v ON v.id=l.vehicle_id AND v.school_id=l.school_id "
-            "WHERE " + event_sql + " ORDER BY l.trip_date DESC,l.event_time DESC,l.id DESC LIMIT 50",
-            tuple(event_params)
+            "WHERE " + " AND ".join(recent_where) + " ORDER BY l.trip_date DESC,l.event_time DESC,l.id DESC LIMIT 50",
+            tuple(recent_params)
         ).fetchall()
         event_rows = "".join(
             f"<tr><td>{escape(str(x['event_type'] or ''))}</td><td>{int(x['total'] or 0)}</td></tr>" for x in by_event
