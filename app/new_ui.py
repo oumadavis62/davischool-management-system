@@ -20810,6 +20810,9 @@ def finance_workspace_section(request: Request, section: str):
         <select name='credit_account' required><option value=''>Credit account</option>%s</select><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount (KES)'><button>Save draft journal</button></form></div>
         <div class='fx-card'><h2>Journal register</h2>%s</div>"""%(_finance_table(["Code","Account","Type","Status","Opening balance"],ar,"No accounts."),
             opts,opts,_finance_table(["Date","Reference","Description","Status","Posted at","Created by"],jr,"No journals yet."))
+        periods=cur.execute("SELECT period_start,period_end,status FROM ds_fin_periods WHERE school_id=? ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
+        period_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["status"])) for x in periods)
+        content += "<div class='fx-card'><h2>Close accounting period</h2><p>Closing a period prevents new charges, receipts and journals dated inside that period. Ensure bank reconciliation and approvals are complete first.</p><form method='post' action='/app/finance/periods/close' class='fx-form'><input type='date' name='period_start' required><input type='date' name='period_end' required><button>Close period</button></form>"+_finance_table(["Period start","Period end","Status"],period_rows,"No accounting periods locked.")+"</div>"
     elif section == "banking":
         banks = cur.execute("SELECT * FROM ds_fin_bank_accounts WHERE school_id=? ORDER BY bank_name",(sid,)).fetchall()
         lines = cur.execute("""SELECT l.*,b.bank_name,b.account_name FROM ds_fin_bank_lines l
@@ -20827,7 +20830,9 @@ def finance_workspace_section(request: Request, section: str):
         <form method='post' action='/app/finance/banking/line' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select>
         <input name='line_date' type='date' required><input name='reference' placeholder='Bank reference'><input name='description' placeholder='Description'>
         <input name='amount' type='number' min='0.01' step='0.01' required placeholder='Amount'><select name='direction'><option>Credit</option><option>Debit</option></select><button>Add statement line</button></form></div></div>
-        <div class='fx-card'><h2>Reconciliation register</h2>%s</div>"""%(opts,_finance_table(["Account","Date","Reference","Description","Amount","Direction","Match"],br,"No statement lines."))
+        <div class='fx-card'><h2>Import bank statement (CSV)</h2><p>CSV headers: Date, Reference, Description, Amount, Direction. Alternatively use Date, Debit, Credit. Duplicate rows are skipped.</p>
+        <form method='post' enctype='multipart/form-data' action='/app/finance/banking/import' class='fx-form'><select name='account_id' required><option value=''>Select account</option>%s</select><input type='file' name='statement_file' accept='.csv,text/csv' required><button>Import statement</button></form></div>
+        <div class='fx-card'><h2>Reconciliation register</h2>%s</div>"""%(opts,opts,_finance_table(["Account","Date","Reference","Description","Amount","Direction","Match"],br,"No statement lines."))
     elif section == "budgets":
         budgets = cur.execute("SELECT * FROM ds_fin_budgets WHERE school_id=? ORDER BY budget_year DESC,department",(sid,)).fetchall()
         actuals = cur.execute("SELECT category,COALESCE(SUM(amount),0) actual FROM expenses WHERE school_id=? GROUP BY category",(sid,)).fetchall()
@@ -20841,16 +20846,44 @@ def finance_workspace_section(request: Request, section: str):
         <input name='account_code' placeholder='Account code (optional)'><input name='amount' type='number' min='0.01' step='0.01' required placeholder='Budget amount (KES)'><button>Save budget</button></form></div>
         <div class='fx-card'><h2>Budget vs recorded expenditure</h2><p>Actuals are matched to the existing expense category field.</p>%s</div>"""%_finance_table(["Year","Department","Budget","Recorded actual","Variance"],rows,"No budgets created.")
     else:
-        fee = cur.execute("SELECT COALESCE(SUM(amount),0) billed,COALESCE(SUM(paid),0) collected FROM fees WHERE school_id=?",(sid,)).fetchone()
-        exp = cur.execute("SELECT COALESCE(SUM(amount),0) amount FROM expenses WHERE school_id=?",(sid,)).fetchone()
-        cash = cur.execute("SELECT COALESCE(SUM(debit),0) debits,COALESCE(SUM(credit),0) credits FROM cashbook WHERE school_id=?",(sid,)).fetchone()
-        supplier_due = cur.execute("SELECT COALESCE(SUM(amount),0) amount FROM ds_fin_bills WHERE school_id=? AND status IN ('Draft','Approved')",(sid,)).fetchone()
-        content = """<div class='fx-kpis'><div><small>Fees billed</small><b>KES %,.2f</b></div><div><small>Fees collected</small><b>KES %,.2f</b></div><div><small>Fee balance</small><b>KES %,.2f</b></div><div><small>Recorded expenses</small><b>KES %,.2f</b></div><div><small>Open supplier bills</small><b>KES %,.2f</b></div></div>
-        <div class='fx-card'><h2>Cashbook movement</h2><p>These are recorded cashbook totals, not a substitute for a balanced trial balance.</p>
-        <div class='fx-kpis'><div><small>Debits</small><b>KES %,.2f</b></div><div><small>Credits</small><b>KES %,.2f</b></div></div></div>
-        <div class='fx-card'><h2>Accounting report scope</h2><p>Use General Accounting for posted double-entry journals and the chart of accounts. Use Cash & Banking to reconcile statement lines. Existing historical fees, receipts and expenses remain in their original registers.</p></div>"""%(
-            float(fee["billed"] or 0),float(fee["collected"] or 0),float(fee["billed"] or 0)-float(fee["collected"] or 0),
-            float(exp["amount"] or 0),float(supplier_due["amount"] or 0),float(cash["debits"] or 0),float(cash["credits"] or 0))
+        start_day=str(request.query_params.get("from") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-01-01"))[:10]
+        end_day=str(request.query_params.get("to") or datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d"))[:10]
+        accounts = cur.execute("""SELECT a.code,a.name,a.account_type,a.opening_balance,
+            COALESCE(SUM(l.debit),0) debits,COALESCE(SUM(l.credit),0) credits
+            FROM ds_fin_accounts a LEFT JOIN ds_fin_journal_lines l ON l.school_id=a.school_id AND l.account_code=a.code
+            LEFT JOIN ds_fin_journals j ON j.id=l.journal_id AND j.school_id=l.school_id AND j.status IN ('Posted','Reversed') AND j.journal_date BETWEEN ? AND ?
+            WHERE a.school_id=? AND a.active=1 GROUP BY a.code,a.name,a.account_type,a.opening_balance ORDER BY a.code""",(start_day,end_day,sid)).fetchall()
+        tb_rows=[];income=0.0;expenses_total=0.0;assets=0.0;liabilities=0.0;equity=0.0;cash_net=0.0
+        for acc in accounts:
+            debit=float(acc["debits"] or 0);credit=float(acc["credits"] or 0);opening=float(acc["opening_balance"] or 0)
+            kind=str(acc["account_type"] or "")
+            balance=opening+debit-credit if kind in ("Asset","Expense") else opening+credit-debit
+            dr=max(0,balance) if kind in ("Asset","Expense") else 0
+            cr=max(0,-balance) if kind in ("Asset","Expense") else max(0,balance)
+            tb_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(_finance_cell(acc["code"]),_finance_cell(acc["name"]),_finance_cell(kind),dr,cr))
+            if kind=="Income":income+=credit-debit
+            elif kind=="Expense":expenses_total+=debit-credit
+            elif kind=="Asset":assets+=balance
+            elif kind=="Liability":liabilities+=balance
+            elif kind=="Equity":equity+=balance
+            if str(acc["code"]) in ("1000","1010","1020"):cash_net+=debit-credit
+        surplus=income-expenses_total
+        statement_rows="<tr><td>Income</td><td>KES %,.2f</td></tr><tr><td>Expenses</td><td>KES %,.2f</td></tr><tr><td>Net surplus / (deficit)</td><td>KES %,.2f</td></tr>"%(income,expenses_total,surplus)
+        position_rows="<tr><td>Assets</td><td>KES %,.2f</td></tr><tr><td>Liabilities</td><td>KES %,.2f</td></tr><tr><td>Accumulated funds</td><td>KES %,.2f</td></tr><tr><td>Current period surplus / (deficit)</td><td>KES %,.2f</td></tr><tr><td>Total liabilities and funds</td><td>KES %,.2f</td></tr>"%(assets,liabilities,equity,surplus,liabilities+equity+surplus)
+        cash_rows="<tr><td>Net movement in cash, bank and mobile-money control accounts</td><td>KES %,.2f</td></tr>"%cash_net
+        closed=cur.execute("SELECT period_start,period_end,closed_by,closed_at FROM ds_fin_periods WHERE school_id=? AND status='Closed' ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
+        closed_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["closed_by"]),_finance_cell(x["closed_at"])) for x in closed)
+        content="""<div class='fx-card'><h2>Financial statement period</h2><form method='get' action='/app/finance/reports' class='fx-form'><input type='date' name='from' value='%s'><input type='date' name='to' value='%s'><button>Run statements</button></form><p>Statements are calculated from posted double-entry journals and account opening balances for the selected period.</p></div>
+        <div class='fx-kpis'><div><small>Total income</small><b>KES %,.2f</b></div><div><small>Total expenses</small><b>KES %,.2f</b></div><div><small>Net surplus / (deficit)</small><b>KES %,.2f</b></div><div><small>Assets</small><b>KES %,.2f</b></div></div>
+        <div class='fx-card'><h2>Trial balance</h2>%s</div>
+        <div class='fx-two'><div class='fx-card'><h2>Income statement</h2>%s</div><div class='fx-card'><h2>Statement of financial position</h2>%s</div></div>
+        <div class='fx-card'><h2>Cash flow summary</h2>%s</div>
+        <div class='fx-card'><h2>Accounting period locks</h2><p>Closed periods block new ledger postings and manual journal posting within their date range. Close only after reconciliation and review.</p>%s</div>"""%(escape(start_day),escape(end_day),income,expenses_total,surplus,assets,
+            _finance_table(["Code","Account","Type","Debit balance","Credit balance"],"".join(tb_rows),"No posted ledger entries for this period."),
+            _finance_table(["Description","Amount"],statement_rows,"No statement values."),
+            _finance_table(["Position","Amount"],position_rows,"No position values."),
+            _finance_table(["Cash flow measure","Amount"],cash_rows,"No cash movement."),
+            _finance_table(["Period start","Period end","Closed by","Closed at"],closed_rows,"No periods closed."))
     con.commit()
     con.close()
     body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
