@@ -662,8 +662,72 @@ def timetable_manager(request: Request):
     sid, con, response = _guard(request, "timetable.view")
     if response:
         return response
-    tab = _selected_tab(request)
     try:
+        # TEMPORARY, SAFE DIAGNOSTIC MODE:
+        # Pause normal timetable initialization after the authenticated route is
+        # reached. This intentionally raises and catches a controlled exception
+        # so we can verify navigation, route dispatch, response rendering and DB
+        # connectivity without changing timetable records or schema.
+        diagnostic_mode = True
+        if diagnostic_mode:
+            diagnostic_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            database_status = "NOT TESTED"
+            failure_type = "RuntimeError"
+            failure_message = (
+                "CONTROLLED_DIAGNOSTIC_INTERRUPT: normal timetable initialization "
+                "was deliberately paused for this navigation test."
+            )
+            try:
+                con.execute("SELECT 1").fetchone()
+                database_status = "PASSED — SELECT 1 returned successfully"
+                raise RuntimeError(failure_message)
+            except RuntimeError as exc:
+                print(
+                    "DAVISCHOOL TIMETABLE CONTROLLED DIAGNOSTIC: "
+                    f"{type(exc).__name__}: {exc}; "
+                    f"path={request.url.path}; method={request.method}; "
+                    f"database={database_status}",
+                    flush=True,
+                )
+                failure_type = type(exc).__name__
+                failure_message = str(exc)
+            except Exception as exc:
+                failure_type = type(exc).__name__
+                failure_message = str(exc)[:500]
+                print(
+                    "DAVISCHOOL TIMETABLE DIAGNOSTIC PROBE FAILED: "
+                    f"{failure_type}: {failure_message}",
+                    flush=True,
+                )
+            diagnostic_html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timetable Technical Diagnostics · DaviSchool</title>
+<style>
+*{{box-sizing:border-box}}body{{margin:0;background:#f1f7f1;color:#203126;font-family:Arial,sans-serif}}
+main{{max-width:850px;margin:28px auto;padding:0 15px}}.panel{{background:#fff;border:1px solid #d8e6d9;border-radius:16px;padding:22px;box-shadow:0 8px 28px #173b2010}}
+h1{{font-size:22px;margin:0 0 8px;color:#14532d}}p{{font-size:13px;line-height:1.6;color:#536458}}
+.row{{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #edf1ed;font-size:13px;flex-wrap:wrap}}
+.ok{{color:#166534;font-weight:800}}.warn{{color:#9a3412;font-weight:800}}code{{font-size:12px;overflow-wrap:anywhere}}
+.notice{{margin-top:17px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:13px;font-size:13px;line-height:1.6}}
+small{{color:#64766a}}a{{display:inline-block;margin-top:17px;color:#14532d;font-weight:700;text-decoration:none}}
+</style></head><body><main><section class="panel">
+<h1>DaviSchool · Timetable Technical Diagnostics</h1>
+<p>The timetable route has returned this diagnostic page. Normal timetable initialization is temporarily paused so the navigation path can be tested safely.</p>
+<div class="row"><b>HTTP route reached</b><span class="ok">YES</span></div>
+<div class="row"><b>Authentication / permission guard</b><span class="ok">PASSED</span></div>
+<div class="row"><b>Database connectivity probe</b><span class="{ 'ok' if database_status.startswith('PASSED') else 'warn' }">{escape(database_status)}</span></div>
+<div class="row"><b>Controlled interruption</b><span class="warn">TRIGGERED AND CAUGHT</span></div>
+<div class="row"><b>Exception type</b><code>{escape(failure_type)}</code></div>
+<div class="row"><b>Technical message</b><code>{escape(failure_message)}</code></div>
+<div class="row"><b>Request path</b><code>{escape(request.url.path)}</code></div>
+<div class="row"><b>Request method</b><code>{escape(request.method)}</code></div>
+<div class="row"><b>Server timestamp</b><code>{escape(diagnostic_time)}</code></div>
+<div class="notice"><b>Diagnostic notice:</b> This is an intentional test interruption, not evidence of the original timetable defect. No timetable data, lesson allocations, teacher assignments or database tables were modified by this test.</div>
+<a href="/app">← Return to DaviSchool</a>
+</section></main></body></html>"""
+            return HTMLResponse(diagnostic_html, status_code=200)
+        tab = _selected_tab(request)
         if tab == "profiles": body = _profiles(request, con, sid)
         elif tab == "setup": body = _setup(request, con, sid)
         elif tab == "periods": body = _periods(request, con, sid)
