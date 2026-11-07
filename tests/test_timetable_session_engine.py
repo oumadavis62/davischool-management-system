@@ -81,6 +81,23 @@ class TimetableSessionEngineTests(unittest.TestCase):
             2,
         )
 
+    def test_extended_instructional_session_must_match_consecutive_period_span(self):
+        second_period = save_period(
+            self.db, 8, self.profile_id, 2, "Period 2", "08:40", "09:20"
+        )
+        session = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:20",
+            class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+            period_id=self.period_id, duration_periods=2,
+        )
+        self.assertGreater(session, 0)
+        with self.assertRaises(TimetableSetupError):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                class_ids=[2], teacher_ids=[12], day_id=self.day_id,
+                period_id=self.period_id, duration_periods=2,
+            )
+
     def test_teacher_and_class_conflicts_are_detected_across_layers(self):
         create_scheduled_session(
             self.db, 8, self.profile_id, "08:00", "09:00",
