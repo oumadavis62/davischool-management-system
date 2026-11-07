@@ -262,3 +262,76 @@ def create_learning_programme(connection: Any, school_id: int, profile_id: int,
     ).fetchone()
     connection.commit()
     return int(row["id"])
+
+
+def save_requirement_session_pattern(connection: Any, school_id: int, profile_id: int,
+                                     requirement_id: int,
+                                     sessions: list[dict[str, Any]]) -> None:
+    """Replace a requirement's single/double/triple session pattern atomically.
+
+    The sum of session durations must exactly equal the requirement's weekly
+    period allocation. Optional day and slot preferences are profile-scoped.
+    """
+    if not isinstance(sessions, list) or not sessions:
+        raise TimetableSetupError("Add at least one lesson session to the weekly pattern.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirement = cur.execute(
+        """SELECT id,lessons_per_week FROM ds_timetable_class_requirements
+           WHERE id=? AND school_id=? AND profile_id=?""",
+        (requirement_id, school_id, profile_id),
+    ).fetchone()
+    if not requirement:
+        raise TimetableSetupError("The selected subject requirement does not belong to this timetable.")
+    normalized = []
+    total_periods = 0
+    for index, session in enumerate(sessions, start=1):
+        try:
+            duration = int(session.get("duration_periods", 1))
+            day_id = session.get("preferred_day_id")
+            slot_id = session.get("preferred_slot_id")
+        except (AttributeError, TypeError, ValueError):
+            raise TimetableSetupError("Each weekly session must have a valid duration and preferences.")
+        if not 1 <= duration <= 4:
+            raise TimetableSetupError("Each lesson session must occupy between 1 and 4 consecutive periods.")
+        if day_id is not None:
+            day = cur.execute(
+                "SELECT id FROM ds_timetable_days WHERE id=? AND school_id=? AND profile_id=?",
+                (int(day_id), school_id, profile_id),
+            ).fetchone()
+            if not day:
+                raise TimetableSetupError("A preferred lesson day is outside this timetable profile.")
+        if slot_id is not None:
+            slot = cur.execute(
+                """SELECT id,slot_type FROM ds_timetable_schedule_slots
+                   WHERE id=? AND school_id=? AND profile_id=?""",
+                (int(slot_id), school_id, profile_id),
+            ).fetchone()
+            if not slot or str(slot["slot_type"]) != "instructional":
+                raise TimetableSetupError("A preferred slot must be an instructional slot in this profile.")
+        label = str(session.get("session_label") or "").strip()[:80] or f"Session {index}"
+        normalized.append((index, duration, int(day_id) if day_id is not None else None,
+                           int(slot_id) if slot_id is not None else None, label))
+        total_periods += duration
+    expected = int(requirement["lessons_per_week"])
+    if total_periods != expected:
+        raise TimetableSetupError(
+            f"Lesson pattern totals {total_periods} periods, but this subject is allocated {expected} per week."
+        )
+    try:
+        cur.execute(
+            "DELETE FROM ds_timetable_requirement_patterns WHERE school_id=? AND profile_id=? AND requirement_id=?",
+            (school_id, profile_id, requirement_id),
+        )
+        for session_no, duration, day_id, slot_id, label in normalized:
+            cur.execute(
+                """INSERT INTO ds_timetable_requirement_patterns
+                   (school_id,profile_id,requirement_id,session_no,duration_periods,
+                    preferred_day_id,preferred_slot_id,session_label)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, requirement_id, session_no, duration, day_id, slot_id, label),
+            )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
