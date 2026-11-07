@@ -1099,9 +1099,33 @@ def _verify(con, sid):
             if a["room_id"] and b["room_id"] and int(a["room_id"])==int(b["room_id"]):
                 issues.append(f"Room conflict on {a['day_name']} periods {max(a_start,b_start)}: lessons {a_lid} / {b_lid}.")
 
+    # Strict daily-load constraints are publication requirements too, not just
+    # solver hints. Count lesson occurrences against every linked class/teacher.
+    strict_constraints=con.execute("""SELECT scope,constraint_type,target_id,value
+        FROM timetable_constraints WHERE school_id=? AND profile_id=? AND enabled=1 AND priority='strict'""",
+        (sid,_active_profile_id(con,sid))).fetchall()
+    for rule in strict_constraints:
+        kind=str(rule["constraint_type"])
+        if kind not in ("Teacher max lessons/day","Class max lessons/day") or not rule["target_id"]:
+            continue
+        try: limit=int(rule["value"] or 0)
+        except (TypeError,ValueError): continue
+        if limit<=0: continue
+        target=int(rule["target_id"])
+        daily={}
+        for raw in rows:
+            row=dict(raw); lid=int(row["lesson_id"]); day=str(row["day_name"])
+            resources=teacher_map.get(lid,set()) if kind.startswith("Teacher") else class_map.get(lid,set())
+            if target in resources:
+                daily[day]=daily.get(day,0)+1
+        label="teacher" if kind.startswith("Teacher") else "class/stream"
+        for day,count in daily.items():
+            if count>limit:
+                issues.append(f"Strict constraint exceeded: {label} {target} has {count} lesson occurrences on {day}; maximum is {limit}.")
+
     issue_rows="".join(f"<tr><td>⚠️</td><td>{escape(x)}</td></tr>" for x in issues)
     return f"""<div class='tt-card'><h2>✅ Timetable Verification</h2>
-<div class='tt-muted'>Audits the active profile's lesson coverage, enabled days, period boundaries, breaks, teacher and subject availability, repeated subjects, class/stream clashes, teacher clashes and room clashes.</div>
+<div class='tt-muted'>Audits the active profile's lesson coverage, enabled days, period boundaries, breaks, teacher and subject availability, repeated subjects, strict daily-load constraints, class/stream clashes, teacher clashes and room clashes.</div>
 <div class='tt-stat' style='margin:12px 0'><b>{len(issues)}</b>{'Issues found' if issues else 'All timetable checks passed'}</div>
 <div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{issue_rows if issues else '<tr><td>✅</td><td>Verification passed. No incomplete requirements or scheduling conflicts were detected.</td></tr>'}</tbody></table></div></div>"""
 
