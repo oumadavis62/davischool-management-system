@@ -122,10 +122,13 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
     period_index = {int(p["id"]):i for i,p in enumerate(periods)}
     day_ids = {int(d["id"]) for d in days}
     lesson_counts = {}
+    daily_counts = {}
     placements = []
     for lesson in lessons:
         key = (int(lesson["class_id"]),int(lesson["subject_id"]),int(lesson["teacher_id"]))
         lesson_counts[key] = lesson_counts.get(key,0) + 1
+        daily_key = key + (int(lesson["day_id"]),)
+        daily_counts[daily_key] = daily_counts.get(daily_key,0) + 1
         if key not in allocation_keys:
             errors.append("A scheduled lesson references a class/subject/teacher combination that is no longer allocated.")
         day_id = int(lesson["day_id"])
@@ -177,6 +180,11 @@ def validate_timetable_for_publication(connection: Any, school_id: int, profile_
                 "A weekly requirement is not fully scheduled (class ID %s, subject ID %s: %s of %s lessons)."
                 % (key[0],key[1],actual,expected)
             )
+        max_per_day = int(requirement["max_lessons_per_day"]) if requirement["max_lessons_per_day"] is not None else 0
+        if max_per_day and any(
+            count > max_per_day for daily_key, count in daily_counts.items() if daily_key[:3] == key
+        ):
+            errors.append("A subject exceeds its configured maximum number of lessons on a day.")
     for i, first in enumerate(placements):
         for second in placements[i+1:]:
             if first["day_id"] != second["day_id"]:
