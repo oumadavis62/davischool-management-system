@@ -21311,6 +21311,117 @@ def _finance_expense_account(category):
 
 
 
+def _finance_interaction_enhancements():
+    return """
+    <style>
+      .fx-workspace .fx-action-row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+      .fx-workspace .fx-open-modal{border:0;border-radius:9px;padding:10px 15px;background:#176b3d;color:#fff;font-weight:800;cursor:pointer}
+      .fx-workspace .fx-open-modal:hover{background:#12552f}
+      .fx-workspace .fx-filterbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+      .fx-workspace .fx-filterbar input,.fx-workspace .fx-filterbar select{min-width:150px;max-width:100%;padding:9px 11px;border:1px solid #d7e2d9;border-radius:8px;background:#fff;color:#294635}
+      .fx-workspace .fx-filter-count{font-size:11px;color:#718078;margin-left:auto}
+      .fx-workspace .fx-modal-backdrop{position:fixed;inset:0;z-index:99999;background:rgba(13,34,22,.52);display:none;align-items:center;justify-content:center;padding:16px}
+      .fx-workspace .fx-modal-backdrop.is-open{display:flex}
+      .fx-workspace .fx-modal{width:min(680px,100%);max-height:90vh;overflow:auto;background:#f8fbf8;border:1px solid #cfe0d2;border-radius:16px;box-shadow:0 24px 80px #10271955}
+      .fx-workspace .fx-modal-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 18px;background:#e8f3eb;border-bottom:1px solid #d3e4d7}
+      .fx-workspace .fx-modal-head h3{margin:0;color:#194b2e;font-size:16px}
+      .fx-workspace .fx-modal-close{width:34px;height:34px;border:0;border-radius:50%;background:#d7e9dc;color:#194b2e;font-size:22px;cursor:pointer}
+      .fx-workspace .fx-modal-body{padding:16px}
+      .fx-workspace .fx-modal-body .fx-form{margin:0;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+      .fx-workspace .fx-modal-body .fx-form button{grid-column:1/-1;min-height:42px}
+      .fx-workspace .fx-card>h2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .fx-workspace .fx-card>h2+ p{line-height:1.5}
+      @media(max-width:560px){.fx-workspace .fx-modal-backdrop{padding:8px;align-items:flex-end}.fx-workspace .fx-modal{max-height:94vh;border-radius:16px 16px 10px 10px}.fx-workspace .fx-modal-body{padding:12px}.fx-workspace .fx-filterbar>*{flex:1 1 100%}.fx-workspace .fx-filter-count{margin-left:0}}
+    </style>
+    <script>
+    (function(){
+      function initFinanceWorkspace(){
+        var root=document.querySelector('.fx-workspace');
+        if(!root || root.dataset.fxEnhanced==='1') return;
+        root.dataset.fxEnhanced='1';
+        var modalLayer=document.createElement('div');
+        modalLayer.className='fx-modal-backdrop';
+        modalLayer.innerHTML="<section class='fx-modal' role='dialog' aria-modal='true' aria-labelledby='fxModalTitle'><header class='fx-modal-head'><h3 id='fxModalTitle'>Finance entry</h3><button type='button' class='fx-modal-close' aria-label='Close'>&times;</button></header><div class='fx-modal-body'></div></section>";
+        root.appendChild(modalLayer);
+        var modalBody=modalLayer.querySelector('.fx-modal-body');
+        var modalTitle=modalLayer.querySelector('#fxModalTitle');
+        function closeModal(){modalLayer.classList.remove('is-open');modalBody.innerHTML='';}
+        modalLayer.querySelector('.fx-modal-close').addEventListener('click',closeModal);
+        modalLayer.addEventListener('click',function(e){if(e.target===modalLayer)closeModal();});
+        document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+        root.querySelectorAll('.fx-card form.fx-form').forEach(function(form,index){
+          var card=form.closest('.fx-card');
+          var heading=card&&card.querySelector('h2');
+          var submit=form.querySelector("button[type='submit'],button:not([type])");
+          var action=(submit&&submit.textContent.trim())||'Save';
+          var title=(heading&&heading.textContent.trim())||'Finance entry';
+          var trigger=document.createElement('button');
+          trigger.type='button';trigger.className='fx-open-modal';
+          trigger.textContent=action;
+          trigger.addEventListener('click',function(){
+            modalTitle.textContent=title;
+            modalBody.innerHTML='';
+            modalBody.appendChild(form);
+            modalLayer.classList.add('is-open');
+            var first=modalBody.querySelector('input:not([type=hidden]),select,textarea');
+            if(first)first.focus();
+          });
+          var slot=document.createElement('div');slot.className='fx-action-row';slot.appendChild(trigger);
+          form.parentNode.insertBefore(slot,form);
+          form.remove();
+        });
+        root.querySelectorAll('.fx-table-wrap').forEach(function(wrap){
+          var table=wrap.querySelector('table');if(!table)return;
+          var head=table.querySelector('thead tr');var rows=Array.from(table.querySelectorAll('tbody tr'));
+          if(!rows.length)return;
+          var headers=head?Array.from(head.children).map(function(x){return x.textContent.trim().toLowerCase();}):[];
+          var bar=document.createElement('div');bar.className='fx-filterbar';
+          var search=document.createElement('input');search.type='search';search.placeholder='Search records…';search.setAttribute('aria-label','Search table records');
+          bar.appendChild(search);
+          var statusIndex=headers.findIndex(function(x){return x.indexOf('status')>=0||x==='match';});
+          var statusSelect=null;
+          if(statusIndex>=0){
+            var vals=Array.from(new Set(rows.map(function(row){return (row.children[statusIndex]||{}).textContent.trim();}).filter(Boolean))).sort();
+            if(vals.length){
+              statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','Filter by status');
+              statusSelect.innerHTML="<option value=''>All statuses</option>";
+              vals.forEach(function(v){var o=document.createElement('option');o.value=v;o.textContent=v;statusSelect.appendChild(o);});
+              bar.appendChild(statusSelect);
+            }
+          }
+          var dateIndex=headers.findIndex(function(x){return x.indexOf('date')>=0;});
+          var from=null,to=null;
+          if(dateIndex>=0){
+            from=document.createElement('input');from.type='date';from.setAttribute('aria-label','From date');
+            to=document.createElement('input');to.type='date';to.setAttribute('aria-label','To date');
+            bar.appendChild(from);bar.appendChild(to);
+          }
+          var count=document.createElement('span');count.className='fx-filter-count';bar.appendChild(count);
+          wrap.parentNode.insertBefore(bar,wrap);
+          function apply(){
+            var q=search.value.trim().toLowerCase(),st=statusSelect?statusSelect.value:'',shown=0;
+            rows.forEach(function(row){
+              var cells=Array.from(row.children);
+              var matchText=!q||row.textContent.toLowerCase().indexOf(q)>=0;
+              var dateCell=dateIndex>=0&&cells[dateIndex]?cells[dateIndex].textContent.trim().slice(0,10):'';
+              var matchStatus=!st||(cells[statusIndex]&&cells[statusIndex].textContent.trim()===st);
+              var matchFrom=!from||!from.value||!dateCell||dateCell>=from.value;
+              var matchTo=!to||!to.value||!dateCell||dateCell<=to.value;
+              var visible=matchText&&matchStatus&&matchFrom&&matchTo;
+              row.style.display=visible?'':'none';if(visible)shown++;
+            });
+            count.textContent=shown+' of '+rows.length+' records';
+          }
+          [search,statusSelect,from,to].filter(Boolean).forEach(function(el){el.addEventListener('input',apply);el.addEventListener('change',apply);});
+          apply();
+        });
+      }
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initFinanceWorkspace);else initFinanceWorkspace();
+    })();
+    </script>
+    """
+
+
 def _finance_tabs(active):
     items = [
         ("overview","Overview","/app/finance"),("billing","Fees & Billing","/app/finance/billing"),
@@ -21510,6 +21621,7 @@ def finance_workspace_section(request: Request, section: str):
         con.commit()
     finally:
         con.close()
+    content += _finance_interaction_enhancements()
     body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
     <style>
     .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -21532,7 +21644,7 @@ def finance_workspace_section(request: Request, section: str):
     .fx-kpis>div{background:#fff;border:1px solid #e2eae3;border-radius:12px;padding:14px;display:grid;gap:7px}
     .fx-kpis small{color:#718078;font-size:12px}.fx-kpis b{font-size:19px;color:#214d34}
     @media(max-width:700px){.fx-two{grid-template-columns:1fr}.fx-heading h1{font-size:22px}.fx-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
-    </style>""" % (escape(title),_finance_tabs(section),content)
+    </style>""" % (escape(title),"",content)
     return _school_page(request,title,body)
 
 
