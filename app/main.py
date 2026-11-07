@@ -29,6 +29,7 @@ from app.timetable.generator_routes import register_timetable_generator_routes
 from app.timetable.views_routes import register_timetable_view_routes
 from app.timetable.export_routes import register_timetable_export_routes
 from app.timetable.publishing_routes import register_timetable_publishing_routes
+from app.timetable.portal_routes import register_timetable_portal_routes
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -4125,6 +4126,7 @@ register_timetable_generator_routes(app, get_db, get_school_obj, module_page)
 register_timetable_view_routes(app, get_db, get_school_obj, module_page)
 register_timetable_export_routes(app, get_db, get_school_obj)
 register_timetable_publishing_routes(app, get_db, get_school_obj, module_page)
+register_timetable_portal_routes(app, get_db)
 
 # Install tab-scoped signed sessions around the fully configured ASGI app.
 # This must wrap the app only after every route and FastAPI middleware has been registered.
