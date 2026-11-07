@@ -93,6 +93,12 @@ def _ensure_tables(con):
         allowed INTEGER NOT NULL DEFAULT 1,
         UNIQUE(school_id,profile_id,resource_type,resource_id,day_name,period_no)
     )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS timetable_profile_migrations(
+        school_id INTEGER NOT NULL,
+        migration_key TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        PRIMARY KEY(school_id,migration_key)
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS timetable_constraints(
         id INTEGER PRIMARY KEY,
         school_id INTEGER NOT NULL,
@@ -335,6 +341,26 @@ def _seed(con, sid):
         WHERE p.school_id=a.school_id AND p.profile_id=?
         AND p.resource_type=a.resource_type AND p.resource_id=a.resource_id
         AND p.day_name=a.day_name AND p.period_no=a.period_no)""",(pid,sid,pid))
+    # Existing profiles shared these rules before profile isolation. Copy the
+    # old shared rules into every profile that already existed at migration
+    # time, exactly once, then let each profile evolve independently.
+    migration_key="profile_owned_availability_constraints_v1"
+    migrated=cur.execute("SELECT 1 FROM timetable_profile_migrations WHERE school_id=? AND migration_key=?",(sid,migration_key)).fetchone()
+    if not migrated:
+        profile_rows=cur.execute("SELECT id FROM timetable_profiles WHERE school_id=? ORDER BY id",(sid,)).fetchall()
+        source_constraints=cur.execute("SELECT scope,constraint_type,target_id,value,priority,enabled,notes FROM timetable_constraints WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+        source_availability=cur.execute("SELECT resource_type,resource_id,day_name,period_no,allowed FROM timetable_profile_availability WHERE school_id=? AND profile_id=? ORDER BY id",(sid,pid)).fetchall()
+        for target in profile_rows:
+            target_pid=int(target["id"])
+            if target_pid==pid:
+                continue
+            for item in source_constraints:
+                cur.execute("""INSERT INTO timetable_constraints(school_id,profile_id,scope,constraint_type,target_id,value,priority,enabled,notes)
+                    VALUES(?,?,?,?,?,?,?,?,?)""",(sid,target_pid,item["scope"],item["constraint_type"],item["target_id"],item["value"],item["priority"],item["enabled"],item["notes"]))
+            for item in source_availability:
+                cur.execute("""INSERT INTO timetable_profile_availability(school_id,profile_id,resource_type,resource_id,day_name,period_no,allowed)
+                    VALUES(?,?,?,?,?,?,?)""",(sid,target_pid,item["resource_type"],item["resource_id"],item["day_name"],item["period_no"],item["allowed"]))
+        cur.execute("INSERT INTO timetable_profile_migrations(school_id,migration_key,completed_at) VALUES(?,?,?)",(sid,migration_key,datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     cur.execute("DELETE FROM timetable_availability WHERE school_id=?",(sid,))
     # Upgrade profiles duplicated by older releases, where slots had their
     # own profile_id but still referenced the original shared lesson rows.
@@ -2049,6 +2075,7 @@ def timetable_profile_delete(request:Request,pid:int):
         con.execute("DELETE FROM timetable_profile_availability WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_constraints WHERE school_id=? AND profile_id=?",(sid,pid))
         con.execute("DELETE FROM timetable_generation_runs WHERE school_id=? AND profile_id=?",(sid,pid))
+        con.execute("DELETE FROM timetable_profile_migrations WHERE school_id=?",(sid,))
         con.execute("DELETE FROM timetable_profiles WHERE id=? AND school_id=?",(pid,sid))
         con.commit()
         return RedirectResponse("/app/timetable?tab=profiles&msg=Timetable+profile+and+its+lesson+cards+deleted",303)
