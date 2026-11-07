@@ -113,9 +113,13 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
  max-width:560px!important;margin:0!important;color:#49684f!important;font-size:12px!important;line-height:1.6!important
 }
 .tr-allocation-dialog .tr-allocation-close,.tr-route-dialog .tr-route-close,.tr-event-dialog .tr-event-close{
- top:17px!important;right:19px!important;width:38px!important;height:38px!important;
- border:1px solid #a8c7aa!important;border-radius:12px!important;background:#ffffffdf!important;
- color:#245b39!important;font-size:23px!important;box-shadow:0 3px 10px #1c482616!important
+ position:absolute!important;top:12px!important;right:12px!important;left:auto!important;bottom:auto!important;
+ z-index:12!important;transform:none!important;margin:0!important;float:none!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ width:38px!important;height:38px!important;box-sizing:border-box!important;
+ border:1px solid #a8c7aa!important;border-radius:12px!important;background:#ffffffed!important;
+ color:#245b39!important;font-size:23px!important;line-height:1!important;
+ box-shadow:0 3px 10px #1c482616!important
 }
 .tr-allocation-dialog .tr-allocation-section,.tr-route-dialog .tr-route-section,.tr-event-dialog .tr-event-section{
  margin:15px 20px 0!important;padding:18px 20px 20px!important;
