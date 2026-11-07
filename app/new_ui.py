@@ -20145,7 +20145,7 @@ def _ensure_admissions_schema(cur):
         if column_name not in existing_admission_columns:
             cur.execute(f"ALTER TABLE admission_applications ADD COLUMN {column_name} {column_type}")
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_admission_applications_school_status
-        ON admission_applications(school_id,status,id)")
+        ON admission_applications(school_id,status,id)""")
     cur.execute("""CREATE TABLE IF NOT EXISTS admission_number_settings(
         school_id INTEGER PRIMARY KEY,
         prefix TEXT NOT NULL DEFAULT 'DAV',
