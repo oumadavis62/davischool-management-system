@@ -675,6 +675,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
             *([("/app/admissions",_modern_icon("clipboard-check"),"Admissions & Enrolment","students.view")] if role in ("school_admin","registrar") else []),
             ("/app/students",_modern_icon("students"),"Students","students.view"),
             ("/app/staff",_modern_icon("staff"),"Staff Manager","staff.view"),
+            ("/app/attendance",_modern_icon("attendance"),"Attendance","attendance.view"),
             ("/app/academics",_modern_icon("academics"),"Academic Manager","marks.view"),
             ("/app/timetable",_modern_icon("calendar"),"Timetable","timetable.view"),
             ("/app/finance",_modern_icon("finance"),"Finance & Accounts","fees.view"),
@@ -738,6 +739,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('students')}</span><b>Students Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/students", "Students List")
+            + _nav_sub("/app/attendance", "Attendance Sheet")
+            + _nav_sub("/app/student-attendance-report", "Attendance Report")
             + _nav_sub("/app/students/id-cards", "ID Cards")
             + _nav_sub("/app/students/clearance", "Clearance List")
             + _nav_sub("/app/students/graduation-records", "Alumni List")
@@ -748,6 +751,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('staff')}</span><b>Staff Manager</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/staff", "Staff List")
+            + _nav_sub("/app/staff/attendance", "Attendance Sheet")
+            + _nav_sub("/app/staff/attendance-report", "Attendance Report")
             + _nav_sub("/app/staff/leave", "Leave Management")
             + _nav_sub("/app/staff/payroll", "Payroll Processing")
             + _nav_sub("/app/staff/payslips", "Payslips")
