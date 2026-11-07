@@ -1831,9 +1831,10 @@ def timetable_snapshot_restore(request:Request,snapshot_id:int):
             if field in profile:
                 con.execute("UPDATE timetable_profiles SET "+field+"=? WHERE id=? AND school_id=?",(profile[field],pid,sid))
         con.execute("DELETE FROM timetable_slots WHERE school_id=? AND profile_id=?",(sid,pid))
-        con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
-        con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
-        con.execute("DELETE FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,pid))
+        if lessons:
+            con.execute("DELETE FROM timetable_lesson_classes WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+            con.execute("DELETE FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id IN (SELECT id FROM timetable_lessons WHERE school_id=? AND profile_id=?)",(sid,sid,pid))
+            con.execute("DELETE FROM timetable_lessons WHERE school_id=? AND profile_id=?",(sid,pid))
         for lesson in lessons:
             con.execute("""INSERT INTO timetable_lessons(
                 school_id,class_id,subject_id,teacher_id,room_id,group_name,lessons_per_week,
