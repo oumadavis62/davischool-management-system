@@ -3638,6 +3638,10 @@ app.include_router(inventory_management_router)
 from app.health_welfare_management import router as health_welfare_management_router
 app.include_router(health_welfare_management_router)
 
+# Facilities and assets management workspace.
+from app.facilities_management import router as facilities_management_router
+app.include_router(facilities_management_router)
+
 
 # Disable the legacy /school interface. The new DaviSchool /app interface is the only school UI.
 from app.legacy_redirect import install_legacy_school_redirect
