@@ -20243,9 +20243,24 @@ def _admission_ui_enhancements():
       }
       apply.addEventListener('click',()=>{
         if(mode==='confirm'&&activeForm){const f=activeForm;close();f.dataset.popupConfirmed='1';f.submit();return;}
+        if(mode==='report'){const f=fields.querySelector('form');if(f)f.submit();return;}
+        if(mode==='print'){close();window.print();return;}
         filterState.status=fields.querySelector('#adm-popup-status')?.value||'';
         filterState.klass=fields.querySelector('#adm-popup-class')?.value||'';
         applyFilter();close();
+      });
+      const reportTrigger=page.querySelector('.adm-report-filter-trigger');
+      if(reportTrigger)reportTrigger.addEventListener('click',()=>{
+        mode='report';activeForm=null;title.textContent='Filter admission report';desc.textContent='Choose an application year and class to update the summary.';
+        fields.innerHTML='';const form=page.querySelector('.adm-report-filter-form');if(form)fields.appendChild(form);
+        apply.textContent='Apply report filters';backdrop.classList.add('is-open');
+      });
+      page.querySelectorAll('.letter-tools button').forEach(btn=>{
+        btn.removeAttribute('onclick');btn.addEventListener('click',()=>{
+          mode='print';activeForm=null;title.textContent='Print admission letter';desc.textContent='The letter will open in your device print dialog, where you can print or save it as a PDF.';
+          fields.innerHTML="<div style='padding:13px;border-radius:10px;background:#e3eee3;color:#355c3d;font-size:13px'>Check that the learner name and admission number are correct before printing.</div>";
+          apply.textContent='Open print dialog';backdrop.classList.add('is-open');
+        });
       });
       const table=page.querySelector('.adm-table');
       if(table){
@@ -20888,25 +20903,44 @@ def admission_letter_print(request: Request, application_id: int):
 
 
 @router.get("/app/admission-reports", response_class=HTMLResponse)
-def admission_reports_page(request: Request):
+def admission_reports_page(request: Request, year: str = "", class_id: str = ""):
     sid, denied = _admission_guard(request)
     if denied: return denied
+    year = year.strip() if re.fullmatch(r"[0-9]{4}", str(year or "").strip()) else ""
+    class_id = class_id.strip() if str(class_id or "").isdigit() else ""
     con = _db(); cur = con.cursor()
     try:
         _ensure_admissions_schema(cur)
-        counts = cur.execute("""SELECT lower(status) status,COUNT(*) total FROM admission_applications
-            WHERE school_id=? GROUP BY lower(status)""",(sid,)).fetchall()
+        where = "school_id=?"
+        params = [sid]
+        if year:
+            where += " AND substr(COALESCE(application_date,''),1,4)=?"
+            params.append(year)
+        if class_id:
+            where += " AND applying_class_id=?"
+            params.append(int(class_id))
+        counts = cur.execute("SELECT lower(status) status,COUNT(*) total FROM admission_applications WHERE " + where + " GROUP BY lower(status)",params).fetchall()
+        classes = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream",(sid,)).fetchall()
+        years = cur.execute("SELECT DISTINCT substr(application_date,1,4) year FROM admission_applications WHERE school_id=? AND application_date IS NOT NULL AND application_date<>'' ORDER BY year DESC",(sid,)).fetchall()
         con.commit()
     finally:
         con.close()
     values = {str(row["status"] or ""):int(row["total"] or 0) for row in counts}
-    body = f"""<div class='page adm-page'><div class='adm-heading'><div><h1>Admission Reports</h1><p>Summary of applications and enrolment progress for this school.</p></div></div>
+    year_options = "<option value=''>All years</option>" + "".join(f"<option value='{escape(str(r['year'] or ''),quote=True)}' {'selected' if str(r['year'] or '')==year else ''}>{escape(str(r['year'] or ''))}</option>" for r in years if r["year"])
+    class_options = "<option value=''>All classes</option>" + "".join(f"<option value='{int(c['id'])}' {'selected' if str(c['id'])==class_id else ''}>{escape(str(c['name'] or '') + (' - ' + str(c['stream']) if c['stream'] else ''))}</option>" for c in classes)
+    body = f"""<div class='page adm-page'><div class='adm-heading'><div><h1>Admission Reports</h1><p>Summary of applications and enrolment progress for this school.</p></div><button type='button' class='adm-popup-trigger adm-report-filter-trigger'>Filter report</button></div>
       <div class='adm-report-grid'><div><small>Total Applications</small><strong>{sum(values.values())}</strong></div>
       <div><small>Pending Review</small><strong>{values.get('pending',0)}</strong></div>
       <div><small>Accepted</small><strong>{values.get('accepted',0)}</strong></div>
       <div><small>Rejected</small><strong>{values.get('rejected',0)}</strong></div>
-      <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div></div></div>
-      <style>.adm-page{{max-width:1200px}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{color:#687c6d}}.adm-report-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}.adm-report-grid>div{{background:#fff;border:1px solid #dce9de;border-radius:13px;padding:18px;display:grid;gap:8px}}.adm-report-grid small{{font-size:11px;color:#6b7e6d;font-weight:800}}.adm-report-grid strong{{font-size:25px;color:#176b3a}}@media(max-width:800px){{.adm-report-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}</style>"""
+      <div><small>Enrolled</small><strong>{values.get('enrolled',0)}</strong></div></div>
+      <form class='adm-report-filter-form' method='get' action='/app/admission-reports' style='display:grid;gap:12px'>
+      <label>Application year<select name='year'>{year_options}</select></label>
+      <label>Class / Stream<select name='class_id'>{class_options}</select></label>
+      <div class='adm-popup-actions'><a href='/app/admission-reports' class='adm-popup-cancel' style='text-decoration:none;padding:10px 15px;border-radius:9px'>Clear filters</a></div>
+      </form></div>
+      <style>.adm-page{{max-width:1200px}}.adm-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.adm-heading h1{{margin:0;color:#174b2b}}.adm-heading p{{color:#687c6d}}.adm-report-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}.adm-report-grid>div{{background:#fff;border:1px solid #dce9de;border-radius:13px;padding:18px;display:grid;gap:8px}}.adm-report-grid small{{font-size:11px;color:#6b7e6d;font-weight:800}}.adm-report-grid strong{{font-size:25px;color:#176b3a}}.adm-report-filter-form{{display:none}}.adm-report-filter-form label{{display:grid;gap:6px;color:#46634b;font-size:12px;font-weight:850}}.adm-report-filter-form select{{padding:11px;border:1px solid #c7d9c8;border-radius:9px;background:#fff}}@media(max-width:800px){{.adm-report-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}</style>"""
+    body += _admission_ui_enhancements()
     return _school_page(request,"Admission Reports",body)
 
 
