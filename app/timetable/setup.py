@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 
-_TIME_RE = re.compile(r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 class TimetableSetupError(ValueError):
