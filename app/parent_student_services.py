@@ -99,29 +99,89 @@ def _count(cur, table, sid):
 @router.get("/app/parent-services/guardians", response_class=HTMLResponse)
 def parent_guardians(request: Request, q: str = ""):
     sid, denied = _guard(request)
-    if denied: return denied
+    if denied:
+        return denied
     con = _db()
     try:
-        cur = con.cursor(); _schema(cur)
-        where = "s.school_id=? AND (COALESCE(s.parent_name,'')<>'' OR COALESCE(s.parent_phone,'')<>'')"
-        params = [sid]
-        if q.strip():
-            term = "%" + q.strip() + "%"
-            where += " AND (s.parent_name LIKE ? OR s.parent_phone LIKE ? OR s.name LIKE ? OR s.admission_no LIKE ?)"
-            params.extend([term,term,term,term])
-        rows = cur.execute("""SELECT s.parent_name,s.parent_phone,COUNT(*) children,
-            STRING_AGG(s.name, ', ') AS learner_names
-            FROM students s WHERE """ + where + """
-            GROUP BY s.parent_name,s.parent_phone ORDER BY s.parent_name""", tuple(params)).fetchall()
-        learners = len(_students(cur,sid)); parents = cur.execute("""SELECT COUNT(*) n FROM (
-            SELECT parent_name,parent_phone FROM students WHERE school_id=?
-            AND (COALESCE(parent_name,'')<>'' OR COALESCE(parent_phone,'')<>'')
-            GROUP BY parent_name,parent_phone) x""",(sid,)).fetchone()
+        cur = con.cursor()
+        _schema(cur)
+        # Student Manager remains the single source of truth. Build this
+        # directory from enrolled learners instead of asking staff to register
+        # the same parent a second time.
+        learner_rows = _students(cur, sid)
         con.commit()
-    finally: con.close()
-    trs = "".join("<tr><td><b>"+escape(str(r["parent_name"] or "Parent / Guardian"))+"</b><small>"+escape(str(r["parent_phone"] or "No phone recorded"))+"</small></td><td>"+str(int(r["children"] or 0))+"</td><td>"+escape(str(r["learner_names"] or ""))+"</td></tr>" for r in rows) or "<tr><td colspan='3'>No parent contacts match this search.</td></tr>"
-    body = "<div class='ps-kpis'><div><small>Unique parent contacts</small><strong>"+str(int(parents["n"] or 0))+"</strong></div><div><small>Active learners</small><strong>"+str(learners)+"</strong></div><div><small>Displayed contacts</small><strong>"+str(len(rows))+"</strong></div><div><small>Source</small><strong style='font-size:15px'>Student register</strong></div></div><section class='ps-card'><h2>Parent / Guardian Directory</h2><p>Contacts are grouped from the existing parent name and phone fields in the student register. Update a learner's contact details in Students Manager to correct this directory.</p><form method='get' class='ps-toolbar'><label>Search parent or learner<input name='q' value='"+escape(q,quote=True)+"' placeholder='Name, phone or admission number'></label><button class='ps-btn'>Search</button><a class='ps-btn light' href='/app/parent-services/guardians'>Clear</a></form><div class='ps-table-wrap'><table><thead><tr><th>Parent / Guardian</th><th>Linked learners</th><th>Learners</th></tr></thead><tbody>"+trs+"</tbody></table></div></section>"
-    return _page(request,"Parent & Guardian Register","A consolidated directory of parent and guardian contacts already captured against enrolled learners.",body)
+    finally:
+        con.close()
+
+    groups = {}
+    for learner in learner_rows:
+        parent_name = str(learner["parent_name"] or "").strip()
+        parent_phone = str(learner["parent_phone"] or "").strip()
+        if not parent_name and not parent_phone:
+            continue
+        digits = "".join(ch for ch in parent_phone if ch.isdigit())
+        # A phone number is the strongest available matching key. If absent,
+        # fall back to a case/spacing-normalised parent name.
+        key = ("phone", digits) if digits else ("name", " ".join(parent_name.casefold().split()))
+        group = groups.setdefault(key, {"names": [], "phones": [], "learners": []})
+        if parent_name and parent_name not in group["names"]:
+            group["names"].append(parent_name)
+        if parent_phone and parent_phone not in group["phones"]:
+            group["phones"].append(parent_phone)
+        group["learners"].append(learner)
+
+    term = q.strip().casefold()
+    directory = []
+    for group in groups.values():
+        names = group["names"]
+        phones = group["phones"]
+        learners = group["learners"]
+        display_name = names[0] if names else "Parent / Guardian"
+        display_phone = phones[0] if phones else "No phone recorded"
+        learner_names = ", ".join(str(row["name"] or "") for row in learners)
+        searchable = " ".join([
+            " ".join(names), " ".join(phones),
+            " ".join(str(row["name"] or "") for row in learners),
+            " ".join(str(row["admission_no"] or "") for row in learners)
+        ]).casefold()
+        if term and term not in searchable:
+            continue
+        directory.append({
+            "name": display_name,
+            "other_names": names[1:],
+            "phone": display_phone,
+            "other_phones": phones[1:],
+            "children": len(learners),
+            "learner_names": learner_names
+        })
+    directory.sort(key=lambda item: item["name"].casefold())
+    learner_count = len(learner_rows)
+    parent_count = len(groups)
+    trs = "".join(
+        "<tr><td><b>" + escape(item["name"]) + "</b>" +
+        ("<small>Also recorded as: " + escape(", ".join(item["other_names"])) + "</small>" if item["other_names"] else "") +
+        "<small>" + escape(item["phone"]) + "</small>" +
+        ("<small>Other phone formats: " + escape(", ".join(item["other_phones"])) + "</small>" if item["other_phones"] else "") +
+        "</td><td>" + str(item["children"]) + "</td><td>" + escape(item["learner_names"]) + "</td></tr>"
+        for item in directory
+    ) or "<tr><td colspan='3'>No parent contacts match this search.</td></tr>"
+    body = (
+        "<div class='ps-kpis'><div><small>Unique parent contacts</small><strong>" + str(parent_count) +
+        "</strong></div><div><small>Active learners</small><strong>" + str(learner_count) +
+        "</strong></div><div><small>Displayed contacts</small><strong>" + str(len(directory)) +
+        "</strong></div><div><small>Source</small><strong style='font-size:15px'>Student register</strong></div></div>"
+        "<section class='ps-card'><h2>Parent / Guardian Directory</h2>"
+        "<p>This directory is automatically populated from parent details entered in Students Manager, Admissions and Enrolment. "
+        "There is no second parent-registration step. Updating a learner's parent name or phone in Students Manager updates this directory. "
+        "Learners sharing the same phone number are grouped together; where no phone is recorded, matching parent names are grouped.</p>"
+        "<form method='get' class='ps-toolbar'><label>Search parent or learner<input name='q' value='" +
+        escape(q, quote=True) + "' placeholder='Name, phone or admission number'></label>"
+        "<button class='ps-btn'>Search</button><a class='ps-btn light' href='/app/parent-services/guardians'>Clear</a></form>"
+        "<div class='ps-table-wrap'><table><thead><tr><th>Parent / Guardian</th><th>Linked learners</th><th>Learners</th></tr></thead><tbody>" +
+        trs + "</tbody></table></div></section>"
+    )
+    return _page(request, "Parent & Guardian Register",
+                 "An automatically maintained directory of parent and guardian contacts captured in the student register.", body)
 
 
 @router.get("/app/parent-services/linking", response_class=HTMLResponse)
