@@ -21627,6 +21627,9 @@ def finance_workspace_section(request: Request, section: str):
     finally:
         con.close()
     content += _finance_interaction_enhancements()
+    # The page template below uses %-formatting; escape percent signs in dynamic
+    # workspace HTML (including CSS widths) so they remain literal in the output.
+    content = content.replace("%", "%%")
     body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
     <style>
     .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
