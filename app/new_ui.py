@@ -6520,7 +6520,7 @@ def finance_page(request: Request):
     finally:
         con.close()
     expected=float(fee["expected"] or 0);collected=float(fee["paid"] or 0);outstanding=max(0,expected-collected)
-    rows="".join("<tr><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(p["student_name"] or "")),float(p["amount"] or 0),escape(str(p["date"] or "")),escape(str(p["reference"] or "")),escape(str(p["method"] or ""))) for p in payments)
+    rows="".join("<tr><td>%s</td><td>KES %.2f</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(escape(str(p["student_name"] or "")),float(p["amount"] or 0),escape(str(p["date"] or "")),escape(str(p["reference"] or "")),escape(str(p["method"] or ""))) for p in payments)
     body=f"""<div class='page finance-hub'><section class='fin-hero'><div><div class='fin-eyebrow'>SCHOOL FINANCE · KENYA SHILLING</div><h1>Finance &amp; Accounts</h1><p>A connected command centre for learner billing, collections, expenditure, accounting controls and school financial reporting.</p><div class='fin-actions'><a href='/app/finance/collections'>Record collection</a><a href='/app/finance/payables'>Add supplier bill</a><a href='/app/finance/ledger'>Open general ledger</a></div></div><div class='fin-mark'><b>KES</b><span>Financial control</span><small>School-scoped records · Audit history</small></div></section>
     <section class='fin-kpis'><article><small>Fees billed</small><b>KES {expected:,.2f}</b><span>Recorded learner charges</span></article><article><small>Fees collected</small><b>KES {collected:,.2f}</b><span>{(collected/expected*100 if expected else 0):.1f}% collection rate</span></article><article><small>Outstanding fees</small><b>KES {outstanding:,.2f}</b><span>Uncollected fee balance</span></article><article><small>Recorded expenditure</small><b>KES {float(exp or 0):,.2f}</b><span>Expense register total</span></article></section>
     <section class='fin-panel fin-activity'><div class='fin-panel-head'><div><h2>Accounting activity</h2><p>Live totals from the school's financial registers and posted ledger.</p></div><a href='/app/finance/reports'>View financial statements →</a></div><div class='fin-activity-grid'><div class='fin-row'><span>Payment vouchers</span><b>{int(voucher_count)}</b></div><div class='fin-row'><span>Purchase orders / LPOs</span><b>{int(lpo_count)}</b></div><div class='fin-row'><span>Posted ledger journals</span><b>{int(journal_count)}</b></div><div class='fin-row'><span>Cashbook debits</span><b>KES {float(cash['debit'] or 0):,.2f}</b></div><div class='fin-row'><span>Cashbook credits</span><b>KES {float(cash['credit'] or 0):,.2f}</b></div></div></section>
@@ -21478,7 +21478,7 @@ def finance_workspace_section(request: Request, section: str):
                 AND s.school_id=f.school_id WHERE f.school_id=? ORDER BY f.id DESC LIMIT 250""",(sid,)).fetchall()
             students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
             opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
-            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %.2f</td><td>KES %.2f</td><td>KES %.2f</td><td>%s</td><td>%s</td></tr>"%(
                 _finance_cell(x["student_name"]),_finance_cell(x["admission_no"]),float(x["amount"] or 0),
                 float(x["paid"] or 0),max(0,float(x["amount"] or 0)-float(x["paid"] or 0)),
                 _finance_cell(x["status"] or "Pending"),_finance_cell(x["due_date"] or "")) for x in charges)
@@ -21495,7 +21495,7 @@ def finance_workspace_section(request: Request, section: str):
                 WHERE p.school_id=? ORDER BY p.id DESC LIMIT 300""",(sid,)).fetchall()
             students = cur.execute("SELECT id,name,admission_no FROM students WHERE school_id=? AND lower(COALESCE(status,'active')) NOT IN ('inactive','transferred','graduated') ORDER BY name",(sid,)).fetchall()
             opts = "".join("<option value='%s'>%s (%s)</option>"%(int(x["id"]),_finance_cell(x["name"]),_finance_cell(x["admission_no"])) for x in students)
-            rows = "".join("<tr><td>RCP-%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
+            rows = "".join("<tr><td>RCP-%s</td><td>%s</td><td>KES %.2f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
                 int(x["id"]),_finance_cell(x["learner"]),float(x["amount"] or 0),_finance_cell(x["method"]),
                 _finance_cell(x["reference"]),_finance_cell(x["date"]),_finance_cell(x["received_by"])) for x in payments)
             content = """<div class='fx-card'><h2>Receive payment</h2><p>Payments are allocated against the learner's oldest outstanding charges. Overpayments are rejected.</p>
@@ -21512,7 +21512,7 @@ def finance_workspace_section(request: Request, section: str):
                 WHERE b.school_id=? ORDER BY b.id DESC LIMIT 200""",(sid,)).fetchall()
             sopts = "".join("<option value='%s'>%s</option>"%(x["id"],_finance_cell(x["name"])) for x in suppliers)
             sr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["name"]),_finance_cell(x["phone"]),_finance_cell(x["email"]),_finance_cell(x["tax_pin"])) for x in suppliers)
-            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %.2f</td><td>%s</td><td>%s</td></tr>"%(
                 _finance_cell(x["supplier_name"]),_finance_cell(x["invoice_no"]),_finance_cell(x["due_date"]),
                 float(x["amount"] or 0),_finance_cell(x["status"]),(
                     "<form method='post' action='/app/finance/payables/pay'><input type='hidden' name='bill_id' value='%s'><button>Mark paid</button></form>"%x["id"]
@@ -21530,7 +21530,7 @@ def finance_workspace_section(request: Request, section: str):
         elif section == "ledger":
             accounts = cur.execute("SELECT * FROM ds_fin_accounts WHERE school_id=? AND active=1 ORDER BY code",(sid,)).fetchall()
             journals = cur.execute("SELECT * FROM ds_fin_journals WHERE school_id=? ORDER BY created_at DESC LIMIT 100",(sid,)).fetchall()
-            ar = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td></tr>"%(
+            ar = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %.2f</td></tr>"%(
                 _finance_cell(x["code"]),_finance_cell(x["name"]),_finance_cell(x["account_type"]),
                 "Active" if x["active"] else "Inactive",float(x["opening_balance"] or 0)) for x in accounts)
             jr = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
@@ -21558,7 +21558,7 @@ def finance_workspace_section(request: Request, section: str):
                 JOIN ds_fin_bank_accounts b ON b.id=l.account_id AND b.school_id=l.school_id
                 WHERE l.school_id=? ORDER BY l.line_date DESC LIMIT 250""",(sid,)).fetchall()
             opts = "".join("<option value='%s'>%s · %s</option>"%(x["id"],_finance_cell(x["bank_name"]),_finance_cell(x["account_name"])) for x in banks)
-            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>%s</td><td>%s</td></tr>"%(
+            br = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>KES %.2f</td><td>%s</td><td>%s</td></tr>"%(
                 _finance_cell(x["bank_name"]),_finance_cell(x["line_date"]),_finance_cell(x["reference"]),
                 _finance_cell(x["description"]),float(x["amount"] or 0),_finance_cell(x["direction"]),
                 "Reconciled" if x["reconciled"] else "<form method='post' action='/app/finance/banking/reconcile'><input type='hidden' name='line_id' value='%s'><button>Match cashbook</button></form>"%x["id"]) for x in lines)
@@ -21576,7 +21576,7 @@ def finance_workspace_section(request: Request, section: str):
             budgets = cur.execute("SELECT * FROM ds_fin_budgets WHERE school_id=? ORDER BY budget_year DESC,department",(sid,)).fetchall()
             actuals = cur.execute("SELECT category,COALESCE(SUM(amount),0) actual FROM expenses WHERE school_id=? GROUP BY category",(sid,)).fetchall()
             actual_map = {str(x["category"] or "").strip().lower():float(x["actual"] or 0) for x in actuals}
-            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(
+            rows = "".join("<tr><td>%s</td><td>%s</td><td>KES %.2f</td><td>KES %.2f</td><td>KES %.2f</td></tr>"%(
                 _finance_cell(x["budget_year"]),_finance_cell(x["department"]),float(x["amount"] or 0),
                 actual_map.get(str(x["department"] or "").strip().lower(),0),
                 float(x["amount"] or 0)-actual_map.get(str(x["department"] or "").strip().lower(),0)) for x in budgets)
@@ -21599,7 +21599,7 @@ def finance_workspace_section(request: Request, section: str):
                 balance=opening+debit-credit if kind in ("Asset","Expense") else opening+credit-debit
                 dr=max(0,balance) if kind in ("Asset","Expense") else 0
                 cr=max(0,-balance) if kind in ("Asset","Expense") else max(0,balance)
-                tb_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %,.2f</td><td>KES %,.2f</td></tr>"%(_finance_cell(acc["code"]),_finance_cell(acc["name"]),_finance_cell(kind),dr,cr))
+                tb_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>KES %.2f</td><td>KES %.2f</td></tr>"%(_finance_cell(acc["code"]),_finance_cell(acc["name"]),_finance_cell(kind),dr,cr))
                 if kind=="Income":income+=credit-debit
                 elif kind=="Expense":expenses_total+=debit-credit
                 elif kind=="Asset":assets+=balance
@@ -21607,13 +21607,13 @@ def finance_workspace_section(request: Request, section: str):
                 elif kind=="Equity":equity+=balance
                 if str(acc["code"]) in ("1000","1010","1020"):cash_net+=debit-credit
             surplus=income-expenses_total
-            statement_rows="<tr><td>Income</td><td>KES %,.2f</td></tr><tr><td>Expenses</td><td>KES %,.2f</td></tr><tr><td>Net surplus / (deficit)</td><td>KES %,.2f</td></tr>"%(income,expenses_total,surplus)
-            position_rows="<tr><td>Assets</td><td>KES %,.2f</td></tr><tr><td>Liabilities</td><td>KES %,.2f</td></tr><tr><td>Accumulated funds</td><td>KES %,.2f</td></tr><tr><td>Current period surplus / (deficit)</td><td>KES %,.2f</td></tr><tr><td>Total liabilities and funds</td><td>KES %,.2f</td></tr>"%(assets,liabilities,equity,surplus,liabilities+equity+surplus)
-            cash_rows="<tr><td>Net movement in cash, bank and mobile-money control accounts</td><td>KES %,.2f</td></tr>"%cash_net
+            statement_rows="<tr><td>Income</td><td>KES %.2f</td></tr><tr><td>Expenses</td><td>KES %.2f</td></tr><tr><td>Net surplus / (deficit)</td><td>KES %.2f</td></tr>"%(income,expenses_total,surplus)
+            position_rows="<tr><td>Assets</td><td>KES %.2f</td></tr><tr><td>Liabilities</td><td>KES %.2f</td></tr><tr><td>Accumulated funds</td><td>KES %.2f</td></tr><tr><td>Current period surplus / (deficit)</td><td>KES %.2f</td></tr><tr><td>Total liabilities and funds</td><td>KES %.2f</td></tr>"%(assets,liabilities,equity,surplus,liabilities+equity+surplus)
+            cash_rows="<tr><td>Net movement in cash, bank and mobile-money control accounts</td><td>KES %.2f</td></tr>"%cash_net
             closed=cur.execute("SELECT period_start,period_end,closed_by,closed_at FROM ds_fin_periods WHERE school_id=? AND status='Closed' ORDER BY period_start DESC LIMIT 20",(sid,)).fetchall()
             closed_rows="".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(_finance_cell(x["period_start"]),_finance_cell(x["period_end"]),_finance_cell(x["closed_by"]),_finance_cell(x["closed_at"])) for x in closed)
             content="""<div class='fx-card'><h2>Financial statement period</h2><form method='get' action='/app/finance/reports' class='fx-form'><input type='date' name='from' value='%s'><input type='date' name='to' value='%s'><button>Run statements</button></form><p>Statements are calculated from posted double-entry journals and account opening balances for the selected period.</p></div>
-            <div class='fx-kpis'><div><small>Total income</small><b>KES %,.2f</b></div><div><small>Total expenses</small><b>KES %,.2f</b></div><div><small>Net surplus / (deficit)</small><b>KES %,.2f</b></div><div><small>Assets</small><b>KES %,.2f</b></div></div>
+            <div class='fx-kpis'><div><small>Total income</small><b>KES %.2f</b></div><div><small>Total expenses</small><b>KES %.2f</b></div><div><small>Net surplus / (deficit)</small><b>KES %.2f</b></div><div><small>Assets</small><b>KES %.2f</b></div></div>
             <div class='fx-card'><h2>Trial balance</h2>%s</div>
             <div class='fx-two'><div class='fx-card'><h2>Income statement</h2>%s</div><div class='fx-card'><h2>Statement of financial position</h2>%s</div></div>
             <div class='fx-card'><h2>Cash flow summary</h2>%s</div>
@@ -21629,7 +21629,6 @@ def finance_workspace_section(request: Request, section: str):
     content += _finance_interaction_enhancements()
     # The page template below uses %-formatting; escape percent signs in dynamic
     # workspace HTML (including CSS widths) so they remain literal in the output.
-    content = content.replace("%", "%%")
     body = """<div class='page fx-workspace'><div class='fx-heading'><div><div class='fx-eyebrow'>SCHOOL FINANCIAL CONTROL · KES</div><h1>%s</h1><p>Connected financial records with school-level access and audit history.</p></div><a class='fx-back' href='/app/finance'>Finance overview</a></div>%s%s</div>
     <style>
     .fx-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
