@@ -102,7 +102,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         hidden = f"<input type='hidden' name='profile_id' value='{pid}'>"
         selector = f"<form method='get' action='/school/timetable/setup' class='tt-select'><label for='profile_id'>Timetable profile</label><select id='profile_id' name='profile_id' onchange='this.form.submit()'>{profile_options}</select></form>" if profiles else ""
         profile_summary = (
-            f"<div class='tt-profile'><div><span class='tt-kicker'>ACTIVE CONFIGURATION</span><h2>{esc(selected['name'])}</h2><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · <span class='tt-status'>{esc(selected['status']).upper()}</span></p></div><div class='tt-stats'><span><b>{len(days)}</b>Days</span><span><b>{len(periods)}</b>Periods</span><span><b>{len(rooms)}</b>Rooms</span></div></div>"
+            f"<div class='tt-profile'><div><span class='tt-kicker'>ACTIVE CONFIGURATION</span><h2>{esc(selected['name'])}</h2><p>{esc(selected['academic_year'])} · {esc(selected['term'])} · {esc(selected['academic_start_date'] or 'Start date not set')} – {esc(selected['academic_end_date'] or 'End date not set')} · <span class='tt-status'>{esc(selected['status']).upper()}</span></p></div><div class='tt-stats'><span><b>{len(days)}</b>Days</span><span><b>{len(periods)}</b>Periods</span><span><b>{len(rooms)}</b>Rooms</span></div></div>"
             if selected else "<div class='tt-empty'><b>No timetable configuration yet</b><p>Create an academic-year and term profile to begin.</p></div>"
         )
         day_rows = "".join(f"<tr><td>{esc(d['day_order'])}</td><td><b>{esc(d['day_name'])}</b></td><td>{esc(d['day_code'])}</td><td>{'Instructional' if d['is_instructional'] else 'Non-instructional'}</td></tr>" for d in days) or "<tr><td colspan='4' class='tt-muted'>No school days configured.</td></tr>"
@@ -116,7 +116,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         availability_rows = "".join(f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{esc(a['availability'])}</span></td><td>{esc(a['reason'] or '—')}</td></tr>" for a in availability) or "<tr><td colspan='5' class='tt-muted'>No teacher availability rules yet.</td></tr>"
         requirement_rows = "".join(f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td></tr>" for r in requirements) or "<tr><td colspan='6' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
 
-        create_profile_html = """<section class='tt-card'><span class='tt-kicker'>FIRST STEP</span><h3>Create timetable profile</h3><p>Choose the academic year and term this timetable will serve.</p><form method='post' action='/school/timetable/setup/profile' class='tt-form'><label>Profile name<input name='name' required maxlength='80' placeholder='2027 Term 1 Master Timetable'></label><label>Academic year<input name='academic_year' required maxlength='20' placeholder='2027'></label><label>Term<select name='term' required><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option><option>Semester 1</option><option>Semester 2</option><option>Annual</option></select></label><button class='tt-btn'>Create profile</button></form></section>"""
+        create_profile_html = """<section class='tt-card'><span class='tt-kicker'>FIRST STEP</span><h3>Create timetable profile</h3><p>Choose the academic year and term this timetable will serve.</p><form method='post' action='/school/timetable/setup/profile' class='tt-form'><label>Profile name<input name='name' required maxlength='80' placeholder='2027 Term 1 Master Timetable'></label><label>Academic year<input name='academic_year' required maxlength='20' placeholder='2027'></label><label>Term<select name='term' required><option value=''>Select term</option><option>Term 1</option><option>Term 2</option><option>Term 3</option><option>Semester 1</option><option>Semester 2</option><option>Annual</option></select></label><label>Academic start date<input name='academic_start_date' type='date'></label><label>Academic end date<input name='academic_end_date' type='date'></label><button class='tt-btn'>Create profile</button></form></section>"""
         sections = ""
         if selected:
             sections = f"""
@@ -135,12 +135,12 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         return module_page(request, "Timetable Setup", "timetable", body)
 
     @app.post("/school/timetable/setup/profile")
-    def create_timetable_profile(request: Request, name: str = Form(...), academic_year: str = Form(...), term: str = Form(...)):
+    def create_timetable_profile(request: Request, name: str = Form(...), academic_year: str = Form(...), term: str = Form(...), academic_start_date: str = Form(""), academic_end_date: str = Form("")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            pid = create_profile(con, int(school["id"]), name, academic_year, term, request.session.get("email", ""))
+            pid = create_profile(con, int(school["id"]), name, academic_year, term, request.session.get("email", ""), academic_start_date, academic_end_date)
             return redirect_setup(pid, "Timetable profile created. Configure the school days and periods next.")
         except TimetableSetupError as exc:
             return redirect_setup(message=str(exc), error=True)
