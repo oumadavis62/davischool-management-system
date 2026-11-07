@@ -1112,8 +1112,12 @@ def _publication_fingerprint(con, sid):
         (sid,int(profile["id"]))).fetchall()
     lessons=con.execute("""SELECT id,class_id,subject_id,teacher_id,room_id,lessons_per_week,duration,locked,preferred_room
         FROM timetable_lessons WHERE school_id=? AND profile_id=? ORDER BY id""",(sid,int(profile["id"]))).fetchall()
-    lesson_classes=con.execute("SELECT lesson_id,class_id FROM timetable_lesson_classes WHERE school_id=? ORDER BY lesson_id,class_id",(sid,)).fetchall()
-    lesson_teachers=con.execute("SELECT lesson_id,teacher_id FROM timetable_lesson_teachers WHERE school_id=? ORDER BY lesson_id,teacher_id",(sid,)).fetchall()
+    lesson_classes=con.execute("""SELECT lc.lesson_id,lc.class_id FROM timetable_lesson_classes lc
+        JOIN timetable_lessons l ON l.id=lc.lesson_id
+        WHERE lc.school_id=? AND l.profile_id=? ORDER BY lc.lesson_id,lc.class_id""",(sid,int(profile["id"]))).fetchall()
+    lesson_teachers=con.execute("""SELECT lt.lesson_id,lt.teacher_id FROM timetable_lesson_teachers lt
+        JOIN timetable_lessons l ON l.id=lt.lesson_id
+        WHERE lt.school_id=? AND l.profile_id=? ORDER BY lt.lesson_id,lt.teacher_id""",(sid,int(profile["id"]))).fetchall()
     availability=con.execute("""SELECT resource_type,resource_id,day_name,period_no,allowed
         FROM timetable_availability WHERE school_id=? ORDER BY resource_type,resource_id,day_name,period_no""",(sid,)).fetchall()
     payload={
@@ -1549,7 +1553,7 @@ def _timetable(request, con, sid):
     )
 
     if str(teacher_filter).isdigit() or str(room_filter).isdigit():
-        where = ["s.school_id=?"]
+        where = ["s.school_id=?", "s.profile_id=timetable_active_profile(s.school_id)"]
         params = [sid]
         if str(teacher_filter).isdigit():
             where.append("(l.teacher_id=? OR l.id IN (SELECT lesson_id FROM timetable_lesson_teachers WHERE school_id=? AND teacher_id=?))")
