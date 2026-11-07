@@ -2581,17 +2581,23 @@ def timetable_placement_move(request:Request,rid:int,day_name:str=Form(...),peri
             st=str(pmap[pno]["start_time"]);et=str(pmap[pno]["end_time"])
             if any(_time_to_min(st)<_time_to_min(str(b["end_time"])) and _time_to_min(et)>_time_to_min(str(b["start_time"])) for b in breaks):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Placement+crosses+a+break",303)
-        others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.room_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
-            WHERE s.school_id=? AND s.profile_id=timetable_active_profile(s.school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
+        moving_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or {int(target_class_id)}
+        moving_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(moving["lesson_id"]))).fetchall()} or ({int(moving["teacher_id"])} if moving["teacher_id"] else set())
+        others=cur.execute("""SELECT s.*,l.class_id,l.teacher_id,l.duration,l.subject_id FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+            WHERE s.school_id=? AND s.profile_id=timetable_active_profile(school_id) AND s.id<>? AND s.day_name=?""",(sid,rid,day_name)).fetchall()
         probe={"period_no":period_no,"duration":int(moving["duration"] or 1)}
         for o in others:
             if not _overlaps(probe,o): continue
-            if int(o["class_id"])==target_class_id or (moving["teacher_id"] and o["teacher_id"] and int(o["teacher_id"])==int(moving["teacher_id"])):
+            other_classes={int(x["class_id"]) for x in cur.execute("SELECT class_id FROM timetable_lesson_classes WHERE school_id=? AND lesson_id=?",(sid,int(o["lesson_id"]))).fetchall()} or {int(o["class_id"])}
+            other_teachers={int(x["teacher_id"]) for x in cur.execute("SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(o["lesson_id"]))).fetchall()} or ({int(o["teacher_id"])} if o["teacher_id"] else set())
+            if moving_classes.intersection(other_classes) or moving_teachers.intersection(other_teachers):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Class+or+teacher+conflict",303)
             if room and o["room_id"] and int(o["room_id"])==int(room):
                 return RedirectResponse("/app/timetable?tab=timetable&error=Room+conflict",303)
+        duration=max(1,int(moving["duration"] or 1))
+        end_time=pmap[int(period_no)+duration-1]["end_time"]
         cur.execute("UPDATE timetable_slots SET day_name=?,period_no=?,start_time=?,end_time=?,room_id=? WHERE id=? AND school_id=?",
-                    (day_name,period_no,period["start_time"],period["end_time"],room,rid,sid))
+                    (day_name,period_no,period["start_time"],end_time,room,rid,sid))
         if target_class_id != int(moving["class_id"]):
             cur.execute("UPDATE timetable_lessons SET class_id=? WHERE id=? AND school_id=?",(target_class_id,int(moving["lesson_id"]),sid))
             if linked_classes:
