@@ -920,6 +920,25 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + _nav_sub("/app/parent-services/reports", "Parent & Student Reports")
             + "</div></details>"
         ) if role in ("school_admin", "registrar") else ""
+        communication_group = (
+            "<details class='nav-group' id='communicationNav' "
+            + ("open" if request_path.startswith("/app/announcements") else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('announcement')}</span><b>Communication</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + _nav_sub("/app/announcements", "Announcements")
+            + "</div></details>"
+        ) if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "communications.view") else ""
+        administration_governance_group = (
+            "<details class='nav-group' id='administrationGovernanceNav' "
+            + ("open" if request_path.startswith(("/app/users", "/app/roles", "/app/school-settings", "/app/audit")) else "") + ">"
+            + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('shield')}</span><b>Administration and Governance</b><span class='nav-chevron'>▾</span></summary>"
+            + "<div class='nav-submenu'>"
+            + (_nav_sub("/app/users", "Users") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "users.manage") else "")
+            + (_nav_sub("/app/roles", "Roles & Permissions") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "settings.manage") else "")
+            + (_nav_sub("/app/school-settings", "School Settings") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "settings.view") else "")
+            + (_nav_sub("/app/audit", "Audit Trail") if role in ("school_admin", "registrar") or _require_permission(request, int(school_id or 0), "audit.view") else "")
+            + "</div></details>"
+        ) if role in ("school_admin", "registrar") or any(_require_permission(request, int(school_id or 0), p) for p in ("users.manage", "settings.manage", "settings.view", "audit.view")) else ""
         nav_markup = []
         for u, i, l, _permission in nav:
             if u == "/app":
@@ -929,14 +948,14 @@ def _shell(title, name, role, body, school_id=None, request=None):
                     nav_markup.append("<div class='nav-section-label'>SCHOOL OPERATIONS</div>")
             elif u == "/app/finance":
                 nav_markup.append("<div class='nav-section-label'>FINANCE &amp; RESOURCES</div>")
-            elif u == "/app/announcements":
-                nav_markup.append("<div class='nav-section-label'>COMMUNICATION &amp; GOVERNANCE</div>")
             item_html = (
                 admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
                 else students_group if u == "/app/students" and role in ("school_admin", "registrar")
                 else staff_group if u == "/app/staff"
                 else academic_group if u == "/app/academics" and role in ("school_admin", "registrar")
                 else finance_accounts_group if u == "/app/finance" and role in ("school_admin", "registrar")
+                else communication_group if u == "/app/announcements"
+                else "" if u in ("/app/users", "/app/roles", "/app/school-settings", "/app/audit")
                 else f"<a href='{u}' class='nav'><span>{i}</span>{escape(l)}</a>"
             )
             nav_markup.append(item_html)
@@ -944,6 +963,8 @@ def _shell(title, name, role, body, school_id=None, request=None):
         if any(service_groups):
             nav_markup.append("<div class='nav-section-label'>SCHOOL SERVICES</div>")
             nav_markup.extend(service_groups)
+        if administration_governance_group:
+            nav_markup.append(administration_governance_group)
         links = "".join(nav_markup)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
