@@ -145,7 +145,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     move_period_opts = "".join(
                         f"<option value='{int(p['id'])}' {'selected' if int(p['id'])==int(lesson['period_id']) else ''}>{esc(p['label'])} ({esc(p['start_time'])})</option>" for p in periods
                     )
-                    card = f"""<div class='tb-lesson' draggable='true' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-class'>{esc(lesson['class_name'])} {esc(lesson['stream'] or '')}</div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div><details class='tb-actions'><summary>Manage</summary><form method='post' action='/school/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/school/timetable/builder/delete' onsubmit='return confirm("Remove this lesson from the timetable?")'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details></div>"""
+                    move_room_opts = "<option value=''>Keep current room</option>" + "".join(
+                        f"<option value='{int(r['id'])}' {'selected' if lesson['room_id'] is not None and int(r['id'])==int(lesson['room_id']) else ''}>{esc(r['name'])}</option>" for r in rooms
+                    )
+                    card = f"""<div class='tb-lesson' draggable='true' data-lesson-id='{int(lesson['id'])}' ondragstart='dragTimetableLesson(event)'><div class='tb-lesson-top'><b>{esc(lesson['subject_name'])}</b><span>{duration}P</span></div><div class='tb-class'>{esc(lesson['class_name'])} {esc(lesson['stream'] or '')}</div><div class='tb-meta'>{esc(lesson['teacher_name'])}</div><div class='tb-meta'>⌂ {room_label}</div><details class='tb-actions'><summary>Manage</summary><form method='post' action='/school/timetable/builder/move'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><label>Move to day<select name='day_id'>{move_day_opts}</select></label><label>Start period<select name='period_id'>{move_period_opts}</select></label><label>Room<select name='room_id'>{move_room_opts}</select></label><button class='tb-small'>Move lesson</button></form><form method='post' action='/school/timetable/builder/delete' onsubmit='return confirm("Remove this lesson from the timetable?")'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='lesson_id' value='{int(lesson['id'])}'><button class='tb-delete'>Delete lesson</button></form></details></div>"""
                     cells.append(f"<td class='tb-cell' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>{card}</td>")
                 elif key in occupied:
                     continued = occupied[key]
@@ -193,12 +196,12 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         finally: con.close()
 
     @app.post("/school/timetable/builder/move")
-    def timetable_builder_move(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...), day_id: int = Form(...), period_id: int = Form(...)):
+    def timetable_builder_move(request: Request, profile_id: int = Form(...), lesson_id: int = Form(...), day_id: int = Form(...), period_id: int = Form(...), room_id: str = Form("")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
         try:
-            move_lesson(con, int(school["id"]), profile_id, lesson_id, day_id, period_id, request.session.get("email", ""))
+            move_lesson(con, int(school["id"]), profile_id, lesson_id, day_id, period_id, request.session.get("email", ""), int(room_id) if room_id.strip() else None)
             return redirect_builder(profile_id, "Lesson moved successfully.")
         except (TimetableSetupError, ValueError) as exc:
             return redirect_builder(profile_id, str(exc), True)
