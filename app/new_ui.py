@@ -977,6 +977,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 if not any("SCHOOL OPERATIONS" in item for item in nav_markup):
                     nav_markup.append("<div class='nav-section-label'>SCHOOL OPERATIONS</div>")
             elif u == "/app/finance":
+                if role in ("school_admin", "registrar"):
+                    nav_markup.append("<div class='nav-section-label'>ACADEMIC OPERATIONS</div>")
+                    nav_markup.append(_nav_sub("/app/timetable", "Smart Timetable"))
                 nav_markup.append("<div class='nav-section-label'>FINANCE &amp; RESOURCES</div>")
             item_html = (
                 admissions_group if u == "/app/admissions" and role in ("school_admin", "registrar")
@@ -998,9 +1001,6 @@ def _shell(title, name, role, body, school_id=None, request=None):
         if administration_governance_links:
             nav_markup.append("<div class='nav-section-label'>ADMINISTRATION AND GOVERNANCE</div>")
             nav_markup.append(administration_governance_links)
-        if role in ("school_admin", "registrar"):
-            nav_markup.append("<div class='nav-section-label'>ACADEMIC OPERATIONS</div>")
-            nav_markup.append(_nav_sub("/app/timetable", "Smart Timetable"))
         links = "".join(nav_markup)
     initials="".join(x[0] for x in (name or "DaviSchool").split()[:2]).upper()
     if teacher_locked:
