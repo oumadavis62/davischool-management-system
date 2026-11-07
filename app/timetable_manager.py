@@ -401,7 +401,7 @@ def _guard(request, permission="timetable.view"):
 
 def _selected_tab(request):
     tab = str(request.query_params.get("tab", "timetable") or "timetable").lower()
-    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print","publish"}
+    allowed = {"profiles","setup","periods","subjects","teachers","classes","rooms","lessons","availability","generate","verify","timetable","teacher_sheets","print","publish","reports"}
     return tab if tab in allowed else "timetable"
 
 
@@ -410,7 +410,7 @@ def _tabs(active):
         ("profiles","🗂️ Timetable Profiles"),("setup","⚙️ Setup"),("periods","🕐 Periods & Bells"),("subjects","📚 Subjects"),
         ("teachers","👨‍🏫 Teachers"),("classes","🏫 Classes"),("rooms","🚪 Rooms"),
         ("lessons","📝 Lessons"),("availability","🎯 Availability"),("generate","🚀 Generate"),
-        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print"),("publish","📣 Publish")
+        ("verify","✅ Verify"),("timetable","🗓️ Timetable"),("teacher_sheets","👨‍🏫 Teacher Sheets"),("print","🖨️ Print"),("publish","📣 Publish"),("reports","📊 Reports")
     ]
     return "<div class='tt-tabs'>" + "".join(
         f"<a class='tt-tab {'active' if k==active else ''}' href='/app/timetable?tab={k}'>{label}</a>" for k,label in labels
@@ -560,6 +560,7 @@ def timetable_manager(request: Request):
 <div class='tt-print-sheets'>{_teacher_sheets(con, sid, selected_id) if selected_id is not None else "<div class='tt-notice bad'>No teachers found.</div>"}</div></div>"""
         elif tab == "print": body = _print_view(con, sid)
         elif tab == "publish": body = _publish_view(con, sid)
+        elif tab == "reports": body = _reports_view(con, sid)
         else:
             try:
                 body = _timetable(request, con, sid)
@@ -981,6 +982,57 @@ def _verify(con, sid):
 <div class='tt-muted'>Audits the active profile's lesson coverage, enabled days, period boundaries, breaks, teacher and subject availability, repeated subjects, class/stream clashes, teacher clashes and room clashes.</div>
 <div class='tt-stat' style='margin:12px 0'><b>{len(issues)}</b>{'Issues found' if issues else 'All timetable checks passed'}</div>
 <div class='tt-scroll'><table class='tt-table'><thead><tr><th>Status</th><th>Detail</th></tr></thead><tbody>{issue_rows if issues else '<tr><td>✅</td><td>Verification passed. No incomplete requirements or scheduling conflicts were detected.</td></tr>'}</tbody></table></div></div>"""
+
+
+def _reports_view(con, sid):
+    """Summarise active timetable class, teacher, subject and room workloads."""
+    pid=_active_profile_id(con,sid)
+    rows=con.execute("""SELECT s.id slot_id,s.day_name,s.period_no,s.room_id,l.id lesson_id,
+        l.class_id,l.subject_id,l.teacher_id,l.duration,c.name class_name,c.stream,
+        sub.name subject,t.name teacher,r.name room
+        FROM timetable_slots s JOIN timetable_lessons l ON l.id=s.lesson_id
+        LEFT JOIN classes c ON c.id=l.class_id
+        LEFT JOIN subjects sub ON sub.id=l.subject_id
+        LEFT JOIN teachers t ON t.id=l.teacher_id
+        LEFT JOIN timetable_rooms r ON r.id=s.room_id
+        WHERE s.school_id=? AND s.profile_id=? ORDER BY s.day_name,s.period_no""",(sid,pid)).fetchall()
+    class_load={};teacher_load={};room_load={};subject_load={}
+    teacher_names={}
+    for raw in rows:
+        row=dict(raw);duration=max(1,int(row.get("duration") or 1))
+        class_label=str(row.get("class_name") or "Unassigned class")+(" "+str(row["stream"]) if row.get("stream") else "")
+        c=class_load.setdefault(class_label,{"lessons":0,"periods":0,"days":set()})
+        c["lessons"]+=1;c["periods"]+=duration;c["days"].add(str(row["day_name"]))
+        subject=str(row.get("subject") or "Unassigned subject")
+        subject_load[subject]=subject_load.get(subject,0)+1
+        teacher_ids={int(row["teacher_id"])} if row.get("teacher_id") else set()
+        teacher_ids.update(int(v["teacher_id"]) for v in con.execute(
+            "SELECT teacher_id FROM timetable_lesson_teachers WHERE school_id=? AND lesson_id=?",(sid,int(row["lesson_id"]))).fetchall())
+        for tid in teacher_ids:
+            if tid not in teacher_names:
+                teacher=con.execute("SELECT name FROM teachers WHERE school_id=? AND id=?",(sid,tid)).fetchone()
+                teacher_names[tid]=str(teacher["name"]) if teacher else "Unknown teacher"
+            name=teacher_names[tid]
+            item=teacher_load.setdefault(name,{"lessons":0,"periods":0,"days":set()})
+            item["lessons"]+=1;item["periods"]+=duration;item["days"].add(str(row["day_name"]))
+        if row.get("room_id"):
+            name=str(row.get("room") or "Room "+str(row["room_id"]))
+            room_load[name]=room_load.get(name,0)+duration
+    def workload_table(data,heading):
+        body="".join(f"<tr><td>{escape(name)}</td><td>{v['lessons']}</td><td>{v['periods']}</td><td>{len(v['days'])}</td></tr>"
+            for name,v in sorted(data.items(),key=lambda kv:(-kv[1]["periods"],kv[0].lower())))
+        return f"<div class='tt-scroll'><table class='tt-table'><thead><tr><th>{heading}</th><th>Occurrences</th><th>Teaching periods</th><th>Days used</th></tr></thead><tbody>{body or '<tr><td colspan=4>No placements recorded.</td></tr>'}</tbody></table></div>"
+    room_body="".join(f"<tr><td>{escape(name)}</td><td>{periods}</td></tr>" for name,periods in sorted(room_load.items(),key=lambda kv:(-kv[1],kv[0].lower())))
+    subject_body="".join(f"<tr><td>{escape(name)}</td><td>{count}</td></tr>" for name,count in sorted(subject_load.items(),key=lambda kv:(-kv[1],kv[0].lower())))
+    total_periods=sum(max(1,int(r["duration"] or 1)) for r in rows)
+    return f"""<div class='tt-card'><h2>📊 Timetable Workload &amp; Resource Reports</h2>
+<div class='tt-muted'>Live summaries from the active timetable profile. Double and triple lessons are weighted by their actual teaching-period duration.</div>
+<div class='tt-grid' style='margin:12px 0'><div class='tt-stat'><b>{len(rows)}</b>Placed lesson occurrences</div><div class='tt-stat'><b>{total_periods}</b>Teaching periods</div><div class='tt-stat'><b>{len(class_load)}</b>Classes / streams</div><div class='tt-stat'><b>{len(teacher_load)}</b>Teachers scheduled</div><div class='tt-stat'><b>{len(room_load)}</b>Rooms used</div><div class='tt-stat'><b>{len(subject_load)}</b>Subjects scheduled</div></div>
+<h3>Class / stream workload</h3>{workload_table(class_load,"Class / stream")}
+<h3 style='margin-top:18px'>Teacher workload</h3>{workload_table(teacher_load,"Teacher")}
+<div class='tt-grid' style='margin-top:18px'><div><h3>Room utilisation (teaching periods)</h3><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Room</th><th>Periods used</th></tr></thead><tbody>{room_body or '<tr><td colspan=2>No room assignments recorded.</td></tr>'}</tbody></table></div></div>
+<div><h3>Subject distribution (occurrences)</h3><div class='tt-scroll'><table class='tt-table'><thead><tr><th>Subject</th><th>Occurrences</th></tr></thead><tbody>{subject_body or '<tr><td colspan=2>No subject placements recorded.</td></tr>'}</tbody></table></div></div></div>
+<div class='no-print' style='margin-top:14px'><button class='tt-btn' onclick='window.print()'>🖨️ Print workload report</button></div></div>"""
 
 
 def _publication_fingerprint(con, sid):
