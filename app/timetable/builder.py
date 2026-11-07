@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.timetable.setup import TimetableSetupError, _profile
+from app.timetable.session_engine import _validate_constraints
 
 
 def _period_span(cursor: Any, school_id: int, profile_id: int, period_id: int, duration: int):
@@ -63,6 +64,11 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
     duration = int(requirement["duration_periods"] or 1)
     span = _period_span(cursor, school_id, profile_id, period_id, duration)
     first, last = span[0], span[-1]
+    _validate_constraints(
+        cursor, school_id, profile_id, "instructional", "lesson",
+        subject_id, [class_id], [teacher_id], room_id, day_id, period_id,
+        str(first["start_time"]), str(last["end_time"]), None,
+    )
     if room_id:
         room = cursor.execute(
             "SELECT id FROM ds_timetable_rooms WHERE id=? AND school_id=? AND is_active=1",
