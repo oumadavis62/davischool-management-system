@@ -133,8 +133,7 @@ var filter=page.querySelector('form[method="get"]');if(filter&&!filter.dataset.p
 var entry=page.querySelector('.fac-card form.fac-form');if(entry&&!entry.dataset.popupReady){entry.dataset.popupReady='1';var card=entry.closest('.fac-card');var h=card&&card.querySelector('h2');var title=h?h.textContent.trim():'Add facility or asset record';var modal=document.createElement('dialog');modal.className='fac-form-dialog';var mh=document.createElement('h2');mh.textContent=title;modal.appendChild(mh);entry.parentNode.insertBefore(modal,entry);modal.appendChild(entry);page.appendChild(modal);var add=document.createElement('button');add.type='button';add.className='fac-btn';add.textContent=title;add.addEventListener('click',function(){modal.showModal()});head.appendChild(add)}
 })}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup()})();
 </script>"""
-</style>"""
-\n    dialog_close_support = """<style>
+    dialog_close_support = """<style>
 .ds-modal-close{position:absolute!important;top:12px!important;right:12px!important;z-index:5;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;border:1px solid #cfe0d2!important;border-radius:50%!important;background:#eaf4ec!important;color:#205a38!important;font:700 24px/1 Arial,sans-serif!important;cursor:pointer!important;box-shadow:0 2px 8px #163b2418!important}
 .ds-modal-close:hover{background:#d9ecdd!important;transform:scale(1.04)}
 dialog:has(.ds-modal-close){position:relative}
@@ -154,7 +153,8 @@ dialog:has(.ds-modal-close)>*:first-child{padding-right:42px}
  function init(){scan(document);new MutationObserver(function(records){records.forEach(function(record){record.addedNodes.forEach(function(node){if(node.nodeType===1){if(node.matches&&node.matches('dialog'))addClose(node);scan(node)}})})}).observe(document.body,{childList:true,subtree:true});document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('dialog');if(d&&e.target===d)d.close()});}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
-</script>"""    return _school_page(request, title, "<div class='page fac-page'><div class='fac-head'><div><div class='lib-eyebrow'>" + escape(eyebrow) + "</div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div></div>" + body + "</div>" + styles + dialog_close_support)
+</script>"""
+    return _school_page(request, title, "<div class='page fac-page'><div class='fac-head'><div><div class='lib-eyebrow'>" + escape(eyebrow) + "</div><h1>" + escape(title) + "</h1><p>" + escape(description) + "</p></div></div>" + body + "</div>" + styles + dialog_close_support)
 
 
 def _count(cur, table, sid, where=""):
