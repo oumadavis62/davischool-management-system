@@ -121,6 +121,7 @@ _TABLES = (
         period_id INTEGER NOT NULL,
         duration_periods INTEGER NOT NULL DEFAULT 1,
         lesson_group TEXT,
+        generation_run_id INTEGER,
         status TEXT NOT NULL DEFAULT 'scheduled',
         created_by TEXT,
         created_at TEXT NOT NULL,
@@ -175,6 +176,7 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_class_grid ON ds_timetable_lessons(school_id, profile_id, class_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_teacher_grid ON ds_timetable_lessons(school_id, profile_id, teacher_id, day_id, period_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_room_grid ON ds_timetable_lessons(school_id, profile_id, room_id, day_id, period_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ds_tt_lessons_generation ON ds_timetable_lessons(school_id, profile_id, generation_run_id)",
     "CREATE INDEX IF NOT EXISTS idx_ds_tt_versions_profile ON ds_timetable_versions(school_id, profile_id, version_no)",
 )
 
@@ -198,6 +200,13 @@ def ensure_timetable_schema(connection: Any) -> None:
     for column in ("academic_start_date", "academic_end_date"):
         if column not in columns:
             cursor.execute("ALTER TABLE ds_timetable_profiles ADD COLUMN " + column + " TEXT")
+    cursor.execute("SELECT * FROM ds_timetable_lessons LIMIT 0")
+    lesson_columns = {
+        str(col.name if hasattr(col, "name") else col[0]).lower()
+        for col in (cursor.description or [])
+    }
+    if "generation_run_id" not in lesson_columns:
+        cursor.execute("ALTER TABLE ds_timetable_lessons ADD COLUMN generation_run_id INTEGER")
     for statement in _INDEXES:
         cursor.execute(statement)
     connection.commit()
