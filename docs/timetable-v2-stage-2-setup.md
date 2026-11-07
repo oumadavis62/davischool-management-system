@@ -4,7 +4,7 @@ Stage 2 adds an administrator-facing configuration workspace at `/school/timetab
 
 ## Capabilities
 
-- Create a draft profile for an academic year and term.
+- Create a draft profile for an academic year and term, with optional academic start and end dates.
 - Configure ordered instructional/non-instructional school days, including a Monday–Friday starter.
 - Define teaching periods with 24-hour start/end times and period type.
 - Define breaks and lunch; prevent breaks from overlapping lessons or other breaks.
@@ -23,7 +23,7 @@ Stage 2 adds an administrator-facing configuration workspace at `/school/timetab
 
 ## Validation
 
-- Profile name, year and term are required; only one non-archived profile per school/year/term is allowed.
+- Profile name, year and term are required; only one non-archived profile per school/year/term is allowed. When supplied, the academic start/end dates must be valid and ordered.
 - Times must be valid 24-hour values and end after start.
 - Teaching periods cannot overlap one another.
 - Breaks cannot overlap a teaching period or another break.
@@ -32,4 +32,4 @@ Stage 2 adds an administrator-facing configuration workspace at `/school/timetab
 
 ## Test coverage
 
-SQLite unit tests cover profile uniqueness, period overlap, break overlap, room upsert, school/profile-safe teacher availability and allocation-backed lesson requirements.
+SQLite unit tests cover profile uniqueness and academic date ranges, period overlap, break overlap, room upsert, school/profile-safe teacher availability and allocation-backed lesson requirements. Existing profile tables receive the two date columns through an additive startup migration.
