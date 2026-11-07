@@ -85,11 +85,13 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             f"<tr><td>#{int(r['id'])}</td><td>{esc(r['created_at'])}</td><td><span class='ag-state {'good' if r['status']=='completed' else 'bad'}'>{esc(r['status'])}</span></td><td>{esc(r['engine_version'])}</td><td><a href='/school/timetable/automatic?profile_id={pid}&run_id={int(r['id'])}'>View result</a></td></tr>"
             for r in runs
         ) or "<tr><td colspan='5' class='ag-muted'>No generation runs yet.</td></tr>"
-        ready = bool(days and periods and requirements and int(allocations_count) == int(requirements))
+        read_only = str(selected['status']) != 'draft'
+        ready = bool(days and periods and requirements and int(allocations_count) == int(requirements) and not read_only)
         action_html = (
             f"""<form method='post' action='/school/timetable/automatic/generate' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.')"><input type='hidden' name='profile_id' value='{pid}'><button class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
-            f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/school/timetable/setup?profile_id={pid}'>Complete Setup</a>"""
+            (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/school/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
+             f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/school/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
         )
         body = f"""
         <style>
