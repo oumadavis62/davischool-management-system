@@ -64,7 +64,7 @@ def timetable_workspace(request, body):
         const sectionsForTabs=visibleSections;
         const labels=visibleLabels;
         function activate(index){
-          sections.forEach((section,i)=>{
+          sectionsForTabs.forEach((section,i)=>{
             section.hidden=i!==index;
             section.classList.toggle('tt-tab-active',i===index);
           });
@@ -73,7 +73,7 @@ def timetable_workspace(request, body):
             button.tabIndex=i===index?0:-1;
           });
         }
-        sections.forEach((section,index)=>{
+        sectionsForTabs.forEach((section,index)=>{
           const button=document.createElement('button');
           button.type='button';
           button.textContent=labels[index];
@@ -84,7 +84,7 @@ def timetable_workspace(request, body):
           button.addEventListener('keydown',event=>{
             if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
               event.preventDefault();
-              const next=(index+(event.key==='ArrowRight'?1:-1)+sections.length)%sections.length;
+              const next=(index+(event.key==='ArrowRight'?1:-1)+sectionsForTabs.length)%sectionsForTabs.length;
               nav.querySelectorAll('button')[next]?.focus();
               activate(next);
             }
