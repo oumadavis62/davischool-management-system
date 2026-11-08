@@ -74,7 +74,6 @@ def enqueue_generation_job(get_db: Callable, school_id: int, profile_id: int, re
 def get_generation_job(get_db: Callable, school_id: int, job_id: int):
     con = get_db()
     try:
-        ensure_generation_jobs_table(con)
         row = con.execute(
             """SELECT id, profile_id, status, stage, result_run_id, message,
                       created_at, started_at, finished_at
