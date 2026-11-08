@@ -11,7 +11,7 @@ from app.timetable.session_engine import (
     find_session_conflicts,
 )
 from app.timetable.generator import generate_advanced_instructional_sessions
-from app.timetable.builder import place_advanced_requirement_session
+from app.timetable.builder import place_advanced_requirement_session, place_dated_advanced_requirement_session
 
 
 class TimetableSessionEngineTests(unittest.TestCase):
@@ -226,6 +226,41 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
+
+
+    def test_manual_builder_places_requirement_on_resolved_calendar_date(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday date template", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Period 1",
+            "instructional", "08:00", "08:40", 1,
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Dated Science",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        session_id = place_dated_advanced_requirement_session(
+            self.db, 8, self.profile_id, requirement, 1,
+            "2027-03-01", 1,
+        )
+        row = self.db.execute(
+            "SELECT session_date,day_id,start_time,end_time FROM ds_timetable_sessions WHERE id=?",
+            (session_id,),
+        ).fetchone()
+        self.assertEqual(row["session_date"], "2027-03-01")
+        self.assertEqual(row["day_id"], self.day_id)
+        self.assertEqual((row["start_time"], row["end_time"]), ("08:00", "08:40"))
 
     def test_normalized_sessions_enforce_class_daily_period_ceiling(self):
         save_class_limits(self.db, 8, self.profile_id, 1, None, 1)
