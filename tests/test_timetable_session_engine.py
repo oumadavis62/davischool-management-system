@@ -270,6 +270,42 @@ class TimetableSessionEngineTests(unittest.TestCase):
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
 
+    def test_failed_advanced_regeneration_preserves_previous_generated_sessions(self):
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Regeneration safety Science",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        first = generate_advanced_instructional_sessions(
+            self.db, 8, self.profile_id, "admin@test"
+        )
+        self.assertEqual(first["status"], "completed")
+        original_ids = list(first["session_ids"])
+        self.db.execute(
+            """INSERT INTO ds_timetable_teacher_availability
+               (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+               VALUES(8,?,?,?,?, 'unavailable','Regeneration failure test')""",
+            (self.profile_id, 11, self.day_id, self.period_id),
+        )
+        self.db.commit()
+        with self.assertRaisesRegex(TimetableSetupError, "No valid slot"):
+            generate_advanced_instructional_sessions(
+                self.db, 8, self.profile_id, "admin@test"
+            )
+        current_ids = [
+            row["id"] for row in self.db.execute(
+                """SELECT id FROM ds_timetable_sessions
+                   WHERE school_id=8 AND profile_id=? AND schedule_layer='instructional'
+                     AND status='scheduled' ORDER BY id""",
+                (self.profile_id,),
+            ).fetchall()
+        ]
+        self.assertEqual(current_ids, original_ids)
+
     def test_manual_builder_places_normalized_requirement_session(self):
         group = create_teaching_group(
             self.db, 8, self.profile_id, "Manual combined group", [1, 2],
