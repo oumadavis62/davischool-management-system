@@ -640,7 +640,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
            .tt-section-content{{padding-top:13px}}
          }}
         </style>
-        <div class='tt-wrap'><div class='tt-hero'><div><span class='tt-kicker'>DAVISCHOOL · SCHEDULING ENGINE</span><h1>Timetable Setup</h1><p>Set up your school week, teaching sessions, facilities and staffing rules in one guided workspace.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tt-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tt-btn secondary' href='/app/timetable/builder?profile_id={pid}'>Manual Builder</a><a class='tt-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a></div></div>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
+        <div class='tt-wrap'><div class='tt-hero'><div><span class='tt-kicker'>DAVISCHOOL · SCHEDULING ENGINE</span><h1>Timetable Setup</h1><p>Set up your school week, teaching sessions, facilities and staffing rules in one guided workspace.</p></div></div>{notice}{selector}{profile_summary}{read_only_html}{create_profile_html if not has_draft_profile else ""}{sections}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
