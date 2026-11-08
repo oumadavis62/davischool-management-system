@@ -353,6 +353,42 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                 params + (value,), f"learner:{value}")
     if room_id is not None:
         collect(base + " AND s.room_id=?", params + (room_id,), f"room:{room_id}")
+
+    # Also reserve legacy weekly lessons against normalized combined/co-teaching sessions.
+    if day_id is not None and session_date is None:
+        legacy_base = """SELECT DISTINCT l.id,p.start_time,e.end_time,
+                                'lesson' AS session_type,'instructional' AS schedule_layer
+                         FROM ds_timetable_lessons l
+                         JOIN ds_timetable_periods p
+                           ON p.id=l.period_id AND p.school_id=l.school_id
+                          AND p.profile_id=l.profile_id
+                         JOIN ds_timetable_periods e
+                           ON e.school_id=l.school_id AND e.profile_id=l.profile_id
+                          AND e.period_no=p.period_no+COALESCE(l.duration_periods,1)-1
+                         WHERE l.school_id=? AND l.profile_id=? AND l.day_id=?
+                           AND l.status='scheduled'
+                           AND p.start_time < ? AND e.end_time > ?"""
+        legacy_params = (school_id, profile_id, day_id, end_time, start_time)
+        def collect_legacy(sql: str, values: tuple[Any, ...], reason: str) -> None:
+            for row in cur.execute(sql, values).fetchall():
+                sid = -int(row["id"])
+                if sid not in conflicts:
+                    conflicts[sid] = {
+                        "session_id": sid, "start_time": row["start_time"],
+                        "end_time": row["end_time"], "session_type": row["session_type"],
+                        "schedule_layer": row["schedule_layer"], "reasons": [],
+                    }
+                if reason not in conflicts[sid]["reasons"]:
+                    conflicts[sid]["reasons"].append(reason)
+        for value in classes:
+            collect_legacy(legacy_base + " AND l.class_id=?",
+                           legacy_params + (value,), f"class:{value}")
+        for value in teachers:
+            collect_legacy(legacy_base + " AND l.teacher_id=?",
+                           legacy_params + (value,), f"teacher:{value}")
+        if room_id is not None:
+            collect_legacy(legacy_base + " AND l.room_id=?",
+                           legacy_params + (room_id,), f"room:{room_id}")
     return list(conflicts.values())
 
 
