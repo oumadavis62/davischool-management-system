@@ -44,18 +44,25 @@ def timetable_workspace(request, body):
         nav.className='tt-setup-tabs';
         nav.setAttribute('role','tablist');
         nav.setAttribute('aria-label','Timetable setup sections');
-        const labels=sections.map((section,index)=>{
+        const allLabels=sections.map((section,index)=>{
           const heading=section.querySelector('h3,h2,h4');
           return (heading?.textContent||('Section '+(index+1))).trim();
         });
+        // Sidebar destinations are focused workspaces, not merely shortcuts
+        // that land on the full setup page with every unrelated tab exposed.
+        const keep = allLabels.map(label=>{
+          if(requested==='requirements') return /requirement|workload|allocation/i.test(label);
+          if(requested==='availability') return /teacher availability/i.test(label);
+          if(requested==='setup') return !/teacher availability|subject availability|requirement|workload|allocation/i.test(label);
+          return true;
+        });
+        const visibleSections=sections.filter((section,index)=>keep[index]);
+        const visibleLabels=allLabels.filter((label,index)=>keep[index]);
+        sections.forEach((section,index)=>{ if(!keep[index]) section.hidden=true; });
+        if(!visibleSections.length)return;
         let initial=0;
-        if(requested==='requirements'){
-          const found=labels.findIndex(label=>/requirement|workload/i.test(label));
-          if(found>=0)initial=found;
-        }else if(requested==='availability'){
-          const found=labels.findIndex(label=>/availability/i.test(label));
-          if(found>=0)initial=found;
-        }
+        const sectionsForTabs=visibleSections;
+        const labels=visibleLabels;
         function activate(index){
           sections.forEach((section,i)=>{
             section.hidden=i!==index;
@@ -84,7 +91,7 @@ def timetable_workspace(request, body):
           });
           nav.append(button);
         });
-        sections[0].parentNode.insertBefore(nav,sections[0]);
+        sectionsForTabs[0].parentNode.insertBefore(nav,sectionsForTabs[0]);
         activate(initial);
       }
       if(document.readyState==='loading'){
