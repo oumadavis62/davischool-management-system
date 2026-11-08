@@ -255,6 +255,28 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                     con.commit()
                 raise
         except TimetableSetupError as exc:
+            try:
+                con.rollback()
+            except Exception:
+                pass
             return redirect_generator(profile_id, message=str(exc), error=True)
+        except Exception:
+            # Keep solver/database failures visible in Render logs while
+            # returning the operator to the generation history instead of
+            # exposing a blank HTTP 500 response.
+            import logging
+            logging.getLogger("davischool.timetable.generator").exception(
+                "Automatic timetable generation failed (school_id=%s, profile_id=%s)",
+                int(school["id"]), profile_id,
+            )
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            return redirect_generator(
+                profile_id,
+                message="Generation could not complete because of an internal or database error. Check the application logs and retry; existing timetable entries have been preserved.",
+                error=True,
+            )
         finally:
             con.close()
