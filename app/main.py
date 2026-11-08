@@ -2011,7 +2011,7 @@ def del_stud(sid: int, request: Request):
     return RedirectResponse("/school/students",303)
 
 @app.get("/school/dean-settings", response_class=HTMLResponse)
-def dean_settings(request: Request, tab: str = "terms"):
+def dean_settings(request: Request, tab: str = "terms", class_id: int | None = None):
     if "email" not in request.session: return RedirectResponse("/")
     school = get_school_obj(request)
     if not school: return RedirectResponse("/dashboard")
@@ -2021,7 +2021,11 @@ def dean_settings(request: Request, tab: str = "terms"):
     cur.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school["id"],)); subjects = cur.fetchall()
     cur.execute("SELECT * FROM teachers WHERE school_id=? ORDER BY name", (school["id"],)); teachers = cur.fetchall()
     cur.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name, stream", (school["id"],)); classes = cur.fetchall()
-    cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? ORDER BY t.name", (school["id"],)); allocs = cur.fetchall()
+    if class_id is not None:
+        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? AND ta.class_id=? ORDER BY s.name, t.name", (school["id"], class_id))
+    else:
+        cur.execute("SELECT ta.*, t.name as tname, s.name as sname, c.name as cname FROM teacher_allocations ta LEFT JOIN teachers t ON ta.teacher_id=t.id LEFT JOIN subjects s ON ta.subject_id=s.id LEFT JOIN classes c ON ta.class_id=c.id WHERE ta.school_id=? ORDER BY t.name", (school["id"],))
+    allocs = cur.fetchall()
     cur.execute("SELECT COUNT(*) as cnt FROM students WHERE school_id=?", (school["id"],)); sc = cur.fetchone()["cnt"]
     con.close()
     header = school_header(school, name, "dean-settings", is_impersonating=is_imp)
@@ -3039,7 +3043,8 @@ def school_report_cards(request:Request, student_id:int=0, exam_id:int=0):
     con.close(); return module_page(request,'📄 Report Card','marksheets',body)
 
 @app.get("/school/subject-allocation", response_class=HTMLResponse)
-def school_subject_allocation(request:Request): return dean_settings(request,tab='allocation')
+def school_subject_allocation(request:Request, class_id: int | None = None):
+    return dean_settings(request, tab="allocation", class_id=class_id)
 
 @app.get("/school/spreadsheet", response_class=HTMLResponse)
 def school_spreadsheet(request:Request):
