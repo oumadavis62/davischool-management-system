@@ -216,17 +216,22 @@ def _validate_constraints(cur: Any, school_id: int, profile_id: int,
                            subject_id: int | None, class_ids: list[int],
                            teacher_ids: list[int], room_id: int | None,
                            day_id: int | None, period_id: int | None,
-                           start: str, end: str, session_date: str | None) -> None:
-    rules = cur.execute(
-        """SELECT * FROM ds_timetable_constraints
-           WHERE school_id=? AND profile_id=? AND is_active=1
-             AND constraint_type IN ('prohibit','require')
-             AND (schedule_layer='all' OR schedule_layer=?)
-             AND (applies_to='all' OR applies_to=? OR applies_to=?)""",
-        (school_id, profile_id, schedule_layer, session_type,
-         "lesson" if schedule_layer == "instructional" else
-         "remedial" if schedule_layer == "additional_learning" else "activity"),
-    ).fetchall()
+                           start: str, end: str, session_date: str | None,
+                           cache: dict[str, Any] | None = None) -> None:
+    cache = cache if cache is not None else {}
+    rules_key = f"rules:{school_id}:{profile_id}:{schedule_layer}:{session_type}"
+    if rules_key not in cache:
+        cache[rules_key] = cur.execute(
+            """SELECT * FROM ds_timetable_constraints
+               WHERE school_id=? AND profile_id=? AND is_active=1
+                 AND constraint_type IN ('prohibit','require')
+                 AND (schedule_layer='all' OR schedule_layer=?)
+                 AND (applies_to='all' OR applies_to=? OR applies_to=?)""",
+            (school_id, profile_id, schedule_layer, session_type,
+             "lesson" if schedule_layer == "instructional" else
+             "remedial" if schedule_layer == "additional_learning" else "activity"),
+        ).fetchall()
+    rules = cache[rules_key]
     def minutes(value):
         return int(str(value)[:2]) * 60 + int(str(value)[3:])
     for rule in rules:
@@ -248,26 +253,26 @@ def _validate_constraints(cur: Any, school_id: int, profile_id: int,
             if period_id is None:
                 slot_matches = False
             else:
-                ordered = cur.execute(
-                    """SELECT id,period_no FROM ds_timetable_periods
-                       WHERE school_id=? AND profile_id=? ORDER BY period_no,id""",
-                    (school_id, profile_id),
-                ).fetchall()
-                start_index = next((i for i, row in enumerate(ordered)
-                                    if int(row["id"]) == int(period_id)), None)
-                span_ids = []
-                if start_index is not None:
-                    periods = cur.execute(
-                        """SELECT id,end_time FROM ds_timetable_periods
-                           WHERE school_id=? AND profile_id=? AND period_no>=?
-                           ORDER BY period_no,id""",
-                        (school_id, profile_id, int(ordered[start_index]["period_no"])),
+                period_key = f"periods:{school_id}:{profile_id}"
+                if period_key not in cache:
+                    cache[period_key] = cur.execute(
+                        """SELECT id,period_no,end_time FROM ds_timetable_periods
+                           WHERE school_id=? AND profile_id=? ORDER BY period_no,id""",
+                        (school_id, profile_id),
                     ).fetchall()
-                    for item in periods:
-                        span_ids.append(int(item["id"]))
-                        if str(item["end_time"]) == end:
-                            break
-                slot_matches = slot_matches and int(rule["period_id"]) in span_ids
+                ordered = cache[period_key]
+                span_key = f"span:{int(period_id)}:{end}"
+                if span_key not in cache:
+                    start_index = next((i for i, row in enumerate(ordered)
+                                        if int(row["id"]) == int(period_id)), None)
+                    span_ids = []
+                    if start_index is not None:
+                        for item in ordered[start_index:]:
+                            span_ids.append(int(item["id"]))
+                            if str(item["end_time"]) == end:
+                                break
+                    cache[span_key] = set(span_ids)
+                slot_matches = slot_matches and int(rule["period_id"]) in cache[span_key]
         if rule["start_time"] and rule["end_time"]:
             has_slot_target = True
             overlaps = minutes(start) < minutes(rule["end_time"]) and minutes(end) > minutes(rule["start_time"])
