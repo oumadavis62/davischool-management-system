@@ -614,7 +614,8 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
                               end_time: str | None = None,
                               effective_from: str | None = None,
                               effective_to: str | None = None,
-                              reason: str = "") -> int:
+                              reason: str = "",
+                              constraint_id: int | None = None) -> int:
     name = (name or "").strip()
     if not name or len(name) > 120:
         raise TimetableSetupError("Give this timetable constraint a name (maximum 120 characters).")
@@ -661,22 +662,36 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
         ).fetchone():
             raise TimetableSetupError(f"The selected {label} does not belong to this school.")
     now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    cur.execute(
-        """INSERT INTO ds_timetable_constraints
-           (school_id,profile_id,name,constraint_type,applies_to,schedule_layer,
-            subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
-            effective_from,effective_to,reason,is_active,created_at,updated_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
-        (school_id,profile_id,name,constraint_type,applies_to,schedule_layer,
-         subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
-         effective_from,effective_to,(reason or "").strip(),now,now),
-    )
-    row = cur.execute(
-        "SELECT id FROM ds_timetable_constraints WHERE school_id=? AND profile_id=? AND name=?",
-        (school_id,profile_id,name),
-    ).fetchone()
+    values = (name,constraint_type,applies_to,schedule_layer,subject_id,teacher_id,
+              class_id,room_id,day_id,period_id,start_time,end_time,effective_from,
+              effective_to,(reason or "").strip(),now)
+    if constraint_id is not None:
+        existing = cur.execute(
+            "SELECT id FROM ds_timetable_constraints WHERE id=? AND school_id=? AND profile_id=?",
+            (int(constraint_id),school_id,profile_id),
+        ).fetchone()
+        if not existing:
+            raise TimetableSetupError("That constraint no longer exists in this timetable profile.")
+        cur.execute(
+            """UPDATE ds_timetable_constraints SET name=?,constraint_type=?,applies_to=?,
+               schedule_layer=?,subject_id=?,teacher_id=?,class_id=?,room_id=?,day_id=?,
+               period_id=?,start_time=?,end_time=?,effective_from=?,effective_to=?,reason=?,updated_at=?
+               WHERE id=? AND school_id=? AND profile_id=?""",
+            values + (int(constraint_id),school_id,profile_id),
+        )
+        saved_id = int(constraint_id)
+    else:
+        cur.execute(
+            """INSERT INTO ds_timetable_constraints
+               (school_id,profile_id,name,constraint_type,applies_to,schedule_layer,
+                subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
+                effective_from,effective_to,reason,is_active,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
+            (school_id,profile_id)+values,
+        )
+        saved_id = int(cur.lastrowid)
     connection.commit()
-    return int(row["id"])
+    return saved_id
 
 
 def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int,
