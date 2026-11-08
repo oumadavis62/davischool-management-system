@@ -134,20 +134,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     ).fetchall()
     if not days or not periods:
         raise TimetableSetupError("Configure instructional days and teaching periods before automatic generation.")
-    # A normalized shared lesson satisfies the subject requirement for every
-    # participating class. Do not create duplicate single-class lessons for
-    # those same class/subject pairs.
+    # Reconcile shared instructional sessions against each participating
+    # class/subject/teacher weekly requirement. A shared occurrence credits
+    # every assigned teacher for the periods they jointly deliver.
     covered_rows = cur.execute(
-        """SELECT DISTINCT rc.class_id,r.subject_id
+        """SELECT rc.class_id,r.subject_id,rt.teacher_id,
+                  COALESCE(NULLIF(r.weekly_periods,0),r.weekly_occurrences) AS covered_periods
            FROM ds_timetable_scheduling_requirements r
            JOIN ds_timetable_scheduling_requirement_classes rc
              ON rc.school_id=r.school_id AND rc.profile_id=r.profile_id
             AND rc.requirement_id=r.id
+           JOIN ds_timetable_scheduling_requirement_teachers rt
+             ON rt.school_id=r.school_id AND rt.profile_id=r.profile_id
+            AND rt.requirement_id=r.id
            WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
              AND r.schedule_layer='instructional' AND r.subject_id IS NOT NULL""",
         (school_id, profile_id),
     ).fetchall()
-    covered_class_subjects = {(int(row["class_id"]), int(row["subject_id"])) for row in covered_rows}
+    normalized_coverage = {}
+    for row in covered_rows:
+        key = (int(row["class_id"]), int(row["subject_id"]), int(row["teacher_id"]))
+        normalized_coverage[key] = normalized_coverage.get(key, 0) + int(row["covered_periods"] or 0)
     allocations = cur.execute(
         """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
            FROM teacher_allocations ta
@@ -160,18 +167,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     allocation_keys = {
         (int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"]))
         for a in allocations
-        if (int(a["class_id"]), int(a["subject_id"])) not in covered_class_subjects
+        if (int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"])) not in normalized_coverage
     }
     requirement_keys = {
         (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"]))
         for r in requirements
-        if (int(r["class_id"]), int(r["subject_id"])) not in covered_class_subjects
+        if (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])) not in normalized_coverage
     }
-    requirements = [
-        r for r in requirements
-        if (int(r["class_id"]), int(r["subject_id"])) not in covered_class_subjects
-    ]
-    if not requirements and not covered_class_subjects:
+    if not requirements and not normalized_coverage:
         raise TimetableSetupError("Configure at least one weekly lesson requirement or shared instructional session before automatic generation.")
     missing_requirements = allocation_keys - requirement_keys
     stale_requirements = requirement_keys - allocation_keys
@@ -270,8 +273,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if weekly < 1:
             raise TimetableSetupError("Every lesson requirement must request at least one lesson per week.")
         already = manual_counts.get(key, 0)
-        if already > weekly:
-            raise TimetableSetupError("A manually scheduled class/subject/teacher combination already exceeds its weekly requirement.")
+        covered = int(normalized_coverage.get(key, 0))
+        if already + covered > weekly:
+            raise TimetableSetupError(
+                "Manual placements and shared combined/co-teaching sessions exceed the weekly requirement for class ID "
+                + str(key[0]) + ", subject ID " + str(key[1]) + "."
+            )
+        remaining = weekly - already - covered
         duration = int(req["duration_periods"] or 1)
         if duration < 1 or duration > 4:
             raise TimetableSetupError("Lesson duration must be between one and four periods.")
@@ -295,19 +303,42 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
                 for x in configured_pattern
             ]
-            # Any unconfigured periods remain flexible single lessons.
             planned_sessions.extend(
                 {"duration": 1, "preferred_period_id": None}
                 for _ in range(weekly - pattern_periods)
             )
+            credit_to_remove = covered
+            while credit_to_remove > 0 and planned_sessions:
+                item = planned_sessions.pop()
+                item_duration = int(item["duration"])
+                if item_duration > credit_to_remove:
+                    planned_sessions.append({
+                        "duration": item_duration - credit_to_remove,
+                        "preferred_period_id": None,
+                    })
+                    credit_to_remove = 0
+                else:
+                    credit_to_remove -= item_duration
+            if credit_to_remove:
+                raise TimetableSetupError("Shared instructional sessions exceed the configured weekly lesson pattern.")
+            if remaining < sum(int(item["duration"]) for item in planned_sessions):
+                trim = sum(int(item["duration"]) for item in planned_sessions) - remaining
+                while trim > 0 and planned_sessions:
+                    item = planned_sessions.pop()
+                    item_duration = int(item["duration"])
+                    if item_duration > trim:
+                        planned_sessions.append({"duration": item_duration - trim, "preferred_period_id": None})
+                        trim = 0
+                    else:
+                        trim -= item_duration
         else:
             planned_sessions = []
-            unplanned_periods = weekly
+            unplanned_periods = remaining
             while unplanned_periods > 0:
                 session_duration = min(duration, unplanned_periods)
                 planned_sessions.append({"duration": session_duration, "preferred_period_id": None})
                 unplanned_periods -= session_duration
-        total_required += weekly
+        total_required += remaining
         for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
                 "class_id": key[0],
