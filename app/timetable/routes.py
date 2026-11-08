@@ -17,6 +17,7 @@ from app.timetable.setup import (
     save_room,
     save_teacher_availability,
     save_class_requirement,
+    save_subject_requirements,
     save_class_limits,
     _profile,
 )
