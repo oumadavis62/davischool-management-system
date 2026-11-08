@@ -400,7 +400,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 ):
                     raise TimetableSetupError("The manually placed lessons already contain a class, teacher or room clash. Resolve it before automatic generation.")
 
-    room_ids = [int(r["id"]) for r in rooms] or [None]
+    # Ordinary class lessons take place in their assigned classrooms by default.
+    # Do not force every lesson into the school's shared/specialist room inventory:
+    # a single registered lab would otherwise become a school-wide bottleneck.
+    # Room reservations are enforced for explicit normalized requirements instead.
+    room_ids = [None]
     # Reuse the profile's constraint rules and period spans across all candidate
     # cells. Without this cache, candidate enumeration performs repeated SQL
     # reads for the same rules and period ordering thousands of times.
