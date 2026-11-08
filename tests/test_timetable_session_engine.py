@@ -10,7 +10,7 @@ from app.timetable.session_engine import (
     create_teaching_group,
     find_session_conflicts,
 )
-from app.timetable.generator import generate_advanced_instructional_sessions
+from app.timetable.generator import generate_advanced_instructional_sessions, generate_dated_advanced_sessions
 from app.timetable.builder import place_advanced_requirement_session, place_dated_advanced_requirement_session
 
 
@@ -262,6 +262,40 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(row["day_id"], self.day_id)
         self.assertEqual((row["start_time"], row["end_time"]), ("08:00", "08:40"))
 
+
+
+    def test_date_range_generator_repeats_weekly_pattern_on_calendar_dates(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday timetable", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Period 1",
+            "instructional", "08:00", "08:40", 1,
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Weekly Science",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        result = generate_dated_advanced_sessions(
+            self.db, 8, self.profile_id, "2027-03-01", "2027-03-14"
+        )
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["generated_sessions"], 2)
+        dates = [r["session_date"] for r in self.db.execute(
+            "SELECT session_date FROM ds_timetable_sessions WHERE scheduling_requirement_id=? ORDER BY session_date",
+            (requirement,),
+        ).fetchall()]
+        self.assertEqual(dates, ["2027-03-01", "2027-03-08"])
 
     def test_dated_builder_respects_active_rotation_programme(self):
         self.db.execute(
