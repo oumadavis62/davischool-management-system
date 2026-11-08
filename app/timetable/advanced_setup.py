@@ -677,3 +677,104 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
     ).fetchone()
     connection.commit()
     return int(row["id"])
+
+
+def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int,
+                                occurrence_date: str) -> dict[str, Any]:
+    """Resolve one calendar date to its day, applicable day template and rotations.
+
+    This is the date-aware foundation for expanding weekly, weekend and
+    rotating programmes. Calendar exceptions override the normal weekday flag;
+    a day template for a numbered cycle week takes precedence over the default
+    (cycle_week=0) template.
+    """
+    try:
+        target = date.fromisoformat((occurrence_date or "").strip())
+    except ValueError:
+        raise TimetableSetupError("Choose a valid timetable date in YYYY-MM-DD format.")
+
+    cur = connection.cursor()
+    profile = _profile(cur, school_id, profile_id)
+    start_value = profile["academic_start_date"]
+    end_value = profile["academic_end_date"]
+    academic_start = date.fromisoformat(str(start_value)) if start_value else None
+    academic_end = date.fromisoformat(str(end_value)) if end_value else None
+    if academic_start and target < academic_start:
+        raise TimetableSetupError("The selected date is before this timetable's academic start date.")
+    if academic_end and target > academic_end:
+        raise TimetableSetupError("The selected date is after this timetable's academic end date.")
+
+    day_codes = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+    day_code = day_codes[target.weekday()]
+    day = cur.execute(
+        """SELECT id,day_code,day_name,day_order,is_instructional
+           FROM ds_timetable_days
+           WHERE school_id=? AND profile_id=? AND day_code=?""",
+        (school_id, profile_id, day_code),
+    ).fetchone()
+
+    exceptions = cur.execute(
+        """SELECT id,label,exception_type,notes,is_instructional
+           FROM ds_timetable_calendar_exceptions
+           WHERE school_id=? AND profile_id=? AND exception_date=?
+           ORDER BY id""",
+        (school_id, profile_id, target.isoformat()),
+    ).fetchall()
+    # Multiple labels may be recorded on one date. Any explicitly instructional
+    # exception keeps the date open; otherwise the exception closes it.
+    instructional = bool(day and day["is_instructional"])
+    if exceptions:
+        instructional = any(bool(item["is_instructional"]) for item in exceptions)
+
+    template_id = None
+    cycle_week = 0
+    if academic_start:
+        elapsed_weeks = (target - academic_start).days // 7
+        cycle_week = (elapsed_weeks % 52) + 1
+    if day:
+        template = cur.execute(
+            """SELECT template_id FROM ds_timetable_day_templates
+               WHERE school_id=? AND profile_id=? AND day_id=? AND cycle_week IN (?,0)
+               ORDER BY CASE WHEN cycle_week=? THEN 0 ELSE 1 END LIMIT 1""",
+            (school_id, profile_id, int(day["id"]), cycle_week, cycle_week),
+        ).fetchone()
+        if template:
+            template_id = int(template["template_id"])
+
+    rotations = []
+    for cycle in cur.execute(
+        """SELECT id,name,cycle_length_weeks,anchor_date
+           FROM ds_timetable_rotation_cycles
+           WHERE school_id=? AND profile_id=? AND is_active=1
+           ORDER BY id""",
+        (school_id, profile_id),
+    ).fetchall():
+        anchor = date.fromisoformat(str(cycle["anchor_date"]))
+        if target < anchor:
+            continue
+        week_number = (((target - anchor).days // 7) % int(cycle["cycle_length_weeks"])) + 1
+        rotation = cur.execute(
+            """SELECT week_number,label,department_code,programme_id
+               FROM ds_timetable_rotation_weeks
+               WHERE school_id=? AND profile_id=? AND cycle_id=? AND week_number=?""",
+            (school_id, profile_id, int(cycle["id"]), week_number),
+        ).fetchone()
+        rotations.append({
+            "cycle_id": int(cycle["id"]),
+            "cycle_name": str(cycle["name"]),
+            "week_number": week_number,
+            "week": dict(rotation) if rotation else None,
+        })
+
+    return {
+        "date": target.isoformat(),
+        "day_code": day_code,
+        "day_id": int(day["id"]) if day else None,
+        "day_name": str(day["day_name"]) if day else day_code.title(),
+        "is_configured": bool(day),
+        "is_instructional": instructional,
+        "template_id": template_id,
+        "cycle_week": cycle_week,
+        "exceptions": [dict(item) for item in exceptions],
+        "rotations": rotations,
+    }
