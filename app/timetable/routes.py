@@ -326,15 +326,21 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             matrix_cells.append(f"<tr><th>{esc(day['day_name'])}</th>{''.join(cells)}</tr>")
         matrix_period_headers = "".join(f"<th>{esc(p['label'])}<small>{esc(p['start_time'])}–{esc(p['end_time'])}</small></th>" for p in periods)
         matrix_day_rows = "".join(matrix_cells) or "<tr><td colspan='2' class='tt-muted'>Configure school days and teaching periods first.</td></tr>"
-        teacher_availability_summary = {}
-        for a in availability:
-            item = teacher_availability_summary.setdefault(int(a["teacher_id"]), {"name": str(a["teacher_name"]), "fallback": 0, "unavailable": 0})
-            item["fallback" if a["availability"] == "fallback" else "unavailable"] += 1
         total_availability_cells = len(days) * len(periods)
+        # Seed from the complete school staff register so unrestricted teachers
+        # are visible too, with every configured cell counted as available.
+        teacher_availability_summary = {
+            int(t["id"]): {"name": str(t["name"]), "fallback": 0, "unavailable": 0}
+            for t in teachers
+        }
+        for a in availability:
+            item = teacher_availability_summary.get(int(a["teacher_id"]))
+            if item is not None:
+                item["fallback" if a["availability"] == "fallback" else "unavailable"] += 1
         availability_rows = "".join(
             f"<tr data-availability-row data-search='{esc(item['name']).lower()}'><td>{esc(item['name'])}</td><td>{item['fallback'] + item['unavailable']}</td><td>{max(0, total_availability_cells-item['fallback']-item['unavailable'])}</td><td>{item['fallback']}</td><td>{item['unavailable']}</td><td><button type='button' class='tt-btn secondary tt-edit-availability' data-kind='teacher' data-id='{teacher_id}'>View / Edit</button></td></tr>"
             for teacher_id, item in sorted(teacher_availability_summary.items(), key=lambda pair: pair[1]["name"].lower())
-        ) or "<tr><td colspan='6' class='tt-muted'>No teacher restrictions configured.</td></tr>"
+        ) or "<tr><td colspan='6' class='tt-muted'>No teachers found in the school register.</td></tr>"
         subject_availability_status = {(int(a['subject_id']), int(a['day_id']), int(a['period_id'])): str(a['availability'] or '') for a in subject_availability}
         subject_matrix_cells = []
         for day in days:
@@ -347,14 +353,19 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             subject_matrix_cells.append(f"<tr><th>{esc(day['day_name'])}</th>{''.join(cells)}</tr>")
         subject_matrix_period_headers = "".join(f"<th>{esc(p['label'])}<small>{esc(p['start_time'])}–{esc(p['end_time'])}</small></th>" for p in periods)
         subject_matrix_day_rows = "".join(subject_matrix_cells) or "<tr><td colspan='2' class='tt-muted'>Configure school days and teaching periods first.</td></tr>"
-        subject_availability_summary = {}
+        # Seed from the full subject register, including subjects with no saved exceptions.
+        subject_availability_summary = {
+            int(s["id"]): {"name": str(s["name"]), "fallback": 0, "unavailable": 0}
+            for s in subjects
+        }
         for a in subject_availability:
-            item = subject_availability_summary.setdefault(int(a["subject_id"]), {"name": str(a["subject_name"]), "fallback": 0, "unavailable": 0})
-            item["fallback" if a["availability"] == "fallback" else "unavailable"] += 1
+            item = subject_availability_summary.get(int(a["subject_id"]))
+            if item is not None:
+                item["fallback" if a["availability"] == "fallback" else "unavailable"] += 1
         subject_availability_rows = "".join(
             f"<tr data-availability-row data-search='{esc(item['name']).lower()}'><td>{esc(item['name'])}</td><td>{item['fallback'] + item['unavailable']}</td><td>{max(0, total_availability_cells-item['fallback']-item['unavailable'])}</td><td>{item['fallback']}</td><td>{item['unavailable']}</td><td><button type='button' class='tt-btn secondary tt-edit-availability' data-kind='subject' data-id='{subject_id}'>View / Edit</button></td></tr>"
             for subject_id, item in sorted(subject_availability_summary.items(), key=lambda pair: pair[1]["name"].lower())
-        ) or "<tr><td colspan='6' class='tt-muted'>No subject restrictions configured.</td></tr>"
+        ) or "<tr><td colspan='6' class='tt-muted'>No subjects found in the school register.</td></tr>"
         requirement_rows = "".join(
             f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td><td><details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Lessons / week<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><button class='tt-btn'>Save changes</button></form></details><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete</button></form></td></tr>" for r in requirements
         ) or "<tr><td colspan='7' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
