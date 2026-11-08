@@ -136,13 +136,7 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
     where = (" AND " + " AND ".join(conditions)) if conditions else ""
     rows = cur.execute(
         """SELECT s.*,d.day_code,d.day_name,sub.name subject_name,rm.name room_name,
-                  p.name programme_name,
-                  (SELECT group_concat(c.name || CASE WHEN COALESCE(c.stream,'')='' THEN '' ELSE ' ' || c.stream END, ', ')
-                   FROM ds_timetable_session_classes sc JOIN classes c ON c.id=sc.class_id AND c.school_id=sc.school_id
-                   WHERE sc.session_id=s.id AND sc.school_id=s.school_id) class_names,
-                  (SELECT group_concat(t.name, ', ')
-                   FROM ds_timetable_session_teachers st JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
-                   WHERE st.session_id=s.id AND st.school_id=s.school_id) teacher_names
+                  p.name programme_name
            FROM ds_timetable_sessions s
            LEFT JOIN ds_timetable_days d ON d.id=s.day_id AND d.profile_id=s.profile_id
            LEFT JOIN subjects sub ON sub.id=s.subject_id AND sub.school_id=s.school_id
@@ -153,6 +147,38 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
         tuple(params),
     ).fetchall()
     sessions = [dict(row) for row in rows]
+    # Aggregate linked classes and teachers in Python instead of using
+    # SQLite-only group_concat; this view must work with both SQLite and
+    # the PostgreSQL production database.
+    if sessions:
+        session_ids = [int(row["id"]) for row in sessions]
+        placeholders = ",".join("?" for _ in session_ids)
+        class_rows = cur.execute(
+            """SELECT sc.session_id,c.name,c.stream
+               FROM ds_timetable_session_classes sc
+               JOIN classes c ON c.id=sc.class_id AND c.school_id=sc.school_id
+               WHERE sc.school_id=? AND sc.session_id IN (""" + placeholders + """)
+               ORDER BY sc.session_id,c.name,c.stream""",
+            (school_id, *session_ids),
+        ).fetchall()
+        teacher_rows = cur.execute(
+            """SELECT st.session_id,t.name
+               FROM ds_timetable_session_teachers st
+               JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
+               WHERE st.school_id=? AND st.session_id IN (""" + placeholders + """)
+               ORDER BY st.session_id,t.name""",
+            (school_id, *session_ids),
+        ).fetchall()
+        class_names = {}
+        for linked in class_rows:
+            label = str(linked["name"]) + ((" " + str(linked["stream"])) if linked["stream"] else "")
+            class_names.setdefault(int(linked["session_id"]), []).append(label)
+        teacher_names = {}
+        for linked in teacher_rows:
+            teacher_names.setdefault(int(linked["session_id"]), []).append(str(linked["name"]))
+        for session in sessions:
+            session["class_names"] = ", ".join(class_names.get(int(session["id"]), []))
+            session["teacher_names"] = ", ".join(teacher_names.get(int(session["id"]), []))
     dated = [str(row["session_date"]) for row in sessions
              if row["session_date"] and str(row.get("day_code") or "").upper() in {"SAT", "SUN"}]
     rotation_labels = {}
