@@ -110,10 +110,19 @@ def _score(task, candidate, placements) -> float:
 def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT, normalized_run_id: int | None = None) -> dict:
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
+    active_run_sql = """SELECT id FROM ds_timetable_generation_runs
+           WHERE school_id=? AND profile_id=? AND status='running'"""
+    active_run_params = [school_id, profile_id]
+    # In the unified workflow, normalized instructional sessions are created
+    # first and their running audit row is passed into this solver. Exclude
+    # only that parent run; any other running row still means another
+    # generation is in progress and must block this request.
+    if normalized_run_id is not None:
+        active_run_sql += " AND id<>?"
+        active_run_params.append(int(normalized_run_id))
     active_run = cur.execute(
-        """SELECT id FROM ds_timetable_generation_runs
-           WHERE school_id=? AND profile_id=? AND status='running' ORDER BY id DESC LIMIT 1""",
-        (school_id, profile_id),
+        active_run_sql + " ORDER BY id DESC LIMIT 1",
+        tuple(active_run_params),
     ).fetchone()
     if active_run:
         raise TimetableSetupError("Automatic timetable generation is already running for this profile.")
