@@ -94,7 +94,7 @@ def timetable_workspace(request, body):
               buildTabs();
               if(!window.__ttSetupTabsObserver){
                 window.__ttSetupTabsObserver=new MutationObserver(()=>{if(!window.__ttSetupTabsQueued){window.__ttSetupTabsQueued=true;requestAnimationFrame(()=>{window.__ttSetupTabsQueued=false;buildTabs();});}});
-                window.__ttSetupTabsObserver.observe(root,{childList:true,subtree:true});
+                window.__ttSetupTabsObserver.observe(root.parentElement||document.body,{childList:true});
               }
             })();
             </script>"""
