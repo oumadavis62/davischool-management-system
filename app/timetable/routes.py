@@ -808,44 +808,99 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         subject_opts = option(subjects, "subject")
         room_opts = option(rooms, "room")
         notice = f"<div class='tt-alert {'error' if error else 'success'}'>{esc(message)}</div>" if message else ""
+        def target_text(r):
+            parts = [label + ": " + str(r[key]) for key,label in (("subject_name","Subject"),("teacher_name","Teacher"),("class_name","Class"),("room_name","Room")) if r[key]]
+            return " · ".join(parts) or "All matching sessions"
         rule_rows = "".join(
-            f"<tr><td><b>{esc(r['name'])}</b><small>{esc(r['reason'] or '')}</small></td><td>{esc(r['subject_name'] or 'Any subject')} · {esc(r['teacher_name'] or 'Any teacher')} · {esc(r['class_name'] or 'Any class')}</td><td>{esc(r['day_name'] or 'Any day')} · {esc(r['period_label'] or 'Any period')}</td><td>{esc(r['start_time'] or 'Any start')}–{esc(r['end_time'] or 'Any end')}</td><td>{'Active' if int(r['is_active'] or 0) else 'Inactive'}</td></tr>"
+            f"<tr data-rule data-search='{esc(str(r['name'])+' '+str(r['reason'] or '')+' '+target_text(r)).lower()}' data-type='{esc(r['constraint_type'])}' data-status='{'active' if int(r['is_active'] or 0) else 'inactive'}'>"
+            f"<td><b>{esc(r['name'])}</b><small>{esc(r['reason'] or 'No additional instruction')}</small></td>"
+            f"<td><span class='tt-rule-kind {esc(r['constraint_type'])}'>{esc(str(r['constraint_type']).title())}</span><small>{esc(str(r['applies_to']).title())} · {esc(str(r['schedule_layer']).replace('_',' ').title())}</small></td>"
+            f"<td>{esc(target_text(r))}</td><td>{esc(r['day_name'] or 'Any day')} · {esc(r['period_label'] or 'Any period')}<small>{esc(r['start_time'] or 'Any start')} – {esc(r['end_time'] or 'Any end')}</small></td>"
+            f"<td>{'Active' if int(r['is_active'] or 0) else 'Inactive'}</td>"
+            f"<td><button type='button' class='tt-rule-edit' data-id='{int(r['id'])}' data-name='{esc(r['name'], quote=True)}' data-type='{esc(r['constraint_type'])}' data-applies='{esc(r['applies_to'])}' data-layer='{esc(r['schedule_layer'])}' data-subject='{esc(r['subject_id'] or '')}' data-teacher='{esc(r['teacher_id'] or '')}' data-class='{esc(r['class_id'] or '')}' data-room='{esc(r['room_id'] or '')}' data-day='{esc(r['day_id'] or '')}' data-period='{esc(r['period_id'] or '')}' data-start='{esc(r['start_time'] or '')}' data-end='{esc(r['end_time'] or '')}' data-from='{esc(r['effective_from'] or '')}' data-until='{esc(r['effective_to'] or '')}' data-reason='{esc(r['reason'] or '', quote=True)}'>Edit</button>"
+            f"<form method='post' action='/app/timetable/constraints/delete' class='tt-inline-delete' onsubmit='return confirm(&quot;Delete this rule?&quot;)'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='constraint_id' value='{int(r['id'])}'><button type='submit' class='tt-rule-delete'>Delete</button></form></td></tr>"
             for r in rules
-        ) or "<tr><td colspan='5'>No constraints have been configured for this profile yet.</td></tr>"
+        ) or "<tr><td colspan='6' class='tt-empty'>No constraints configured yet. Add a rule to guide timetable placement.</td></tr>"
+        active_count = sum(1 for r in rules if int(r["is_active"] or 0))
+        prohibit_count = sum(1 for r in rules if r["constraint_type"] == "prohibit")
+        prefer_count = sum(1 for r in rules if r["constraint_type"] == "prefer")
+        notice = f"<div class='tt-notice {'error' if error else ''}'>{esc(message)}</div>" if message else ""
         body = f"""
         <style>
-          .tt-constraints{{max-width:1400px;margin:auto;color:#23443a}}.tt-constraints .panel{{background:#fff;border:1px solid #e1ebe4;border-radius:18px;padding:22px;margin:16px 0;box-shadow:0 8px 24px #244d3510}}
-          .tt-constraints h2{{margin:0 0 8px}}.tt-constraints p{{color:#667b70}}.tt-constraints .fields{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}}
-          .tt-constraints label{{display:block;font-size:12px;font-weight:700;margin:0 0 6px}}.tt-constraints input,.tt-constraints select{{width:100%;padding:11px;border:1px solid #d9e5dc;border-radius:10px;background:#fbfdfb;color:#244338}}
-          .tt-constraints button{{border:0;border-radius:10px;background:#527d66;color:white;padding:12px 20px;font-weight:700;cursor:pointer;margin-top:14px}}
-          .tt-constraints table{{width:100%;border-collapse:collapse;font-size:13px}}.tt-constraints td,.tt-constraints th{{padding:12px;border-bottom:1px solid #e9eee9;text-align:left}}.tt-constraints small{{display:block;color:#728478}}
-          .tt-constraints .notice{{padding:12px;border-radius:10px;background:#eff6ef;margin:12px 0}}@media(max-width:650px){{.tt-constraints .table-wrap{{overflow:auto}}}}
+        .tt-constraints{{max-width:1450px;margin:auto;color:#244b38}}.tt-constraints *{{box-sizing:border-box}}
+        .tt-constraints .hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;padding:25px 27px;border:1px solid #d5e6d8;border-radius:22px;background:linear-gradient(120deg,#e3f1e5,#f8fbf8);box-shadow:0 12px 30px #285a3c0c}}
+        .tt-constraints .eyebrow{{font-size:10px;font-weight:900;letter-spacing:.14em;color:#398052}}.tt-constraints h2{{font-size:clamp(22px,3vw,30px);margin:6px 0;color:#1f4a34}}
+        .tt-constraints .hero p{{margin:0;max-width:680px;color:#6a8071;font-size:13px;line-height:1.6}}
+        .tt-constraints button{{border:0;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:800;cursor:pointer}}
+        .tt-constraints .primary{{background:#246b43;color:#fff}}.tt-constraints .secondary{{background:#edf5ee;color:#286442;border:1px solid #dceade}}
+        .tt-constraints .stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:15px 0}}
+        .tt-constraints .stat{{padding:15px 17px;background:#fff;border:1px solid #e0ebe2;border-radius:15px}}.tt-constraints .stat b{{display:block;font-size:23px;color:#245a3a}}.tt-constraints .stat span{{display:block;margin-top:5px;font-size:10px;font-weight:800;text-transform:uppercase;color:#809184}}
+        .tt-constraints .panel{{margin-top:15px;padding:18px;background:#fff;border:1px solid #dfeae1;border-radius:19px;box-shadow:0 8px 25px #244d3508}}
+        .tt-constraints .panel-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:13px}}.tt-constraints h3{{margin:0;font-size:16px;color:#24553a}}
+        .tt-constraints .toolbar{{display:flex;gap:8px;flex-wrap:wrap;align-items:center}}.tt-constraints input,.tt-constraints select{{width:100%;padding:11px 12px;border:1px solid #d9e6dc;border-radius:10px;background:#fbfdfb;color:#244338;font-size:12px}}
+        .tt-constraints .search{{min-width:230px;flex:1}}.tt-constraints label{{display:block;margin:0 0 6px;font-size:11px;font-weight:800;color:#526e5b}}
+        .tt-constraints .table-wrap{{overflow:auto;border:1px solid #e7eee8;border-radius:13px}}.tt-constraints table{{width:100%;min-width:850px;border-collapse:collapse;font-size:12px}}
+        .tt-constraints th{{padding:12px;background:#f5f9f5;color:#6b8070;text-align:left;font-size:10px;text-transform:uppercase;white-space:nowrap}}
+        .tt-constraints td{{padding:13px;border-top:1px solid #edf2ed;vertical-align:middle;color:#405d49}}.tt-constraints td small{{display:block;margin-top:4px;color:#829187;font-size:10px}}
+        .tt-constraints .tt-rule-kind{{display:inline-flex;padding:5px 8px;border-radius:20px;font-size:10px;font-weight:900}}.tt-constraints .prohibit{{background:#fff0ed;color:#a94b39}}.tt-constraints .require{{background:#eaf3ff;color:#35649b}}.tt-constraints .prefer{{background:#fff6df;color:#946c20}}
+        .tt-constraints .tt-rule-edit{{background:#edf5ee;color:#286442;padding:8px 11px}}.tt-constraints .tt-rule-delete{{background:#fff0ee;color:#a44c40;padding:8px 11px}}.tt-constraints .tt-inline-delete{{display:inline;margin-left:5px}}
+        .tt-constraints .notice{{margin:12px 0;padding:12px 14px;border-radius:11px;background:#eaf5ec;color:#286342;font-size:12px;font-weight:700}}.tt-constraints .notice.error{{background:#fff0ed;color:#a3473b}}
+        .tt-constraints .empty{{padding:25px;text-align:center;color:#829187}}.tt-constraints tr[hidden]{{display:none}}
+        .tt-constraints .modal{{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;background:#14291dbb;backdrop-filter:blur(5px)}}.tt-constraints .modal.open{{display:flex}}
+        .tt-constraints .modal-card{{width:min(850px,100%);max-height:90vh;overflow:auto;background:#fff;border:1px solid #dce9df;border-radius:20px;box-shadow:0 24px 80px #0e241866}}
+        .tt-constraints .modal-head{{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:16px 19px;background:#f7fbf7;border-bottom:1px solid #e5eee6}}
+        .tt-constraints .modal-head h3{{margin:0}}.tt-constraints .close{{width:34px;height:34px;padding:0;background:#eaf3eb;color:#315f41;font-size:22px}}
+        .tt-constraints .form-body{{padding:19px}}.tt-constraints .form-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}
+        .tt-constraints .wide{{grid-column:1/-1}}.tt-constraints .form-foot{{display:flex;justify-content:flex-end;gap:9px;padding-top:15px;margin-top:15px;border-top:1px solid #edf2ed}}
+        .tt-constraints .filter-card{{width:min(440px,100%)}}.tt-constraints .filter-body{{padding:19px;display:grid;gap:14px}}
+        @media(max-width:700px){{.tt-constraints .stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.tt-constraints .hero{{padding:19px}}}}
+        @media(max-width:520px){{.tt-constraints .form-grid{{grid-template-columns:1fr}}.tt-constraints .wide{{grid-column:auto}}.tt-constraints .panel{{padding:12px}}.tt-constraints .hero .primary{{width:100%}}}}
         </style>
-        <div class='tt-constraints'><h2>Scheduling constraints</h2>
-        <p>Define hard rules that the automatic generator must obey and the manual builder must reject. Leave a target blank to apply the rule more broadly.</p>
-        {notice}
-        <form class='panel' method='post' action='/app/timetable/constraints'>
-          <input type='hidden' name='profile_id' value='{pid}'>
-          <div class='fields'>
-            <div><label>Constraint name</label><input name='name' required maxlength='120' placeholder='e.g. No Mathematics after lunch'></div>
-            <div><label>Rule behavior</label><select name='constraint_type'><option value='prohibit'>Prohibit this time</option><option value='require'>Require this time</option><option value='prefer'>Prefer this time (soft rule)</option></select></div>
-            <div><label>Applies to</label><select name='applies_to'><option value='all'>All sessions</option><option value='lesson'>Ordinary lessons</option><option value='remedial'>Remedial lessons</option><option value='activity'>Activities</option></select></div>
-            <div><label>Timetable layer</label><select name='schedule_layer'><option value='all'>All layers</option><option value='instructional'>Instructional</option><option value='additional_learning'>Additional learning</option><option value='school_activity'>School activities</option></select></div>
-            <div><label>Subject</label><select name='subject_id'>{subject_opts}</select></div>
-            <div><label>Teacher</label><select name='teacher_id'>{teacher_opts}</select></div>
-            <div><label>Class / stream</label><select name='class_id'>{class_opts}</select></div>
-            <div><label>Room / facility</label><select name='room_id'>{room_opts}</select></div>
-            <div><label>Day</label><select name='day_id'>{day_opts}</select></div>
-            <div><label>Period</label><select name='period_id'>{period_opts}</select></div>
-            <div><label>Not before (optional)</label><input type='time' name='start_time'></div>
-            <div><label>Not after (optional)</label><input type='time' name='end_time'></div>
-            <div><label>Effective from</label><input type='date' name='effective_from'></div>
-            <div><label>Effective until</label><input type='date' name='effective_to'></div>
-            <div style='grid-column:1/-1'><label>Reason / instruction</label><input name='reason' placeholder='Explain why this time is blocked'></div>
-          </div><button type='submit'>Save constraint</button>
-        </form>
-        <section class='panel'><h2>Configured rules</h2><div class='table-wrap'><table><thead><tr><th>Rule</th><th>Target</th><th>Day / period</th><th>Time window</th><th>Status</th></tr></thead><tbody>{rule_rows}</tbody></table></div></section>
-        <p><a href='/app/timetable/setup?profile_id={pid}'>← Back to timetable setup</a></p></div>
+        <div class='tt-constraints'>
+          <section class='hero'><div><span class='eyebrow'>SMART TIMETABLE · RULE ENGINE</span><h2>Scheduling constraints</h2><p>Set the boundaries and preferences that guide automatic generation and keep manual timetable changes within your school's rules.</p></div><button type='button' class='primary' id='tt-rule-add'>＋ Add constraint</button></section>
+          {notice}
+          <section class='stats'><div class='stat'><b>{len(rules)}</b><span>Total rules</span></div><div class='stat'><b>{active_count}</b><span>Active rules</span></div><div class='stat'><b>{prohibit_count}</b><span>Prohibited windows</span></div><div class='stat'><b>{prefer_count}</b><span>Preferred windows</span></div></section>
+          <section class='panel'><div class='panel-head'><div><h3>Configured rules</h3><small style='color:#809184'>Manage rules for this timetable profile.</small></div><div class='toolbar'><input class='search' id='tt-rule-search' type='search' placeholder='Search rules, targets or notes…'><button type='button' class='secondary' id='tt-rule-filter-open'>Filters</button><button type='button' class='secondary' id='tt-rule-clear'>Clear</button></div></div>
+          <div class='table-wrap'><table><thead><tr><th>Rule</th><th>Behavior / scope</th><th>Applies to</th><th>Day / time</th><th>Status</th><th>Actions</th></tr></thead><tbody>{rule_rows}</tbody></table></div><div id='tt-rule-empty' class='empty' hidden>No rules match the current search or filters.</div></section>
+          <div class='modal' id='tt-rule-editor' aria-hidden='true'><div class='modal-card' role='dialog' aria-modal='true'><div class='modal-head'><h3 id='tt-rule-editor-title'>Add scheduling constraint</h3><button type='button' class='close' data-close='tt-rule-editor'>×</button></div>
+          <form method='post' action='/app/timetable/constraints' id='tt-rule-form'><div class='form-body'><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='constraint_id' id='tt-rule-id'>
+          <div class='form-grid'><div class='wide'><label>Constraint name</label><input name='name' id='tt-rule-name' required maxlength='120' placeholder='e.g. No Mathematics after lunch'></div>
+          <div><label>Rule behavior</label><select name='constraint_type' id='tt-rule-type'><option value='prohibit'>Prohibit this time</option><option value='require'>Require this time</option><option value='prefer'>Prefer this time</option></select></div>
+          <div><label>Applies to</label><select name='applies_to' id='tt-rule-applies'><option value='all'>All sessions</option><option value='lesson'>Ordinary lessons</option><option value='remedial'>Remedial lessons</option><option value='activity'>Activities</option></select></div>
+          <div><label>Timetable layer</label><select name='schedule_layer' id='tt-rule-layer'><option value='all'>All layers</option><option value='instructional'>Instructional</option><option value='additional_learning'>Additional learning</option><option value='school_activity'>School activities</option></select></div>
+          <div><label>Subject</label><select name='subject_id' id='tt-rule-subject'>{subject_opts}</select></div><div><label>Teacher</label><select name='teacher_id' id='tt-rule-teacher'>{teacher_opts}</select></div>
+          <div><label>Class / stream</label><select name='class_id' id='tt-rule-class'>{class_opts}</select></div><div><label>Room / facility</label><select name='room_id' id='tt-rule-room'>{room_opts}</select></div>
+          <div><label>Day</label><select name='day_id' id='tt-rule-day'>{day_opts}</select></div><div><label>Period</label><select name='period_id' id='tt-rule-period'>{period_opts}</select></div>
+          <div><label>Not before</label><input type='time' name='start_time' id='tt-rule-start'></div><div><label>Not after</label><input type='time' name='end_time' id='tt-rule-end'></div>
+          <div><label>Effective from</label><input type='date' name='effective_from' id='tt-rule-from'></div><div><label>Effective until</label><input type='date' name='effective_to' id='tt-rule-until'></div>
+          <div class='wide'><label>Reason / instruction</label><input name='reason' id='tt-rule-reason' maxlength='500' placeholder='Explain why this rule is needed'></div></div>
+          <div class='form-foot'><button type='button' class='secondary' data-close='tt-rule-editor'>Cancel</button><button type='submit' class='primary'>Save constraint</button></div></div></form></div></div>
+          <div class='modal' id='tt-rule-filter' aria-hidden='true'><div class='modal-card filter-card' role='dialog' aria-modal='true'><div class='modal-head'><h3>Filter constraints</h3><button type='button' class='close' data-close='tt-rule-filter'>×</button></div><div class='filter-body'><div><label>Behavior</label><select id='tt-rule-type-filter'><option value=''>All behaviors</option><option value='prohibit'>Prohibit</option><option value='require'>Require</option><option value='prefer'>Prefer</option></select></div><div><label>Status</label><select id='tt-rule-status-filter'><option value=''>All statuses</option><option value='active'>Active</option><option value='inactive'>Inactive</option></select></div><div class='form-foot'><button type='button' class='secondary' id='tt-rule-reset'>Reset</button><button type='button' class='primary' data-close='tt-rule-filter'>Apply</button></div></div></div></div>
+          <p style='margin:14px 4px'><a href='/app/timetable/setup?profile_id={pid}' style='color:#34764d;font-weight:800;text-decoration:none'>← Back to timetable setup</a></p>
+        </div>
+        <script>
+        (function(){{
+          const root=document.querySelector('.tt-constraints');if(!root||root.dataset.bound==='1')return;root.dataset.bound='1';
+          const editor=root.querySelector('#tt-rule-editor'),filter=root.querySelector('#tt-rule-filter'),form=root.querySelector('#tt-rule-form');
+          const ids={{id:'tt-rule-id',name:'tt-rule-name',constraint_type:'tt-rule-type',applies_to:'tt-rule-applies',schedule_layer:'tt-rule-layer',subject_id:'tt-rule-subject',teacher_id:'tt-rule-teacher',class_id:'tt-rule-class',room_id:'tt-rule-room',day_id:'tt-rule-day',period_id:'tt-rule-period',start_time:'tt-rule-start',end_time:'tt-rule-end',effective_from:'tt-rule-from',effective_to:'tt-rule-until',reason:'tt-rule-reason'}};
+          const dataKeys={{id:'id',name:'name',constraint_type:'type',applies_to:'applies',schedule_layer:'layer',subject_id:'subject',teacher_id:'teacher',class_id:'class',room_id:'room',day_id:'day',period_id:'period',start_time:'start',end_time:'end',effective_from:'from',effective_to:'until',reason:'reason'}};
+          const show=m=>{{m.classList.add('open');m.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}};
+          const hide=m=>{{m.classList.remove('open');m.setAttribute('aria-hidden','true');document.body.style.removeProperty('overflow');}};
+          const reset=()=>{{form.reset();root.querySelector('#tt-rule-id').value='';root.querySelector('#tt-rule-editor-title').textContent='Add scheduling constraint';}};
+          root.querySelector('#tt-rule-add').addEventListener('click',()=>{{reset();show(editor);root.querySelector('#tt-rule-name').focus();}});
+          root.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>hide(root.querySelector('#'+b.dataset.close))));
+          [editor,filter].forEach(m=>m.addEventListener('click',e=>{{if(e.target===m)hide(m);}}));
+          document.addEventListener('keydown',e=>{{if(e.key==='Escape'){{hide(editor);hide(filter);}}}});
+          root.querySelectorAll('.tt-rule-edit').forEach(b=>b.addEventListener('click',()=>{{reset();Object.entries(ids).forEach(([key,id])=>{{root.querySelector('#'+id).value=b.dataset[dataKeys[key]]||'';}});root.querySelector('#tt-rule-editor-title').textContent='Edit scheduling constraint';show(editor);}}));
+          const rows=[...root.querySelectorAll('[data-rule]')],search=root.querySelector('#tt-rule-search'),type=root.querySelector('#tt-rule-type-filter'),status=root.querySelector('#tt-rule-status-filter');
+          function apply(){{const q=search.value.trim().toLowerCase();let n=0;rows.forEach(r=>{{const ok=(!q||r.dataset.search.includes(q))&&(!type.value||r.dataset.type===type.value)&&(!status.value||r.dataset.status===status.value);r.hidden=!ok;if(ok)n++;}});root.querySelector('#tt-rule-empty').hidden=n>0;}}
+          search.addEventListener('input',apply);type.addEventListener('change',apply);status.addEventListener('change',apply);
+          root.querySelector('#tt-rule-filter-open').addEventListener('click',()=>show(filter));
+          root.querySelector('#tt-rule-clear').addEventListener('click',()=>{{search.value='';type.value='';status.value='';apply();}});
+          root.querySelector('#tt-rule-reset').addEventListener('click',()=>{{type.value='';status.value='';apply();}});
+          apply();
+        }})();
+        </script>
         """
         return module_page(request, "Timetable Constraints", "timetable", body)
 
