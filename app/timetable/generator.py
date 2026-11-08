@@ -475,6 +475,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     placement["start_time"], placement["end_time"],
                     class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
                     room_id=placement.get("room_id"), day_id=placement["day_id"],
+                    include_legacy_lessons=False,
                 ):
                     continue
                 if not _can_place(task, placement, placements):

@@ -355,7 +355,7 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
         collect(base + " AND s.room_id=?", params + (room_id,), f"room:{room_id}")
 
     # Also reserve legacy weekly lessons against normalized combined/co-teaching sessions.
-    if day_id is not None and session_date is None:
+    if include_legacy_lessons and day_id is not None and session_date is None:
         legacy_base = """SELECT DISTINCT l.id,p.start_time,e.end_time,
                                 'lesson' AS session_type,'instructional' AS schedule_layer
                          FROM ds_timetable_lessons l
