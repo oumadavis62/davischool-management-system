@@ -159,21 +159,25 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             for offset in range(1,int(lesson["duration_periods"] or 1)):
                 if start + offset < len(periods):
                     occupied[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
-        rows = []
         timeline = sorted(
             [(str(p["start_time"]), "period", p) for p in periods] +
-            [(str(b["start_time"]), "break", b) for b in breaks],
+            [(str(br["start_time"]), "break", br) for br in breaks],
             key=lambda item: (item[0], 0 if item[1] == "period" else 1),
         )
+        headers = ["<th class='tb-day-heading'>Day</th>"]
         for _, item_type, item in timeline:
-            cells = []
             if item_type == "break":
-                for _day in days:
+                headers.append(f"<th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+            else:
+                headers.append(f"<th class='tb-period-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>")
+        rows = []
+        for day in days:
+            cells = [f"<th class='tb-day-heading'>{esc(day['day_name'])}</th>"]
+            for _, item_type, item in timeline:
+                if item_type == "break":
                     cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
-                rows.append(f"<tr class='tb-break-row'><th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>{''.join(cells)}</tr>")
-                continue
-            period = item
-            for day in days:
+                    continue
+                period = item
                 key = (int(day["id"]),int(period["id"]))
                 lesson = lesson_by_start.get(key)
                 if lesson:
@@ -198,9 +202,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     cells.append(f"<td class='tb-cell tb-continued' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'>↳ {esc(continued['subject_name'])} continues</td>")
                 else:
                     cells.append(f"<td class='tb-cell tb-free' data-day-id='{int(day['id'])}' data-period-id='{int(period['id'])}' ondragover='event.preventDefault()' ondrop='dropTimetableLesson(event,this)'><span>Free period</span></td>")
-            rows.append(f"<tr><th class='tb-period'><b>{esc(period['label'])}</b><span>{esc(period['start_time'])}–{esc(period['end_time'])}</span></th>{''.join(cells)}</tr>")
-        day_headers = "".join("<th>" + esc(d["day_name"]) + "</th>" for d in days)
-        grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr><th>Period</th>{day_headers}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
+            rows.append(f"<tr>{''.join(cells)}</tr>")
+        grid = f"<div class='tb-grid-scroll'><table class='tb-grid'><thead><tr>{''.join(headers)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>" if days and periods else "<div class='tb-empty'>Configure at least one instructional day and one teaching period in Timetable Setup.</div>"
         add_form = (
             f"""<section class='tb-panel'><div><span class='tb-kicker'>MANUAL SCHEDULING</span><h3>Add a lesson</h3><p>Choose an existing class, subject and allocated teacher. Lesson duration follows the weekly requirement.</p></div><form method='post' action='/app/timetable/builder/add' class='tb-add-form'><input type='hidden' name='profile_id' value='{pid}'><label class='wide'>Class · subject · teacher<select name='allocation' required><option value=''>Select configured requirement</option>{allocation_options}</select></label><label>Day<select name='day_id' required><option value=''>Select day</option>{day_options}</select></label><label>Start period<select name='period_id' required><option value=''>Select period</option>{period_options}</select></label><label>Room<select name='room_id'>{room_options}</select></label><button class='tb-btn'>＋ Add lesson</button></form></section>"""
             if not read_only and allocations and days and periods else
