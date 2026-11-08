@@ -30,6 +30,7 @@ from app.timetable.views_routes import register_timetable_view_routes
 from app.timetable.export_routes import register_timetable_export_routes
 from app.timetable.publishing_routes import register_timetable_publishing_routes
 from app.timetable.portal_routes import register_timetable_portal_routes
+from app.db import RequestDatabaseConnectionMiddleware
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -38,6 +39,9 @@ BUILD_COMMIT = "students-save-role-fix-2026-10-04"
 app = FastAPI()
 # Compress larger responses to reduce transfer time on mobile connections.
 app.add_middleware(GZipMiddleware, minimum_size=700)
+# Ensure pooled PostgreSQL connections are returned even when a legacy route
+# raises before reaching its own con.close() statement.
+app.add_middleware(RequestDatabaseConnectionMiddleware)
 
 # Render/Uvicorn must be able to bind the HTTP port even when PostgreSQL
 # migrations take time. Database initialization therefore runs in a background
