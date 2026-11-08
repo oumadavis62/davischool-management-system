@@ -118,6 +118,31 @@ class TimetableViewTests(unittest.TestCase):
         self.assertEqual(set(result["weekend_groups"]), {"Weekend 1", "Weekend 2"})
         self.assertEqual(len(result["remedial_sessions"]), 2)
 
+    def test_calendar_dated_instructional_sessions_are_exposed(self):
+        cur = self.db.cursor()
+        cur.execute(
+            """INSERT INTO ds_timetable_sessions
+               (school_id,profile_id,schedule_layer,session_type,day_id,session_date,
+                subject_id,start_time,end_time,duration_periods,status,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (1,self.profile_id,"instructional","lesson",self.day_id,"2027-01-04",
+             30,"08:00","08:40",1,"scheduled","2027-01-01","2027-01-01"),
+        )
+        session_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO ds_timetable_session_classes(school_id,profile_id,session_id,class_id) VALUES(?,?,?,?)",
+            (1,self.profile_id,session_id,20),
+        )
+        cur.execute(
+            "INSERT INTO ds_timetable_session_teachers(school_id,profile_id,session_id,teacher_id) VALUES(?,?,?,?)",
+            (1,self.profile_id,session_id,10),
+        )
+        self.db.commit()
+        result = get_timetable_view(self.db, 1, self.profile_id, "school")
+        self.assertEqual(len(result["dated_instructional_sessions"]), 1)
+        self.assertEqual(result["dated_instructional_sessions"][0]["session_date"], "2027-01-04")
+        self.assertEqual(result["dated_instructional_sessions"][0]["class_names"], "Grade 7 Blue")
+
     def test_views_reject_cross_school_targets(self):
         with self.assertRaises(Exception):
             get_timetable_view(self.db, 2, self.profile_id, "class", 20)
