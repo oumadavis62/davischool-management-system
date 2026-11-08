@@ -394,6 +394,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             for row in ws.iter_rows():
                 for cell in row:
                     cell.border = Border(bottom=thin)
+        # Keep every worksheet printable on standard A4 paper. Wide timetables
+        # and details scale to one page wide; weekend rotations remain a single
+        # consolidated A4 page as explicitly requested.
+        for ws in workbook.worksheets:
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+            ws.page_setup.orientation = "landscape"
+            ws.page_setup.paperSize = ws.PAPERSIZE_A4
+            ws.page_setup.fitToWidth = 1
+            if ws.title == "Weekend Lessons":
+                ws.page_setup.fitToHeight = 1
+                ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
+                ws.print_area = "A1:J" + str(ws.max_row)
+            else:
+                ws.page_setup.fitToHeight = 0
+
         workbook.save(buffer)
         buffer.seek(0)
         filename = filename_prefix(school,result) + ".xlsx"
