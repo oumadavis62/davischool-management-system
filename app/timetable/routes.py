@@ -455,10 +455,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 for item in sorted(group["subjects"], key=lambda x: x["subject"].lower())
             )
             modal_id = f"tt-subject-breakdown-{cid}"
-            allocation_editor_url = "/school/subject-allocation"
+            allocation_editor_url = "/school/subject-allocation?class_id=" + quote(str(cid), safe="")
             current_tab_id = str(request.scope.get("davischool_tab_id") or "")
             if current_tab_id:
-                allocation_editor_url += "?ds_tab=" + quote(current_tab_id, safe="")
+                allocation_editor_url += "&ds_tab=" + quote(current_tab_id, safe="")
             allocation_monitor_rows.append(
                 f"<tr class='tt-allocation-summary'><td><b>{esc(group['class_name'])} {esc(group['stream'])}</b><small>{group['configured']} of {len(group['subjects'])} subject loads configured</small></td>"
                 f"<td><b>{group['total']}</b> lessons / week</td><td>{maximum_value if maximum_value is not None else 'Not set'}</td>"
