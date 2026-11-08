@@ -472,7 +472,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 buttons.forEach(button=>button.disabled=false);
                 delete form.dataset.ajaxBusy;
               }}
-            }},true);
+            }},false);
           }}
           let serial=0;
           root.querySelectorAll('.tt-section').forEach(section=>{{
@@ -694,15 +694,37 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                          ("ds_timetable_sessions", "room_id"),
                          ("ds_timetable_constraints", "room_id")),
             }
-            for ref_table, ref_column in references.get(kind, ()):
-                used = cur.execute(
-                    f"SELECT 1 FROM {ref_table} WHERE school_id=? AND {ref_column}=? LIMIT 1",
-                    (school_id, int(row_id)),
-                ).fetchone()
-                if used:
-                    raise TimetableSetupError(
-                        "This row is already used by timetable records. Remove or reassign those records first."
-                    )
+            if kind == "period":
+                # Availability preferences and period-specific constraints are
+                # setup metadata; remove them with the period. Actual scheduled
+                # lessons/sessions must be reassigned before a period is removed.
+                for ref_table in ("ds_timetable_lessons", "ds_timetable_sessions"):
+                    used = cur.execute(
+                        f"SELECT 1 FROM {ref_table} WHERE school_id=? AND profile_id=? AND period_id=? LIMIT 1",
+                        (school_id, int(profile_id), int(row_id)),
+                    ).fetchone()
+                    if used:
+                        raise TimetableSetupError(
+                            "This teaching period is already used by a scheduled lesson or timetable session. Reassign those lessons first."
+                        )
+                cur.execute(
+                    "DELETE FROM ds_timetable_teacher_availability WHERE school_id=? AND profile_id=? AND period_id=?",
+                    (school_id, int(profile_id), int(row_id)),
+                )
+                cur.execute(
+                    "DELETE FROM ds_timetable_constraints WHERE school_id=? AND profile_id=? AND period_id=?",
+                    (school_id, int(profile_id), int(row_id)),
+                )
+            else:
+                for ref_table, ref_column in references.get(kind, ()):
+                    used = cur.execute(
+                        f"SELECT 1 FROM {ref_table} WHERE school_id=? AND {ref_column}=? LIMIT 1",
+                        (school_id, int(row_id)),
+                    ).fetchone()
+                    if used:
+                        raise TimetableSetupError(
+                            "This row is already used by timetable records. Remove or reassign those records first."
+                        )
             cur.execute(f"DELETE FROM {table} WHERE {where}", params)
             con.commit()
             return redirect_setup(profile_id, "Setup row deleted.")
