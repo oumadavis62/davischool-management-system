@@ -33,7 +33,7 @@ def timetable_workspace(request, body):
         @media(max-width:600px){.tt-setup-tabs{margin-left:-4px;margin-right:-4px;border-radius:12px}.tt-setup-tabs button{min-height:40px;padding:9px 12px;font-size:11px}}
       </style>
       <script>
-      (function(){
+      function initTimetableSetupTabs(){
         const root=document.querySelector('.tt-wrap');
         if(!root)return;
         const sections=[...root.querySelectorAll('.tt-section')];
@@ -86,7 +86,12 @@ def timetable_workspace(request, body):
         });
         sections[0].parentNode.insertBefore(nav,sections[0]);
         activate(initial);
-      })();
+      }
+      if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',initTimetableSetupTabs,{once:true});
+      }else{
+        initTimetableSetupTabs();
+      }
       </script>
     """
     return marker + intro + body
