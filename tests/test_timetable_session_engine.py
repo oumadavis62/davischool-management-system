@@ -4,7 +4,7 @@ import unittest
 
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_limits, TimetableSetupError
-from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint
+from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint, create_schedule_template, save_schedule_slot, assign_day_template
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
@@ -52,6 +52,47 @@ class TimetableSessionEngineTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+
+    def test_dated_instructional_session_obeys_date_template_and_breaks(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday teaching day", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Period 1",
+            "instructional", "08:00", "08:40", 1,
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 2, "Morning break",
+            "break", "08:40", "09:00",
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 3, "Period 2",
+            "instructional", "09:00", "09:40", 2,
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        valid = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "08:40",
+            class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+            session_date="2027-03-01",
+        )
+        self.assertGreater(valid, 0)
+        with self.assertRaisesRegex(TimetableSetupError, "date's instructional template"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:40", "09:00",
+                class_ids=[2], teacher_ids=[12], day_id=self.day_id,
+                session_date="2027-03-01",
+            )
+        with self.assertRaisesRegex(TimetableSetupError, "cannot span a break"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:40",
+                class_ids=[3], teacher_ids=[12], day_id=self.day_id,
+                session_date="2027-03-01",
+            )
 
     def test_combined_classes_and_team_teaching_are_saved_once(self):
         group = create_teaching_group(
