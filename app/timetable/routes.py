@@ -479,13 +479,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         <script>
         (function(){{
           const root=document.querySelector('.tt-wrap'); if(!root) return;
-          let ttPreviousBodyOverflow=null;
+          // The setup workspace lives inside the application's own scrolling
+          // container on some devices. Do not lock body overflow for a modal:
+          // that can leave the app shell unable to scroll after an AJAX refresh.
           function releaseTimetableScrollLock(){{
-            if(ttPreviousBodyOverflow!==null){{
-              document.body.style.overflow=ttPreviousBodyOverflow;
-              ttPreviousBodyOverflow=null;
-            }}
             document.querySelectorAll('.tt-modal.is-open').forEach(modal=>modal.classList.remove('is-open'));
+            document.body.classList.remove('tt-modal-scroll-locked');
+            document.documentElement.classList.remove('tt-modal-scroll-locked');
+            document.body.style.removeProperty('touch-action');
+            document.documentElement.style.removeProperty('touch-action');
           }}
           // Make every setup POST form carry the active tab session explicitly.
           // These forms are moved into modal containers below; this local guard
@@ -630,8 +632,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 if(!nextRoot) throw new Error('The server response did not contain the timetable setup page. The server may have redirected your session.');
                 const currentRoot=document.querySelector('.tt-wrap');
                 if(!currentRoot) throw new Error('The timetable setup page is no longer available.');
-                // Replacing the setup workspace also removes its modal. Always
-                // release the body scroll lock before removing that modal host.
+                // Preserve the active scroll position (including the app's
+                // nested scrolling pane) while replacing the setup workspace.
+                const windowScrollY=window.scrollY||0;
+                const scrollSnapshots=[];
+                let scrollNode=currentRoot;
+                while(scrollNode){{
+                  if(scrollNode.scrollHeight>scrollNode.clientHeight+1) scrollSnapshots.push({{node:scrollNode,top:scrollNode.scrollTop,left:scrollNode.scrollLeft}});
+                  scrollNode=scrollNode.parentElement;
+                }}
+                const openSections=Array.from(currentRoot.querySelectorAll('.tt-section.tt-step-open h3')).map(node=>node.textContent.trim());
+                // Remove any stale overlay state before the old modal nodes are discarded.
                 releaseTimetableScrollLock();
                 currentRoot.replaceWith(nextRoot);
                 const initializer=Array.from(parsed.scripts).find(script=>script.textContent.includes('Keep every setup panel collapsed'));
@@ -641,6 +652,17 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                   document.body.appendChild(fresh);
                   fresh.remove();
                 }}
+                // Re-open the section the user was editing and restore both
+                // document and application-pane scroll offsets after layout.
+                openSections.forEach(title=>{{
+                  const section=Array.from(nextRoot.querySelectorAll('.tt-section')).find(item=>(item.querySelector('h3')?.textContent||'').trim()===title);
+                  const toggle=section?.querySelector('.tt-section-toggle');
+                  if(toggle&&toggle.getAttribute('aria-expanded')!=='true') toggle.click();
+                }});
+                requestAnimationFrame(()=>{{
+                  scrollSnapshots.forEach(item=>{{if(item.node&&item.node.isConnected){{item.node.scrollTop=item.top;item.node.scrollLeft=item.left;}}}});
+                  window.scrollTo(0,windowScrollY);
+                }});
               }}catch(error){{
                 window.alert(error.message||'Unable to save this change. Please try again.');
                 if(submitter&&oldText) submitter.textContent=oldText;
@@ -667,8 +689,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const openModal=(form,mode)=>{{
               formSlot.replaceChildren(form);
               copy.querySelector('h3').textContent=(mode==='edit'?'Edit ':'Add ')+title;
-              if(ttPreviousBodyOverflow===null) ttPreviousBodyOverflow=document.body.style.overflow;
-              host.classList.add('is-open'); document.body.style.overflow='hidden'; close.focus();
+              host.classList.add('is-open'); close.focus();
             }};
             const closeModal=()=>{{
               host.classList.remove('is-open'); releaseTimetableScrollLock();
