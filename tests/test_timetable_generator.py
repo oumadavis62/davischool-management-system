@@ -61,6 +61,57 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertTrue(all(row["room_id"] is not None for row in rows))
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
 
+    def test_repeated_weekly_occurrences_use_symmetry_breaking(self):
+        # Forty interchangeable occurrences across eight subjects must fill
+        # forty distinct weekly slots without exploring factorial permutations.
+        for code, name, order in (
+            ("WED", "Wednesday", 3), ("THU", "Thursday", 4), ("FRI", "Friday", 5)
+        ):
+            save_day(self.db, 1, self.profile_id, code, name, order)
+        periods = (
+            ("09:20", "10:00"), ("10:00", "10:40"), ("10:40", "11:20"),
+            ("11:20", "12:00"), ("12:00", "12:40"), ("12:40", "13:20"),
+        )
+        for number, (start, end) in enumerate(periods, start=3):
+            save_period(self.db, 1, self.profile_id, number, f"Period {number}", start, end)
+
+        save_class_requirement(
+            self.db, 1, self.profile_id, 20, 30, 10, 5, 1, 1, False
+        )
+        for index in range(7):
+            teacher_id = 11 + index
+            subject_id = 31 + index
+            self.db.execute(
+                "INSERT INTO teachers VALUES(?,?,?)",
+                (teacher_id, 1, f"Teacher {teacher_id}"),
+            )
+            self.db.execute(
+                "INSERT INTO subjects VALUES(?,?,?)",
+                (subject_id, 1, f"Subject {subject_id}"),
+            )
+            self.db.execute(
+                "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
+                (index + 2, 1, teacher_id, subject_id, 20),
+            )
+            save_class_requirement(
+                self.db, 1, self.profile_id, 20, subject_id, teacher_id, 5, 1, 1, False
+            )
+        save_class_limits(self.db, 1, self.profile_id, 20, 40, 8)
+
+        result = generate_timetable(
+            self.db, 1, self.profile_id, "admin@test", node_limit=500
+        )
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["generated_lessons"], 40)
+        self.assertLessEqual(result["search_nodes"], 500)
+        rows = self.db.execute(
+            """SELECT day_id,period_id FROM ds_timetable_lessons
+               WHERE generation_run_id=?""",
+            (result["run_id"],),
+        ).fetchall()
+        self.assertEqual(len(rows), 40)
+        self.assertEqual(len({(row["day_id"], row["period_id"]) for row in rows}), 40)
+
     def test_specialist_room_is_not_forced_for_ordinary_lessons(self):
         self.db.execute(
             "UPDATE ds_timetable_rooms SET room_type='laboratory' WHERE school_id=1"
