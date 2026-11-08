@@ -265,7 +265,7 @@ def _choose_requirement_room(connection: Any, school_id: int, profile_id: int,
             if str(row["allocation_mode"] or "shared") != "dedicated"
             or int(row["assigned_class_id"] or 0) in class_ids
         ]
-        if mode == "preferred" and preferred_id is not None:
+        if mode == "preferred" and preferred_id is not None and preferred_id in candidates:
             candidates = [preferred_id] + [value for value in candidates if value != preferred_id]
     if not candidates and not requirement["room_type"] and mode == "automatic":
         return None

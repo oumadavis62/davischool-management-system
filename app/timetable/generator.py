@@ -789,7 +789,9 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                             or int(r["assigned_class_id"] or 0) in task["classes"])
                         and (r["capacity"] is None or int(r["capacity"]) >= room_enrolment)
                     ]
-                    if task["room_assignment_mode"] == "preferred" and task["preferred_room_id"] is not None:
+                    if (task["room_assignment_mode"] == "preferred"
+                            and task["preferred_room_id"] is not None
+                            and task["preferred_room_id"] in room_ids):
                         room_ids = [task["preferred_room_id"]] + [value for value in room_ids if value != task["preferred_room_id"]]
                 else:
                     room_ids = [None]
