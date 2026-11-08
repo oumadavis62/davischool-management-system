@@ -356,3 +356,58 @@ def save_class_requirement(connection: Any, school_id: int, profile_id: int, cla
             (school_id, profile_id, class_id, subject_id, teacher_id) + values,
         )
     connection.commit()
+
+
+def save_subject_requirements(connection: Any, school_id: int, profile_id: int,
+                              subject_ids: list[int], lessons_per_week: int,
+                              duration_periods: int = 1,
+                              max_lessons_per_day: int | None = None,
+                              allow_double: bool = False) -> tuple[int, int, int]:
+    """Apply selected subject loads to every allocated class/teacher combination.
+
+    The user selects subjects, not individual allocations. Existing teacher
+    allocations supply the class and teacher links required by the legacy
+    timetable generator. Existing customized requirements are never replaced.
+    Returns (selected_subject_count, created_count, preserved_count).
+    """
+    selected_subjects = sorted({int(value) for value in subject_ids})
+    if not selected_subjects:
+        raise TimetableSetupError("Select at least one subject.")
+    if not 1 <= int(lessons_per_week) <= 30 or not 1 <= int(duration_periods) <= 4:
+        raise TimetableSetupError("Choose a valid weekly lesson load and lesson duration.")
+    if max_lessons_per_day is not None and not 1 <= int(max_lessons_per_day) <= 10:
+        raise TimetableSetupError("Maximum lessons per day must be between 1 and 10.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    placeholders = ",".join("?" for _ in selected_subjects)
+    rows = cur.execute(
+        f"""SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
+            FROM teacher_allocations ta
+            JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id
+            JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id
+            JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id
+            WHERE ta.school_id=? AND ta.subject_id IN ({placeholders})
+            ORDER BY ta.subject_id,ta.class_id,ta.teacher_id""",
+        (int(school_id), *selected_subjects),
+    ).fetchall()
+    if not rows:
+        raise TimetableSetupError(
+            "The selected subjects have no active class and teacher allocations in this school."
+        )
+    created = preserved = 0
+    for row in rows:
+        exists = cur.execute(
+            """SELECT id FROM ds_timetable_class_requirements
+               WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=? LIMIT 1""",
+            (school_id, profile_id, row["class_id"], row["subject_id"], row["teacher_id"]),
+        ).fetchone()
+        if exists:
+            preserved += 1
+            continue
+        save_class_requirement(
+            connection, school_id, profile_id, int(row["class_id"]),
+            int(row["subject_id"]), int(row["teacher_id"]), int(lessons_per_week),
+            int(duration_periods), max_lessons_per_day, allow_double,
+        )
+        created += 1
+    return len(selected_subjects), created, preserved
