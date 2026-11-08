@@ -337,14 +337,19 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             subject = next((z["name"] for z in subject_records if int(z["id"])==int(group["subject_id"] or 0)), "—")
             group_rows.append(f"""<tr><td>{esc(group['name'])}</td><td>{esc(group['group_type'])}</td><td>{esc(subject)}</td><td>{esc(', '.join(str(z['name']) + (' '+str(z['stream']) if z['stream'] else '') for z in group_classes))}</td><td>{'Active' if int(group['is_active'] or 0) else 'Inactive'}</td><td><button type='button' class='tb-small' onclick="selectBuilderRequirement({int(req['id']) if req else 0})" {'disabled' if not req or read_only else ''}>Place session</button><form method='post' action='/app/timetable/builder/deactivate-group' onsubmit="return confirm('Deactivate this combined group and its requirement?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='group_id' value='{int(group['id'])}'><button class='tb-delete' {'disabled' if read_only or not int(group['is_active'] or 0) else ''}>Deactivate</button></form></td></tr>""")
         group_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED GROUPS</span><h3>Combined classes & co-teaching groups</h3><p>Manage shared teaching groups created in this builder.</p></div><span class='tb-count'>{len(teaching_groups)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Group</th><th>Type</th><th>Subject</th><th>Classes / streams</th><th>Status</th><th>Actions</th></tr></thead><tbody>{''.join(group_rows) or "<tr><td colspan='6' class='tb-empty-cell'>No combined groups saved yet.</td></tr>"}</tbody></table></div></section>"""
+        requirement_rows = "".join(
+            f"""<tr><td>{esc(x['name'])}</td><td>{esc(x['schedule_layer'])}</td><td>{int(x['weekly_occurrences'])}</td><td>{int(x['weekly_periods'])}</td><td>{esc(x['room_type'] or 'Any')}</td><td><button type='button' class='tb-small' onclick="selectBuilderRequirement({int(x['id'])})" {'disabled' if read_only else ''}>Place session</button><form method='post' action='/app/timetable/builder/deactivate-requirement' onsubmit="return confirm('Deactivate this scheduling requirement?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='requirement_id' value='{int(x['id'])}'><button class='tb-delete' {'disabled' if read_only else ''}>Deactivate</button></form></td></tr>"""
+            for x in advanced_requirements
+        ) or "<tr><td colspan='6' class='tb-empty-cell'>No active scheduling requirements saved yet.</td></tr>"
+        requirement_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED REQUIREMENTS</span><h3>Advanced scheduling requirements</h3><p>Combined sessions, co-teaching and other normalized requirements.</p></div><span class='tb-count'>{len(advanced_requirements)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Requirement</th><th>Layer</th><th>Sessions / week</th><th>Periods / week</th><th>Room type</th><th>Actions</th></tr></thead><tbody>{requirement_rows}</tbody></table></div></section>"""
         room_rule_rows = "".join(f"""<tr><td>{esc(x['name'])}</td><td>{esc(x['room_type'] or 'Any suitable room')}</td><td>{esc(x['room_assignment_mode'])}</td><td>{esc(x['preferred_room_name'] or '—')}</td><td><button type='button' class='tb-small' onclick="editRoomRule({int(x['id'])},'{esc(x['room_assignment_mode'] or 'automatic')}','{int(x['preferred_room_id'] or 0)}')" {'disabled' if read_only else ''}>Edit rule</button></td></tr>""" for x in room_rules) or "<tr><td colspan='5' class='tb-empty-cell'>No room rules saved yet.</td></tr>"
         room_rule_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED ROOM RULES</span><h3>Room allocation rules</h3><p>Edit loads the saved rule into the editor above.</p></div><span class='tb-count'>{len(room_rules)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Requirement</th><th>Room type</th><th>Mode</th><th>Selected room</th><th>Actions</th></tr></thead><tbody>{room_rule_rows}</tbody></table></div></section>"""
         con.close()
         advanced_session_rows = "".join(
-            f"<tr><td>{esc(x['day_name'] or x['session_date'] or '—')}</td><td>{esc(x['period_label'] or (str(x['start_time'])+'–'+str(x['end_time'])))}</td><td>{esc(x['subject_name'] or x['session_type'])}</td><td>{esc(x['class_names'] or 'Learner group')}</td><td>{esc(x['teacher_names'] or '—')}</td><td>{esc(x['room_name'] or 'No room')}</td></tr>"
+            f"""<tr><td>{esc(x['day_name'] or x['session_date'] or '—')}</td><td>{esc(x['period_label'] or (str(x['start_time'])+'–'+str(x['end_time'])))}</td><td>{esc(x['subject_name'] or x['session_type'])}</td><td>{esc(x['class_names'] or 'Learner group')}</td><td>{esc(x['teacher_names'] or '—')}</td><td>{esc(x['room_name'] or 'No room')}</td><td><form method='post' action='/app/timetable/builder/cancel-session' onsubmit="return confirm('Remove this session from the timetable?')"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='session_id' value='{int(x['id'])}'><button class='tb-delete' {'disabled' if read_only else ''}>Remove</button></form></td></tr>"""
             for x in advanced_sessions
-        ) or "<tr><td colspan='6'>No advanced sessions placed yet.</td></tr>"
-        advanced_session_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED ADVANCED SESSIONS</span><h3>Combined classes and team-taught lessons</h3><p>Saved normalized sessions and dated placements.</p></div><span class='tb-count'>{len(advanced_sessions)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Day / date</th><th>Time</th><th>Subject / activity</th><th>Classes</th><th>Teaching team</th><th>Room</th></tr></thead><tbody>{advanced_session_rows}</tbody></table></div></section>"""
+        ) or "<tr><td colspan='7' class='tb-empty-cell'>No advanced sessions placed yet.</td></tr>"
+        advanced_session_table = f"""<section class='tb-panel tb-data-section'><div class='tb-section-head'><div><span class='tb-kicker'>SAVED ADVANCED SESSIONS</span><h3>Combined classes and team-taught lessons</h3><p>Saved normalized sessions and dated placements.</p></div><span class='tb-count'>{len(advanced_sessions)} records</span></div><div class='tb-table-scroll'><table class='tb-data-table'><thead><tr><th>Day / date</th><th>Time</th><th>Subject / activity</th><th>Classes</th><th>Teaching team</th><th>Room</th><th>Actions</th></tr></thead><tbody>{advanced_session_rows}</tbody></table></div></section>"""
         body = f"""
         <style>
         .tb-wrap{{max-width:1700px;margin:auto;padding:24px;color:#234638;background:linear-gradient(145deg,#edf6ef 0%,#e3f0e5 45%,#f8fbf8 100%);border-radius:25px}}
@@ -373,7 +378,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         @media(max-width:900px){{.tb-add-form{{grid-template-columns:1fr 1fr}}.tb-add-form label.wide{{grid-column:1/-1}}}}
         @media(max-width:600px){{.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
         </style>
-        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{basic_lesson_table}{combined_group_form}{group_table}{room_policy_form}{room_rule_table}{advanced_form}{dated_form}{advanced_session_table}{grid}</div>
+        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{basic_lesson_table}{combined_group_form}{group_table}{advanced_form}{requirement_table}{room_policy_form}{room_rule_table}{dated_form}{advanced_session_table}{grid}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tb-wrap');if(!root)return;
@@ -557,6 +562,84 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             save_scheduling_pattern(con, int(school["id"]), profile_id, requirement_id,
                 [{"duration_periods": int(duration_periods), "session_label": "Combined lesson"}])
             return redirect_builder(profile_id, "Combined class and co-teaching requirement created. It is ready to place in the timetable.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally: con.close()
+
+    @app.post("/app/timetable/builder/deactivate-group")
+    def deactivate_builder_group(request: Request, profile_id: int = Form(...), group_id: int = Form(...)):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            school_id = int(school["id"])
+            group = con.execute(
+                "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=?",
+                (group_id, school_id, profile_id),
+            ).fetchone()
+            if not group: raise TimetableSetupError("Combined teaching group not found.")
+            con.execute(
+                "UPDATE ds_timetable_scheduling_requirements SET is_active=0 WHERE school_id=? AND profile_id=? AND teaching_group_id=?",
+                (school_id, profile_id, group_id),
+            )
+            con.execute(
+                "UPDATE ds_timetable_teaching_groups SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                (group_id, school_id, profile_id),
+            )
+            con.commit()
+            return redirect_builder(profile_id, "Combined group deactivated; saved history is retained.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally: con.close()
+
+    @app.post("/app/timetable/builder/deactivate-requirement")
+    def deactivate_builder_requirement(request: Request, profile_id: int = Form(...), requirement_id: int = Form(...)):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            cur = con.cursor()
+            row = cur.execute(
+                "SELECT teaching_group_id FROM ds_timetable_scheduling_requirements WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+                (requirement_id, int(school["id"]), profile_id),
+            ).fetchone()
+            if not row: raise TimetableSetupError("Active scheduling requirement not found.")
+            cur.execute(
+                "UPDATE ds_timetable_scheduling_requirements SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                (requirement_id, int(school["id"]), profile_id),
+            )
+            if row["teaching_group_id"] is not None:
+                cur.execute(
+                    "UPDATE ds_timetable_teaching_groups SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                    (int(row["teaching_group_id"]), int(school["id"]), profile_id),
+                )
+            con.commit()
+            return redirect_builder(profile_id, "Scheduling requirement deactivated; saved session history is retained.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally: con.close()
+
+    @app.post("/app/timetable/builder/cancel-session")
+    def cancel_builder_session(request: Request, profile_id: int = Form(...), session_id: int = Form(...)):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            cur = con.cursor()
+            row = cur.execute(
+                "SELECT id FROM ds_timetable_sessions WHERE id=? AND school_id=? AND profile_id=? AND status='scheduled'",
+                (session_id, int(school["id"]), profile_id),
+            ).fetchone()
+            if not row: raise TimetableSetupError("Scheduled session not found.")
+            cur.execute(
+                "UPDATE ds_timetable_sessions SET status='cancelled' WHERE id=? AND school_id=? AND profile_id=?",
+                (session_id, int(school["id"]), profile_id),
+            )
+            con.commit()
+            return redirect_builder(profile_id, "Session removed from the active timetable; its record is retained.")
         except (TimetableSetupError, ValueError) as exc:
             con.rollback()
             return redirect_builder(profile_id, str(exc), True)
