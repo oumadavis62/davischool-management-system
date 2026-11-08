@@ -9,6 +9,7 @@ from app.timetable.advanced_setup import (
     create_rotation_cycle,
     create_schedule_template,
     save_rotation_week,
+    resolve_calendar_occurrence,
     save_schedule_slot,
     save_requirement_session_pattern,
 )
@@ -137,6 +138,40 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
             (requirement_id,),
         ).fetchone()["n"]
         self.assertEqual(preserved, 4)
+
+
+    def test_calendar_occurrence_resolves_weekday_weekend_exception_and_template(self):
+        from app.timetable.setup import save_day, save_calendar_exception
+        from app.timetable.advanced_setup import create_schedule_template, assign_day_template
+
+        monday = save_day(self.db, 12, self.profile_id, "MON", "Monday", 1)
+        saturday = save_day(self.db, 12, self.profile_id, "SAT", "Saturday", 6, instructional=False)
+        template = create_schedule_template(self.db, 12, self.profile_id, "Saturday remedial", "weekend")
+        assign_day_template(self.db, 12, self.profile_id, saturday, template)
+        save_calendar_exception(
+            self.db, 12, self.profile_id, "2027-03-06", "Saturday remedial",
+            "special_instruction", instructional=True,
+        )
+        regular = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-01")
+        weekend = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-06")
+        self.assertEqual(regular["day_id"], monday)
+        self.assertTrue(regular["is_instructional"])
+        self.assertEqual(weekend["day_id"], saturday)
+        self.assertTrue(weekend["is_instructional"])
+        self.assertEqual(weekend["template_id"], template)
+        self.assertEqual(weekend["exceptions"][0]["label"], "Saturday remedial")
+
+    def test_calendar_occurrence_repeats_department_rotation_from_anchor(self):
+        cycle = create_rotation_cycle(self.db, 12, self.profile_id, "Departments", 3, "2027-03-01")
+        save_rotation_week(self.db, 12, self.profile_id, cycle, 1, "Science", "SCI")
+        save_rotation_week(self.db, 12, self.profile_id, cycle, 2, "Languages", "LANG")
+        save_rotation_week(self.db, 12, self.profile_id, cycle, 3, "Humanities", "HUM")
+        week_one = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-01")
+        week_three = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-15")
+        week_four = resolve_calendar_occurrence(self.db, 12, self.profile_id, cycle, "2027-03-22") if False else resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-22")
+        self.assertEqual(week_one["rotations"][0]["week"]["department_code"], "SCI")
+        self.assertEqual(week_three["rotations"][0]["week"]["department_code"], "HUM")
+        self.assertEqual(week_four["rotations"][0]["week_number"], 1)
 
     def test_rotation_programme_requires_a_cycle(self):
         with self.assertRaises(TimetableSetupError):
