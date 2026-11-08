@@ -687,7 +687,7 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
                 subject_id,teacher_id,class_id,room_id,day_id,period_id,start_time,end_time,
                 effective_from,effective_to,reason,is_active,created_at,updated_at)
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
-            (school_id,profile_id)+values,
+            (school_id,profile_id)+values[:-1]+(now,now),
         )
         saved_id = int(cur.lastrowid)
     connection.commit()
