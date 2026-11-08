@@ -661,6 +661,15 @@ def save_timetable_constraint(connection: Any, school_id: int, profile_id: int,
             (int(value), school_id),
         ).fetchone():
             raise TimetableSetupError(f"The selected {label} does not belong to this school.")
+    duplicate_params = (school_id, profile_id, name.strip().lower())
+    duplicate_sql = """SELECT id FROM ds_timetable_constraints
+                       WHERE school_id=? AND profile_id=? AND lower(name)=?"""
+    if constraint_id is not None:
+        duplicate_sql += " AND id<>?"
+        duplicate_params += (int(constraint_id),)
+    if cur.execute(duplicate_sql, duplicate_params).fetchone():
+        raise TimetableSetupError("A constraint with this name already exists in this timetable profile. Choose a different name.")
+
     now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     values = (name,constraint_type,applies_to,schedule_layer,subject_id,teacher_id,
               class_id,room_id,day_id,period_id,start_time,end_time,effective_from,

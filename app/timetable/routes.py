@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from html import escape
+import logging
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -876,7 +879,6 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           <div class='wide'><label>Reason / instruction</label><input name='reason' id='tt-rule-reason' maxlength='500' placeholder='Explain why this rule is needed'></div></div>
           <div class='form-foot'><button type='button' class='secondary' data-close='tt-rule-editor'>Cancel</button><button type='submit' class='primary'>Save constraint</button></div></div></form></div></div>
           <div class='modal' id='tt-rule-filter' aria-hidden='true'><div class='modal-card filter-card' role='dialog' aria-modal='true'><div class='modal-head'><h3>Filter constraints</h3><button type='button' class='close' data-close='tt-rule-filter'>×</button></div><div class='filter-body'><div><label>Behavior</label><select id='tt-rule-type-filter'><option value=''>All behaviors</option><option value='prohibit'>Prohibit</option><option value='require'>Require</option><option value='prefer'>Prefer</option></select></div><div><label>Status</label><select id='tt-rule-status-filter'><option value=''>All statuses</option><option value='active'>Active</option><option value='inactive'>Inactive</option></select></div><div class='form-foot'><button type='button' class='secondary' id='tt-rule-reset'>Reset</button><button type='button' class='primary' data-close='tt-rule-filter'>Apply</button></div></div></div></div>
-          <p style='margin:14px 4px'><a href='/app/timetable/setup?profile_id={pid}' style='color:#34764d;font-weight:800;text-decoration:none'>← Back to timetable setup</a></p>
         </div>
         <script>
         (function(){{
@@ -949,7 +951,13 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             )
             return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&message=Constraint%20saved", 303)
         except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
             return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303)
+        except Exception:
+            con.rollback()
+            logger.exception("Failed to save timetable constraint for profile %s", profile_id)
+            message = "The constraint could not be saved because of a server or database error. Please review the rule and try again."
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&error=1&message={quote(message)}", 303)
         finally:
             con.close()
 
