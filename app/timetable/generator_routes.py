@@ -203,11 +203,13 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             try:
                 if int(advanced_count or 0):
                     advanced_result = generate_advanced_instructional_sessions(
-                        con, int(school["id"]), profile_id, request.session.get("email", "")
+                        con, int(school["id"]), profile_id, request.session.get("email", ""),
+                        defer_replacement=True,
                     )
                     created_advanced_ids = list(advanced_result.get("session_ids") or [])
                 result = generate_timetable(
-                    con, int(school["id"]), profile_id, request.session.get("email", "")
+                    con, int(school["id"]), profile_id, request.session.get("email", ""),
+                    normalized_run_id=(advanced_result or {}).get("run_id"),
                 )
                 if result.get("status") != "completed":
                     if created_advanced_ids:
@@ -221,6 +223,15 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                     return redirect_generator(profile_id, int(result.get("run_id") or 0),
                                               result.get("message", "Generation failed."), True)
                 if advanced_result:
+                    previous_ids = list(advanced_result.get("previous_session_ids") or [])
+                    if previous_ids:
+                        marks = ",".join("?" for _ in previous_ids)
+                        con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(previous_ids))
+                        con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(previous_ids))
+                        con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(previous_ids))
+                        con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                                    (int(school["id"]), profile_id, *previous_ids))
+                        con.commit()
                     result["generated_sessions"] = int(advanced_result.get("generated_sessions") or 0)
                     result["message"] = (
                         str(result.get("message") or "Weekly timetable generated.") +

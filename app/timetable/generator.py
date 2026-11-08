@@ -107,7 +107,7 @@ def _score(task, candidate, placements) -> float:
     return score
 
 
-def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT, normalized_run_id: int | None = None) -> dict:
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
     active_run = cur.execute(
@@ -534,7 +534,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     placement["start_time"], placement["end_time"],
                     class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
                     room_id=placement.get("room_id"), day_id=placement["day_id"],
-                    include_legacy_lessons=False,
+                    include_legacy_lessons=False, generated_run_id=normalized_run_id,
                 ):
                     continue
                 if not _can_place(task, placement, placements):
@@ -679,7 +679,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
 def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                                              profile_id: int, created_by: str = "",
-                                             node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+                                             node_limit: int = DEFAULT_NODE_LIMIT,
+                                             defer_replacement: bool = False) -> dict:
     """Place normalized multi-class/team-teaching requirements using the shared engine.
 
     This deliberately writes to ds_timetable_sessions; legacy single-class rows
@@ -980,7 +981,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             (school_id, profile_id, run_id),
         ).fetchall()
         old_ids = [int(row["id"]) for row in old_rows]
-        if old_ids:
+        if old_ids and not defer_replacement:
             marks = ",".join("?" for _ in old_ids)
             cur.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(old_ids))
             cur.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(old_ids))
@@ -1019,6 +1020,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         "run_id": run_id,
         "generated_sessions": len(created),
         "session_ids": created,
+        "previous_session_ids": old_ids,
         "search_nodes": nodes,
         "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
     }
