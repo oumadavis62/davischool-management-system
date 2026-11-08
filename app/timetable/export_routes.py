@@ -175,7 +175,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Timetable"
-        last_col = 2 + len(result["days"])
+        from openpyxl.utils import get_column_letter
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        last_col = 1 + len(timeline)
         sheet.merge_cells(start_row=1,start_column=1,end_row=1,end_column=last_col)
         sheet.cell(1,1,str(school["name"] or "School"))
         sheet.cell(1,1).font = Font(bold=True,size=16,color="174A31")
@@ -189,58 +195,50 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         sheet.cell(3,1,profile_text)
         sheet.cell(3,1).alignment = Alignment(horizontal="center")
         header_row = 5
-        headers = ["Period","Time"] + [str(d["day_name"]) for d in result["days"]]
+        headers = ["Day"] + [
+            (str(item["label"]) + "\n" + str(item["start_time"]) + "–" + str(item["end_time"]))
+            for _, _, item in timeline
+        ]
         for col, value in enumerate(headers,1):
             cell = sheet.cell(header_row,col,value)
             cell.font = Font(bold=True,color="FFFFFF")
             cell.fill = PatternFill("solid",fgColor="17633B")
-            cell.alignment = Alignment(horizontal="center",vertical="center")
+            cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
         starts, continued = cell_map(result)
-        timeline = sorted(
-            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
-            [(str(b["start_time"]), "break", b) for b in result.get("breaks", [])],
-            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
-        )
+        break_columns = {index + 2 for index, (_, kind, _) in enumerate(timeline) if kind == "break"}
         row_index = header_row + 1
-        for _, item_type, item in timeline:
-            if item_type == "break":
-                label = str(item["label"])
-                sheet.cell(row_index,1,label)
-                sheet.cell(row_index,2,str(item["start_time"])+"–"+str(item["end_time"]))
-                for col in range(3,last_col+1):
-                    sheet.cell(row_index,col,label)
-                for cell in sheet[row_index][:last_col]:
+        for day in result["days"]:
+            sheet.cell(row_index,1,str(day["day_name"]))
+            sheet.cell(row_index,1).font = Font(bold=True,color="315B3E")
+            for col, (_, item_type, item) in enumerate(timeline,2):
+                cell = sheet.cell(row_index,col)
+                if item_type == "break":
+                    cell.value = str(item["label"])
                     cell.fill = PatternFill("solid",fgColor="F1EAD8")
                     cell.font = Font(bold=True,color="75551D")
-                    cell.alignment = Alignment(horizontal="center",vertical="center")
-                sheet.row_dimensions[row_index].height = 26
-                row_index += 1
-                continue
-            period = item
-            sheet.cell(row_index,1,str(period["label"]))
-            sheet.cell(row_index,2,str(period["start_time"])+"–"+str(period["end_time"]))
-            for col, day in enumerate(result["days"],3):
-                key = (int(day["id"]),int(period["id"]))
+                    cell.alignment = Alignment(horizontal="center",vertical="center",wrap_text=True)
+                    continue
+                key = (int(day["id"]),int(item["id"]))
                 if key in starts:
                     lines = []
                     for lesson in starts[key]:
                         class_label = str(lesson["class_name"]) + ((" " + str(lesson["stream"])) if lesson["stream"] else "")
                         lines.append(str(lesson["subject_name"]) + " — " + class_label + "\n" + str(lesson["teacher_name"]) + "\n" + str(lesson["room_name"] or "No room"))
-                    value = "\n\n".join(lines)
+                    cell.value = "\n\n".join(lines)
                 elif key in continued:
-                    value = "↳ " + str(continued[key]["subject_name"]) + " continues"
+                    cell.value = "↳ " + str(continued[key]["subject_name"]) + " continues"
                 else:
-                    value = ""
-                sheet.cell(row_index,col,value).alignment = Alignment(wrap_text=True,vertical="top")
+                    cell.value = ""
+                cell.alignment = Alignment(wrap_text=True,vertical="top")
             sheet.row_dimensions[row_index].height = 48
             row_index += 1
         sheet.column_dimensions["A"].width = 16
-        sheet.column_dimensions["B"].width = 18
-        for col in range(3,last_col+1):
-            sheet.column_dimensions[chr(64+col)].width = 24
-        sheet.freeze_panes = "C6"
+        for col in range(2,last_col+1):
+            sheet.column_dimensions[get_column_letter(col)].width = 22
+        sheet.freeze_panes = "B6"
         sheet.sheet_view.showGridLines = False
-        sheet.auto_filter.ref = f"A{header_row}:{chr(64+last_col)}{row_index-1}"
+        sheet.auto_filter.ref = f"A{header_row}:{get_column_letter(last_col)}{row_index-1}"
+
 
         details = workbook.create_sheet("Lesson Details")
         detail_headers = ["Day","Period","Start","End","Class","Stream","Subject","Teacher","Room","Duration"]
