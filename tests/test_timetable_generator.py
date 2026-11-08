@@ -10,6 +10,7 @@ from app.timetable.setup import (
     save_period,
     save_room,
     save_class_requirement,
+    save_class_limits,
 )
 from app.timetable.builder import place_lesson
 from app.timetable.generator import generate_timetable
@@ -55,6 +56,27 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["room_id"] is not None for row in rows))
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
+
+    def test_generator_respects_class_weekly_lesson_ceiling(self):
+        save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchone()[0], 0)
+
+    def test_generator_counts_double_periods_toward_daily_class_ceiling(self):
+        save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 2, None, True)
+        save_class_limits(self.db, 1, self.profile_id, 20, None, 1)
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=1 AND profile_id=?",
+                (self.profile_id,),
+            ).fetchone()[0], 0)
 
     def test_manual_lessons_are_preserved_and_generator_fills_remainder(self):
         day_id = self.db.execute(
