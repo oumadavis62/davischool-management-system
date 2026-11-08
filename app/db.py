@@ -537,5 +537,22 @@ def close_pools() -> None:
 atexit.register(close_pools)
 
 
+def acquire_schema_migration_lock(connection) -> None:
+    """Serialize startup DDL across overlapping app instances on PostgreSQL.
+
+    Transaction-scoped advisory locks work with Supavisor transaction pooling;
+    unlike session locks, they remain attached to the current transaction only.
+    SQLite development has a single-file writer lock and needs no advisory lock.
+    Every schema initializer must acquire this same lock before issuing DDL and
+    commit/rollback only after its migration block is complete.
+    """
+    if not os.environ.get("DATABASE_URL", "").strip():
+        return
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(?)",
+        (7462026110801,),
+    )
+
+
 def connect(database_url: str, **kwargs) -> CompatConnection:
     return CompatConnection(database_url, **kwargs)
