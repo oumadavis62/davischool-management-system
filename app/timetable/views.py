@@ -148,7 +148,8 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
         tuple(params),
     ).fetchall()
     sessions = [dict(row) for row in rows]
-    dated = [str(row["session_date"]) for row in sessions if row["session_date"]]
+    dated = [str(row["session_date"]) for row in sessions
+             if row["session_date"] and str(row.get("day_code") or "").upper() in {"SAT", "SUN"}]
     rotation_labels = {}
     if dated:
         occurrences = expand_calendar_occurrences(
