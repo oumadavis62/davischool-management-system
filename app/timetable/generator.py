@@ -400,11 +400,21 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 ):
                     raise TimetableSetupError("The manually placed lessons already contain a class, teacher or room clash. Resolve it before automatic generation.")
 
-    # Ordinary class lessons take place in their assigned classrooms by default.
-    # Do not force every lesson into the school's shared/specialist room inventory:
-    # a single registered lab would otherwise become a school-wide bottleneck.
-    # Room reservations are enforced for explicit normalized requirements instead.
-    room_ids = [None]
+    # Ordinary weekly lessons use classroom-type rooms only. Specialist spaces
+    # (labs, libraries, halls, workshops) are not generic classrooms and must not
+    # become a school-wide bottleneck simply because they are registered.
+    # Dedicated classrooms are available only to their assigned class.
+    def _rooms_for_task(task):
+        eligible = [
+            int(room["id"]) for room in rooms
+            if str(room["room_type"] or "classroom").lower() == "classroom"
+            and (
+                str(room["allocation_mode"] or "shared").lower() != "dedicated"
+                or (room["assigned_class_id"] is not None
+                    and int(room["assigned_class_id"]) == int(task["class_id"]))
+            )
+        ]
+        return eligible or [None]
     # Reuse the profile's constraint rules and period spans across all candidate
     # cells. Without this cache, candidate enumeration performs repeated SQL
     # reads for the same rules and period ordering thousands of times.
@@ -544,7 +554,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     existing_sessions = list(existing_by_id.values())
     for task_index, task in enumerate(tasks):
         for candidate in candidate_lookup[task_index]:
-            for room_id in room_ids:
+            for room_id in _rooms_for_task(task):
                 for existing in existing_sessions:
                     if existing["day_id"] != int(candidate["day_id"]):
                         continue
@@ -585,7 +595,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         )
         for candidate in candidates:
             room_order = sorted(
-                room_ids,
+                _rooms_for_task(task),
                 key=lambda room: sum(
                     1 for placed in placements
                     if int(placed["day_id"]) == int(candidate["day_id"])
