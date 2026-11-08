@@ -610,6 +610,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 raise TimetableSetupError("That row was not found in the selected timetable profile.")
             references = {
                 "day": (("ds_timetable_teacher_availability", "day_id"),
+                        ("ds_timetable_day_templates", "day_id"),
                         ("ds_timetable_lessons", "day_id"),
                         ("ds_timetable_sessions", "day_id"),
                         ("ds_timetable_constraints", "day_id")),
