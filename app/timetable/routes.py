@@ -434,7 +434,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
               const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
               const endpoint=action.pathname;
-              const isSetupWrite=/^\\/app\\/timetable\\/setup\\/(day|period|break|calendar-event|room|availability|requirement|class-limits|row-delete|break-gap)$/.test(endpoint);
+              const isSetupWrite=endpoint.startsWith('/app/timetable/setup/')&&new Set(['day','period','break','calendar-event','room','availability','requirement','class-limits','row-delete','break-gap']).has(endpoint.split('/').pop());
               if(!isSetupWrite) return;
               event.preventDefault();
               if(form.dataset.ajaxBusy==='1') return;
