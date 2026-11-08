@@ -315,9 +315,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
                 for x in configured_pattern
             ]
+            # lessons_per_week counts lesson occurrences, not occupied periods.
+            # A double-period pattern still fulfils only one weekly lesson;
+            # retain the remaining occurrences as ordinary single-period lessons.
             planned_sessions.extend(
                 {"duration": 1, "preferred_period_id": None}
-                for _ in range(expected_periods - pattern_periods)
+                for _ in range(max(0, remaining - len(planned_sessions)))
             )
         else:
             planned_sessions = [
@@ -339,7 +342,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 )
             planned_sessions.pop(match)
         if len(planned_sessions) > remaining:
-            planned_sessions = planned_sessions[:remaining]
+            raise TimetableSetupError(
+                "The configured lesson pattern contains more weekly sessions than the remaining lesson requirement for class ID "
+                + str(key[0]) + ", subject ID " + str(key[1]) + ". Review the weekly pattern."
+            )
+        if len(planned_sessions) != remaining:
+            raise TimetableSetupError(
+                "The weekly lesson pattern does not cover every required occurrence for class ID "
+                + str(key[0]) + ", subject ID " + str(key[1]) + "."
+            )
         total_required += remaining
         for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
