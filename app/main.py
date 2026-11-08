@@ -30,7 +30,7 @@ from app.timetable.views_routes import register_timetable_view_routes
 from app.timetable.export_routes import register_timetable_export_routes
 from app.timetable.publishing_routes import register_timetable_publishing_routes
 from app.timetable.portal_routes import register_timetable_portal_routes
-from app.db import RequestDatabaseConnectionMiddleware
+from app.db import RequestDatabaseConnectionMiddleware, acquire_schema_migration_lock
 from zoneinfo import ZoneInfo
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -588,6 +588,7 @@ def get_db():
 
 def init_db():
     con = get_db(); cur = con.cursor()
+    acquire_schema_migration_lock(con)
     cur.execute("CREATE TABLE IF NOT EXISTS schools (id INTEGER PRIMARY KEY, name TEXT, email TEXT, code TEXT, location TEXT, phone TEXT, principal TEXT, school_type TEXT, status TEXT DEFAULT 'active')")
     cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT, password TEXT, role TEXT, full_name TEXT, school_id INTEGER)")
     # Additive account fields used by the current login and teacher-account
@@ -654,6 +655,7 @@ def init_db():
     con.commit(); con.close()
 def init_extended_db():
     con = get_db(); cur = con.cursor()
+    acquire_schema_migration_lock(con)
     cur.execute("CREATE TABLE IF NOT EXISTS fees (id INTEGER PRIMARY KEY, school_id INTEGER, student_id INTEGER, amount REAL, paid REAL DEFAULT 0, description TEXT, due_date TEXT, status TEXT DEFAULT 'Pending')")
     cur.execute("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY, school_id INTEGER, title TEXT, message TEXT, audience TEXT, created_at TEXT)")
     cur.execute("CREATE TABLE IF NOT EXISTS sms_logs (id INTEGER PRIMARY KEY, school_id INTEGER, recipient TEXT, message TEXT, status TEXT, created_at TEXT)")
@@ -669,6 +671,7 @@ def init_extended_db():
             except Exception:
                 con.rollback()
                 cur = con.cursor()
+                acquire_schema_migration_lock(con)
         _drop_cascade = " CASCADE" if os.environ.get("DATABASE_URL", "").strip() else ""
         for _table in (
             "timetable_edit_history", "timetable_snapshots", "timetable_publications",
