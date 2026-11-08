@@ -262,7 +262,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         period_opts = "".join(f"<option value='{int(p['id'])}'>{esc(p['label'])} ({esc(p['start_time'])}–{esc(p['end_time'])})</option>" for p in periods)
         teacher_opts = "".join(f"<option value='{int(t['id'])}'>{esc(t['name'])}</option>" for t in teachers)
         subject_choices = {int(a["subject_id"]): str(a["subject_name"]) for a in allocations}
-        subject_opts = "".join(f"<option value='{subject_id}'>{esc(subject_name)}</option>" for subject_id, subject_name in sorted(subject_choices.items(), key=lambda item: item[1].lower()))
+        subject_opts = "".join(f"<label class='tt-check'><input type='checkbox' name='subject_ids' value='{subject_id}'> {esc(subject_name)}</label>" for subject_id, subject_name in sorted(subject_choices.items(), key=lambda item: item[1].lower()))
         availability_rows = "".join(f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{esc(a['availability'])}</span></td><td>{esc(a['reason'] or '—')}</td></tr>" for a in availability) or "<tr><td colspan='5' class='tt-muted'>No teacher availability rules yet.</td></tr>"
         requirement_rows = "".join(f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td></tr>" for r in requirements) or "<tr><td colspan='6' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
         class_limit_rows = "".join(
@@ -278,7 +278,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>"
             + hidden
             + "<p class='wide'>Choose each subject once. DaviSchool applies the weekly requirement to every class or stream where that subject is allocated, and links the existing teacher allocation automatically. Existing customized requirements are preserved.</p>"
-            + "<label class='wide'>Subjects to include<select name='subject_ids' multiple size='6' required>" + subject_opts + "</select></label>"
+            + "<div class='wide'><b>Subjects to include</b><div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px'>" + subject_opts + "</div></div>"
             + "<label>Lessons per week<input name='lessons_per_week' type='number' min='1' max='30' value='5' required></label>"
             + "<label>Lesson duration<select name='duration_periods'><option value='1'>Single period</option><option value='2'>Double period</option><option value='3'>Triple period</option><option value='4'>Four periods</option></select></label>"
             + "<label>Maximum lessons per day<input name='max_lessons_per_day' type='number' min='1' max='10' placeholder='No limit'></label>"
