@@ -28,8 +28,9 @@ def _unique_ids(values: Iterable[Any], field: str) -> list[int]:
 
 def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
                                 session_date: str | None, day_id: int | None,
-                                start: str, end: str, schedule_layer: str) -> None:
-    """Ensure every dated session fits its calendar day and configured layer slots."""
+                                start: str, end: str, schedule_layer: str,
+                                programme_id: int | None = None) -> None:
+    """Ensure every dated session fits its calendar day, rotation and layer slots."""
     if not session_date:
         return
     occurrence = resolve_calendar_occurrence(
@@ -49,6 +50,13 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
         occurrence["is_instructional"] or occurrence["template_id"] is not None
     ):
         raise TimetableSetupError("Additional learning requires an instructional day or a configured day template.")
+    if programme_id is not None:
+        active_programmes = {
+            int(item["programme_id"]) for item in occurrence["rotations"]
+            if item.get("programme_id") is not None
+        }
+        if active_programmes and int(programme_id) not in active_programmes:
+            raise TimetableSetupError("This learning programme is not active in the selected rotation week.")
     slots = occurrence["schedule_slots"]
     if not slots:
         raise TimetableSetupError("The selected date has no configured day template; dated sessions cannot be placed.")
