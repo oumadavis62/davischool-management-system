@@ -356,7 +356,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 weekend.column_dimensions[get_column_letter(col)].width=20
             weekend.sheet_properties.pageSetUpPr.fitToPage=True
             weekend.page_setup.orientation="landscape"; weekend.page_setup.paperSize=weekend.PAPERSIZE_A4
-            weekend.page_setup.fitToWidth=1; weekend.page_setup.fitToHeight=0
+            weekend.page_setup.fitToWidth=1; weekend.page_setup.fitToHeight=1
+            weekend.print_area="A1:J" + str(weekend.max_row)
+            weekend.sheet_properties.pageSetUpPr.autoPageBreaks=False
         if result.get("weekday_remedials") and remedial_display == "separate":
             remedial = workbook.create_sheet("Weekday Remedials")
             remedial_headers=["Date / Day","Start","End","Programme / Subject","Class / Group","Teacher(s)","Venue"]
