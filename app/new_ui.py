@@ -751,7 +751,7 @@ def _shell(title, name, role, body, school_id=None, request=None):
                 "Parent & Guardian Register":"users", "Parent–Learner Linking":"allocation", "Parent Portal Access":"key",
                 "School Notices":"announcement", "Parent Meetings":"calendar", "Service Requests":"clipboard-check",
                 "Parent & Student Reports":"chart", "Announcements":"announcement", "Users":"users",
-                "Roles & Permissions":"shield", "School Settings":"settings", "Smart Timetable":"calendar", "Timetable Overview":"calendar", "Timetable Setup":"settings", "Teaching Requirements":"book-open", "Subject Allocations":"allocation", "Staff Availability":"calendar", "Timetable Constraints":"shield", "Smart Timetable Generator":"wand-sparkles", "Manual Timetable Builder":"pencil-ruler", "Generated Timetables &amp; Printing":"printer", "Validation, Review &amp; Publish":"clipboard-check", "Audit Trail":"audit"
+                "Roles & Permissions":"shield", "School Settings":"settings", "Smart Timetable":"calendar", "Timetable Overview":"calendar", "Timetable Setup":"settings", "Teaching Requirements":"book-open", "Subject Allocations":"allocation", "Staff Availability":"calendar", "Timetable Constraints":"shield", "Smart Timetable Generator":"wand-sparkles", "Manual Timetable Builder":"pencil-ruler", "Generated Timetables & Printing":"printer", "Validation, Review & Publish":"clipboard-check", "Audit Trail":"audit"
             }
             icon = _modern_icon(icons.get(label, "circle"))
             return f"<a href='{url}' class='nav-sub{' active' if active else ''}'><span class='nav-sub-icon'>{icon}</span><span>{escape(label)}</span></a>"
@@ -818,9 +818,9 @@ def _shell(title, name, role, body, school_id=None, request=None):
             + "</div></details>"
             + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/builder") or request_path.startswith("/app/timetable/views") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("school") + "</span><b>Timetable Workspace</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
             + _nav_sub("/app/timetable/builder", "Manual Timetable Builder")
-            + _nav_sub("/app/timetable/views", "Generated Timetables &amp; Printing")
+            + _nav_sub("/app/timetable/views", "Generated Timetables & Printing")
             + "</div></details>"
-            + _nav_sub("/app/timetable/publishing", "Validation, Review &amp; Publish")
+            + _nav_sub("/app/timetable/publishing", "Validation, Review & Publish")
             + "</div></details>"
         )
         def _academic_dropdown(label, items, active=False, group_id=""):
