@@ -873,7 +873,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         except TimetableSetupError:
                             continue
                     if find_session_conflicts(connection, school_id, profile_id, start, end,
-                        task["classes"], task["teachers"], task["learners"], room_id, day_id):
+                        task["classes"], task["teachers"], task["learners"], room_id, day_id,
+                        ignore_generated_sessions=True):
                         continue
                     options.append({"day_id": day_id, "period_id": int(period["id"]),
                         "start": start, "end": end, "room_id": room_id,
