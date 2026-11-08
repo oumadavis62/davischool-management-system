@@ -301,7 +301,10 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                            room_id: int | None = None,
                            day_id: int | None = None,
                            session_date: str | None = None,
-                           exclude_session_id: int | None = None) -> list[dict[str, Any]]:
+                           exclude_session_id: int | None = None,
+                           ignore_generated_sessions: bool = False,
+                           include_legacy_lessons: bool = True,
+                           generated_run_id: int | None = None) -> list[dict[str, Any]]:
     """Return every overlapping new-engine session sharing a resource."""
     classes = _unique_ids(class_ids, "class")
     teachers = _unique_ids(teacher_ids, "teacher")
@@ -328,6 +331,11 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                 AND s.start_time < ? AND s.end_time > ?
                 AND s.status NOT IN ('cancelled','void')"""
     params: tuple[Any, ...] = (school_id, profile_id, end_time, start_time)
+    if ignore_generated_sessions:
+        base += " AND s.generation_run_id IS NULL"
+    elif generated_run_id is not None:
+        base += " AND (s.generation_run_id IS NULL OR s.generation_run_id=?)"
+        params += (int(generated_run_id),)
     if exclude_session_id is not None:
         base += " AND s.id<>?"
         params += (exclude_session_id,)
@@ -353,6 +361,42 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                 params + (value,), f"learner:{value}")
     if room_id is not None:
         collect(base + " AND s.room_id=?", params + (room_id,), f"room:{room_id}")
+
+    # Also reserve legacy weekly lessons against normalized combined/co-teaching sessions.
+    if include_legacy_lessons and day_id is not None and session_date is None:
+        legacy_base = """SELECT DISTINCT l.id,p.start_time,e.end_time,
+                                'lesson' AS session_type,'instructional' AS schedule_layer
+                         FROM ds_timetable_lessons l
+                         JOIN ds_timetable_periods p
+                           ON p.id=l.period_id AND p.school_id=l.school_id
+                          AND p.profile_id=l.profile_id
+                         JOIN ds_timetable_periods e
+                           ON e.school_id=l.school_id AND e.profile_id=l.profile_id
+                          AND e.period_no=p.period_no+COALESCE(l.duration_periods,1)-1
+                         WHERE l.school_id=? AND l.profile_id=? AND l.day_id=?
+                           AND l.status='scheduled'
+                           AND p.start_time < ? AND e.end_time > ?"""
+        legacy_params = (school_id, profile_id, day_id, end_time, start_time)
+        def collect_legacy(sql: str, values: tuple[Any, ...], reason: str) -> None:
+            for row in cur.execute(sql, values).fetchall():
+                sid = -int(row["id"])
+                if sid not in conflicts:
+                    conflicts[sid] = {
+                        "session_id": sid, "start_time": row["start_time"],
+                        "end_time": row["end_time"], "session_type": row["session_type"],
+                        "schedule_layer": row["schedule_layer"], "reasons": [],
+                    }
+                if reason not in conflicts[sid]["reasons"]:
+                    conflicts[sid]["reasons"].append(reason)
+        for value in classes:
+            collect_legacy(legacy_base + " AND l.class_id=?",
+                           legacy_params + (value,), f"class:{value}")
+        for value in teachers:
+            collect_legacy(legacy_base + " AND l.teacher_id=?",
+                           legacy_params + (value,), f"teacher:{value}")
+        if room_id is not None:
+            collect_legacy(legacy_base + " AND l.room_id=?",
+                           legacy_params + (room_id,), f"room:{room_id}")
     return list(conflicts.values())
 
 
@@ -414,7 +458,9 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                              duration_periods: int = 0,
                              scheduling_requirement_id: int | None = None,
                              pattern_session_no: int | None = None,
-                             created_by: str = "") -> int:
+                             created_by: str = "",
+                             generation_run_id: int | None = None,
+                             ignore_generated_conflicts: bool = False) -> int:
     start_time, end_time = (start_time or "").strip(), (end_time or "").strip()
     if not _TIME_RE.fullmatch(start_time) or not _TIME_RE.fullmatch(end_time) or start_time >= end_time:
         raise TimetableSetupError("Enter a valid start and end time in 24-hour HH:MM format.")
@@ -628,6 +674,7 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
     conflicts = find_session_conflicts(
         connection, school_id, profile_id, start_time, end_time,
         classes, teachers, learners, room_id, day_id, session_date,
+        ignore_generated_sessions=ignore_generated_conflicts,
     )
     if conflicts:
         summary = "; ".join(
@@ -641,11 +688,11 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
             """INSERT INTO ds_timetable_sessions
                (school_id,profile_id,schedule_layer,session_type,subject_id,programme_id,
                 teaching_group_id,day_id,session_date,period_id,start_time,end_time,
-                duration_periods,room_id,status,created_by,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                duration_periods,room_id,generation_run_id,status,created_by,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (school_id, profile_id, schedule_layer, session_type, subject_id, programme_id,
              teaching_group_id, day_id, session_date, period_id, start_time, end_time,
-             int(duration_periods), room_id, "scheduled", created_by, now, now),
+             int(duration_periods), room_id, generation_run_id, "scheduled", created_by, now, now),
         )
         row = cur.execute(
             """SELECT id FROM ds_timetable_sessions

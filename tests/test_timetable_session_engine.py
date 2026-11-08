@@ -3,14 +3,14 @@ import sqlite3
 import unittest
 
 from app.timetable.schema import ensure_timetable_schema
-from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_limits, TimetableSetupError
+from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_limits, save_class_requirement, TimetableSetupError
 from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint, create_schedule_template, save_schedule_slot, assign_day_template, create_rotation_cycle, save_rotation_week
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
     find_session_conflicts,
 )
-from app.timetable.generator import generate_advanced_instructional_sessions, generate_dated_advanced_sessions
+from app.timetable.generator import generate_advanced_instructional_sessions, generate_dated_advanced_sessions, generate_timetable
 from app.timetable.builder import place_advanced_requirement_session, place_dated_advanced_requirement_session
 
 
@@ -269,6 +269,42 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers WHERE session_id=?",
                             (session_id,)).fetchone()[0], 2)
+
+    def test_failed_advanced_regeneration_preserves_previous_generated_sessions(self):
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Regeneration safety Science",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        first = generate_advanced_instructional_sessions(
+            self.db, 8, self.profile_id, "admin@test"
+        )
+        self.assertEqual(first["status"], "completed")
+        original_ids = list(first["session_ids"])
+        self.db.execute(
+            """INSERT INTO ds_timetable_teacher_availability
+               (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+               VALUES(8,?,?,?,?, 'unavailable','Regeneration failure test')""",
+            (self.profile_id, 11, self.day_id, self.period_id),
+        )
+        self.db.commit()
+        with self.assertRaisesRegex(TimetableSetupError, "No valid slot"):
+            generate_advanced_instructional_sessions(
+                self.db, 8, self.profile_id, "admin@test"
+            )
+        current_ids = [
+            row["id"] for row in self.db.execute(
+                """SELECT id FROM ds_timetable_sessions
+                   WHERE school_id=8 AND profile_id=? AND schedule_layer='instructional'
+                     AND status='scheduled' ORDER BY id""",
+                (self.profile_id,),
+            ).fetchall()
+        ]
+        self.assertEqual(current_ids, original_ids)
 
     def test_manual_builder_places_normalized_requirement_session(self):
         group = create_teaching_group(
@@ -685,6 +721,63 @@ class TimetableSessionEngineTests(unittest.TestCase):
             (requirement,),
         ).fetchone()[0]
         self.assertEqual(count, 2)
+
+    def test_shared_session_credits_weekly_requirement_without_duplicate_lesson(self):
+        save_period(self.db, 8, self.profile_id, 2, "Period 2", "08:40", "09:20")
+        self.db.execute(
+            """CREATE TABLE teacher_allocations (
+                id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
+                subject_id INTEGER, class_id INTEGER
+            )"""
+        )
+        self.db.execute("INSERT INTO teacher_allocations VALUES(1,8,11,5,1)")
+        save_class_requirement(
+            self.db, 8, self.profile_id, 1, 5, 11, 2, 1, None, False
+        )
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Shared Grade 7 Science",
+            class_ids=[1], teacher_ids=[11], subject_id=5,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1, "preferred_day_id": self.day_id}],
+        )
+        shared = generate_advanced_instructional_sessions(
+            self.db, 8, self.profile_id, "admin@test"
+        )
+        ordinary = generate_timetable(self.db, 8, self.profile_id, "admin@test")
+        self.assertEqual(shared["generated_sessions"], 1)
+        self.assertEqual(ordinary["status"], "completed")
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_lessons WHERE school_id=8 AND profile_id=? AND generation_run_id IS NOT NULL",
+                (self.profile_id,),
+            ).fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT COUNT(*) FROM ds_timetable_sessions WHERE school_id=8 AND profile_id=? AND generation_run_id IS NOT NULL",
+                (self.profile_id,),
+            ).fetchone()[0],
+            1,
+        )
+
+    def test_normalized_session_cannot_clash_with_legacy_weekly_lesson(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_lessons
+               (school_id,profile_id,class_id,subject_id,teacher_id,room_id,
+                day_id,period_id,duration_periods,status,created_by,created_at,updated_at)
+               VALUES(8,?,?,1,11,NULL,?,?,1,'scheduled','admin','2027-01-01','2027-01-01')""",
+            (self.profile_id, 1, self.day_id, self.period_id),
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "conflicts with"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+                period_id=self.period_id,
+            )
 
     def test_activity_type_can_require_teacher_and_venue(self):
         self.db.execute(

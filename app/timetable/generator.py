@@ -107,7 +107,7 @@ def _score(task, candidate, placements) -> float:
     return score
 
 
-def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+def generate_timetable(connection: Any, school_id: int, profile_id: int, created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT, normalized_run_id: int | None = None) -> dict:
     cur = connection.cursor()
     profile = _profile(cur, school_id, profile_id)
     active_run = cur.execute(
@@ -132,8 +132,31 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
            WHERE school_id=? AND profile_id=? ORDER BY class_id,subject_id,teacher_id""",
         (school_id, profile_id),
     ).fetchall()
-    if not days or not periods or not requirements:
-        raise TimetableSetupError("Configure instructional days, teaching periods and weekly lesson requirements before automatic generation.")
+    if not days or not periods:
+        raise TimetableSetupError("Configure instructional days and teaching periods before automatic generation.")
+    # Reconcile each shared weekly occurrence with the matching duration
+    # in every participating class/subject/teacher allocation.
+    covered_rows = cur.execute(
+        """SELECT rc.class_id,r.subject_id,rt.teacher_id,p.duration_periods
+           FROM ds_timetable_scheduling_requirements r
+           JOIN ds_timetable_scheduling_requirement_classes rc
+             ON rc.school_id=r.school_id AND rc.profile_id=r.profile_id
+            AND rc.requirement_id=r.id
+           JOIN ds_timetable_scheduling_requirement_teachers rt
+             ON rt.school_id=r.school_id AND rt.profile_id=r.profile_id
+            AND rt.requirement_id=r.id
+           JOIN ds_timetable_scheduling_patterns p
+             ON p.school_id=r.school_id AND p.profile_id=r.profile_id
+            AND p.requirement_id=r.id
+           WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
+             AND r.schedule_layer='instructional' AND r.subject_id IS NOT NULL
+           ORDER BY r.id,p.session_no""",
+        (school_id, profile_id),
+    ).fetchall()
+    normalized_coverage = {}
+    for row in covered_rows:
+        key = (int(row["class_id"]), int(row["subject_id"]), int(row["teacher_id"]))
+        normalized_coverage.setdefault(key, []).append(int(row["duration_periods"] or 1))
     allocations = cur.execute(
         """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
            FROM teacher_allocations ta
@@ -143,8 +166,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
            WHERE ta.school_id=?""",
         (school_id,),
     ).fetchall()
-    allocation_keys = {(int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"])) for a in allocations}
-    requirement_keys = {(int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])) for r in requirements}
+    allocation_keys = {
+        (int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"]))
+        for a in allocations
+        if (int(a["class_id"]), int(a["subject_id"]), int(a["teacher_id"])) not in normalized_coverage
+    }
+    requirement_keys = {
+        (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"]))
+        for r in requirements
+        if (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])) not in normalized_coverage
+    }
+    if not requirements and not normalized_coverage:
+        raise TimetableSetupError("Configure at least one weekly lesson requirement or shared instructional session before automatic generation.")
     missing_requirements = allocation_keys - requirement_keys
     stale_requirements = requirement_keys - allocation_keys
     if missing_requirements:
@@ -242,8 +275,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if weekly < 1:
             raise TimetableSetupError("Every lesson requirement must request at least one lesson per week.")
         already = manual_counts.get(key, 0)
-        if already > weekly:
-            raise TimetableSetupError("A manually scheduled class/subject/teacher combination already exceeds its weekly requirement.")
+        covered_sessions = list(normalized_coverage.get(key, []))
+        if already + len(covered_sessions) > weekly:
+            raise TimetableSetupError(
+                "Manual placements and shared combined/co-teaching sessions exceed the weekly requirement for class ID "
+                + str(key[0]) + ", subject ID " + str(key[1]) + "."
+            )
+        remaining = weekly - already - len(covered_sessions)
         duration = int(req["duration_periods"] or 1)
         if duration < 1 or duration > 4:
             raise TimetableSetupError("Lesson duration must be between one and four periods.")
@@ -259,27 +297,41 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             raise TimetableSetupError(
                 "A configured weekly lesson pattern cannot be combined with manually placed lessons for the same subject. Clear those manual placements or remove the pattern first."
             )
+        expected_periods = weekly * duration
         pattern_periods = sum(int(x["duration_periods"] or 1) for x in configured_pattern)
-        if configured_pattern and pattern_periods > weekly:
-            raise TimetableSetupError("The saved lesson pattern exceeds this subject's weekly period requirement. Edit the pattern before generating.")
+        if configured_pattern and pattern_periods > expected_periods:
+            raise TimetableSetupError("The saved lesson pattern exceeds this subject's weekly duration allocation. Edit the pattern before generating.")
         if configured_pattern:
             planned_sessions = [
                 {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
                 for x in configured_pattern
             ]
-            # Any unconfigured periods remain flexible single lessons.
             planned_sessions.extend(
                 {"duration": 1, "preferred_period_id": None}
-                for _ in range(weekly - pattern_periods)
+                for _ in range(expected_periods - pattern_periods)
             )
         else:
-            planned_sessions = []
-            unplanned_periods = weekly
-            while unplanned_periods > 0:
-                session_duration = min(duration, unplanned_periods)
-                planned_sessions.append({"duration": session_duration, "preferred_period_id": None})
-                unplanned_periods -= session_duration
-        total_required += weekly
+            planned_sessions = [
+                {"duration": duration, "preferred_period_id": None}
+                for _ in range(weekly)
+            ]
+
+        for shared_duration in covered_sessions:
+            match = next(
+                (index for index, item in enumerate(planned_sessions)
+                 if int(item["duration"]) == int(shared_duration)),
+                None,
+            )
+            if match is None:
+                raise TimetableSetupError(
+                    "A combined/co-teaching session duration does not match the weekly requirement pattern for class ID "
+                    + str(key[0]) + ", subject ID " + str(key[1])
+                    + ". Align the shared session and subject lesson durations."
+                )
+            planned_sessions.pop(match)
+        if len(planned_sessions) > remaining:
+            planned_sessions = planned_sessions[:remaining]
+        total_required += remaining
         for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
                 "class_id": key[0],
@@ -347,6 +399,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             day_id = int(day["id"])
             for start_index, period in enumerate(periods):
                 if task.get("preferred_period_id") is not None and int(period["id"]) != int(task["preferred_period_id"]):
+                    continue
+                # A single configured lesson must fit the class's daily
+                # period ceiling on its own; otherwise no placement can ever
+                # satisfy the workload limit, regardless of the search order.
+                if (task.get("max_periods_per_day") is not None
+                        and int(task["duration"]) > int(task["max_periods_per_day"])):
                     continue
                 span = _period_span(periods, start_index, task["duration"])
                 if not span:
@@ -468,6 +526,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     exhausted = True
                     return False
                 placement = dict(candidate, room_id=room_id)
+                # Reserve normalized sessions against the legacy weekly solver.
+                from app.timetable.session_engine import find_session_conflicts
+                if find_session_conflicts(
+                    connection, school_id, profile_id,
+                    placement["start_time"], placement["end_time"],
+                    class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
+                    room_id=placement.get("room_id"), day_id=placement["day_id"],
+                    include_legacy_lessons=False, generated_run_id=normalized_run_id,
+                ):
+                    continue
                 if not _can_place(task, placement, placements):
                     continue
                 placement.update({
@@ -610,7 +678,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
 
 def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                                              profile_id: int, created_by: str = "",
-                                             node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+                                             node_limit: int = DEFAULT_NODE_LIMIT,
+                                             defer_replacement: bool = False) -> dict:
     """Place normalized multi-class/team-teaching requirements using the shared engine.
 
     This deliberately writes to ds_timetable_sessions; legacy single-class rows
@@ -804,7 +873,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                         except TimetableSetupError:
                             continue
                     if find_session_conflicts(connection, school_id, profile_id, start, end,
-                        task["classes"], task["teachers"], task["learners"], room_id, day_id):
+                        task["classes"], task["teachers"], task["learners"], room_id, day_id,
+                        ignore_generated_sessions=True):
                         continue
                     options.append({"day_id": day_id, "period_id": int(period["id"]),
                         "start": start, "end": end, "room_id": room_id,
@@ -872,6 +942,30 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     if not search(0):
         raise TimetableSetupError("The normalized requirements cannot all fit without clashes under the configured constraints.")
 
+    now = _now()
+    snapshot = {
+        "profile_id": profile_id,
+        "engine_version": ENGINE_VERSION,
+        "normalized_requirement_ids": sorted({int(item["task"]["requirement_id"]) for item in planned}),
+    }
+    cur.execute(
+        """INSERT INTO ds_timetable_generation_runs
+           (school_id,profile_id,status,engine_version,input_snapshot_json,started_at,created_by,created_at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (school_id, profile_id, "running", ENGINE_VERSION, json.dumps(snapshot, sort_keys=True),
+         now, created_by, now),
+    )
+    run_id = int(cur.lastrowid or 0)
+    if not run_id:
+        run_row = cur.execute(
+            """SELECT id FROM ds_timetable_generation_runs
+               WHERE school_id=? AND profile_id=? AND created_at=?
+               ORDER BY id DESC LIMIT 1""",
+            (school_id, profile_id, now),
+        ).fetchone()
+        run_id = int(run_row["id"]) if run_row else 0
+    if not run_id:
+        raise TimetableSetupError("Could not create a generation run record for the normalized weekly timetable.")
     created = []
     try:
         for item in planned:
@@ -886,7 +980,36 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 teaching_group_id=task["group_id"], duration_periods=option["duration"],
                 scheduling_requirement_id=task["requirement_id"],
                 pattern_session_no=task["session_no"], created_by=created_by,
+                generation_run_id=run_id, ignore_generated_conflicts=True,
             ))
+        old_rows = cur.execute(
+            """SELECT id FROM ds_timetable_sessions
+               WHERE school_id=? AND profile_id=? AND schedule_layer='instructional'
+                 AND generation_run_id IS NOT NULL AND generation_run_id<>?
+                 AND status='scheduled'""",
+            (school_id, profile_id, run_id),
+        ).fetchall()
+        old_ids = [int(row["id"]) for row in old_rows]
+        if old_ids and not defer_replacement:
+            marks = ",".join("?" for _ in old_ids)
+            cur.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                        (school_id, profile_id, *old_ids))
+        summary = {
+            "status": "completed",
+            "generated_sessions": len(created),
+            "search_nodes": nodes,
+            "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
+        }
+        cur.execute(
+            """UPDATE ds_timetable_generation_runs
+               SET status='completed',result_summary_json=?,finished_at=?
+               WHERE id=? AND school_id=?""",
+            (json.dumps(summary, sort_keys=True), _now(), run_id, school_id),
+        )
+        connection.commit()
     except Exception:
         if created:
             marks = ",".join("?" for _ in created)
@@ -895,11 +1018,21 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             cur.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created))
             cur.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
                         (school_id, profile_id, *created))
-            connection.commit()
+        cur.execute(
+            "UPDATE ds_timetable_generation_runs SET status='failed',finished_at=? WHERE id=? AND school_id=?",
+            (_now(), run_id, school_id),
+        )
+        connection.commit()
         raise
-    return {"status": "completed", "generated_sessions": len(created),
-            "session_ids": created, "search_nodes": nodes,
-            "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation."}
+    return {
+        "status": "completed",
+        "run_id": run_id,
+        "generated_sessions": len(created),
+        "session_ids": created,
+        "previous_session_ids": old_ids,
+        "search_nodes": nodes,
+        "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
+    }
 
 
 def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id: int,

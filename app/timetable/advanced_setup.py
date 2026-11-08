@@ -277,7 +277,7 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     requirement = cur.execute(
-        """SELECT id,lessons_per_week FROM ds_timetable_class_requirements
+        """SELECT id,lessons_per_week,duration_periods FROM ds_timetable_class_requirements
            WHERE id=? AND school_id=? AND profile_id=?""",
         (requirement_id, school_id, profile_id),
     ).fetchone()
@@ -323,10 +323,10 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
                            int(slot_id) if slot_id is not None else None,
                            int(period_id) if period_id is not None else None, label))
         total_periods += duration
-    expected = int(requirement["lessons_per_week"])
-    if total_periods > expected:
+    expected = int(requirement["lessons_per_week"]) * int(requirement["duration_periods"] or 1)
+    if total_periods != expected:
         raise TimetableSetupError(
-            f"Lesson pattern totals {total_periods} periods, exceeding this subject's weekly allocation of {expected}."
+            f"Lesson pattern totals {total_periods} periods; this subject requires exactly {expected} periods per week."
         )
     try:
         cur.execute(
