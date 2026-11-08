@@ -16,6 +16,10 @@ from app.timetable.generator import (
 
 
 def register_timetable_generator_routes(app, get_db, get_school_obj, module_page):
+    from app.timetable.navigation import timetable_workspace
+    _base_module_page = module_page
+    def module_page(request, title, module, body):
+        return _base_module_page(request, title, module, timetable_workspace(request, body))
     def school_for(request):
         if not request.session.get("email") or request.session.get("role") not in ("school_admin", "registrar", "super_admin"):
             return None
