@@ -500,7 +500,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           function setSubjectAvailabilityCell(button,subjectId){{
             const statusMap={{}};
             (button.dataset.statuses||'').split(';').filter(Boolean).forEach(item=>{{const parts=item.split(':');statusMap[parts[0]]=parts[1]||'';}});
-            const status=statusMap[String(subjectId)]||'available';
+            const stored=statusMap[String(subjectId)]||'available';
+            const status=stored==='fallback'?'':stored;
             button.dataset.status=status;
             button.textContent=status==='available'?'✓':(status==='unavailable'?'X':'');
             button.setAttribute('role','checkbox'); button.setAttribute('aria-checked',status==='available'?'true':'false');
