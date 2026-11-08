@@ -6,7 +6,7 @@ session can serve combined classes and be delivered by a teaching team.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, timedelta, datetime
 import re
 from typing import Any, Iterable
 
@@ -475,13 +475,27 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                    WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled'""",
                 (school_id, profile_id, class_id),
             ).fetchone()[0] or 0)
-            normalized_week = int(cur.execute(
-                """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
-                   JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
-                   WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
-                     AND s.schedule_layer='instructional' AND s.status='scheduled'""",
-                (school_id, profile_id, class_id),
-            ).fetchone()[0] or 0)
+            if session_date:
+                dated = date.fromisoformat(session_date)
+                week_start = (dated - timedelta(days=dated.weekday())).isoformat()
+                week_end = (date.fromisoformat(week_start) + timedelta(days=6)).isoformat()
+                normalized_week = int(cur.execute(
+                    """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
+                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
+                         AND s.schedule_layer='instructional' AND s.status='scheduled'
+                         AND (s.session_date BETWEEN ? AND ? OR s.session_date IS NULL)""",
+                    (school_id, profile_id, class_id, week_start, week_end),
+                ).fetchone()[0] or 0)
+            else:
+                normalized_week = int(cur.execute(
+                    """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
+                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
+                         AND s.schedule_layer='instructional' AND s.status='scheduled'
+                         AND s.session_date IS NULL""",
+                    (school_id, profile_id, class_id),
+                ).fetchone()[0] or 0)
             if limit["max_lessons_per_week"] is not None and legacy_week + normalized_week >= int(limit["max_lessons_per_week"]):
                 raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
             if day_id is not None and limit["max_periods_per_day"] is not None:
@@ -490,13 +504,24 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
                        WHERE school_id=? AND profile_id=? AND class_id=? AND day_id=? AND status='scheduled'""",
                     (school_id, profile_id, class_id, day_id),
                 ).fetchone()[0] or 0)
-                normalized_daily = int(cur.execute(
-                    """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
-                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
-                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
-                         AND s.schedule_layer='instructional' AND s.status='scheduled'""",
-                    (school_id, profile_id, class_id, day_id),
-                ).fetchone()[0] or 0)
+                if session_date:
+                    normalized_daily = int(cur.execute(
+                        """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
+                           JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                           WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
+                             AND s.schedule_layer='instructional' AND s.status='scheduled'
+                             AND (s.session_date=? OR s.session_date IS NULL)""",
+                        (school_id, profile_id, class_id, day_id, session_date),
+                    ).fetchone()[0] or 0)
+                else:
+                    normalized_daily = int(cur.execute(
+                        """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
+                           JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                           WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
+                             AND s.schedule_layer='instructional' AND s.status='scheduled'
+                             AND s.session_date IS NULL""",
+                        (school_id, profile_id, class_id, day_id),
+                    ).fetchone()[0] or 0)
                 if legacy_daily + normalized_daily + max(1, int(duration_periods or 1)) > int(limit["max_periods_per_day"]):
                     raise TimetableSetupError("This session would exceed the class maximum periods per day.")
 
