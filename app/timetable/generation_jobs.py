@@ -73,7 +73,13 @@ def get_generation_job(get_db: Callable, school_id: int, job_id: int):
                WHERE id=? AND school_id=?""",
             (int(job_id), int(school_id)),
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        for key, value in result.items():
+            if hasattr(value, "isoformat"):
+                result[key] = value.isoformat()
+        return result
     finally:
         con.close()
 
