@@ -123,7 +123,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                    LEFT JOIN ds_timetable_session_teachers st ON st.session_id=s.id AND st.school_id=s.school_id
                    LEFT JOIN teachers t ON t.id=st.teacher_id AND t.school_id=st.school_id
                    WHERE s.school_id=? AND s.profile_id=? AND s.status='scheduled'
-                   GROUP BY s.id ORDER BY d.day_order,p.period_no,s.start_time""",
+                   GROUP BY s.id,sub.name,d.day_name,p.label,rm.name,d.day_order,p.period_no ORDER BY d.day_order,p.period_no,s.start_time""",
                 (school_id,pid),
             ).fetchall()
             calendar_events = cur.execute(
@@ -235,7 +235,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             <button class='tb-btn'>Save room rule</button></form></section>"""
             if not read_only and advanced_requirements else ""
         )
-        classclass_group_options = "".join(f"<option value='{int(c['id'])}'>{esc(c['name'])} {esc(c['stream'] or '')}</option>" for c in class_records)
+        class_group_options = "".join(f"<option value='{int(c['id'])}'>{esc(c['name'])} {esc(c['stream'] or '')}</option>" for c in class_records)
         teacher_group_options = "".join(f"<option value='{int(t['id'])}'>{esc(t['name'])}</option>" for t in teacher_records)
         subject_group_options = "".join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subject_records)
         combined_group_form = (
