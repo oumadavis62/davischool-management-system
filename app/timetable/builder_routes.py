@@ -40,7 +40,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             (school_id,),
         ).fetchall()
         selected = (next((p for p in profiles if int(p["id"]) == int(profile_id)), None) or (profiles[0] if profiles else None))
-        days = periods = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = advanced_sessions = []
+        days = periods = breaks = rooms = allocations = requirements = lessons = calendar_events = advanced_requirements = advanced_sessions = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute(
@@ -49,6 +49,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             ).fetchall()
             periods = cur.execute(
                 "SELECT * FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson' ORDER BY period_no,id",
+                (school_id,pid),
+            ).fetchall()
+            breaks = cur.execute(
+                "SELECT * FROM ds_timetable_breaks WHERE school_id=? AND profile_id=? ORDER BY start_time,break_no,id",
                 (school_id,pid),
             ).fetchall()
             rooms = cur.execute(
@@ -156,8 +160,19 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 if start + offset < len(periods):
                     occupied[(int(lesson["day_id"]),int(periods[start+offset]["id"]))] = lesson
         rows = []
-        for period in periods:
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in periods] +
+            [(str(b["start_time"]), "break", b) for b in breaks],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        for _, item_type, item in timeline:
             cells = []
+            if item_type == "break":
+                for _day in days:
+                    cells.append(f"<td class='tb-break-cell'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></td>")
+                rows.append(f"<tr class='tb-break-row'><th class='tb-break-heading'><b>{esc(item['label'])}</b><span>{esc(item['start_time'])}–{esc(item['end_time'])}</span></th>{''.join(cells)}</tr>")
+                continue
+            period = item
             for day in days:
                 key = (int(day["id"]),int(period["id"]))
                 lesson = lesson_by_start.get(key)
@@ -227,7 +242,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         .tb-add-form select,.tb-actions select{{width:100%;min-width:0;padding:11px;border:1px solid #d5e4d7;border-radius:10px;background:#fbfdfb;font-size:12px;color:#234638}}.tb-add-form select:focus,.tb-actions select:focus{{outline:none;border-color:#78ad85;box-shadow:0 0 0 3px rgba(91,153,107,.12)}}
         .tb-grid-scroll{{overflow:auto;border:1px solid #dce8de;border-radius:15px;background:white;box-shadow:0 6px 20px rgba(36,83,52,.045)}}.tb-grid{{width:100%;border-collapse:separate;border-spacing:0;min-width:850px}}
         .tb-grid thead th{{background:linear-gradient(110deg,#347b50,#286743);color:white;padding:14px 10px;text-align:center;font-size:12px;position:sticky;top:0}}
-        .tb-grid .tb-period{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:left;position:sticky;left:0;z-index:1}}.tb-period b,.tb-period span{{display:block}}.tb-period span{{font-size:10px;color:#647b6a;font-weight:500;margin-top:4px}}
+        .tb-grid .tb-period{{min-width:115px;background:#edf5ee;color:#315b3e;text-align:left;position:sticky;left:0;z-index:1}}.tb-period b,.tb-period span,.tb-break-heading b,.tb-break-heading span{{display:block}}.tb-period span{{font-size:10px;color:#647b6a;font-weight:500;margin-top:4px}}
         .tb-cell{{height:122px;min-width:150px;vertical-align:top;padding:7px;border-right:1px solid #edf2ed;border-bottom:1px solid #edf2ed;background:#fff}}.tb-free{{background:#fbfdfb;text-align:center;vertical-align:middle;color:#a2b3a5;font-size:10px}}.tb-free:hover{{background:#eff8f0}}.tb-continued{{background:#f6faf6;color:#7b9480;text-align:center;vertical-align:middle;font-size:10px}}
         .tb-lesson{{background:linear-gradient(145deg,#edf7ee,#e3f1e5);border:1px solid #d6e8d9;border-left:4px solid #43845a;border-radius:11px;padding:9px;min-height:102px;color:#234638;cursor:grab;box-shadow:0 2px 7px rgba(35,83,51,.07);transition:box-shadow .16s,transform .16s}}.tb-lesson:hover{{box-shadow:0 6px 14px rgba(35,83,51,.12);transform:translateY(-1px)}}.tb-lesson:active{{cursor:grabbing}}
         .tb-lesson-top{{display:flex;justify-content:space-between;gap:5px;font-size:11px}}.tb-lesson-top span{{font-size:9px;background:#d5e9d9;border-radius:10px;padding:2px 5px;white-space:nowrap}}.tb-class{{font-size:10px;font-weight:800;margin-top:5px}}.tb-meta{{font-size:9px;color:#55705d;margin-top:4px}}
