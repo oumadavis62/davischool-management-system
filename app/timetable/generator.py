@@ -941,6 +941,20 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     if not search(0):
         raise TimetableSetupError("The normalized requirements cannot all fit without clashes under the configured constraints.")
 
+    now = _now()
+    snapshot = {
+        "profile_id": profile_id,
+        "engine_version": ENGINE_VERSION,
+        "normalized_requirement_ids": sorted({int(item["task"]["requirement_id"]) for item in planned}),
+    }
+    cur.execute(
+        """INSERT INTO ds_timetable_generation_runs
+           (school_id,profile_id,status,engine_version,input_snapshot_json,started_at,created_by,created_at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (school_id, profile_id, "running", ENGINE_VERSION, json.dumps(snapshot, sort_keys=True),
+         now, created_by, now),
+    )
+    run_id = int(cur.lastrowid or 0)
     created = []
     try:
         for item in planned:
@@ -955,7 +969,36 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 teaching_group_id=task["group_id"], duration_periods=option["duration"],
                 scheduling_requirement_id=task["requirement_id"],
                 pattern_session_no=task["session_no"], created_by=created_by,
+                generation_run_id=run_id, ignore_generated_conflicts=True,
             ))
+        old_rows = cur.execute(
+            """SELECT id FROM ds_timetable_sessions
+               WHERE school_id=? AND profile_id=? AND schedule_layer='instructional'
+                 AND generation_run_id IS NOT NULL AND generation_run_id<>?
+                 AND status='scheduled'""",
+            (school_id, profile_id, run_id),
+        ).fetchall()
+        old_ids = [int(row["id"]) for row in old_rows]
+        if old_ids:
+            marks = ",".join("?" for _ in old_ids)
+            cur.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(old_ids))
+            cur.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                        (school_id, profile_id, *old_ids))
+        summary = {
+            "status": "completed",
+            "generated_sessions": len(created),
+            "search_nodes": nodes,
+            "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
+        }
+        cur.execute(
+            """UPDATE ds_timetable_generation_runs
+               SET status='completed',result_summary_json=?,finished_at=?
+               WHERE id=? AND school_id=?""",
+            (json.dumps(summary, sort_keys=True), _now(), run_id, school_id),
+        )
+        connection.commit()
     except Exception:
         if created:
             marks = ",".join("?" for _ in created)
@@ -964,11 +1007,20 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
             cur.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created))
             cur.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
                         (school_id, profile_id, *created))
-            connection.commit()
+        cur.execute(
+            "UPDATE ds_timetable_generation_runs SET status='failed',finished_at=? WHERE id=? AND school_id=?",
+            (_now(), run_id, school_id),
+        )
+        connection.commit()
         raise
-    return {"status": "completed", "generated_sessions": len(created),
-            "session_ids": created, "search_nodes": nodes,
-            "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation."}
+    return {
+        "status": "completed",
+        "run_id": run_id,
+        "generated_sessions": len(created),
+        "session_ids": created,
+        "search_nodes": nodes,
+        "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation.",
+    }
 
 
 def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id: int,
