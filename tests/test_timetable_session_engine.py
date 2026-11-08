@@ -94,6 +94,39 @@ class TimetableSessionEngineTests(unittest.TestCase):
                 session_date="2027-03-01",
             )
 
+    def test_dated_remedial_and_activity_sessions_must_use_their_own_slot_types(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday mixed programme", "instructional"
+        )
+        save_schedule_slot(self.db, 8, self.profile_id, template, 1, "Lesson", "instructional", "08:00", "08:40", 1)
+        save_schedule_slot(self.db, 8, self.profile_id, template, 2, "Break", "break", "08:40", "09:00")
+        save_schedule_slot(self.db, 8, self.profile_id, template, 3, "Remedial", "remedial", "09:00", "09:40")
+        save_schedule_slot(self.db, 8, self.profile_id, template, 4, "Assembly", "assembly", "09:40", "10:00")
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        remedial = create_scheduled_session(
+            self.db, 8, self.profile_id, "09:00", "09:40",
+            schedule_layer="additional_learning", session_type="remedial",
+            class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+            session_date="2027-03-01",
+        )
+        activity = create_scheduled_session(
+            self.db, 8, self.profile_id, "09:40", "10:00",
+            schedule_layer="school_activity", session_type="assembly",
+            teacher_ids=[12], day_id=self.day_id, session_date="2027-03-01",
+        )
+        self.assertGreater(remedial, 0)
+        self.assertGreater(activity, 0)
+        with self.assertRaisesRegex(TimetableSetupError, "remedial or study slots"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "08:40",
+                schedule_layer="additional_learning", session_type="remedial",
+                class_ids=[2], teacher_ids=[12], day_id=self.day_id,
+                session_date="2027-03-01",
+            )
     def test_combined_classes_and_team_teaching_are_saved_once(self):
         group = create_teaching_group(
             self.db, 8, self.profile_id, "Grade 7 combined science", [1, 2],
