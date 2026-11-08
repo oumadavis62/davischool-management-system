@@ -144,13 +144,15 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         from app.timetable.setup import save_day, save_calendar_exception
         from app.timetable.advanced_setup import create_schedule_template, assign_day_template
 
-        monday = save_day(self.db, 12, self.profile_id, "MON", "Monday", 1)
-        saturday = save_day(self.db, 12, self.profile_id, "SAT", "Saturday", 6, instructional=False)
+        save_day(self.db, 12, self.profile_id, "MON", "Monday", 1)
+        save_day(self.db, 12, self.profile_id, "SAT", "Saturday", 6, instructional=False)
+        monday = self.db.execute("SELECT id FROM ds_timetable_days WHERE profile_id=? AND day_code='MON'", (self.profile_id,)).fetchone()["id"]
+        saturday = self.db.execute("SELECT id FROM ds_timetable_days WHERE profile_id=? AND day_code='SAT'", (self.profile_id,)).fetchone()["id"]
         template = create_schedule_template(self.db, 12, self.profile_id, "Saturday remedial", "weekend")
         assign_day_template(self.db, 12, self.profile_id, saturday, template)
         save_calendar_exception(
             self.db, 12, self.profile_id, "2027-03-06", "Saturday remedial",
-            "special_instruction", instructional=True,
+            "special_instructional_day", instructional=True,
         )
         regular = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-01")
         weekend = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-06")
@@ -168,7 +170,7 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         save_rotation_week(self.db, 12, self.profile_id, cycle, 3, "Humanities", "HUM")
         week_one = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-01")
         week_three = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-15")
-        week_four = resolve_calendar_occurrence(self.db, 12, self.profile_id, cycle, "2027-03-22") if False else resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-22")
+        week_four = resolve_calendar_occurrence(self.db, 12, self.profile_id, "2027-03-22")
         self.assertEqual(week_one["rotations"][0]["week"]["department_code"], "SCI")
         self.assertEqual(week_three["rotations"][0]["week"]["department_code"], "HUM")
         self.assertEqual(week_four["rotations"][0]["week_number"], 1)
