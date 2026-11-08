@@ -38,11 +38,22 @@ def timetable_workspace(request, body):
         ("views", "Timetable views", "/app/timetable/views"),
         ("publishing", "Review & publish", "/app/timetable/publishing"),
     ]
+    # Include the active per-tab session identifier in server-rendered
+    # navigation links. Do not rely solely on the deferred browser click
+    # interceptor: the Auto generate tab must select the same authenticated
+    # session even when JavaScript is delayed, cached, or bypassed.
+    tab_id = str(request.scope.get("davischool_tab_id") or "").strip()
+    if not (16 <= len(tab_id) <= 64 and all(ch.isalnum() or ch in "_-" for ch in tab_id)):
+        tab_id = ""
     links = []
     for key, label, url in items:
+        query = []
         if pid and key != "overview":
-            separator = "&" if "?" in url else "?"
-            url += separator + "profile_id=" + pid
+            query.append(("profile_id", pid))
+        if tab_id:
+            query.append(("ds_tab", tab_id))
+        if query:
+            url += ("&" if "?" in url else "?") + urlencode(query)
         links.append(
             "<a class='tt-work-tab" + (" is-active" if key == active else "") +
             "' href='" + escape(url, quote=True) + "' " +
