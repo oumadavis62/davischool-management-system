@@ -469,12 +469,22 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
             if programme_id is not None and int(programme_id) != int(requirement["programme_id"]):
                 raise TimetableSetupError("Session programme does not match its scheduling requirement.")
             programme_id = int(requirement["programme_id"])
+        allocation_mode = str(requirement["room_assignment_mode"] or "automatic")
+        preferred_room_id = int(requirement["preferred_room_id"]) if requirement["preferred_room_id"] is not None else None
+        if allocation_mode == "fixed":
+            if preferred_room_id is None:
+                raise TimetableSetupError("This fixed-room requirement has no configured room.")
+            if room_id is not None and int(room_id) != preferred_room_id:
+                raise TimetableSetupError("This lesson must use its fixed room.")
+            room_id = preferred_room_id
+        elif allocation_mode == "preferred" and room_id is None:
+            room_id = preferred_room_id
         if requirement["room_type"]:
             requested_room = cur.execute(
                 "SELECT room_type FROM ds_timetable_rooms WHERE id=? AND school_id=? AND is_active=1",
                 (room_id, school_id),
             ).fetchone() if room_id is not None else None
-            if not requested_room or str(requested_room["room_type"]) != str(requirement["room_type"]):
+            if room_id is not None and (not requested_room or str(requested_room["room_type"]) != str(requirement["room_type"])):
                 raise TimetableSetupError("This requirement needs a " + str(requirement["room_type"]) + " venue.")
         if pattern_session_no is not None:
             pattern = cur.execute(

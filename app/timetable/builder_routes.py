@@ -9,6 +9,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
 from app.timetable.builder import place_lesson, move_lesson, delete_lesson, place_advanced_requirement_session, place_dated_advanced_requirement_session
+from app.timetable.session_engine import create_teaching_group
+from app.timetable.advanced_setup import create_scheduling_requirement, save_scheduling_pattern
 from app.timetable.advanced_setup import resolve_calendar_occurrence
 
 
@@ -64,12 +66,16 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 "SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name",
                 (school_id,),
             ).fetchall()
+            class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
+            teacher_records = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            subject_records = cur.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
             requirements = cur.execute(
                 "SELECT * FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=? ORDER BY class_id,subject_id",
                 (school_id,pid),
             ).fetchall()
             advanced_requirements = cur.execute(
-                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods,r.schedule_layer
+                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods,r.schedule_layer,
+                          r.room_type,r.room_assignment_mode,r.preferred_room_id
                    FROM ds_timetable_scheduling_requirements r
                    WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
                    ORDER BY r.schedule_layer,r.name""",
@@ -219,6 +225,34 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             f"<option value='{int(r['id'])}'>{esc(r['name'])} · {esc(r['schedule_layer'])} · {int(r['weekly_occurrences'])} sessions / {int(r['weekly_periods'])} periods weekly</option>"
             for r in advanced_requirements
         )
+        room_policy_form = (
+            f"""<section class='tb-panel'><h3>Room allocation rules</h3><p>Automatic chooses any suitable free room. Preferred tries your chosen room first, then another suitable room. Fixed requires the selected room.</p>
+            <form method='post' action='/app/timetable/builder/room-policy' class='tb-add-form'>
+            <input type='hidden' name='profile_id' value='{pid}'>
+            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select requirement</option>{advanced_options}</select></label>
+            <label>Allocation mode<select name='room_assignment_mode'><option value='automatic'>Automatic</option><option value='preferred'>Preferred (fallback allowed)</option><option value='fixed'>Fixed (no fallback)</option></select></label>
+            <label>Preferred / fixed room<select name='preferred_room_id'>{room_options}</select></label>
+            <button class='tb-btn'>Save room rule</button></form></section>"""
+            if not read_only and advanced_requirements else ""
+        )
+        class_group_options = "".join(f"<option value='{int(c['id'])}'>{esc(c['name'])} {esc(c['stream'] or '')}</option>" for c in class_records)
+        teacher_group_options = "".join(f"<option value='{int(t['id'])}'>{esc(t['name'])}</option>" for t in teacher_records)
+        subject_group_options = "".join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subject_records)
+        combined_group_form = (
+            f"""<section class='tb-panel'><h3>Combined classes and co-teaching</h3><p>Merge two or more classes into one shared session, assign one or more teachers and reserve a single room for the combined group.</p>
+            <form method='post' action='/app/timetable/builder/create-combined' class='tb-add-form'>
+            <input type='hidden' name='profile_id' value='{pid}'>
+            <label class='wide'>Combined lesson name<input name='name' required maxlength='120' placeholder='e.g. Grade 7 combined Mathematics'></label>
+            <label>Classes / streams<select name='class_ids' multiple required size='5'>{class_group_options}</select></label>
+            <label>Co-teaching team<select name='teacher_ids' multiple required size='5'>{teacher_group_options}</select></label>
+            <label>Subject<select name='subject_id' required><option value=''>Choose subject</option>{subject_group_options}</select></label>
+            <label>Session duration<select name='duration_periods'><option value='1'>1 period</option><option value='2'>2 consecutive periods</option><option value='3'>3 consecutive periods</option><option value='4'>4 consecutive periods</option></select></label>
+            <label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label>
+            <label>Room allocation<select name='room_assignment_mode'><option value='automatic'>Automatic</option><option value='preferred'>Preferred</option><option value='fixed'>Fixed</option></select></label>
+            <label>Preferred / fixed room<select name='preferred_room_id'>{room_options}</select></label>
+            <button class='tb-btn'>＋ Create combined lesson</button></form></section>"""
+            if not read_only and class_records and teacher_records and subject_records else ""
+        )
         advanced_form = (
             f"""<section class='tb-panel'><div><span class='tb-kicker'>ADVANCED MANUAL SCHEDULING</span><h3>Place a combined or team-taught session</h3><p>Uses the normalized requirement, configured session pattern and the same constraint/conflict engine as automatic generation.</p></div>
             <form method='post' action='/app/timetable/builder/add-advanced' class='tb-add-form'>
@@ -312,7 +346,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         @media(max-width:900px){{.tb-add-form{{grid-template-columns:1fr 1fr}}.tb-add-form label.wide{{grid-column:1/-1}}}}
         @media(max-width:600px){{.tb-wrap{{padding:12px;border-radius:17px}}.tb-hero{{padding:21px 17px}}.tb-hero h2{{font-size:23px}}.tb-add-form,.tb-modal .tb-add-form,.tb-modal .tb-actions form{{grid-template-columns:1fr}}.tb-add-form label.wide,.tb-modal .tb-add-form label.wide,.tb-modal .tb-add-form button,.tb-modal .tb-actions form button{{grid-column:auto}}.tb-modal{{padding:10px}}.tb-modal-dialog{{padding:20px 16px;border-radius:18px}}.tb-hero>div:last-child{{width:100%}}.tb-hero>div:last-child a{{flex:1}}}}
         </style>
-        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{advanced_form}{dated_form}{advanced_session_table}{grid}</div>
+        <div class='tb-wrap'><div class='tb-hero'><div><span class='tb-kicker'>DAVISCHOOL · MANUAL SCHEDULING</span><h2>Master Timetable Builder</h2><p>Place lessons, move them between periods and resolve clashes as you build.</p></div><div style='display:flex;gap:8px;flex-wrap:wrap'><a class='tb-btn' href='/app/timetable/automatic?profile_id={pid}'>⚡ Automatic Generator</a><a class='tb-btn secondary' href='/app/timetable/views?profile_id={pid}'>Timetable Views</a><a class='tb-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Publishing & Versions</a><a class='tb-btn secondary' href='/app/timetable/setup?profile_id={pid}'>⚙ Setup</a><a class='tb-btn secondary' href='/school/dashboard'>School overview</a></div></div>{notice}{profile_selector}<div class='tb-panel'><b>{esc(selected['name'])}</b><span style='font-size:11px;color:#64748b'> · {esc(selected['academic_year'])} · {esc(selected['term'])}</span><span style='float:right;font-size:11px;color:#17633b;font-weight:800'>{len(lessons)} scheduled lessons · {len(requirements)} requirements · {len(calendar_events)} calendar dates</span></div>{add_form}{combined_group_form}{room_policy_form}{advanced_form}{dated_form}{advanced_session_table}{grid}</div>
         <script>
         (function(){{
           const root=document.querySelector('.tb-wrap');if(!root)return;
@@ -417,6 +451,74 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             return redirect_builder(profile_id, str(exc), True)
         finally:
             con.close()
+
+    @app.post("/app/timetable/builder/room-policy")
+    def save_builder_room_policy(request: Request, profile_id: int = Form(...),
+        requirement_id: int = Form(...), room_assignment_mode: str = Form("automatic"),
+        preferred_room_id: str = Form("")):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            mode = (room_assignment_mode or "automatic").strip().lower()
+            if mode not in {"automatic", "preferred", "fixed"}:
+                raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
+            room_id = int(preferred_room_id) if preferred_room_id.strip() else None
+            if mode in {"preferred", "fixed"} and room_id is None:
+                raise TimetableSetupError("Choose a room for Preferred or Fixed allocation.")
+            requirement = con.execute("SELECT room_type FROM ds_timetable_scheduling_requirements WHERE id=? AND school_id=? AND profile_id=? AND is_active=1", (requirement_id, int(school["id"]), profile_id)).fetchone()
+            if not requirement: raise TimetableSetupError("Select a valid scheduling requirement.")
+            if room_id is not None:
+                room = con.execute("SELECT room_type,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?", (room_id, int(school["id"]))).fetchone()
+                if not room or not int(room["is_active"] or 0): raise TimetableSetupError("Select an active room.")
+                if requirement["room_type"] and str(room["room_type"]) != str(requirement["room_type"]):
+                    raise TimetableSetupError("The selected room does not match the required room type.")
+            if mode == "automatic": room_id = None
+            con.execute("UPDATE ds_timetable_scheduling_requirements SET room_assignment_mode=?,preferred_room_id=? WHERE id=? AND school_id=? AND profile_id=?", (mode, room_id, requirement_id, int(school["id"]), profile_id))
+            con.commit()
+            return redirect_builder(profile_id, "Room allocation rule saved.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally: con.close()
+
+    @app.post("/app/timetable/builder/create-combined")
+    def create_combined_builder_requirement(request: Request, profile_id: int = Form(...),
+        name: str = Form(...), class_ids: list[int] = Form(...),
+        teacher_ids: list[int] = Form(...), subject_id: int = Form(...),
+        duration_periods: int = Form(1), room_type: str = Form("classroom"),
+        room_assignment_mode: str = Form("automatic"), preferred_room_id: str = Form("")):
+        school = school_for(request)
+        if not school: return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            classes = list(dict.fromkeys(int(value) for value in class_ids))
+            teachers = list(dict.fromkeys(int(value) for value in teacher_ids))
+            if len(classes) < 2: raise TimetableSetupError("Select at least two classes to create a combined lesson.")
+            if not teachers: raise TimetableSetupError("Select at least one teacher for the combined lesson.")
+            if not 1 <= int(duration_periods) <= 4: raise TimetableSetupError("A combined lesson must occupy 1–4 consecutive periods.")
+            mode = (room_assignment_mode or "automatic").strip().lower()
+            room_id = int(preferred_room_id) if preferred_room_id.strip() else None
+            if mode not in {"automatic", "preferred", "fixed"}: raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
+            if mode in {"preferred", "fixed"} and room_id is None: raise TimetableSetupError("Choose a room for Preferred or Fixed allocation.")
+            group_id = create_teaching_group(con, int(school["id"]), profile_id, name, classes,
+                group_type="combined_class", subject_id=subject_id,
+                notes="Combined class session with a shared teaching team.")
+            requirement_id = create_scheduling_requirement(
+                con, int(school["id"]), profile_id, name + " — combined session",
+                class_ids=classes, teacher_ids=teachers, schedule_layer="instructional",
+                session_type="lesson", subject_id=subject_id, teaching_group_id=group_id,
+                weekly_occurrences=1, weekly_periods=int(duration_periods),
+                counts_toward_curriculum=True, min_teacher_count=1,
+                room_type=room_type, room_assignment_mode=mode, preferred_room_id=room_id,
+            )
+            save_scheduling_pattern(con, int(school["id"]), profile_id, requirement_id,
+                [{"duration_periods": int(duration_periods), "session_label": "Combined lesson"}])
+            return redirect_builder(profile_id, "Combined class and co-teaching requirement created. It is ready to place in the timetable.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally: con.close()
 
     @app.post("/app/timetable/builder/add-advanced")
     def add_advanced_builder_session(request: Request, profile_id: int = Form(...),

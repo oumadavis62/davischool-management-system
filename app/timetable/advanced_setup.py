@@ -452,7 +452,9 @@ def create_scheduling_requirement(connection: Any, school_id: int, profile_id: i
                                   weekly_periods: int = 0,
                                   counts_toward_curriculum: bool = True,
                                   min_teacher_count: int = 1,
-                                  room_type: str = "") -> int:
+                                  room_type: str = "",
+                                  room_assignment_mode: str = "automatic",
+                                  preferred_room_id: int | None = None) -> int:
     """Create a normalized requirement with many classes, teachers and learners."""
     name = (name or "").strip()
     classes = list(dict.fromkeys(int(v) for v in (class_ids or [])))
@@ -470,8 +472,24 @@ def create_scheduling_requirement(connection: Any, school_id: int, profile_id: i
         raise TimetableSetupError("The selected teaching team is smaller than the required teacher count.")
     if room_type and room_type not in {"classroom", "laboratory", "library", "hall", "workshop", "sports", "other"}:
         raise TimetableSetupError("Choose a valid room type.")
+    room_assignment_mode = (room_assignment_mode or "automatic").strip().lower()
+    if room_assignment_mode not in {"automatic", "preferred", "fixed"}:
+        raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
+    if room_assignment_mode in {"preferred", "fixed"} and preferred_room_id is None:
+        raise TimetableSetupError("Choose a preferred or fixed room.")
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
+    if preferred_room_id is not None:
+        selected_room = cur.execute(
+            "SELECT id,room_type,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?",
+            (int(preferred_room_id), school_id),
+        ).fetchone()
+        if not selected_room or not int(selected_room["is_active"] or 0):
+            raise TimetableSetupError("Choose an active room belonging to this school.")
+        if room_type and str(selected_room["room_type"]) != room_type:
+            raise TimetableSetupError("The preferred room must match the required room type.")
+    if room_assignment_mode == "automatic":
+        preferred_room_id = None
     if teaching_group_id is not None:
         group = cur.execute(
             "SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
@@ -504,11 +522,12 @@ def create_scheduling_requirement(connection: Any, school_id: int, profile_id: i
         """INSERT INTO ds_timetable_scheduling_requirements
            (school_id,profile_id,name,schedule_layer,session_type,subject_id,programme_id,
             teaching_group_id,weekly_occurrences,weekly_periods,counts_toward_curriculum,
-            min_teacher_count,room_type)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            min_teacher_count,room_type,room_assignment_mode,preferred_room_id)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (school_id, profile_id, name, schedule_layer, session_type, subject_id, programme_id,
          teaching_group_id, int(weekly_occurrences), int(weekly_periods),
-         int(bool(counts_toward_curriculum)), int(min_teacher_count), room_type or None),
+         int(bool(counts_toward_curriculum)), int(min_teacher_count), room_type or None,
+         room_assignment_mode, int(preferred_room_id) if preferred_room_id is not None else None),
     )
     row = cur.execute(
         "SELECT id FROM ds_timetable_scheduling_requirements WHERE school_id=? AND profile_id=? AND name=?",

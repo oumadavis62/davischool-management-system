@@ -236,6 +236,69 @@ def delete_lesson(connection: Any, school_id: int, profile_id: int, lesson_id: i
 
 
 
+def _choose_requirement_room(connection: Any, school_id: int, profile_id: int,
+                               requirement: Any, class_ids: list[int],
+                               start_time: str, end_time: str,
+                               day_id: int | None, session_date: str | None,
+                               selected_room_id: int | None = None) -> int | None:
+    """Resolve automatic/preferred/fixed room choice without permitting overlap."""
+    from app.timetable.session_engine import find_session_conflicts
+    if selected_room_id is not None:
+        return int(selected_room_id)
+    mode = str(requirement["room_assignment_mode"] or "automatic")
+    preferred_id = int(requirement["preferred_room_id"]) if requirement["preferred_room_id"] is not None else None
+    cur = connection.cursor()
+    if mode == "fixed":
+        if preferred_id is None:
+            raise TimetableSetupError("Configure a fixed room for this requirement first.")
+        candidates = [preferred_id]
+    else:
+        params: list[Any] = [school_id]
+        sql = "SELECT id,capacity,allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1"
+        if requirement["room_type"]:
+            sql += " AND room_type=?"
+            params.append(str(requirement["room_type"]))
+        sql += " ORDER BY capacity DESC,id"
+        rows = cur.execute(sql, tuple(params)).fetchall()
+        candidates = [
+            int(row["id"]) for row in rows
+            if str(row["allocation_mode"] or "shared") != "dedicated"
+            or int(row["assigned_class_id"] or 0) in class_ids
+        ]
+        if mode == "preferred" and preferred_id is not None:
+            candidates = [preferred_id] + [value for value in candidates if value != preferred_id]
+    if not candidates and not requirement["room_type"] and mode == "automatic":
+        return None
+    enrolled = 0
+    if class_ids:
+        marks = ",".join("?" for _ in class_ids)
+        row = cur.execute(
+            f"SELECT COUNT(*) AS n FROM students WHERE school_id=? AND class_id IN ({marks})",
+            (school_id, *class_ids),
+        ).fetchone()
+        enrolled = int(row["n"] or 0)
+    for candidate in candidates:
+        room = cur.execute(
+            "SELECT capacity,is_active,room_type FROM ds_timetable_rooms WHERE id=? AND school_id=?",
+            (candidate, school_id),
+        ).fetchone()
+        if not room or not int(room["is_active"] or 0):
+            continue
+        if requirement["room_type"] and str(room["room_type"]) != str(requirement["room_type"]):
+            continue
+        if room["capacity"] is not None and enrolled > int(room["capacity"]):
+            continue
+        conflicts = find_session_conflicts(
+            connection, school_id, profile_id, start_time, end_time,
+            room_id=candidate, day_id=day_id, session_date=session_date,
+        )
+        if not conflicts:
+            return candidate
+    if requirement["room_type"] or mode in {"preferred", "fixed"}:
+        raise TimetableSetupError("No suitable room is free for this session's full time interval.")
+    return None
+
+
 def place_advanced_requirement_session(connection: Any, school_id: int, profile_id: int,
                                        requirement_id: int, session_no: int,
                                        day_id: int, period_id: int,
@@ -262,6 +325,14 @@ def place_advanced_requirement_session(connection: Any, school_id: int, profile_
     if requirement["schedule_layer"] != "instructional":
         raise TimetableSetupError("This manual period-grid action supports instructional sessions; use the programme scheduler for additional learning and activities.")
     span = _period_span(cur, school_id, profile_id, period_id, int(pattern["duration_periods"] or 1))
+    req_classes = [int(row["class_id"]) for row in cur.execute(
+        "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE requirement_id=? AND school_id=?",
+        (requirement_id, school_id),
+    ).fetchall()]
+    room_id = _choose_requirement_room(
+        connection, school_id, profile_id, requirement, req_classes,
+        str(span[0]["start_time"]), str(span[-1]["end_time"]), day_id, None, room_id,
+    )
     return create_scheduled_session(
         connection, school_id, profile_id,
         str(span[0]["start_time"]), str(span[-1]["end_time"]),
@@ -335,6 +406,15 @@ def place_dated_advanced_requirement_session(connection: Any, school_id: int, pr
         ).fetchone()
         period_id = int(period["id"]) if period else None
 
+    req_classes = [int(row["class_id"]) for row in cur.execute(
+        "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE requirement_id=? AND school_id=?",
+        (requirement_id, school_id),
+    ).fetchall()]
+    room_id = _choose_requirement_room(
+        connection, school_id, profile_id, requirement, req_classes,
+        str(selected[0]["start_time"]), str(selected[-1]["end_time"]),
+        int(occurrence["day_id"]), session_date, room_id,
+    )
     return create_scheduled_session(
         connection, school_id, profile_id,
         str(selected[0]["start_time"]), str(selected[-1]["end_time"]),

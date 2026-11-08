@@ -279,6 +279,8 @@ _TABLES = (
         counts_toward_curriculum INTEGER NOT NULL DEFAULT 1,
         min_teacher_count INTEGER NOT NULL DEFAULT 1,
         room_type TEXT,
+        room_assignment_mode TEXT NOT NULL DEFAULT 'automatic',
+        preferred_room_id INTEGER,
         is_active INTEGER NOT NULL DEFAULT 1,
         UNIQUE (school_id, profile_id, name)
     )""",
@@ -495,6 +497,12 @@ def ensure_timetable_schema(connection: Any) -> None:
         cursor.execute(statement)
     # Additive compatibility for profiles created by the first foundation
     # release before term date fields were introduced.
+    cursor.execute("SELECT * FROM ds_timetable_scheduling_requirements LIMIT 0")
+    requirement_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
+    for column, column_type in (("room_assignment_mode", "TEXT NOT NULL DEFAULT 'automatic'"),
+                                ("preferred_room_id", "INTEGER")):
+        if column not in requirement_columns:
+            cursor.execute("ALTER TABLE ds_timetable_scheduling_requirements ADD COLUMN " + column + " " + column_type)
     cursor.execute("SELECT * FROM ds_timetable_rooms LIMIT 0")
     room_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
     for column, column_type in (("description", "TEXT"), ("equipment", "TEXT"),
