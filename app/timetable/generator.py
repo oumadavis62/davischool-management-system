@@ -58,6 +58,19 @@ def _can_place(task, candidate, placements) -> bool:
         )
         if same_subject_day >= int(max_per_day):
             return False
+    max_week = task.get("max_lessons_per_week")
+    if max_week is not None:
+        weekly_count = sum(1 for p in placements if int(p["class_id"]) == task["class_id"])
+        if weekly_count >= int(max_week):
+            return False
+    max_day_periods = task.get("max_periods_per_day")
+    if max_day_periods is not None:
+        used_periods = sum(
+            int(p.get("duration", 1)) for p in placements
+            if int(p["class_id"]) == task["class_id"] and int(p["day_id"]) == candidate["day_id"]
+        )
+        if used_periods + int(candidate.get("duration", 1)) > int(max_day_periods):
+            return False
     for other in placements:
         if int(other["day_id"]) != candidate["day_id"]:
             continue
@@ -187,6 +200,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         key = (int(lesson["class_id"]), int(lesson["subject_id"]), int(lesson["teacher_id"]))
         manual_counts[key] = manual_counts.get(key, 0) + 1
 
+    class_limits = {
+        int(row["class_id"]): row for row in cur.execute(
+            """SELECT class_id,max_lessons_per_week,max_periods_per_day
+               FROM ds_timetable_class_limits WHERE school_id=? AND profile_id=?""",
+            (school_id, profile_id),
+        ).fetchall()
+    }
     tasks = []
     total_required = 0
     for req in requirements:
@@ -209,6 +229,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 "teacher_id": key[2],
                 "duration": duration,
                 "max_lessons_per_day": int(req["max_lessons_per_day"]) if req["max_lessons_per_day"] is not None else None,
+                "max_lessons_per_week": int(class_limits[key[0]]["max_lessons_per_week"]) if key[0] in class_limits and class_limits[key[0]]["max_lessons_per_week"] is not None else None,
+                "max_periods_per_day": int(class_limits[key[0]]["max_periods_per_day"]) if key[0] in class_limits and class_limits[key[0]]["max_periods_per_day"] is not None else None,
                 "occurrence": occurrence + 1,
             })
     if len(tasks) > 700:
