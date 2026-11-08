@@ -205,7 +205,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
                    JOIN ds_timetable_days d ON d.id=a.day_id AND d.profile_id=a.profile_id
                    JOIN ds_timetable_periods p ON p.id=a.period_id AND p.profile_id=a.profile_id
-                   WHERE a.school_id=? AND a.profile_id=? ORDER BY d.day_order,p.period_no,t.name""",
+                   WHERE a.school_id=? AND a.profile_id=? AND a.availability='unavailable' ORDER BY d.day_order,p.period_no,t.name""",
                 (school_id,pid),
             ).fetchall()
             requirements = cur.execute(
@@ -307,7 +307,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         for day in days:
             cells = []
             for period in periods:
-                status = availability_status.get((matrix_teacher_id, int(day["id"]), int(period["id"])), "")
+                status = availability_status.get((matrix_teacher_id, int(day["id"]), int(period["id"])), "available")
                 if status == "preferred":
                     status = "available"
                 symbol = "✓" if status == "available" else ("X" if status == "unavailable" else "")
@@ -359,7 +359,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · AUTOMATIC BREAK DETECTION</span><h3>Break gaps between periods</h3><p>Every positive time gap between consecutive periods is detected automatically. Select a gap, give it a name, and it becomes a break column. Unselected gaps remain available.</p></div></div><div class='tt-split'><div class='tt-table'><table><tr><th>Detected gap</th><th>Time</th><th>Status</th><th>Action</th></tr>{break_candidate_rows}</table></div><div class='tt-table'><h4>Selected breaks</h4><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th><th>Actions</th></tr>{break_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>04 · ACADEMIC CALENDAR</span><h3>Holidays and special dates</h3><p>Mark closures, holidays and exceptional instructional days inside this term.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<label>Date<input name='exception_date' type='date' required></label><label>Event name<input name='label' required placeholder='National holiday'></label><label>Event type<select name='exception_type'><option value='holiday'>Public / school holiday</option><option value='school_closure'>School closure</option><option value='special_instructional_day'>Special instructional day</option><option value='event'>School event</option></select></label><label>Notes<input name='notes' maxlength='180' placeholder='Optional details'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1'> Instructional day</label><button class='tt-btn'>Save calendar date</button></form><div class='tt-table'><table><tr><th>Date</th><th>Event</th><th>Type</th><th>Day type</th><th>Notes</th><th>Actions</th></tr>{calendar_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Optional setup: register physical spaces only if your school wants room allocation. Leave this section empty if rooms are not needed. Classes and streams are managed separately.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity (optional)<input name='capacity' type='number' min='1' placeholder='Leave blank if unrestricted'></label><label class='wide'>Description (optional)<input name='description' maxlength='240' placeholder='Location or purpose'></label><label class='wide'>Equipment / resources (optional)<input name='equipment' maxlength='400' placeholder='Projector, computers, lab benches…'></label><label class='wide'>Suitable for (optional)<input name='suitable_for' maxlength='300' placeholder='Science practicals, exams, meetings…'></label><button class='tt-btn'>Save room / facility</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th><th>Equipment / resources</th><th>Actions</th></tr>{room_rows}</table></div></div></section>
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>Mark unavailable or preferred teacher periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Tap a cell to cycle: blank → ✓ → X → blank. Blank periods are fallback options, considered only when the generator cannot complete the timetable using ✓ periods.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-table'><h4>Configured restrictions</h4><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Status</th><th>Reason</th><th>Actions</th></tr>{availability_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>All teachers are available by default. Add a teacher only when you need to set fallback periods or block specific periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked (available). Tap to cycle: ✓ available → blank (fallback only) → X (never place). The generator tries all ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-table'><h4>Teacher restrictions</h4><table><tr><th>Teacher</th><th>Day</th><th>Period</th><th>Restriction</th><th>Reason</th><th>Actions</th></tr>{availability_rows}</table></div></div></section>
             {class_limit_form}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-table'><table><tr><th>Class / Stream</th><th>Subject</th><th>Assigned teacher</th><th>Weekly</th><th>Duration</th><th>Double</th><th>Actions</th></tr>{requirement_rows}</table></div></div></section>
             """
@@ -446,19 +446,21 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
           function setAvailabilityCell(button,teacherId){{
             const statusMap={{}};
             (button.dataset.statuses||'').split(';').filter(Boolean).forEach(item=>{{const parts=item.split(':');statusMap[parts[0]]=parts[1]||'';}});
-            const status=statusMap[String(teacherId)]||'';
+            const status=statusMap[String(teacherId)]||'available';
             button.dataset.status=status;
             button.textContent=status==='available'?'✓':(status==='unavailable'?'X':'');
+            button.setAttribute('role','checkbox'); button.setAttribute('aria-checked',status==='available'?'true':'false');
             const hidden=button.nextElementSibling;
             if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+status;
           }}
           root.querySelectorAll('.tt-av-cell').forEach(button=>{{
             button.addEventListener('click',()=>{{
-              const states=['','available','unavailable'];
+              const states=['available','','unavailable'];
               const current=button.dataset.status||'';
               const next=states[(states.indexOf(current)+1)%states.length];
               button.dataset.status=next;
               button.textContent=next==='available'?'✓':(next==='unavailable'?'X':'');
+              button.setAttribute('aria-checked',next==='available'?'true':'false');
               const hidden=button.nextElementSibling;
               if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+next;
             }});
