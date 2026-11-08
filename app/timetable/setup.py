@@ -223,7 +223,7 @@ def save_calendar_exception(connection: Any, school_id: int, profile_id: int, ex
     connection.commit()
 
 
-def save_room(connection: Any, school_id: int, room_code: str, name: str, room_type: str = "classroom", capacity: int | None = None) -> None:
+def save_room(connection: Any, school_id: int, room_code: str, name: str, room_type: str = "classroom", capacity: int | None = None, description: str = "", equipment: str = "", suitable_for: str = "") -> None:
     code, name = (room_code or "").strip().upper(), (name or "").strip()
     if not code or not name:
         raise TimetableSetupError("Room code and room name are required.")
@@ -238,15 +238,15 @@ def save_room(connection: Any, school_id: int, room_code: str, name: str, room_t
     ).fetchone()
     if existing:
         cur.execute(
-            """UPDATE ds_timetable_rooms SET name=?,room_type=?,capacity=?,is_active=1
+            """UPDATE ds_timetable_rooms SET name=?,room_type=?,capacity=?,description=?,equipment=?,suitable_for=?,is_active=1
                WHERE id=? AND school_id=?""",
-            (name, room_type, capacity, existing["id"], school_id),
+            (name, room_type, capacity, (description or "").strip(), (equipment or "").strip(), (suitable_for or "").strip(), existing["id"], school_id),
         )
     else:
         cur.execute(
-            """INSERT INTO ds_timetable_rooms(school_id,room_code,name,room_type,capacity)
-               VALUES(?,?,?,?,?)""",
-            (school_id, code, name, room_type, capacity),
+            """INSERT INTO ds_timetable_rooms(school_id,room_code,name,room_type,capacity,description,equipment,suitable_for)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (school_id, code, name, room_type, capacity, (description or "").strip(), (equipment or "").strip(), (suitable_for or "").strip()),
         )
     connection.commit()
 

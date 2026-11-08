@@ -482,6 +482,11 @@ def ensure_timetable_schema(connection: Any) -> None:
         cursor.execute(statement)
     # Additive compatibility for profiles created by the first foundation
     # release before term date fields were introduced.
+    cursor.execute("SELECT * FROM ds_timetable_rooms LIMIT 0")
+    room_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
+    for column in ("description", "equipment", "suitable_for"):
+        if column not in room_columns:
+            cursor.execute("ALTER TABLE ds_timetable_rooms ADD COLUMN " + column + " TEXT")
     cursor.execute("SELECT * FROM ds_timetable_profiles LIMIT 0")
     columns = {
         str(col.name if hasattr(col, "name") else col[0]).lower()
