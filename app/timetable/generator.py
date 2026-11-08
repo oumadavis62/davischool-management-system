@@ -9,7 +9,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.2"
+ENGINE_VERSION = "1.3"
 DEFAULT_NODE_LIMIT = 100000
 
 
@@ -514,7 +514,23 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         range(len(tasks)),
         key=lambda i: (len(candidates_by_task[i][1]), -tasks[i]["duration"], tasks[i]["class_id"], tasks[i]["subject_id"], tasks[i]["occurrence"]),
     )
-    candidate_lookup = {i: candidates for i, candidates in candidates_by_task}
+    # Candidate ordering is static and computed once. Re-scoring every candidate
+    # at every recursive backtracking node repeatedly scans the full placement
+    # list (and recomputes gap counts), turning a bounded search into a very
+    # expensive O(nodes * candidates * placements) workload. The solver's
+    # constraints are enforced by _can_place; this ordering only guides which
+    # valid slot is tried first.
+    candidate_lookup = {
+        i: sorted(
+            candidates,
+            key=lambda candidate: (
+                not bool(candidate.get("preferred")),
+                int(candidate["period_no"]),
+                int(candidate["day_id"]),
+            ),
+        )
+        for i, candidates in candidates_by_task
+    }
     placements = list(fixed)
     nodes = 0
     exhausted = False
@@ -589,10 +605,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             candidate for candidate in candidate_lookup[task_index]
             if fallback or candidate.get("explicitly_available")
         ]
-        candidates = sorted(
-            eligible_candidates,
-            key=lambda candidate: _score(task, candidate, placements),
-        )
+        # Preserve the precomputed candidate order during recursion. Dynamic
+        # scoring here was the dominant cost for large school workloads.
+        candidates = eligible_candidates
         for candidate in candidates:
             room_order = sorted(
                 _rooms_for_task(task),
