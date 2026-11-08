@@ -24,7 +24,7 @@ from app.timetable.setup import (
     save_class_limits,
     _profile,
 )
-from app.timetable.advanced_setup import save_timetable_constraint
+from app.timetable.advanced_setup import save_timetable_constraint, save_requirement_session_pattern
 
 
 def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
@@ -373,8 +373,23 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             f"<tr data-availability-row data-search='{esc(item['name']).lower()}'><td>{esc(item['name'])}</td><td>{item['fallback'] + item['unavailable']}</td><td>{max(0, total_availability_cells-item['fallback']-item['unavailable'])}</td><td>{item['fallback']}</td><td>{item['unavailable']}</td><td><button type='button' class='tt-btn secondary tt-edit-availability' data-kind='subject' data-id='{subject_id}'>View / Edit</button></td></tr>"
             for subject_id, item in sorted(subject_availability_summary.items(), key=lambda pair: pair[1]["name"].lower())
         ) or "<tr><td colspan='6' class='tt-muted'>No subjects found in the school register.</td></tr>"
+        requirement_pattern_values = {}
+        for req in requirements:
+            saved_pattern = cur.execute(
+                """SELECT rp.duration_periods,p.period_no
+                   FROM ds_timetable_requirement_patterns rp
+                   LEFT JOIN ds_timetable_periods p ON p.id=rp.preferred_period_id
+                   WHERE rp.school_id=? AND rp.profile_id=? AND rp.requirement_id=?
+                   ORDER BY rp.session_no""",
+                (school_id, pid, int(req["id"])),
+            ).fetchall()
+            requirement_pattern_values[int(req["id"])] = ", ".join(
+                str(int(item["duration_periods"])) +
+                (("@" + str(int(item["period_no"]))) if item["period_no"] is not None else "")
+                for item in saved_pattern
+            )
         requirement_rows = "".join(
-            f"<tr data-requirement-row data-class='{int(r['class_id'])}' data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' data-search='{esc(str(r['class_name'])+' '+str(r['stream'] or '')+' '+str(r['subject_name'])+' '+str(r['teacher_name'])).lower()}'><td><b>{esc(r['class_name'])} {esc(r['stream'] or '')}</b></td><td>{esc(r['subject_name'])}</td><td><b>{esc(r['lessons_per_week'])} / wk</b><small class='tt-req-subline'>{esc(r['duration_periods'])} period(s) per lesson · {'Double allowed' if r['allow_double'] else 'Single pattern'}</small></td><td>{esc(r['teacher_name'])}</td><td><details><summary>Manage</summary><div class='tt-req-manage'><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Lessons / week<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form></div></details></td></tr>" for r in requirements
+            f"<tr data-requirement-row data-class='{int(r['class_id'])}' data-subject='{int(r['subject_id'])}' data-teacher='{int(r['teacher_id'])}' data-search='{esc(str(r['class_name'])+' '+str(r['stream'] or '')+' '+str(r['subject_name'])+' '+str(r['teacher_name'])).lower()}'><td><b>{esc(r['class_name'])} {esc(r['stream'] or '')}</b></td><td>{esc(r['subject_name'])}</td><td><b>{esc(r['lessons_per_week'])} / wk</b><small class='tt-req-subline'>{esc(r['duration_periods'])} period(s) per lesson · {'Double allowed' if r['allow_double'] else 'Single pattern'}</small></td><td>{esc(r['teacher_name'])}</td><td><details><summary>Manage</summary><div class='tt-req-manage'><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Lessons / week<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><label class='wide'>Weekly lesson pattern<input name='weekly_pattern' maxlength='180' value='{esc(requirement_pattern_values.get(int(r['id']), ''))}' placeholder='e.g. 2@1, 1, 1, 1 or 2@4, 2@1, 1'><small>Comma-separated sessions. 2@1 means a double starting at Period 1; 2@4 means a double starting at Period 4. Enter auto to clear the pattern and let the generator distribute sessions.</small></label><button class='tt-btn'>Save changes</button></form><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete requirement</button></form></div></details></td></tr>" for r in requirements
         ) or "<tr><td colspan='5' class='tt-muted'>No weekly lesson requirements configured.</td></tr>"
         requirement_class_filters = "".join(f"<option value='{int(cid)}'>{esc(name)}</option>" for cid,name in sorted({(int(r['class_id']), str(r['class_name'])+' '+str(r['stream'] or '')) for r in requirements}, key=lambda x:x[1].lower()))
         requirement_subject_filters = "".join(f"<option value='{int(sid)}'>{esc(name)}</option>" for sid,name in sorted({(int(r['subject_id']), str(r['subject_name'])) for r in requirements}, key=lambda x:x[1].lower()))
@@ -1308,7 +1323,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             con.close()
 
     @app.post("/app/timetable/setup/requirement")
-    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form("")):
+    def create_timetable_requirement(request: Request, profile_id: int = Form(...), allocation: str = Form(...), lessons_per_week: int = Form(...), duration_periods: int = Form(1), max_lessons_per_day: str = Form(""), allow_double: str = Form(""), weekly_pattern: str = Form("")):
         school = school_for(request)
         if not school: return RedirectResponse("/", 303)
         con = get_db()
@@ -1318,7 +1333,39 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 raise TimetableSetupError("Select a valid teacher allocation.")
             class_id, subject_id, teacher_id = (int(part) for part in parts)
             save_class_requirement(con, int(school["id"]), profile_id, class_id, subject_id, teacher_id, lessons_per_week, duration_periods, int(max_lessons_per_day) if max_lessons_per_day.strip() else None, allow_double == "1")
-            return redirect_setup(profile_id, "Weekly lesson requirement saved.")
+            requirement = con.execute(
+                """SELECT id FROM ds_timetable_class_requirements
+                   WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=?""",
+                (int(school["id"]), profile_id, class_id, subject_id, teacher_id),
+            ).fetchone()
+            if weekly_pattern.strip().lower() == "auto":
+                con.execute(
+                    "DELETE FROM ds_timetable_requirement_patterns WHERE school_id=? AND profile_id=? AND requirement_id=?",
+                    (int(school["id"]), profile_id, int(requirement["id"])),
+                )
+                con.commit()
+            elif weekly_pattern.strip():
+                sessions = []
+                for item in weekly_pattern.split(","):
+                    token = item.strip()
+                    if not token:
+                        continue
+                    if "@" in token:
+                        duration_text, period_text = token.split("@", 1)
+                        duration, period_no = int(duration_text.strip()), int(period_text.strip())
+                        period = con.execute(
+                            "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=? AND period_type='lesson'",
+                            (int(school["id"]), profile_id, period_no),
+                        ).fetchone()
+                        if not period:
+                            raise TimetableSetupError("A preferred start period does not exist or is not a teaching period.")
+                        preferred_period_id = int(period["id"])
+                    else:
+                        duration, preferred_period_id = int(token), None
+                    sessions.append({"duration_periods": duration, "preferred_period_id": preferred_period_id})
+                save_requirement_session_pattern(con, int(school["id"]), profile_id, int(requirement["id"]), sessions)
+            return redirect_setup(profile_id, "Weekly lesson requirement and lesson pattern saved.")
         except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
             return redirect_setup(profile_id, str(exc), True)
         finally: con.close()

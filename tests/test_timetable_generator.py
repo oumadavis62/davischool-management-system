@@ -57,6 +57,30 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertTrue(all(row["room_id"] is not None for row in rows))
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
 
+    def test_generator_honours_configured_double_lesson_start_period(self):
+        from app.timetable.advanced_setup import save_requirement_session_pattern
+        requirement_id = self.db.execute(
+            """SELECT id FROM ds_timetable_class_requirements
+               WHERE profile_id=? AND class_id=20 AND subject_id=30 AND teacher_id=10""",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        period_one = self.db.execute(
+            "SELECT id FROM ds_timetable_periods WHERE profile_id=? AND period_no=1",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        save_requirement_session_pattern(
+            self.db, 1, self.profile_id, requirement_id,
+            [{"duration_periods": 2, "preferred_period_id": period_one}],
+        )
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "completed")
+        row = self.db.execute(
+            """SELECT period_id,duration_periods FROM ds_timetable_lessons
+               WHERE profile_id=? AND generation_run_id IS NOT NULL""",
+            (self.profile_id,),
+        ).fetchone()
+        self.assertEqual((row["period_id"], row["duration_periods"]), (period_one, 2))
+
     def test_generator_respects_class_weekly_lesson_ceiling(self):
         save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
         result = generate_timetable(self.db, 1, self.profile_id, "admin@test")

@@ -290,6 +290,7 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
             duration = int(session.get("duration_periods", 1))
             day_id = session.get("preferred_day_id")
             slot_id = session.get("preferred_slot_id")
+            period_id = session.get("preferred_period_id")
         except (AttributeError, TypeError, ValueError):
             raise TimetableSetupError("Each weekly session must have a valid duration and preferences.")
         if not 1 <= duration <= 4:
@@ -309,9 +310,18 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
             ).fetchone()
             if not slot or str(slot["slot_type"]) != "instructional":
                 raise TimetableSetupError("A preferred slot must be an instructional slot in this profile.")
+        if period_id is not None:
+            period = cur.execute(
+                """SELECT id,period_type FROM ds_timetable_periods
+                   WHERE id=? AND school_id=? AND profile_id=?""",
+                (int(period_id), school_id, profile_id),
+            ).fetchone()
+            if not period or str(period["period_type"] or "lesson") != "lesson":
+                raise TimetableSetupError("A preferred start period must be an instructional period in this profile.")
         label = str(session.get("session_label") or "").strip()[:80] or f"Session {index}"
         normalized.append((index, duration, int(day_id) if day_id is not None else None,
-                           int(slot_id) if slot_id is not None else None, label))
+                           int(slot_id) if slot_id is not None else None,
+                           int(period_id) if period_id is not None else None, label))
         total_periods += duration
     expected = int(requirement["lessons_per_week"])
     if total_periods != expected:
@@ -323,13 +333,13 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
             "DELETE FROM ds_timetable_requirement_patterns WHERE school_id=? AND profile_id=? AND requirement_id=?",
             (school_id, profile_id, requirement_id),
         )
-        for session_no, duration, day_id, slot_id, label in normalized:
+        for session_no, duration, day_id, slot_id, period_id, label in normalized:
             cur.execute(
                 """INSERT INTO ds_timetable_requirement_patterns
                    (school_id,profile_id,requirement_id,session_no,duration_periods,
-                    preferred_day_id,preferred_slot_id,session_label)
-                   VALUES(?,?,?,?,?,?,?,?)""",
-                (school_id, profile_id, requirement_id, session_no, duration, day_id, slot_id, label),
+                    preferred_day_id,preferred_slot_id,preferred_period_id,session_label)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                (school_id, profile_id, requirement_id, session_no, duration, day_id, slot_id, period_id, label),
             )
         connection.commit()
     except Exception:

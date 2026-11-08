@@ -247,14 +247,35 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         duration = int(req["duration_periods"] or 1)
         if duration < 1 or duration > 4:
             raise TimetableSetupError("Lesson duration must be between one and four periods.")
-        remaining = weekly - already
+        configured_pattern = cur.execute(
+            """SELECT duration_periods,preferred_period_id FROM ds_timetable_requirement_patterns
+               WHERE school_id=? AND profile_id=? AND requirement_id=(
+                   SELECT id FROM ds_timetable_class_requirements
+                   WHERE school_id=? AND profile_id=? AND class_id=? AND subject_id=? AND teacher_id=?
+               ) ORDER BY session_no""",
+            (school_id, profile_id, school_id, profile_id, key[0], key[1], key[2]),
+        ).fetchall()
+        if configured_pattern and already:
+            raise TimetableSetupError(
+                "A configured weekly lesson pattern cannot be combined with manually placed lessons for the same subject. Clear those manual placements or remove the pattern first."
+            )
+        if configured_pattern and sum(int(x["duration_periods"] or 1) for x in configured_pattern) != weekly:
+            raise TimetableSetupError("The saved lesson pattern no longer matches this subject's weekly period requirement. Edit the pattern before generating.")
+        planned_sessions = (
+            [{"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
+             for x in configured_pattern]
+            if configured_pattern else
+            [{"duration": duration, "preferred_period_id": None} for _ in range(remaining)]
+        )
+        remaining = len(planned_sessions)
         total_required += weekly
-        for occurrence in range(remaining):
+        for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
                 "class_id": key[0],
                 "subject_id": key[1],
                 "teacher_id": key[2],
-                "duration": duration,
+                "duration": planned["duration"],
+                "preferred_period_id": planned["preferred_period_id"],
                 "max_lessons_per_day": int(req["max_lessons_per_day"]) if req["max_lessons_per_day"] is not None else None,
                 "max_lessons_per_week": int(class_limits[key[0]]["max_lessons_per_week"]) if key[0] in class_limits and class_limits[key[0]]["max_lessons_per_week"] is not None else None,
                 "max_periods_per_day": int(class_limits[key[0]]["max_periods_per_day"]) if key[0] in class_limits and class_limits[key[0]]["max_periods_per_day"] is not None else None,
@@ -314,6 +335,8 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         for day in days:
             day_id = int(day["id"])
             for start_index, period in enumerate(periods):
+                if task.get("preferred_period_id") is not None and int(period["id"]) != int(task["preferred_period_id"]):
+                    continue
                 span = _period_span(periods, start_index, task["duration"])
                 if not span:
                     continue

@@ -141,6 +141,27 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         self.assertEqual(preserved, 4)
 
 
+    def test_two_doubles_and_one_single_fill_five_periods(self):
+        self.db.execute(
+            """INSERT INTO ds_timetable_class_requirements
+               (school_id,profile_id,class_id,subject_id,teacher_id,lessons_per_week)
+               VALUES(12,?,?,101,201,5)""",
+            (self.profile_id, 1),
+        )
+        requirement_id = self.db.execute(
+            "SELECT id FROM ds_timetable_class_requirements WHERE profile_id=?",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        save_requirement_session_pattern(
+            self.db, 12, self.profile_id, requirement_id,
+            [{"duration_periods": 2}, {"duration_periods": 2}, {"duration_periods": 1}],
+        )
+        rows = self.db.execute(
+            "SELECT duration_periods FROM ds_timetable_requirement_patterns WHERE requirement_id=? ORDER BY session_no",
+            (requirement_id,),
+        ).fetchall()
+        self.assertEqual([row["duration_periods"] for row in rows], [2, 2, 1])
+
     def test_calendar_occurrence_resolves_weekday_weekend_exception_and_template(self):
         from app.timetable.setup import save_day, save_calendar_exception
         from app.timetable.advanced_setup import create_schedule_template, assign_day_template
