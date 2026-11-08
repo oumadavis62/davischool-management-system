@@ -13,7 +13,8 @@ from app.timetable.setup import (
     save_class_limits,
 )
 from app.timetable.builder import place_lesson
-from app.timetable.generator import generate_timetable
+from app.timetable.generator import generate_timetable, generate_advanced_instructional_sessions
+from app.timetable.advanced_setup import create_scheduling_requirement, save_scheduling_pattern
 
 
 class TimetableGeneratorTests(unittest.TestCase):
@@ -80,6 +81,48 @@ class TimetableGeneratorTests(unittest.TestCase):
             (self.profile_id,),
         ).fetchone()
         self.assertEqual((row["period_id"], row["duration_periods"]), (period_one, 2))
+
+    def test_shared_instructional_occurrence_replaces_matching_legacy_requirement(self):
+        # The ordinary allocation requires one double lesson. A shared
+        # instructional session of the same duration fulfils that requirement
+        # instead of causing a duplicate legacy lesson to be generated.
+        save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 1, 2, None, True)
+        requirement_id = create_scheduling_requirement(
+            self.db, 1, self.profile_id, "Shared Mathematics",
+            class_ids=[20], teacher_ids=[10], subject_id=30,
+            weekly_occurrences=1, weekly_periods=2,
+        )
+        save_scheduling_pattern(
+            self.db, 1, self.profile_id, requirement_id,
+            [{"duration_periods": 2}],
+        )
+        shared = generate_advanced_instructional_sessions(
+            self.db, 1, self.profile_id, "admin@test"
+        )
+        self.assertEqual(shared["status"], "completed")
+        ordinary = generate_timetable(
+            self.db, 1, self.profile_id, "admin@test",
+            normalized_run_id=shared["run_id"],
+        )
+        self.assertEqual(ordinary["status"], "completed")
+        self.assertEqual(ordinary["generated_lessons"], 0)
+        self.assertEqual(
+            self.db.execute(
+                """SELECT COUNT(*) FROM ds_timetable_sessions
+                   WHERE school_id=1 AND profile_id=? AND schedule_layer='instructional'
+                     AND generation_run_id=?""",
+                (self.profile_id, shared["run_id"]),
+            ).fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.db.execute(
+                """SELECT COUNT(*) FROM ds_timetable_lessons
+                   WHERE school_id=1 AND profile_id=? AND status='scheduled'""",
+                (self.profile_id,),
+            ).fetchone()[0],
+            0,
+        )
 
     def test_generator_respects_class_weekly_lesson_ceiling(self):
         save_class_limits(self.db, 1, self.profile_id, 20, 1, None)
