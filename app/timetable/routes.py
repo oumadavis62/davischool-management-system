@@ -415,6 +415,63 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for x in class_records
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th><th>Actions</th></tr>{class_limit_rows}</table></div></div></section>"""
+        # Current allocation monitor: compare the weekly lessons configured for each
+        # allocated class/stream with its own workload ceiling before generation.
+        requirements_by_allocation = {
+            (int(r["class_id"]), int(r["subject_id"]), int(r["teacher_id"])): r
+            for r in requirements
+        }
+        limits_by_class = {int(x["class_id"]): x for x in class_limits}
+        allocation_groups = {}
+        for a in allocations:
+            cid = int(a["class_id"])
+            group = allocation_groups.setdefault(cid, {
+                "class_name": str(a["class_name"]), "stream": str(a["stream"] or ""),
+                "subjects": [], "total": 0, "configured": 0,
+            })
+            req = requirements_by_allocation.get((cid, int(a["subject_id"]), int(a["teacher_id"])))
+            lessons = int(req["lessons_per_week"]) if req else 0
+            group["subjects"].append({
+                "subject": str(a["subject_name"]), "teacher": str(a["teacher_name"]),
+                "lessons": lessons, "configured": req is not None,
+            })
+            group["total"] += lessons
+            group["configured"] += 1 if req is not None else 0
+        allocation_monitor_rows = []
+        for cid, group in sorted(allocation_groups.items(), key=lambda item: (item[1]["class_name"].lower(), item[1]["stream"].lower())):
+            limit = limits_by_class.get(cid)
+            maximum = limit["max_lessons_per_week"] if limit else None
+            maximum_value = int(maximum) if maximum is not None else None
+            if maximum_value is None:
+                status_text, status_class = "Maximum not set", "neutral"
+            elif group["total"] > maximum_value:
+                status_text, status_class = f"Over by {group['total'] - maximum_value}", "over"
+            elif group["total"] < maximum_value:
+                status_text, status_class = f"{maximum_value - group['total']} available", "under"
+            else:
+                status_text, status_class = "At maximum", "match"
+            subject_lines = "".join(
+                f"<tr><td>{esc(item['subject'])}</td><td>{esc(item['teacher'])}</td><td><b>{item['lessons']}</b> / week</td><td>{'Configured' if item['configured'] else 'Not configured'}</td></tr>"
+                for item in sorted(group["subjects"], key=lambda x: x["subject"].lower())
+            )
+            allocation_monitor_rows.append(
+                f"<tr class='tt-allocation-summary'><td><b>{esc(group['class_name'])} {esc(group['stream'])}</b><small>{group['configured']} of {len(group['subjects'])} subject loads configured</small></td>"
+                f"<td><b>{group['total']}</b> lessons / week</td><td>{maximum_value if maximum_value is not None else 'Not set'}</td>"
+                f"<td><span class='tt-allocation-status {status_class}'>{esc(status_text)}</span></td>"
+                f"<td><a class='tt-btn secondary' href='/school/subject-allocation'>Edit allocations</a></td></tr>"
+                f"<tr class='tt-allocation-details'><td colspan='5'><details><summary>View subject breakdown ({len(group['subjects'])})</summary>"
+                f"<div class='tt-table'><table><thead><tr><th>Subject</th><th>Allocated teacher</th><th>Weekly lessons</th><th>Setup</th></tr></thead><tbody>{subject_lines}</tbody></table></div></details></td></tr>"
+            )
+        allocation_monitor_section = f"""
+        <section class='tt-section tt-allocation-monitor'>
+          <div class='tt-section-title'><div><span class='tt-kicker'>CURRENT ALLOCATIONS</span><h3>Track class lesson allocations</h3>
+          <p>Compare the weekly lessons assigned to each class or stream with its configured maximum. Expand a row to inspect subject and teacher allocations.</p></div>
+          <a class='tt-btn' href='/school/subject-allocation'>Manage subject allocations</a></div>
+          <div class='tt-table'><table><thead><tr><th>Class / stream</th><th>Current weekly load</th><th>Maximum</th><th>Balance</th><th>Action</th></tr></thead>
+          <tbody>{"".join(allocation_monitor_rows) or "<tr><td colspan='5' class='tt-muted'>No current subject allocations found. Add allocations to begin tracking class lesson loads.</td></tr>"}</tbody></table></div>
+          <p class='tt-muted'>Weekly totals are calculated from the saved subject requirements. If a subject has no weekly lesson requirement yet, it is shown as not configured and contributes zero until configured.</p>
+        </section>
+        """
         bulk_requirement_form = (
             "<form method='post' data-native-post='true' action='/app/timetable/setup/requirements/bulk' class='tt-form compact'>"
             + hidden
@@ -445,6 +502,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>05 · LEARNING SPACES</span><h3>Rooms and facilities</h3><p>Optional setup: register physical spaces only if your school wants room allocation. Leave this section empty if rooms are not needed. Classes and streams are managed separately.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/room' class='tt-form compact'>{hidden}<label>Room code<input name='room_code' required placeholder='LAB-01'></label><label>Room name<input name='name' required placeholder='Science Laboratory'></label><label>Room type<select name='room_type'><option value='classroom'>Classroom</option><option value='laboratory'>Laboratory</option><option value='library'>Library</option><option value='hall'>Hall</option><option value='workshop'>Workshop</option><option value='sports'>Sports facility</option><option value='other'>Other</option></select></label><label>Capacity (optional)<input name='capacity' type='number' min='1' placeholder='Leave blank if unrestricted'></label>{room_policy_fields('shared',None)}<label class='wide'>Description (optional)<input name='description' maxlength='240' placeholder='Location or purpose'></label><label class='wide'>Equipment / resources (optional)<input name='equipment' maxlength='400' placeholder='Projector, computers, lab benches…'></label><label class='wide'>Suitable for (optional)<input name='suitable_for' maxlength='300' placeholder='Science practicals, exams, meetings…'></label><button class='tt-btn'>Save room / facility</button></form><div class='tt-table'><table><tr><th>Code</th><th>Room</th><th>Type</th><th>Capacity</th><th>Allocation</th><th>Equipment / resources</th><th>Actions</th></tr>{room_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>06 · STAFF AVAILABILITY</span><h3>Teacher availability</h3><p>All teachers are available by default. Add a teacher only when you need to set fallback periods or block specific periods.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/availability-matrix' class='tt-form compact'>{hidden}<label>Teacher<select name='teacher_id' id='tt-availability-teacher' required>{teacher_opts}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never place</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{matrix_period_headers}</tr></thead><tbody>{matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked (available). Tap to cycle: ✓ available → blank (fallback only) → X (never place). The generator tries all ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save teacher availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search teachers<input type='search' data-availability-search='teacher' placeholder='Find teacher…'></label><div class='tt-table'><h4>Teacher restrictions</h4><table><thead><tr><th>Teacher</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{availability_rows}</tbody></table></div></div></div></section>
             {class_limit_form}
+            {allocation_monitor_section}
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>07 · SUBJECT AVAILABILITY</span><h3>Subject availability</h3><p>All subjects are available in every configured lesson period by default. Add a subject only when you need to make certain periods fallback-only or completely unavailable.</p></div></div><div class='tt-availability-editor'><form method='post' data-native-post='true' action='/app/timetable/setup/subject-availability-matrix' class='tt-form compact'>{hidden}<label>Subject<select name='subject_id' id='tt-subject-availability' required>{''.join(f"<option value='{int(x['id'])}'>{esc(x['name'])}</option>" for x in subjects)}</select></label><div class='tt-availability-legend'><span><b>✓</b> Available first</span><span><b>Blank</b> Fallback only</span><span><b>X</b> Never schedule</span></div><div class='tt-table tt-availability-grid'><table><thead><tr><th>Day / Period</th>{subject_matrix_period_headers}</tr></thead><tbody>{subject_matrix_day_rows}</tbody></table></div><p class='tt-muted'>Every cell starts ticked. Tap to cycle: ✓ available → blank (fallback only) → X (never schedule). The generator tries ticked periods first and uses blank periods only when needed to complete the timetable.</p><button class='tt-btn'>Save subject availability</button></form><div class='tt-availability-summary'><label class='tt-summary-search'>Search subjects<input type='search' data-availability-search='subject' placeholder='Find subject…'></label><div class='tt-table'><h4>Subject restrictions</h4><table><thead><tr><th>Subject</th><th title='Total restricted cells'>#</th><th title='Available'>✓</th><th title='Fallback only'>—</th><th title='Unavailable'>X</th><th>Actions</th></tr></thead><tbody>{subject_availability_rows}</tbody></table></div></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · WEEKLY LESSON LOAD</span><h3>Subject requirements</h3><p>Set each subject's weekly lesson load once and apply it across all classes and streams where it is taught. Teacher allocations are matched automatically.</p></div></div><div class='tt-split'><div>{bulk_requirement_form}</div><div class='tt-req-workspace'><div class='tt-req-toolbar'><label class='tt-req-search'><span>Search requirements</span><input type='search' id='tt-req-search' placeholder='Search class, subject or teacher…'></label><details class='tt-req-filter'><summary>⚙ Filters <span id='tt-req-filter-count'>All</span></summary><div class='tt-req-filter-panel'><div class='tt-req-filter-head'><strong>Filter requirements</strong><button type='button' class='tt-req-filter-close' aria-label='Close filters' title='Close filters'>×</button></div><label>Class / stream<select id='tt-req-class'><option value=''>All classes</option>{requirement_class_filters}</select></label><label>Subject<select id='tt-req-subject'><option value=''>All subjects</option>{requirement_subject_filters}</select></label><label>Teacher<select id='tt-req-teacher'><option value=''>All teachers</option>{requirement_teacher_filters}</select></label><button type='button' class='tt-btn secondary' id='tt-req-reset'>Clear filters</button></div></details><span class='tt-req-count' id='tt-req-count'></span></div><div class='tt-table tt-req-table'><table><thead><tr><th>Class / stream</th><th>Subject</th><th>Weekly requirement</th><th>Teacher</th><th>Manage</th></tr></thead><tbody>{requirement_rows}</tbody></table></div><div class='tt-req-pagination'><span id='tt-req-page-info'></span><div><button type='button' class='tt-btn secondary' id='tt-req-prev'>← Previous</button><button type='button' class='tt-btn secondary' id='tt-req-next'>Next →</button></div></div></div></div></section>
             """
@@ -461,6 +519,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         .tt-card h3,.tt-section h3{{font-size:17px;margin:4px 0;color:#234c37}}.tt-profile{{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;border-left:4px solid #4d9564}}.tt-profile h2{{margin:4px 0;font-size:21px;color:#204a34}}
         .tt-stats{{display:flex;gap:18px}}.tt-stats span{{font-size:11px;color:#647b6a;text-align:center}}.tt-stats b{{display:block;font-size:22px;color:#28734a}}
         .tt-status,.tt-pill{{background:#e7f4e9;color:#23613b;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:800}}
+        .tt-allocation-summary small{{display:block;color:#748779;font-size:10px;margin-top:4px}}.tt-allocation-details>td{{padding:0 12px 12px!important;background:#f8fbf8}}.tt-allocation-details details{{padding:8px 0}}.tt-allocation-details summary{{cursor:pointer;color:#37684a;font-size:12px;font-weight:800}}.tt-allocation-details .tt-table{{margin-top:10px}}.tt-allocation-status{{display:inline-block;padding:5px 9px;border-radius:20px;font-size:10px;font-weight:800;white-space:nowrap}}.tt-allocation-status.over{{background:#fff0ed;color:#a33b2d}}.tt-allocation-status.under{{background:#fff7df;color:#8a6416}}.tt-allocation-status.match{{background:#e6f4e9;color:#28653c}}.tt-allocation-status.neutral{{background:#eef1ef;color:#59675e}}
         .tt-select{{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}}.tt-select label{{font-size:12px;font-weight:800;color:#42634e}}.tt-select select{{min-width:260px;max-width:100%;padding:11px 13px;border:1px solid #cfe0d1;border-radius:11px;background:white;color:#254a35}}
         .tt-section-title{{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:15px}}.tt-section-title>div{{min-width:180px}}
         .tt-split{{display:grid;grid-template-columns:minmax(190px,.48fr) minmax(0,1.7fr);gap:16px;align-items:start}}
