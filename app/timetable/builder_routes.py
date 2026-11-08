@@ -34,6 +34,133 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             parts.append("error=1")
         return RedirectResponse("/app/timetable/builder" + (("?" + "&".join(parts)) if parts else ""), 303)
 
+    @app.post("/app/timetable/builder")
+    async def timetable_builder_post_fallback(request: Request):
+        """Accept legacy/current-page form posts and dispatch them to the same validated operations."""
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        form = await request.form()
+        def value(name, default=""):
+            return str(form.get(name, default) or default).strip()
+        def integer(name, default=0):
+            try:
+                return int(value(name, str(default)))
+            except (TypeError, ValueError):
+                return default
+        profile_id = integer("profile_id")
+        school_id = int(school["id"])
+        con = get_db()
+        try:
+            if value("allocation"):
+                parts = value("allocation").split("|")
+                if len(parts) != 3:
+                    raise TimetableSetupError("Select a valid class, subject and teacher allocation.")
+                place_lesson(con, school_id, profile_id, *(int(part) for part in parts),
+                    integer("day_id"), integer("period_id"), integer("room_id") or None,
+                    request.session.get("email", ""))
+                message = "Lesson added to the timetable."
+            elif value("lesson_id") and value("day_id") and value("period_id"):
+                move_lesson(con, school_id, profile_id, integer("lesson_id"),
+                    integer("day_id"), integer("period_id"), request.session.get("email", ""),
+                    integer("room_id") or None)
+                message = "Lesson moved successfully."
+            elif value("lesson_id"):
+                delete_lesson(con, school_id, profile_id, integer("lesson_id"),
+                    request.session.get("email", ""))
+                message = "Lesson removed from the timetable."
+            elif value("session_id"):
+                con.execute("UPDATE ds_timetable_sessions SET status='cancelled' WHERE id=? AND school_id=? AND profile_id=? AND status='scheduled'",
+                    (integer("session_id"), school_id, profile_id))
+                con.commit()
+                message = "Session removed from the active timetable; its record is retained."
+            elif value("group_id"):
+                group_id = integer("group_id")
+                row = con.execute("SELECT id FROM ds_timetable_teaching_groups WHERE id=? AND school_id=? AND profile_id=?",
+                    (group_id, school_id, profile_id)).fetchone()
+                if not row:
+                    raise TimetableSetupError("Combined teaching group not found.")
+                con.execute("UPDATE ds_timetable_scheduling_requirements SET is_active=0 WHERE school_id=? AND profile_id=? AND teaching_group_id=?",
+                    (school_id, profile_id, group_id))
+                con.execute("UPDATE ds_timetable_teaching_groups SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                    (group_id, school_id, profile_id))
+                con.commit()
+                message = "Combined group deactivated; saved history is retained."
+            elif value("requirement_id") and value("room_assignment_mode"):
+                mode = value("room_assignment_mode").lower()
+                room_id = integer("preferred_room_id") or None
+                if mode not in {"automatic", "preferred", "fixed"}:
+                    raise TimetableSetupError("Choose Automatic, Preferred or Fixed room allocation.")
+                if mode in {"preferred", "fixed"} and room_id is None:
+                    raise TimetableSetupError("Choose a room for Preferred or Fixed allocation.")
+                requirement = con.execute("SELECT room_type FROM ds_timetable_scheduling_requirements WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+                    (integer("requirement_id"), school_id, profile_id)).fetchone()
+                if not requirement:
+                    raise TimetableSetupError("Select a valid scheduling requirement.")
+                if room_id is not None:
+                    room = con.execute("SELECT room_type,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?",
+                        (room_id, school_id)).fetchone()
+                    if not room or not int(room["is_active"] or 0):
+                        raise TimetableSetupError("Select an active room.")
+                    if requirement["room_type"] and str(room["room_type"]) != str(requirement["room_type"]):
+                        raise TimetableSetupError("The selected room does not match the required room type.")
+                con.execute("UPDATE ds_timetable_scheduling_requirements SET room_assignment_mode=?,preferred_room_id=? WHERE id=? AND school_id=? AND profile_id=?",
+                    (mode, None if mode == "automatic" else room_id, integer("requirement_id"), school_id, profile_id))
+                con.commit()
+                message = "Room allocation rule saved."
+            elif value("requirement_id") and value("day_id") and value("period_id"):
+                place_advanced_requirement_session(con, school_id, profile_id,
+                    integer("requirement_id"), integer("session_no", 1), integer("day_id"),
+                    integer("period_id"), integer("room_id") or None,
+                    request.session.get("email", ""))
+                message = "Advanced session placed successfully."
+            elif value("requirement_id"):
+                requirement_id = integer("requirement_id")
+                row = con.execute("SELECT teaching_group_id FROM ds_timetable_scheduling_requirements WHERE id=? AND school_id=? AND profile_id=? AND is_active=1",
+                    (requirement_id, school_id, profile_id)).fetchone()
+                if not row:
+                    raise TimetableSetupError("Active scheduling requirement not found.")
+                con.execute("UPDATE ds_timetable_scheduling_requirements SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                    (requirement_id, school_id, profile_id))
+                if row["teaching_group_id"] is not None:
+                    con.execute("UPDATE ds_timetable_teaching_groups SET is_active=0 WHERE id=? AND school_id=? AND profile_id=?",
+                        (int(row["teaching_group_id"]), school_id, profile_id))
+                con.commit()
+                message = "Scheduling requirement deactivated; saved session history is retained."
+            elif value("name") and form.getlist("class_ids") and form.getlist("teacher_ids"):
+                classes = list(dict.fromkeys(int(v) for v in form.getlist("class_ids")))
+                teachers = list(dict.fromkeys(int(v) for v in form.getlist("teacher_ids")))
+                subject_id = integer("subject_id")
+                duration = integer("duration_periods", 1)
+                mode = value("room_assignment_mode", "automatic").lower()
+                room_id = integer("preferred_room_id") or None
+                if len(classes) < 2 or not teachers or not 1 <= duration <= 4:
+                    raise TimetableSetupError("Select at least two classes, one teacher and a duration of 1–4 periods.")
+                if mode not in {"automatic", "preferred", "fixed"}:
+                    raise TimetableSetupError("Choose a valid room allocation mode.")
+                if mode in {"preferred", "fixed"} and room_id is None:
+                    raise TimetableSetupError("Choose a preferred or fixed room.")
+                group_id = create_teaching_group(con, school_id, profile_id, value("name"), classes,
+                    group_type="combined_class", subject_id=subject_id,
+                    notes="Combined class session with a shared teaching team.")
+                req_id = create_scheduling_requirement(con, school_id, profile_id,
+                    value("name") + " — combined session", class_ids=classes, teacher_ids=teachers,
+                    schedule_layer="instructional", session_type="lesson", subject_id=subject_id,
+                    teaching_group_id=group_id, weekly_occurrences=1, weekly_periods=duration,
+                    counts_toward_curriculum=True, min_teacher_count=1, room_type=value("room_type", "classroom"),
+                    room_assignment_mode=mode, preferred_room_id=room_id)
+                save_scheduling_pattern(con, school_id, profile_id, req_id,
+                    [{"duration_periods": duration, "session_label": "Combined lesson"}])
+                message = "Combined class and co-teaching requirement created."
+            else:
+                raise TimetableSetupError("The submitted builder action could not be identified. Reopen the action and try again.")
+            return redirect_builder(profile_id, message)
+        except (TimetableSetupError, ValueError, TypeError) as exc:
+            con.rollback()
+            return redirect_builder(profile_id, str(exc), True)
+        finally:
+            con.close()
+
     @app.get("/app/timetable/builder", response_class=HTMLResponse)
     def timetable_builder_page(request: Request, profile_id: int = 0, day_id: int = 0, period_id: int = 0, message: str = "", error: int = 0):
         school = school_for(request)
