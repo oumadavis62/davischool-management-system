@@ -741,6 +741,18 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
         if template:
             template_id = int(template["template_id"])
 
+    schedule_slots = []
+    if template_id is not None:
+        schedule_slots = [
+            dict(slot) for slot in cur.execute(
+                """SELECT id,slot_no,label,slot_type,start_time,end_time,period_no
+                   FROM ds_timetable_schedule_slots
+                   WHERE school_id=? AND profile_id=? AND template_id=? AND is_active=1
+                   ORDER BY slot_no,id""",
+                (school_id, profile_id, template_id),
+            ).fetchall()
+        ]
+
     rotations = []
     for cycle in cur.execute(
         """SELECT id,name,cycle_length_weeks,anchor_date
@@ -764,6 +776,7 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
             "cycle_name": str(cycle["name"]),
             "week_number": week_number,
             "week": dict(rotation) if rotation else None,
+            "programme_id": int(rotation["programme_id"]) if rotation and rotation["programme_id"] is not None else None,
         })
 
     return {
@@ -774,6 +787,7 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
         "is_configured": bool(day),
         "is_instructional": instructional,
         "template_id": template_id,
+        "schedule_slots": schedule_slots,
         "cycle_week": cycle_week,
         "exceptions": [dict(item) for item in exceptions],
         "rotations": rotations,
