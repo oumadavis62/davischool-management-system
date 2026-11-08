@@ -268,7 +268,18 @@ def _worker_loop(get_db):
             if con:
                 con.close()
         if job:
-            _execute_job(get_db, job)
+            try:
+                _execute_job(get_db, job)
+            except Exception:
+                log.exception("Timetable job worker failed before completing job_id=%s", job.get("id"))
+                try:
+                    _set_job(
+                        get_db, int(job["id"]), status="queued",
+                        stage="retrying after a temporary database error",
+                        message="The worker encountered a temporary database error and will retry.",
+                    )
+                except Exception:
+                    log.exception("Could not requeue timetable job_id=%s after worker failure", job.get("id"))
         else:
             _STOP.wait(2.0)
 
