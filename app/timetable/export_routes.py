@@ -67,13 +67,13 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         if error:
             return error
         from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.pagesizes import A3, A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A3 if result.get("weekend_sessions") else A4), leftMargin=18, rightMargin=18, topMargin=18, bottomMargin=18)
         styles = getSampleStyleSheet()
         school_style = ParagraphStyle("DaviSchoolName", parent=styles["Title"], alignment=TA_CENTER, fontSize=16, leading=19, textColor=colors.HexColor("#174a31"))
         title_style = ParagraphStyle("TimetableTitle", parent=styles["Heading2"], alignment=TA_CENTER, fontSize=11, leading=14, textColor=colors.HexColor("#315b3e"))
