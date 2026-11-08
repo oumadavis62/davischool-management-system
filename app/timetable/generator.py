@@ -9,7 +9,7 @@ from app.timetable.setup import TimetableSetupError, _profile
 from app.timetable.session_engine import _validate_constraints
 
 
-ENGINE_VERSION = "1.0"
+ENGINE_VERSION = "1.1"
 DEFAULT_NODE_LIMIT = 100000
 
 
@@ -500,6 +500,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     nodes = 0
     exhausted = False
 
+    # Database-backed normalized-session conflict checks do not depend on the
+    # partial DFS placement. Evaluate them once per task/slot/room candidate,
+    # rather than repeating the same SQL queries every time backtracking
+    # revisits that candidate. The DFS below handles conflicts between newly
+    # placed legacy lessons in memory.
+    from app.timetable.session_engine import find_session_conflicts
+    blocked_candidates = set()
+    for task_index, task in enumerate(tasks):
+        for candidate in candidate_lookup[task_index]:
+            for room_id in room_ids:
+                if find_session_conflicts(
+                    connection, school_id, profile_id,
+                    candidate["start_time"], candidate["end_time"],
+                    class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
+                    room_id=room_id, day_id=candidate["day_id"],
+                    include_legacy_lessons=False, generated_run_id=normalized_run_id,
+                ):
+                    blocked_candidates.add((
+                        task_index, candidate["day_id"], candidate["period_id"], room_id
+                    ))
+
     def search(position: int, fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
         if position >= len(order):
@@ -535,15 +556,9 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     exhausted = True
                     return False
                 placement = dict(candidate, room_id=room_id)
-                # Reserve normalized sessions against the legacy weekly solver.
-                from app.timetable.session_engine import find_session_conflicts
-                if find_session_conflicts(
-                    connection, school_id, profile_id,
-                    placement["start_time"], placement["end_time"],
-                    class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
-                    room_id=placement.get("room_id"), day_id=placement["day_id"],
-                    include_legacy_lessons=False, generated_run_id=normalized_run_id,
-                ):
+                if (
+                    task_index, candidate["day_id"], candidate["period_id"], room_id
+                ) in blocked_candidates:
                     continue
                 if not _can_place(task, placement, placements):
                     continue
