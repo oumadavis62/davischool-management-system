@@ -259,15 +259,26 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             raise TimetableSetupError(
                 "A configured weekly lesson pattern cannot be combined with manually placed lessons for the same subject. Clear those manual placements or remove the pattern first."
             )
-        if configured_pattern and sum(int(x["duration_periods"] or 1) for x in configured_pattern) != weekly:
-            raise TimetableSetupError("The saved lesson pattern no longer matches this subject's weekly period requirement. Edit the pattern before generating.")
-        planned_sessions = (
-            [{"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
-             for x in configured_pattern]
-            if configured_pattern else
-            [{"duration": duration, "preferred_period_id": None} for _ in range(remaining)]
-        )
-        remaining = len(planned_sessions)
+        pattern_periods = sum(int(x["duration_periods"] or 1) for x in configured_pattern)
+        if configured_pattern and pattern_periods > weekly:
+            raise TimetableSetupError("The saved lesson pattern exceeds this subject's weekly period requirement. Edit the pattern before generating.")
+        if configured_pattern:
+            planned_sessions = [
+                {"duration": int(x["duration_periods"]), "preferred_period_id": int(x["preferred_period_id"]) if x["preferred_period_id"] is not None else None}
+                for x in configured_pattern
+            ]
+            # Any unconfigured periods remain flexible single lessons.
+            planned_sessions.extend(
+                {"duration": 1, "preferred_period_id": None}
+                for _ in range(weekly - pattern_periods)
+            )
+        else:
+            planned_sessions = []
+            unplanned_periods = weekly
+            while unplanned_periods > 0:
+                session_duration = min(duration, unplanned_periods)
+                planned_sessions.append({"duration": session_duration, "preferred_period_id": None})
+                unplanned_periods -= session_duration
         total_required += weekly
         for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
