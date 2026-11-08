@@ -83,6 +83,49 @@ class TimetablePublishingTests(unittest.TestCase):
         self.assertEqual(len(snapshot["lessons"]), 1)
         self.assertEqual(snapshot["profile"]["status"], "pending_approval")
 
+    def test_advanced_sessions_are_snapshotted_and_cloned_into_revisions(self):
+        cur = self.db.cursor()
+        cur.execute("INSERT INTO ds_timetable_schedule_templates(school_id,profile_id,name,template_type) VALUES(1,?,'Saturday','remedial')", (self.profile_id,))
+        template_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_schedule_slots(school_id,profile_id,template_id,slot_no,label,slot_type,start_time,end_time,duration_minutes) VALUES(1,?,?,1,'Remedial','remedial','09:00','10:00',60)", (self.profile_id,template_id))
+        slot_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_day_templates(school_id,profile_id,day_id,template_id,cycle_week) VALUES(1,?,?,?,0)", (self.profile_id,self.mon,template_id))
+        cur.execute("INSERT INTO ds_timetable_rotation_cycles(school_id,profile_id,name,cycle_length_weeks,anchor_date) VALUES(1,?,'Weekend Rotation',2,'2027-01-02')", (self.profile_id,))
+        cycle_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_learning_programmes(school_id,profile_id,name,programme_type,schedule_layer,rotation_cycle_id) VALUES(1,?,'Science Weekend','remedial','additional_learning',?)", (self.profile_id,cycle_id))
+        programme_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_rotation_weeks(school_id,profile_id,cycle_id,week_number,label,programme_id) VALUES(1,?,?,1,'Weekend 1',?)", (self.profile_id,cycle_id,programme_id))
+        cur.execute("INSERT INTO ds_timetable_teaching_groups(school_id,profile_id,name,group_type,subject_id) VALUES(1,?,'Combined Grade 7','combined_class',30)", (self.profile_id,))
+        group_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_teaching_group_classes(school_id,profile_id,teaching_group_id,class_id) VALUES(1,?,?,20)", (self.profile_id,group_id))
+        cur.execute("INSERT INTO ds_timetable_requirement_patterns(school_id,profile_id,requirement_id,session_no,duration_periods,preferred_day_id,preferred_slot_id) VALUES(1,?,?,1,1,?,?)", (self.profile_id,cur.execute("SELECT id FROM ds_timetable_class_requirements WHERE profile_id=?", (self.profile_id,)).fetchone()[0],self.mon,slot_id))
+        cur.execute("INSERT INTO ds_timetable_programme_sessions(school_id,profile_id,programme_id,subject_id,teaching_group_id,day_id,start_time,end_time,duration_minutes) VALUES(1,?,?,30,?,?,'09:00','10:00',60)", (self.profile_id,programme_id,group_id,self.mon))
+        cur.execute("INSERT INTO ds_timetable_scheduling_requirements(school_id,profile_id,name,schedule_layer,session_type,subject_id,programme_id,teaching_group_id,weekly_occurrences) VALUES(1,?,'Weekend Science','additional_learning','lesson',30,?,?,1)", (self.profile_id,programme_id,group_id))
+        req_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_scheduling_requirement_classes(school_id,profile_id,requirement_id,class_id) VALUES(1,?,?,20)", (self.profile_id,req_id))
+        cur.execute("INSERT INTO ds_timetable_scheduling_requirement_teachers(school_id,profile_id,requirement_id,teacher_id) VALUES(1,?,?,10)", (self.profile_id,req_id))
+        cur.execute("INSERT INTO ds_timetable_scheduling_patterns(school_id,profile_id,requirement_id,session_no,duration_minutes,preferred_day_id,preferred_slot_id) VALUES(1,?, ?,1,60,?,?)", (self.profile_id,req_id,self.mon,slot_id))
+        cur.execute("INSERT INTO ds_timetable_sessions(school_id,profile_id,schedule_layer,session_type,subject_id,programme_id,teaching_group_id,day_id,session_date,period_id,start_time,end_time,created_at,updated_at) VALUES(1,?,'additional_learning','lesson',30,?,?,?,'2027-03-06',?,'09:00','10:00','now','now')", (self.profile_id,programme_id,group_id,self.mon,self.p1))
+        session_id = cur.lastrowid
+        cur.execute("INSERT INTO ds_timetable_session_classes(school_id,profile_id,session_id,class_id) VALUES(1,?,?,20)", (self.profile_id,session_id))
+        cur.execute("INSERT INTO ds_timetable_session_teachers(school_id,profile_id,session_id,teacher_id) VALUES(1,?,?,10)", (self.profile_id,session_id))
+        cur.execute("INSERT INTO ds_timetable_constraints(school_id,profile_id,name,day_id,period_id,created_at,updated_at) VALUES(1,?,'No Friday',?,?,'now','now')", (self.profile_id,self.tue,self.p2))
+        self.db.commit()
+        submit_for_approval(self.db,1,self.profile_id,'admin@test')
+        published = publish_timetable(self.db,1,self.profile_id,'admin@test')
+        snapshot = json.loads(self.db.execute("SELECT snapshot_json FROM ds_timetable_versions WHERE id=?", (published['version_id'],)).fetchone()[0])
+        self.assertEqual(len(snapshot['sessions']),1)
+        self.assertEqual(len(snapshot['rotation_cycles']),1)
+        self.assertEqual(len(snapshot['scheduling_requirements']),1)
+        revision_id = create_revision(self.db,1,self.profile_id,'admin@test')
+        copied = self.db.execute("SELECT * FROM ds_timetable_sessions WHERE school_id=1 AND profile_id=?", (revision_id,)).fetchone()
+        self.assertIsNotNone(copied)
+        self.assertNotEqual(int(copied['id']),session_id)
+        self.assertEqual(copied['session_date'],'2027-03-06')
+        copied_group = self.db.execute("SELECT teaching_group_id FROM ds_timetable_sessions WHERE profile_id=?", (revision_id,)).fetchone()[0]
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ds_timetable_teaching_group_classes WHERE profile_id=? AND teaching_group_id=?", (revision_id,copied_group)).fetchone()[0],1)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers st JOIN ds_timetable_sessions s ON s.id=st.session_id WHERE s.profile_id=?", (revision_id,)).fetchone()[0],1)
+
     def test_revision_clones_published_schedule_and_version_comparison_detects_change(self):
         submit_for_approval(self.db, 1, self.profile_id, "admin@test")
         first = publish_timetable(self.db, 1, self.profile_id, "admin@test")
