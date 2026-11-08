@@ -802,14 +802,13 @@ def _shell(title, name, role, body, school_id=None, request=None):
         )
         timetable_group = (
             "<details class='nav-group' id='timetableManagerNav' "
-            + ("open" if request_path.startswith("/app/timetable/") or request_path == "/app/timetable" or request_path == "/app/academics/subject-allocation" else "") + ">"
+            + ("open" if request_path.startswith("/app/timetable/") or request_path == "/app/timetable" else "") + ">"
             + f"<summary class='nav staff-manager-summary'><span>{_modern_icon('calendar')}</span><b>Timetable Management</b><span class='nav-chevron'>▾</span></summary>"
             + "<div class='nav-submenu'>"
             + _nav_sub("/app/timetable", "Timetable Overview")
             + "<details class='nav-group nav-subgroup' " + ("open" if request_path.startswith("/app/timetable/setup") or request_path.startswith("/app/timetable/constraints") else "") + "><summary class='nav-sub nav-subgroup-summary' onclick='event.preventDefault();event.stopPropagation();this.parentElement.open=!this.parentElement.open'><span class='nav-sub-icon'>" + _modern_icon("settings") + "</span><b>Configuration &amp; Requirements</b><span class='nav-chevron'>▾</span></summary><div class='nav-submenu nav-nested-submenu'>"
             + _nav_sub("/app/timetable/setup", "Timetable Setup")
             + _nav_sub("/app/timetable/setup?tab=requirements", "Teaching Requirements")
-            + _nav_sub("/app/academics/subject-allocation", "Subject Allocations")
             + _nav_sub("/app/timetable/setup?tab=availability", "Staff Availability")
             + _nav_sub("/app/timetable/constraints", "Timetable Constraints")
             + "</div></details>"
