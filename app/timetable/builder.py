@@ -99,6 +99,23 @@ def _placement_context(cursor: Any, school_id: int, profile_id: int, class_id: i
              AND l.id<>?""",
         (school_id, profile_id, day_id, exclude_lesson_id),
     ).fetchall()
+    class_limit = cursor.execute(
+        """SELECT max_lessons_per_week,max_periods_per_day FROM ds_timetable_class_limits
+           WHERE school_id=? AND profile_id=? AND class_id=?""",
+        (school_id, profile_id, class_id),
+    ).fetchone()
+    class_lessons = cursor.execute(
+        """SELECT COUNT(*) total FROM ds_timetable_lessons
+           WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled' AND id<>?""",
+        (school_id, profile_id, class_id, exclude_lesson_id),
+    ).fetchone()["total"]
+    if class_limit and class_limit["max_lessons_per_week"] is not None and int(class_lessons) >= int(class_limit["max_lessons_per_week"]) and not exclude_lesson_id:
+        raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
+    if class_limit and class_limit["max_periods_per_day"] is not None:
+        daily = [x for x in existing if int(x["class_id"]) == int(class_id)]
+        used = sum(int(x["duration_periods"] or 1) for x in daily)
+        if used + len(span) > int(class_limit["max_periods_per_day"]):
+            raise TimetableSetupError("This placement would exceed the class maximum periods per day.")
     max_per_day = int(requirement["max_lessons_per_day"]) if requirement["max_lessons_per_day"] is not None else 0
     if max_per_day:
         same_subject_day = sum(
