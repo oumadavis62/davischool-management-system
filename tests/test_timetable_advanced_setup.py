@@ -162,6 +162,7 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         self.assertEqual(weekend["day_id"], saturday)
         self.assertTrue(weekend["is_instructional"])
         self.assertEqual(weekend["template_id"], template)
+        self.assertEqual(weekend["schedule_slots"], [])
         self.assertEqual(weekend["exceptions"][0]["label"], "Saturday remedial")
 
     def test_calendar_occurrence_repeats_department_rotation_from_anchor(self):
