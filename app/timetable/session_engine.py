@@ -429,6 +429,46 @@ def create_scheduled_session(connection: Any, school_id: int, profile_id: int,
             raise TimetableSetupError("Session classes must match all classes in the selected combined group.")
         classes = group_classes
 
+    if schedule_layer == "instructional" and classes:
+        for class_id in classes:
+            limit = cur.execute(
+                """SELECT max_lessons_per_week,max_periods_per_day
+                   FROM ds_timetable_class_limits
+                   WHERE school_id=? AND profile_id=? AND class_id=?""",
+                (school_id, profile_id, class_id),
+            ).fetchone()
+            if not limit:
+                continue
+            legacy_week = int(cur.execute(
+                """SELECT COUNT(*) FROM ds_timetable_lessons
+                   WHERE school_id=? AND profile_id=? AND class_id=? AND status='scheduled'""",
+                (school_id, profile_id, class_id),
+            ).fetchone()[0] or 0)
+            normalized_week = int(cur.execute(
+                """SELECT COUNT(DISTINCT s.id) FROM ds_timetable_sessions s
+                   JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                   WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=?
+                     AND s.schedule_layer='instructional' AND s.status='scheduled'""",
+                (school_id, profile_id, class_id),
+            ).fetchone()[0] or 0)
+            if limit["max_lessons_per_week"] is not None and legacy_week + normalized_week >= int(limit["max_lessons_per_week"]):
+                raise TimetableSetupError("The class has reached its maximum number of lessons per week.")
+            if day_id is not None and limit["max_periods_per_day"] is not None:
+                legacy_daily = int(cur.execute(
+                    """SELECT COALESCE(SUM(duration_periods),0) FROM ds_timetable_lessons
+                       WHERE school_id=? AND profile_id=? AND class_id=? AND day_id=? AND status='scheduled'""",
+                    (school_id, profile_id, class_id, day_id),
+                ).fetchone()[0] or 0)
+                normalized_daily = int(cur.execute(
+                    """SELECT COALESCE(SUM(s.duration_periods),0) FROM ds_timetable_sessions s
+                       JOIN ds_timetable_session_classes sc ON sc.session_id=s.id AND sc.school_id=s.school_id
+                       WHERE s.school_id=? AND s.profile_id=? AND sc.class_id=? AND s.day_id=?
+                         AND s.schedule_layer='instructional' AND s.status='scheduled'""",
+                    (school_id, profile_id, class_id, day_id),
+                ).fetchone()[0] or 0)
+                if legacy_daily + normalized_daily + max(1, int(duration_periods or 1)) > int(limit["max_periods_per_day"]):
+                    raise TimetableSetupError("This session would exceed the class maximum periods per day.")
+
     _validate_resources(
         cur, school_id, profile_id, classes, teachers, learners, room_id,
         start_time, end_time, day_id, session_date, period_id,
