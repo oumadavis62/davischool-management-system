@@ -223,7 +223,7 @@ def save_calendar_exception(connection: Any, school_id: int, profile_id: int, ex
     connection.commit()
 
 
-def save_room(connection: Any, school_id: int, room_code: str, name: str, room_type: str = "classroom", capacity: int | None = None, description: str = "", equipment: str = "", suitable_for: str = "") -> None:
+def save_room(connection: Any, school_id: int, room_code: str, name: str, room_type: str = "classroom", capacity: int | None = None, description: str = "", equipment: str = "", suitable_for: str = "", allocation_mode: str = "shared", assigned_class_id: int | None = None) -> None:
     code, name = (room_code or "").strip().upper(), (name or "").strip()
     if not code or not name:
         raise TimetableSetupError("Room code and room name are required.")
@@ -231,6 +231,20 @@ def save_room(connection: Any, school_id: int, room_code: str, name: str, room_t
         raise TimetableSetupError("Choose a valid room type.")
     if capacity is not None and int(capacity) < 1:
         raise TimetableSetupError("Room capacity must be at least one.")
+    allocation_mode = (allocation_mode or "shared").strip().lower()
+    if allocation_mode not in ("shared", "dedicated"):
+        raise TimetableSetupError("Choose shared or dedicated classroom allocation.")
+    if allocation_mode == "dedicated" and assigned_class_id is None:
+        raise TimetableSetupError("Choose the class permanently assigned to this dedicated room.")
+    if allocation_mode == "shared":
+        assigned_class_id = None
+    if assigned_class_id is not None:
+        assigned_class_id = int(assigned_class_id)
+        if not connection.cursor().execute(
+            "SELECT id FROM classes WHERE id=? AND school_id=?",
+            (assigned_class_id, school_id),
+        ).fetchone():
+            raise TimetableSetupError("The dedicated room class must belong to this school.")
     cur = connection.cursor()
     existing = cur.execute(
         "SELECT id FROM ds_timetable_rooms WHERE school_id=? AND room_code=?",
@@ -238,15 +252,18 @@ def save_room(connection: Any, school_id: int, room_code: str, name: str, room_t
     ).fetchone()
     if existing:
         cur.execute(
-            """UPDATE ds_timetable_rooms SET name=?,room_type=?,capacity=?,description=?,equipment=?,suitable_for=?,is_active=1
-               WHERE id=? AND school_id=?""",
-            (name, room_type, capacity, (description or "").strip(), (equipment or "").strip(), (suitable_for or "").strip(), existing["id"], school_id),
+            """UPDATE ds_timetable_rooms SET name=?,room_type=?,capacity=?,description=?,equipment=?,suitable_for=?,
+               allocation_mode=?,assigned_class_id=?,is_active=1 WHERE id=? AND school_id=?""",
+            (name, room_type, capacity, (description or "").strip(), (equipment or "").strip(),
+             (suitable_for or "").strip(), allocation_mode, assigned_class_id, existing["id"], school_id),
         )
     else:
         cur.execute(
-            """INSERT INTO ds_timetable_rooms(school_id,room_code,name,room_type,capacity,description,equipment,suitable_for)
-               VALUES(?,?,?,?,?,?,?,?)""",
-            (school_id, code, name, room_type, capacity, (description or "").strip(), (equipment or "").strip(), (suitable_for or "").strip()),
+            """INSERT INTO ds_timetable_rooms
+               (school_id,room_code,name,room_type,capacity,description,equipment,suitable_for,allocation_mode,assigned_class_id)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (school_id, code, name, room_type, capacity, (description or "").strip(),
+             (equipment or "").strip(), (suitable_for or "").strip(), allocation_mode, assigned_class_id),
         )
     connection.commit()
 

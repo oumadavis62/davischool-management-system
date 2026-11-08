@@ -765,11 +765,16 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                     continue
                 if task["room_type"]:
                     rooms = cur.execute(
-                        """SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1
-                           AND room_type=? ORDER BY capacity DESC,id""",
+                        """SELECT id,allocation_mode,assigned_class_id FROM ds_timetable_rooms
+                           WHERE school_id=? AND is_active=1 AND room_type=?
+                           ORDER BY capacity DESC,id""",
                         (school_id, task["room_type"]),
                     ).fetchall()
-                    room_ids = [int(r["id"]) for r in rooms]
+                    room_ids = [
+                        int(r["id"]) for r in rooms
+                        if str(r["allocation_mode"] or "shared") != "dedicated"
+                        or int(r["assigned_class_id"] or 0) in task["classes"]
+                    ]
                 else:
                     room_ids = [None]
                 for room_id in room_ids:

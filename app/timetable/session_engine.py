@@ -104,11 +104,15 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
             raise TimetableSetupError("A selected teacher does not belong to this school.")
     if room_id is not None:
         room = cur.execute(
-            "SELECT id,capacity,is_active FROM ds_timetable_rooms WHERE id=? AND school_id=?",
+            "SELECT id,capacity,is_active,allocation_mode,assigned_class_id FROM ds_timetable_rooms WHERE id=? AND school_id=?",
             (room_id, school_id),
         ).fetchone()
         if not room or not int(room["is_active"] or 0):
             raise TimetableSetupError("Select an active room belonging to this school.")
+        if str(room["allocation_mode"] or "shared") == "dedicated":
+            assigned = int(room["assigned_class_id"] or 0)
+            if not assigned or assigned not in class_ids:
+                raise TimetableSetupError("This room is permanently assigned to another class and cannot be shared with this session.")
         if room["capacity"] is not None:
             enrolled = len(learner_ids)
             if class_ids:

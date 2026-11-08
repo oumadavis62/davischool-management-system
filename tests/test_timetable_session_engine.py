@@ -540,6 +540,24 @@ class TimetableSessionEngineTests(unittest.TestCase):
             )
 
 
+    def test_dedicated_room_rejects_other_class_but_accepts_assigned_class(self):
+        from app.timetable.setup import save_room
+        save_room(self.db, 8, "DED1", "Grade 7 room", "classroom", 40,
+                  allocation_mode="dedicated", assigned_class_id=1)
+        dedicated_id = self.db.execute(
+            "SELECT id FROM ds_timetable_rooms WHERE room_code='DED1'"
+        ).fetchone()["id"]
+        with self.assertRaisesRegex(TimetableSetupError, "permanently assigned"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                class_ids=[2], room_id=dedicated_id, day_id=self.day_id,
+            )
+        allowed = create_scheduled_session(
+            self.db, 8, self.profile_id, "08:00", "09:00",
+            class_ids=[1], room_id=dedicated_id, day_id=self.day_id,
+        )
+        self.assertGreater(allowed, 0)
+
     def test_room_capacity_counts_combined_class_enrolment(self):
         with self.assertRaises(TimetableSetupError):
             create_scheduled_session(

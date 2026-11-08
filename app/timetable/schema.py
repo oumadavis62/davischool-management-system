@@ -77,6 +77,8 @@ _TABLES = (
         room_type TEXT NOT NULL DEFAULT 'classroom',
         capacity INTEGER,
         is_active INTEGER NOT NULL DEFAULT 1,
+        allocation_mode TEXT NOT NULL DEFAULT 'shared',
+        assigned_class_id INTEGER,
         UNIQUE (school_id, room_code)
     )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_calendar_exceptions (
@@ -495,9 +497,12 @@ def ensure_timetable_schema(connection: Any) -> None:
     # release before term date fields were introduced.
     cursor.execute("SELECT * FROM ds_timetable_rooms LIMIT 0")
     room_columns = {str(col.name if hasattr(col, "name") else col[0]).lower() for col in (cursor.description or [])}
-    for column in ("description", "equipment", "suitable_for"):
+    for column, column_type in (("description", "TEXT"), ("equipment", "TEXT"),
+                                ("suitable_for", "TEXT"),
+                                ("allocation_mode", "TEXT NOT NULL DEFAULT 'shared'"),
+                                ("assigned_class_id", "INTEGER")):
         if column not in room_columns:
-            cursor.execute("ALTER TABLE ds_timetable_rooms ADD COLUMN " + column + " TEXT")
+            cursor.execute("ALTER TABLE ds_timetable_rooms ADD COLUMN " + column + " " + column_type)
     cursor.execute("SELECT * FROM ds_timetable_profiles LIMIT 0")
     columns = {
         str(col.name if hasattr(col, "name") else col[0]).lower()
