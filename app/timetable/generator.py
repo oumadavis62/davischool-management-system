@@ -521,6 +521,11 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         task_index, candidate["day_id"], candidate["period_id"], room_id
                     ))
 
+    # All database-backed inputs and conflict checks are now materialised.
+    # End the read transaction before CPU-heavy recursive backtracking so this
+    # solver does not hold AccessShare locks on school tables for minutes.
+    connection.commit()
+
     def search(position: int, fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
         if position >= len(order):
@@ -927,6 +932,11 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                                           0 if task["preferred_day_id"] == option["day_id"] else 1,
                                           option["period_no"], option["day_id"]))
         candidates.append(options)
+
+    # Candidate construction above completes every database-backed lookup.
+    # Release its read transaction before recursive search, which is entirely
+    # in memory and can otherwise leave Supabase table locks open for minutes.
+    connection.commit()
 
     order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -tasks[i]["duration"], tasks[i]["requirement_id"], tasks[i]["session_no"]))
     planned = []
