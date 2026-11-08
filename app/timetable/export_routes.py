@@ -145,10 +145,10 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             ("TOPPADDING",(0,0),(-1,-1),5),
             ("BOTTOMPADDING",(0,0),(-1,-1),5),
         ]))
-        for break_index in break_row_indexes:
+        for break_col in break_col_indexes:
             table.setStyle(TableStyle([
-                ("BACKGROUND",(0,break_index),(-1,break_index),colors.HexColor("#f1ead8")),
-                ("TEXTCOLOR",(0,break_index),(-1,break_index),colors.HexColor("#75551d")),
+                ("BACKGROUND",(break_col,0),(break_col,-1),colors.HexColor("#f1ead8")),
+                ("TEXTCOLOR",(break_col,0),(break_col,-1),colors.HexColor("#75551d")),
             ]))
         story.append(table)
         doc.build(story)
