@@ -277,7 +277,7 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
     cur = connection.cursor()
     _profile(cur, school_id, profile_id)
     requirement = cur.execute(
-        """SELECT id,lessons_per_week FROM ds_timetable_class_requirements
+        """SELECT id,lessons_per_week,duration_periods FROM ds_timetable_class_requirements
            WHERE id=? AND school_id=? AND profile_id=?""",
         (requirement_id, school_id, profile_id),
     ).fetchone()
