@@ -568,6 +568,70 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         finally:
             con.close()
 
+    @app.post("/app/timetable/setup/row-delete")
+    def delete_timetable_setup_row(
+        request: Request,
+        profile_id: int = Form(...),
+        kind: str = Form(...),
+        row_id: int = Form(...),
+    ):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            school_id = int(school["id"])
+            cur = con.cursor()
+            _profile(cur, school_id, profile_id)
+            targets = {
+                "day": ("ds_timetable_days", "profile"),
+                "period": ("ds_timetable_periods", "profile"),
+                "break": ("ds_timetable_breaks", "profile"),
+                "calendar": ("ds_timetable_calendar_exceptions", "profile"),
+                "room": ("ds_timetable_rooms", "school"),
+                "availability": ("ds_timetable_teacher_availability", "profile"),
+                "requirement": ("ds_timetable_class_requirements", "profile"),
+                "class_limit": ("ds_timetable_class_limits", "profile"),
+            }
+            if kind not in targets:
+                raise TimetableSetupError("That setup row cannot be deleted from this page.")
+            table, scope = targets[kind]
+            where = "id=? AND school_id=?" + (" AND profile_id=?" if scope == "profile" else "")
+            params = (int(row_id), school_id, profile_id) if scope == "profile" else (int(row_id), school_id)
+            record = cur.execute(f"SELECT id FROM {table} WHERE {where}", params).fetchone()
+            if not record:
+                raise TimetableSetupError("That row was not found in the selected timetable profile.")
+            references = {
+                "day": (("ds_timetable_teacher_availability", "day_id"),
+                        ("ds_timetable_lessons", "day_id"),
+                        ("ds_timetable_sessions", "day_id"),
+                        ("ds_timetable_constraints", "day_id")),
+                "period": (("ds_timetable_teacher_availability", "period_id"),
+                           ("ds_timetable_lessons", "period_id"),
+                           ("ds_timetable_sessions", "period_id"),
+                           ("ds_timetable_constraints", "period_id")),
+                "room": (("ds_timetable_lessons", "room_id"),
+                         ("ds_timetable_sessions", "room_id"),
+                         ("ds_timetable_constraints", "room_id")),
+            }
+            for ref_table, ref_column in references.get(kind, ()):
+                used = cur.execute(
+                    f"SELECT 1 FROM {ref_table} WHERE school_id=? AND {ref_column}=? LIMIT 1",
+                    (school_id, int(row_id)),
+                ).fetchone()
+                if used:
+                    raise TimetableSetupError(
+                        "This row is already used by timetable records. Remove or reassign those records first."
+                    )
+            cur.execute(f"DELETE FROM {table} WHERE {where}", params)
+            con.commit()
+            return redirect_setup(profile_id, "Setup row deleted.")
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return redirect_setup(profile_id, str(exc), True)
+        finally:
+            con.close()
+
     # Compatibility endpoint: older cached setup pages submitted to the page URL.
     # Keep this alias so profile creation cannot fail with 405 on stale markup.
     @app.post("/app/timetable/setup")
