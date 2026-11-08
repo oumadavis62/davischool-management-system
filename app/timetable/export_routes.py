@@ -92,26 +92,29 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             Spacer(1,10),
         ])
         starts, continued = cell_map(result)
-        headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(pdf_text(str(d["day_name"])), header_style) for d in result["days"]]
-        data = [headers]
         timeline = sorted(
             [(str(p["start_time"]), "period", p) for p in result["periods"]] +
-            [(str(b["start_time"]), "break", b) for b in result.get("breaks", [])],
+            [(str(br["start_time"]), "break", br) for br in result.get("breaks", [])],
             key=lambda item: (item[0], 0 if item[1] == "period" else 1),
         )
-        break_row_indexes = []
+        headers = [Paragraph("Day", header_style)]
         for _, item_type, item in timeline:
             if item_type == "break":
-                row = [Paragraph("<b>" + pdf_text(str(item["label"])) + "</b>", cell_style),
-                       Paragraph(pdf_text(str(item["start_time"])) + " - " + pdf_text(str(item["end_time"])), cell_style)]
-                row.extend(Paragraph("<b>" + pdf_text(str(item["label"])) + "</b>", cell_style) for _day in result["days"])
-                data.append(row)
-                break_row_indexes.append(len(data)-1)
-                continue
-            period = item
-            row = [Paragraph(pdf_text(str(period["label"])), cell_style), Paragraph(pdf_text(str(period["start_time"])) + " - " + pdf_text(str(period["end_time"])), cell_style)]
-            for day in result["days"]:
-                key = (int(day["id"]),int(period["id"]))
+                label = str(item["label"]) + "<br/>" + str(item["start_time"]) + " - " + str(item["end_time"])
+            else:
+                label = str(item["label"]) + "<br/>" + str(item["start_time"]) + " - " + str(item["end_time"])
+            headers.append(Paragraph(pdf_text(label), header_style))
+        data = [headers]
+        break_col_indexes = [i + 1 for i, (_, kind, _) in enumerate(timeline) if kind == "break"]
+        for day in result["days"]:
+            row = [Paragraph("<b>" + pdf_text(str(day["day_name"])) + "</b>", cell_style)]
+            for _, item_type, item in timeline:
+                if item_type == "break":
+                    row.append(Paragraph("<b>" + pdf_text(str(item["label"])) + "</b><br/>" +
+                                         pdf_text(str(item["start_time"])) + " - " +
+                                         pdf_text(str(item["end_time"])), cell_style))
+                    continue
+                key = (int(day["id"]), int(item["id"]))
                 if key in starts:
                     lines = []
                     for lesson in starts[key]:
@@ -128,10 +131,9 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                 row.append(Paragraph(cell, cell_style))
             data.append(row)
         available_width = doc.width
-        first_width = 65
-        time_width = 75
-        day_width = max(70,(available_width-first_width-time_width)/max(1,len(result["days"])))
-        table = Table(data, colWidths=[first_width,time_width]+[day_width]*len(result["days"]), repeatRows=1)
+        first_width = 62
+        slot_width = max(52, (available_width - first_width) / max(1, len(timeline)))
+        table = Table(data, colWidths=[first_width] + [slot_width] * len(timeline), repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),
             ("TEXTCOLOR",(0,0),(-1,0),colors.white),
