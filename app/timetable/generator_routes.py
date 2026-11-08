@@ -185,6 +185,9 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         finally:
             con.close()
 
+    # Accept both the canonical action URL and the legacy page URL used by
+    # already-rendered clients/forms. The page itself remains GET-only.
+    @app.post("/app/timetable/automatic")
     @app.post("/app/timetable/automatic/generate")
     def run_automatic_generation(request: Request, profile_id: int = Form(...)):
         school = school_for(request)
