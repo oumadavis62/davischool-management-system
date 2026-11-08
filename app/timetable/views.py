@@ -158,7 +158,8 @@ def _load_advanced_sessions(cur, school_id: int, profile_id: int, view_type: str
             rotations = occurrence.get("rotations", [])
             labels = []
             for rotation in rotations:
-                label = str(rotation.get("label") or ("Weekend " + str(rotation.get("week_number"))))
+                week = rotation.get("week") or {}
+                label = str(week.get("label") or (str(rotation.get("cycle_name") or "Weekend") + " " + str(week.get("week_number") or rotation.get("week_number") or ""))).strip()
                 if label not in labels:
                     labels.append(label)
             rotation_labels[occurrence["date"]] = " / ".join(labels) if labels else ""
