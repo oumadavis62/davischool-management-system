@@ -9,7 +9,10 @@ from fastapi import Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.timetable.setup import TimetableSetupError
-from app.timetable.generator import (\n    generate_timetable, generate_advanced_instructional_sessions,\n    generate_dated_advanced_sessions,\n)
+from app.timetable.generator import (
+    generate_timetable, generate_advanced_instructional_sessions,
+    generate_dated_advanced_sessions,
+)
 
 
 def register_timetable_generator_routes(app, get_db, get_school_obj, module_page):
