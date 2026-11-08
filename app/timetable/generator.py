@@ -260,6 +260,16 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             "period_no": int(span[0]["period_no"]),
             "fixed": True,
         })
+    for class_id, limit in class_limits.items():
+        class_fixed = [item for item in fixed if int(item["class_id"]) == int(class_id)]
+        if limit["max_lessons_per_week"] is not None and len(class_fixed) > int(limit["max_lessons_per_week"]):
+            raise TimetableSetupError("Existing manually scheduled lessons exceed the class weekly lesson ceiling. Reduce the fixed lessons or revise the class limit.")
+        if limit["max_periods_per_day"] is not None:
+            for day in days:
+                daily_periods = sum(item["duration"] for item in class_fixed if int(item["day_id"]) == int(day["id"]))
+                if daily_periods > int(limit["max_periods_per_day"]):
+                    raise TimetableSetupError("Existing manually scheduled lessons exceed the class daily period ceiling. Adjust the timetable or revise the class limit.")
+
     for i, first in enumerate(fixed):
         for second in fixed[i + 1:]:
             if int(first["day_id"]) != int(second["day_id"]):
