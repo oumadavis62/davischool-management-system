@@ -61,6 +61,20 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertTrue(all(row["room_id"] is not None for row in rows))
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
 
+    def test_specialist_room_is_not_forced_for_ordinary_lessons(self):
+        self.db.execute(
+            "UPDATE ds_timetable_rooms SET room_type='laboratory' WHERE school_id=1"
+        )
+        self.db.commit()
+        result = generate_timetable(self.db, 1, self.profile_id, "admin@test")
+        self.assertEqual(result["status"], "completed")
+        rows = self.db.execute(
+            "SELECT room_id FROM ds_timetable_lessons WHERE generation_run_id=?",
+            (result["run_id"],),
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["room_id"] is None for row in rows))
+
     def test_generator_honours_configured_double_lesson_start_period(self):
         from app.timetable.advanced_setup import save_requirement_session_pattern
         requirement_id = self.db.execute(
