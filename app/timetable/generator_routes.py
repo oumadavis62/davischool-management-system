@@ -193,8 +193,53 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             return RedirectResponse("/", 303)
         con = get_db()
         try:
-            result = generate_timetable(con, int(school["id"]), profile_id, request.session.get("email", ""))
-            return redirect_generator(profile_id, int(result.get("run_id") or 0), result.get("message", "Generation finished."), result.get("status") != "completed")
+            advanced_result = None
+            advanced_count = con.execute(
+                """SELECT COUNT(*) FROM ds_timetable_scheduling_requirements
+                   WHERE school_id=? AND profile_id=? AND is_active=1
+                     AND schedule_layer='instructional'""",
+                (int(school["id"]), profile_id),
+            ).fetchone()[0]
+            created_advanced_ids = []
+            try:
+                if int(advanced_count or 0):
+                    advanced_result = generate_advanced_instructional_sessions(
+                        con, int(school["id"]), profile_id, request.session.get("email", "")
+                    )
+                    created_advanced_ids = list(advanced_result.get("session_ids") or [])
+                result = generate_timetable(
+                    con, int(school["id"]), profile_id, request.session.get("email", "")
+                )
+                if result.get("status") != "completed":
+                    if created_advanced_ids:
+                        marks = ",".join("?" for _ in created_advanced_ids)
+                        con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                        con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                        con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                        con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                                    (int(school["id"]), profile_id, *created_advanced_ids))
+                        con.commit()
+                    return redirect_generator(profile_id, int(result.get("run_id") or 0),
+                                              result.get("message", "Generation failed."), True)
+                if advanced_result:
+                    result["generated_sessions"] = int(advanced_result.get("generated_sessions") or 0)
+                    result["message"] = (
+                        str(result.get("message") or "Weekly timetable generated.") +
+                        " Combined/co-teaching sessions: " +
+                        str(result["generated_sessions"]) + "."
+                    )
+                return redirect_generator(profile_id, int(result.get("run_id") or 0),
+                                          result.get("message", "Generation finished."), False)
+            except Exception:
+                if created_advanced_ids:
+                    marks = ",".join("?" for _ in created_advanced_ids)
+                    con.execute(f"DELETE FROM ds_timetable_session_classes WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                    con.execute(f"DELETE FROM ds_timetable_session_teachers WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                    con.execute(f"DELETE FROM ds_timetable_session_learners WHERE session_id IN ({marks})", tuple(created_advanced_ids))
+                    con.execute(f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                                (int(school["id"]), profile_id, *created_advanced_ids))
+                    con.commit()
+                raise
         except TimetableSetupError as exc:
             return redirect_generator(profile_id, message=str(exc), error=True)
         finally:
