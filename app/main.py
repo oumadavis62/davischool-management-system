@@ -230,14 +230,17 @@ def _initialize_database_background():
 
 @app.on_event("startup")
 def _startup_database_initialization():
-    global DB_INIT_THREAD
-    DB_INIT_THREAD = threading.Thread(
-        target=_initialize_database_background,
-        name="davischool-db-init",
-        daemon=True,
-    )
-    DB_INIT_THREAD.start()
-    print("DAVISCHOOL DATABASE INITIALIZATION STARTED IN BACKGROUND", flush=True)
+    # Do not let Render route login/dashboard requests while schema setup is
+    # still running. Uvicorn completes startup only after this function returns,
+    # so the service becomes ready only when the database is ready as well.
+    print("DAVISCHOOL DATABASE INITIALIZATION STARTED", flush=True)
+    _initialize_database_background()
+    if not DB_INIT_READY:
+        raise RuntimeError(
+            "DaviSchool database initialization did not complete; refusing "
+            "to serve requests against an unready database. "
+            + str(DB_INIT_ERROR or "Unknown database initialization error")
+        )
 
 def send_school_verification_email(recipient: str, school_name: str, auth_code: str) -> None:
     """Send a one-time school registration code; prefer Gmail HTTPS API on Render Free."""
