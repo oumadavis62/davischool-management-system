@@ -4,7 +4,7 @@ import unittest
 
 from app.timetable.schema import ensure_timetable_schema
 from app.timetable.setup import create_profile, save_day, save_period, save_room, save_class_limits, TimetableSetupError
-from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint, create_schedule_template, save_schedule_slot, assign_day_template
+from app.timetable.advanced_setup import create_learning_programme, save_programme_session, save_activity_type, create_scheduling_requirement, save_scheduling_pattern, save_timetable_constraint, create_schedule_template, save_schedule_slot, assign_day_template, create_rotation_cycle, save_rotation_week
 from app.timetable.session_engine import (
     create_scheduled_session,
     create_teaching_group,
@@ -261,6 +261,51 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(row["session_date"], "2027-03-01")
         self.assertEqual(row["day_id"], self.day_id)
         self.assertEqual((row["start_time"], row["end_time"]), ("08:00", "08:40"))
+
+
+    def test_dated_builder_respects_active_rotation_programme(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        cycle = create_rotation_cycle(
+            self.db, 8, self.profile_id, "Weekend department rotation", 2, "2027-03-01"
+        )
+        science = create_learning_programme(
+            self.db, 8, self.profile_id, "Science remedial",
+            programme_type="remedial", schedule_layer="additional_learning",
+            recurrence_type="rotation", rotation_cycle_id=cycle,
+        )
+        languages = create_learning_programme(
+            self.db, 8, self.profile_id, "Languages remedial",
+            programme_type="remedial", schedule_layer="additional_learning",
+            recurrence_type="rotation", rotation_cycle_id=cycle,
+        )
+        save_rotation_week(self.db, 8, self.profile_id, cycle, 1, "Science", "SCI", science)
+        save_rotation_week(self.db, 8, self.profile_id, cycle, 2, "Languages", "LAN", languages)
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Remedial day", "remedial"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Morning remedial",
+            "remedial", "07:00", "07:40",
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Science rotation session",
+            class_ids=[1], teacher_ids=[11], programme_id=science,
+            schedule_layer="additional_learning", session_type="remedial",
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "not active in the selected rotation week"):
+            place_dated_advanced_requirement_session(
+                self.db, 8, self.profile_id, requirement, 1,
+                "2027-03-08", 1,
+            )
 
     def test_normalized_sessions_enforce_class_daily_period_ceiling(self):
         save_class_limits(self.db, 8, self.profile_id, 1, None, 1)
