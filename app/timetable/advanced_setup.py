@@ -745,9 +745,10 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
     if template_id is not None:
         schedule_slots = [
             dict(slot) for slot in cur.execute(
-                """SELECT id,slot_no,label,slot_type,start_time,end_time,period_no
+                """SELECT id,slot_no,label,slot_type,start_time,end_time,
+                          instructional_period_no AS period_no
                    FROM ds_timetable_schedule_slots
-                   WHERE school_id=? AND profile_id=? AND template_id=? AND is_active=1
+                   WHERE school_id=? AND profile_id=? AND template_id=?
                    ORDER BY slot_no,id""",
                 (school_id, profile_id, template_id),
             ).fetchall()
