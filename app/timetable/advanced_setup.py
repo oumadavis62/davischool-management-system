@@ -6,7 +6,7 @@ record against the owning school and editable timetable profile.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 import re
 from typing import Any
@@ -778,3 +778,28 @@ def resolve_calendar_occurrence(connection: Any, school_id: int, profile_id: int
         "exceptions": [dict(item) for item in exceptions],
         "rotations": rotations,
     }
+
+
+def expand_calendar_occurrences(connection: Any, school_id: int, profile_id: int,
+                                start_date: str, end_date: str,
+                                include_closed: bool = False) -> list[dict[str, Any]]:
+    """Expand a bounded date range using the profile's date-aware calendar."""
+    try:
+        start = date.fromisoformat((start_date or "").strip())
+        end = date.fromisoformat((end_date or "").strip())
+    except ValueError:
+        raise TimetableSetupError("Enter valid calendar dates in YYYY-MM-DD format.")
+    if end < start:
+        raise TimetableSetupError("The calendar end date must not be before its start date.")
+    span = (end - start).days
+    if span > 365:
+        raise TimetableSetupError("Expand no more than 366 calendar dates at a time.")
+    occurrences = []
+    for offset in range(span + 1):
+        occurrence = resolve_calendar_occurrence(
+            connection, school_id, profile_id, (start + timedelta(days=offset)).isoformat()
+        )
+        if (include_closed or occurrence["is_instructional"]
+                or occurrence["template_id"] is not None or occurrence["rotations"]):
+            occurrences.append(occurrence)
+    return occurrences
