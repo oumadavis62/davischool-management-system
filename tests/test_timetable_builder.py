@@ -11,6 +11,7 @@ from app.timetable.setup import (
     save_room,
     save_class_requirement,
     save_teacher_availability,
+    save_class_limits,
 )
 from app.timetable.builder import place_lesson, move_lesson, delete_lesson
 
@@ -115,6 +116,26 @@ class TimetableBuilderTests(unittest.TestCase):
     def test_double_lesson_must_be_consecutive_without_break(self):
         with self.assertRaises(TimetableSetupError):
             place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p3, self.room_id)
+
+
+    def test_moving_lesson_still_respects_weekly_class_ceiling(self):
+        save_class_limits(self.db, 1, self.profile_id, 20, 2, None)
+        first = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        place_lesson(self.db, 1, self.profile_id, 20, 31, 11, self.day_tue, self.p1)
+        # Moving an existing lesson excludes that lesson from the count, so
+        # moving it must remain allowed at the ceiling, but not above it.
+        move_lesson(self.db, 1, self.profile_id, first, self.day_wed, self.p1)
+        self.assertEqual(
+            self.db.execute("SELECT day_id FROM ds_timetable_lessons WHERE id=?", (first,)).fetchone()["day_id"],
+            self.day_wed,
+        )
+
+    def test_moving_lesson_checks_daily_period_ceiling_without_double_counting_itself(self):
+        save_class_limits(self.db, 1, self.profile_id, 20, None, 2)
+        first = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1)
+        move_lesson(self.db, 1, self.profile_id, first, self.day_tue, self.p1)
+        row = self.db.execute("SELECT day_id FROM ds_timetable_lessons WHERE id=?", (first,)).fetchone()
+        self.assertEqual(row["day_id"], self.day_tue)
 
     def test_move_and_delete_are_audited(self):
         lesson_id = place_lesson(self.db, 1, self.profile_id, 20, 30, 10, self.day_mon, self.p1, self.room_id)
