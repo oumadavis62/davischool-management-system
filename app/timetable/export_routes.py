@@ -208,20 +208,26 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             story.append(PageBreak())
             story.append(Paragraph("WEEKEND LESSONS & REMEDIALS", school_style))
             story.append(Paragraph("All configured weekend rotations consolidated on one sheet", title_style))
-            groups = result.get("weekend_groups", {})
-            group_names = list(groups) or ["Weekend sessions"]
-            columns = []
-            for name in group_names:
-                blocks = [Paragraph("<b>"+pdf_text(name)+"</b>", title_style)]
-                blocks.extend(session_paragraphs(groups.get(name, result["weekend_sessions"]), True))
-                columns.append(blocks)
-            rows = []
-            for i in range(0,len(columns),2):
-                left = columns[i]
-                right = columns[i+1] if i+1 < len(columns) else []
-                rows.append([left,right])
-            weekend_table = Table(rows,colWidths=[doc.width/2,doc.width/2])
-            weekend_table.setStyle(TableStyle([("GRID",(0,0),(-1,-1),.4,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+            weekend_rows = [[
+                Paragraph("<b>"+label+"</b>",header_style)
+                for label in ["Rotation","Date / Day","Time","Lesson / Activity","Class / Group","Teacher(s)","Venue"]
+            ]]
+            for item in result["weekend_sessions"]:
+                date_label = str(item.get("session_date") or item.get("day_name") or "Weekly")
+                if item.get("session_date") and item.get("day_name"):
+                    date_label += " · " + str(item["day_name"])
+                weekend_rows.append([
+                    Paragraph(pdf_text(item.get("rotation_label") or "Weekend schedule"),cell_style),
+                    Paragraph(pdf_text(date_label),cell_style),
+                    Paragraph(pdf_text(str(item["start_time"])+"–"+str(item["end_time"])),cell_style),
+                    Paragraph(pdf_text(item.get("subject_name") or item.get("programme_name") or item.get("session_type") or "Session"),cell_style),
+                    Paragraph(pdf_text(item.get("class_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("teacher_names") or "—"),cell_style),
+                    Paragraph(pdf_text(item.get("room_name") or "—"),cell_style),
+                ])
+            widths = [doc.width*.14,doc.width*.15,doc.width*.12,doc.width*.19,doc.width*.15,doc.width*.15,doc.width*.10]
+            weekend_table = Table(weekend_rows,colWidths=widths,repeatRows=1)
+            weekend_table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#17633b")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#b8d2bd")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)]))
             story.append(weekend_table)
         doc.build(story)
         buffer.seek(0)
