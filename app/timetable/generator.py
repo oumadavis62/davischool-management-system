@@ -796,3 +796,270 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     return {"status": "completed", "generated_sessions": len(created),
             "session_ids": created, "search_nodes": nodes,
             "message": "Advanced instructional sessions generated with combined-class, team-teaching and shared conflict validation."}
+
+
+def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id: int,
+                                     start_date: str, end_date: str,
+                                     created_by: str = "", node_limit: int = DEFAULT_NODE_LIMIT) -> dict:
+    """Generate normalized sessions against actual calendar dates and day templates.
+
+    Weekly patterns are repeated per calendar week in the requested range. Each
+    dated placement uses that date's day template, rotation and shared conflict
+    engine; recurring weekly templates are not rewritten.
+    """
+    from datetime import date, timedelta
+    from app.timetable.advanced_setup import expand_calendar_occurrences
+    from app.timetable.session_engine import create_scheduled_session, find_session_conflicts
+
+    occurrences = expand_calendar_occurrences(
+        connection, school_id, profile_id, start_date, end_date, include_closed=True
+    )
+    if not occurrences:
+        raise TimetableSetupError("No calendar dates were found in the requested range.")
+    cur = connection.cursor()
+    _profile(cur, school_id, profile_id)
+    requirements = cur.execute(
+        """SELECT * FROM ds_timetable_scheduling_requirements
+           WHERE school_id=? AND profile_id=? AND is_active=1 ORDER BY id""",
+        (school_id, profile_id),
+    ).fetchall()
+    if not requirements:
+        raise TimetableSetupError("No active normalized scheduling requirements are configured.")
+
+    limits = {
+        int(row["class_id"]): row for row in cur.execute(
+            """SELECT class_id,max_lessons_per_week,max_periods_per_day
+               FROM ds_timetable_class_limits WHERE school_id=? AND profile_id=?""",
+            (school_id, profile_id),
+        ).fetchall()
+    }
+    date_rows = {item["date"]: item for item in occurrences}
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    week_dates: dict[str, list[str]] = {}
+    for offset in range((end - start).days + 1):
+        current = start + timedelta(days=offset)
+        monday = current - timedelta(days=current.weekday())
+        week_dates.setdefault(monday.isoformat(), []).append(current.isoformat())
+
+    tasks = []
+    for week_key, dates in sorted(week_dates.items()):
+        for req in requirements:
+            rid = int(req["id"])
+            classes = [int(x["class_id"]) for x in cur.execute(
+                "SELECT class_id FROM ds_timetable_scheduling_requirement_classes WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY class_id",
+                (school_id, profile_id, rid)).fetchall()]
+            teachers = [int(x["teacher_id"]) for x in cur.execute(
+                "SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY role,teacher_id",
+                (school_id, profile_id, rid)).fetchall()]
+            learners = [int(x["student_id"]) for x in cur.execute(
+                "SELECT student_id FROM ds_timetable_scheduling_requirement_learners WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY student_id",
+                (school_id, profile_id, rid)).fetchall()]
+            patterns = cur.execute(
+                """SELECT * FROM ds_timetable_scheduling_patterns
+                   WHERE school_id=? AND profile_id=? AND requirement_id=? ORDER BY session_no""",
+                (school_id, profile_id, rid),
+            ).fetchall()
+            if len(patterns) != int(req["weekly_occurrences"]):
+                raise TimetableSetupError("Requirement '" + str(req["name"]) + "' needs a complete weekly session pattern.")
+            if not classes and not learners and req["schedule_layer"] == "instructional":
+                raise TimetableSetupError("Requirement '" + str(req["name"]) + "' has no assigned classes or learners.")
+            for pattern in patterns:
+                tasks.append({
+                    "week": week_key, "dates": dates, "requirement_id": rid,
+                    "session_no": int(pattern["session_no"]), "pattern": dict(pattern),
+                    "classes": classes, "teachers": teachers, "learners": learners,
+                    "subject_id": int(req["subject_id"]) if req["subject_id"] is not None else None,
+                    "programme_id": int(req["programme_id"]) if req["programme_id"] is not None else None,
+                    "group_id": int(req["teaching_group_id"]) if req["teaching_group_id"] is not None else None,
+                    "layer": str(req["schedule_layer"]), "session_type": str(req["session_type"]),
+                    "room_type": req["room_type"], "name": str(req["name"]),
+                })
+
+    def active_rotation(occurrence, programme_id):
+        if programme_id is None:
+            return True
+        relevant = [r for r in occurrence["rotations"] if r.get("week")]
+        if not relevant:
+            return True
+        return any(r.get("programme_id") == programme_id for r in relevant)
+
+    def slot_span(slots, index, task):
+        pattern = task["pattern"]
+        duration = int(pattern["duration_periods"] or 0)
+        minutes = int(pattern["duration_minutes"] or 0)
+        layer = task["layer"]
+        allowed = {
+            "instructional": {"instructional", "lesson", "teaching"},
+            "additional_learning": {"remedial", "study"},
+            "school_activity": {"activity", "assembly", "other"},
+        }.get(layer, set())
+        if duration:
+            selected = slots[index:index + duration]
+        else:
+            selected = [slots[index]]
+        if not selected or any(str(s["slot_type"]).lower() not in allowed for s in selected):
+            return None
+        if duration and len(selected) != duration:
+            return None
+        if minutes:
+            actual = (int(str(selected[-1]["end_time"])[:2]) * 60 + int(str(selected[-1]["end_time"])[3:])) - (int(str(selected[0]["start_time"])[:2]) * 60 + int(str(selected[0]["start_time"])[3:]))
+            if actual != minutes:
+                return None
+        for prev, current in zip(selected, selected[1:]):
+            if int(current["slot_no"]) != int(prev["slot_no"]) + 1 or str(prev["end_time"]) != str(current["start_time"]):
+                return None
+        return selected
+
+    candidates = []
+    for task in tasks:
+        options = []
+        for occurrence_date in task["dates"]:
+            occurrence = date_rows.get(occurrence_date)
+            if not occurrence or occurrence["day_id"] is None:
+                continue
+            if task["layer"] == "instructional" and not occurrence["is_instructional"]:
+                continue
+            if task["layer"] != "instructional" and not (
+                occurrence["is_instructional"] or occurrence["template_id"] is not None
+            ):
+                continue
+            if not active_rotation(occurrence, task["programme_id"]):
+                continue
+            slots = occurrence["schedule_slots"]
+            preferred_slot = task["pattern"]["preferred_slot_id"]
+            for index, slot in enumerate(slots):
+                if preferred_slot is not None and int(slot["id"]) != int(preferred_slot):
+                    continue
+                selected = slot_span(slots, index, task)
+                if not selected:
+                    continue
+                start_time, end_time = str(selected[0]["start_time"]), str(selected[-1]["end_time"])
+                period_id = None
+                period_no = selected[0]["period_no"]
+                if period_no is not None:
+                    period = cur.execute(
+                        "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no=?",
+                        (school_id, profile_id, int(period_no)),
+                    ).fetchone()
+                    period_id = int(period["id"]) if period else None
+                if task["pattern"]["preferred_day_id"] is not None and int(task["pattern"]["preferred_day_id"]) != int(occurrence["day_id"]):
+                    continue
+                try:
+                    _validate_constraints(
+                        cur, school_id, profile_id, task["layer"], task["session_type"],
+                        task["subject_id"], task["classes"], task["teachers"], None,
+                        int(occurrence["day_id"]), period_id, start_time, end_time, occurrence_date,
+                    )
+                except TimetableSetupError:
+                    continue
+                room_ids = [None]
+                if task["room_type"]:
+                    room_ids = [int(r["id"]) for r in cur.execute(
+                        "SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 AND room_type=? ORDER BY capacity DESC,id",
+                        (school_id, task["room_type"]),
+                    ).fetchall()]
+                for room_id in room_ids:
+                    if find_session_conflicts(
+                        connection, school_id, profile_id, start_time, end_time,
+                        task["classes"], task["teachers"], task["learners"],
+                        room_id, int(occurrence["day_id"]), occurrence_date,
+                    ):
+                        continue
+                    options.append({
+                        "date": occurrence_date, "day_id": int(occurrence["day_id"]),
+                        "period_id": period_id, "start": start_time, "end": end_time,
+                        "room_id": room_id, "duration": int(task["pattern"]["duration_periods"] or 0),
+                        "slots": selected,
+                    })
+        if not options:
+            raise TimetableSetupError(
+                "No date and slot can satisfy '" + task["name"] + "' session " +
+                str(task["session_no"]) + " in week " + task["week"] +
+                ". Check day templates, rotations, constraints and availability."
+            )
+        candidates.append(options)
+
+    order = sorted(range(len(tasks)), key=lambda i: (len(candidates[i]), -int(tasks[i]["pattern"]["duration_periods"] or 0), tasks[i]["requirement_id"], tasks[i]["session_no"]))
+    planned = []
+    nodes = 0
+
+    def compatible(task, option):
+        for class_id in task["classes"]:
+            limit = limits.get(int(class_id))
+            if not limit:
+                continue
+            same_week = sum(1 for item in planned
+                            if item["task"]["week"] == task["week"]
+                            and int(class_id) in item["task"]["classes"])
+            if limit["max_lessons_per_week"] is not None and same_week >= int(limit["max_lessons_per_week"]):
+                return False
+            same_day = sum(int(item["option"]["duration"] or 1) for item in planned
+                           if item["option"]["date"] == option["date"]
+                           and int(class_id) in item["task"]["classes"])
+            if limit["max_periods_per_day"] is not None and same_day + int(option["duration"] or 1) > int(limit["max_periods_per_day"]):
+                return False
+        for item in planned:
+            other = item["option"]
+            if other["date"] != option["date"] or not _overlap(option["start"], option["end"], other["start"], other["end"]):
+                continue
+            other_task = item["task"]
+            if (set(task["classes"]) & set(other_task["classes"])
+                or set(task["teachers"]) & set(other_task["teachers"])
+                or set(task["learners"]) & set(other_task["learners"])
+                or (option["room_id"] is not None and option["room_id"] == other["room_id"])):
+                return False
+        return True
+
+    def search(position):
+        nonlocal nodes
+        if position >= len(order):
+            return True
+        index = order[position]
+        for option in candidates[index]:
+            nodes += 1
+            if nodes > int(node_limit):
+                return False
+            if compatible(tasks[index], option):
+                planned.append({"task": tasks[index], "option": option})
+                if search(position + 1):
+                    return True
+                planned.pop()
+        return False
+
+    if not search(0):
+        raise TimetableSetupError("The dated requirements cannot all fit without clashes in the selected calendar range.")
+
+    created = []
+    try:
+        for item in planned:
+            task, option = item["task"], item["option"]
+            created.append(create_scheduled_session(
+                connection, school_id, profile_id, option["start"], option["end"],
+                schedule_layer=task["layer"], session_type=task["session_type"],
+                class_ids=task["classes"], teacher_ids=task["teachers"],
+                learner_ids=task["learners"], room_id=option["room_id"],
+                day_id=option["day_id"], session_date=option["date"],
+                period_id=option["period_id"], subject_id=task["subject_id"],
+                programme_id=task["programme_id"], teaching_group_id=task["group_id"],
+                duration_periods=option["duration"],
+                scheduling_requirement_id=task["requirement_id"],
+                pattern_session_no=task["session_no"], created_by=created_by,
+            ))
+    except Exception:
+        if created:
+            marks = ",".join("?" for _ in created)
+            for table in ("ds_timetable_session_classes", "ds_timetable_session_teachers", "ds_timetable_session_learners"):
+                cur.execute(f"DELETE FROM {table} WHERE session_id IN ({marks})", tuple(created))
+            cur.execute(
+                f"DELETE FROM ds_timetable_sessions WHERE school_id=? AND profile_id=? AND id IN ({marks})",
+                (school_id, profile_id, *created),
+            )
+            connection.commit()
+        raise
+    return {
+        "status": "completed", "generated_sessions": len(created),
+        "session_ids": created, "search_nodes": nodes,
+        "date_range": {"start": start_date, "end": end_date},
+        "message": "Dated sessions generated from calendar templates and active rotation programmes.",
+    }
