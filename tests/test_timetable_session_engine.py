@@ -94,6 +94,40 @@ class TimetableSessionEngineTests(unittest.TestCase):
                 session_date="2027-03-01",
             )
 
+    def test_dated_programme_session_must_match_active_rotation_week(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        cycle = create_rotation_cycle(
+            self.db, 8, self.profile_id, "Department rotation", 2, "2027-03-01"
+        )
+        science = create_learning_programme(
+            self.db, 8, self.profile_id, "Science weekend",
+            rotation_cycle_id=cycle, recurrence_type="rotation",
+        )
+        languages = create_learning_programme(
+            self.db, 8, self.profile_id, "Languages weekend",
+            rotation_cycle_id=cycle, recurrence_type="rotation",
+        )
+        save_rotation_week(self.db, 8, self.profile_id, cycle, 1, "Science week", "SCI", science)
+        save_rotation_week(self.db, 8, self.profile_id, cycle, 2, "Languages week", "LANG", languages)
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday remedial", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Remedial",
+            "remedial", "08:00", "09:00",
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        with self.assertRaisesRegex(TimetableSetupError, "not active in the selected rotation week"):
+            create_scheduled_session(
+                self.db, 8, self.profile_id, "08:00", "09:00",
+                schedule_layer="additional_learning", session_type="remedial",
+                class_ids=[1], teacher_ids=[11], day_id=self.day_id,
+                session_date="2027-03-01", programme_id=languages,
+            )
+
     def test_dated_remedial_and_activity_sessions_must_use_their_own_slot_types(self):
         self.db.execute(
             "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
