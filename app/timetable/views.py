@@ -33,6 +33,11 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     if not days or not periods:
         raise TimetableSetupError("Configure instructional days and periods before viewing this timetable.")
 
+    breaks = cur.execute(
+        """SELECT * FROM ds_timetable_breaks
+           WHERE school_id=? AND profile_id=? ORDER BY start_time,break_no,id""",
+        (school_id, profile_id),
+    ).fetchall()
     where = ""
     params: list[Any] = [school_id, profile_id]
     title = "School-wide timetable"
@@ -89,5 +94,6 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
         "target": target,
         "days": days,
         "periods": periods,
+        "breaks": breaks,
         "lessons": lessons,
     }
