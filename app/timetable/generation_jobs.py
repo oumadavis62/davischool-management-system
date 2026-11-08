@@ -49,6 +49,15 @@ def enqueue_generation_job(get_db: Callable, school_id: int, profile_id: int, re
     con = get_db()
     try:
         ensure_generation_jobs_table(con)
+        existing = con.execute(
+            """SELECT id FROM ds_timetable_generation_jobs
+               WHERE school_id=? AND profile_id=? AND status IN ('queued','running')
+               ORDER BY id DESC LIMIT 1""",
+            (int(school_id), int(profile_id)),
+        ).fetchone()
+        if existing:
+            con.commit()
+            return int(existing["id"])
         cur = con.execute(
             """INSERT INTO ds_timetable_generation_jobs
                (school_id, profile_id, requested_by, status, stage)
@@ -269,6 +278,14 @@ def start_generation_worker(get_db) -> None:
     setup = get_db()
     try:
         ensure_generation_jobs_table(setup)
+        # A process restart means no previous in-process consumer can still be
+        # executing. Requeue interrupted jobs so they resume automatically.
+        setup.execute(
+            """UPDATE ds_timetable_generation_jobs
+               SET status='queued', stage='resuming after service restart'
+               WHERE status='running'"""
+        )
+        setup.commit()
     finally:
         setup.close()
     with _worker_lock:
