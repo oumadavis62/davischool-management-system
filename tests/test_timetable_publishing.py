@@ -125,6 +125,13 @@ class TimetablePublishingTests(unittest.TestCase):
         copied_group = self.db.execute("SELECT teaching_group_id FROM ds_timetable_sessions WHERE profile_id=?", (revision_id,)).fetchone()[0]
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ds_timetable_teaching_group_classes WHERE profile_id=? AND teaching_group_id=?", (revision_id,copied_group)).fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ds_timetable_session_teachers st JOIN ds_timetable_sessions s ON s.id=st.session_id WHERE s.profile_id=?", (revision_id,)).fetchone()[0],1)
+        self.db.execute("UPDATE ds_timetable_sessions SET start_time='10:00',end_time='11:00' WHERE profile_id=?", (revision_id,))
+        self.db.commit()
+        submit_for_approval(self.db,1,revision_id,'admin@test')
+        second = publish_timetable(self.db,1,revision_id,'admin@test')
+        comparison = compare_timetable_versions(self.db,1,published['version_id'],second['version_id'])
+        self.assertEqual(len(comparison['advanced_added']),1)
+        self.assertEqual(len(comparison['advanced_removed']),1)
 
     def test_revision_clones_published_schedule_and_version_comparison_detects_change(self):
         submit_for_approval(self.db, 1, self.profile_id, "admin@test")
