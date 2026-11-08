@@ -65,7 +65,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 (school_id,pid),
             ).fetchall()
             advanced_requirements = cur.execute(
-                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods
+                """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods,r.schedule_layer
                    FROM ds_timetable_scheduling_requirements r
                    WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
                    ORDER BY r.schedule_layer,r.name""",
