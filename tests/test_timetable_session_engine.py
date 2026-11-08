@@ -432,7 +432,7 @@ class TimetableSessionEngineTests(unittest.TestCase):
         )
         save_scheduling_pattern(
             self.db, 8, self.profile_id, requirement,
-            [{"duration_periods": 1}],
+            [{"duration_periods": 1, "duration_minutes": 40}],
         )
         with self.assertRaisesRegex(TimetableSetupError, "not active in the selected rotation week"):
             place_dated_advanced_requirement_session(
