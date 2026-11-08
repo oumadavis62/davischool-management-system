@@ -62,8 +62,8 @@ class TimetableGeneratorTests(unittest.TestCase):
         self.assertTrue(all(row["generation_run_id"] == result["run_id"] for row in rows))
 
     def test_repeated_weekly_occurrences_use_symmetry_breaking(self):
-        # Forty interchangeable occurrences must fill forty distinct weekly
-        # slots without exploring the factorial permutations of those lessons.
+        # Forty interchangeable occurrences across eight subjects must fill
+        # forty distinct weekly slots without exploring factorial permutations.
         for code, name, order in (
             ("WED", "Wednesday", 3), ("THU", "Thursday", 4), ("FRI", "Friday", 5)
         ):
@@ -74,9 +74,28 @@ class TimetableGeneratorTests(unittest.TestCase):
         )
         for number, (start, end) in enumerate(periods, start=3):
             save_period(self.db, 1, self.profile_id, number, f"Period {number}", start, end)
+
         save_class_requirement(
-            self.db, 1, self.profile_id, 20, 30, 10, 40, 1, 8, False
+            self.db, 1, self.profile_id, 20, 30, 10, 5, 1, 1, False
         )
+        for index in range(7):
+            teacher_id = 11 + index
+            subject_id = 31 + index
+            self.db.execute(
+                "INSERT INTO teachers VALUES(?,?,?)",
+                (teacher_id, 1, f"Teacher {teacher_id}"),
+            )
+            self.db.execute(
+                "INSERT INTO subjects VALUES(?,?,?)",
+                (subject_id, 1, f"Subject {subject_id}"),
+            )
+            self.db.execute(
+                "INSERT INTO teacher_allocations VALUES(?,?,?,?,?)",
+                (index + 2, 1, teacher_id, subject_id, 20),
+            )
+            save_class_requirement(
+                self.db, 1, self.profile_id, 20, subject_id, teacher_id, 5, 1, 1, False
+            )
         save_class_limits(self.db, 1, self.profile_id, 20, 40, 8)
 
         result = generate_timetable(
