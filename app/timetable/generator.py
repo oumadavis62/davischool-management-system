@@ -175,6 +175,15 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
         for a in availability
     }
+    available_rows = cur.execute(
+        """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
+           WHERE school_id=? AND profile_id=? AND availability IN ('available','preferred')""",
+        (school_id, profile_id),
+    ).fetchall()
+    explicitly_available = {
+        (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
+        for a in available_rows
+    }
     preferred_rows = cur.execute(
         """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
            WHERE school_id=? AND profile_id=? AND availability='preferred'""",
@@ -314,6 +323,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "end_time": span[-1]["end_time"],
                     "period_no": int(period["period_no"]),
                     "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
+                    "explicitly_available": all((task["teacher_id"], day_id, int(p["id"])) in explicitly_available for p in span),
                 })
         if not candidates:
             message = (
@@ -366,7 +376,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     nodes = 0
     exhausted = False
 
-    def search(position: int) -> bool:
+    def search(position: int, fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
         if position >= len(order):
             return True
@@ -375,8 +385,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             return False
         task_index = order[position]
         task = tasks[task_index]
+        eligible_candidates = [
+            candidate for candidate in candidate_lookup[task_index]
+            if fallback or candidate.get("explicitly_available")
+        ]
         candidates = sorted(
-            candidate_lookup[task_index],
+            eligible_candidates,
             key=lambda candidate: _score(task, candidate, placements),
         )
         for candidate in candidates:
@@ -406,12 +420,22 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "fixed": False,
                 })
                 placements.append(placement)
-                if search(position + 1):
+                if search(position + 1, fallback):
                     return True
                 placements.pop()
                 if exhausted:
                     return False
         return False
+
+    # First attempt a complete timetable using only explicitly available
+    # cells. If that cannot satisfy all requirements, retry with blank cells
+    # as fallback placements. X cells remain hard exclusions.
+    generated = search(0, False)
+    if not generated:
+        placements[:] = list(fixed)
+        nodes = 0
+        exhausted = False
+        generated = search(0, True)
 
     snapshot = {
         "profile_id": profile_id,
