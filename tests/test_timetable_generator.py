@@ -30,6 +30,9 @@ class TimetableGeneratorTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY, school_id INTEGER, teacher_id INTEGER,
                 subject_id INTEGER, class_id INTEGER
             );
+            CREATE TABLE students (
+                id INTEGER PRIMARY KEY, school_id INTEGER, class_id INTEGER
+            );
         """)
         self.db.execute("INSERT INTO teachers VALUES(10,1,'Teacher A')")
         self.db.execute("INSERT INTO classes VALUES(20,1,'Grade 7','Blue')")
