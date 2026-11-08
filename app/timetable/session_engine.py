@@ -353,7 +353,50 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                 params + (value,), f"learner:{value}")
     if room_id is not None:
         collect(base + " AND s.room_id=?", params + (room_id,), f"room:{room_id}")
-    return list(conflicts.values())
+
+    # The normalized session engine and legacy weekly lesson builder share
+    # one physical timetable. Legacy rows must therefore be collision anchors.
+    legacy: dict[int, dict[str, Any]] = {}
+
+    def collect_legacy(sql: str, query_params: tuple[Any, ...], reason: str) -> None:
+        for row in cur.execute(sql, query_params).fetchall():
+            lesson_id = int(row["id"])
+            if lesson_id not in legacy:
+                legacy[lesson_id] = {
+                    "lesson_id": lesson_id, "source": "legacy",
+                    "start_time": row["start_time"], "end_time": row["end_time"],
+                    "session_type": "lesson", "schedule_layer": "instructional",
+                    "reasons": [],
+                }
+            if reason not in legacy[lesson_id]["reasons"]:
+                legacy[lesson_id]["reasons"].append(reason)
+
+    legacy_base = """SELECT DISTINCT l.id,first_period.start_time,last_period.end_time
+                     FROM ds_timetable_lessons l
+                     JOIN ds_timetable_periods first_period
+                       ON first_period.id=l.period_id
+                     JOIN ds_timetable_periods last_period
+                       ON last_period.school_id=l.school_id
+                      AND last_period.profile_id=l.profile_id
+                      AND last_period.period_no=first_period.period_no
+                          + COALESCE(l.duration_periods,1)-1
+                     WHERE l.school_id=? AND l.profile_id=? AND l.status='scheduled'
+                       AND l.day_id=?
+                       AND first_period.start_time < ? AND last_period.end_time > ?"""
+    legacy_params: tuple[Any, ...] = (
+        school_id, profile_id, day_id if day_id is not None else -1,
+        end_time, start_time,
+    )
+    for value in classes:
+        collect_legacy(legacy_base + " AND l.class_id=?",
+                       legacy_params + (value,), f"class:{value}")
+    for value in teachers:
+        collect_legacy(legacy_base + " AND l.teacher_id=?",
+                       legacy_params + (value,), f"teacher:{value}")
+    if room_id is not None:
+        collect_legacy(legacy_base + " AND l.room_id=?",
+                       legacy_params + (room_id,), f"room:{room_id}")
+    return list(conflicts.values()) + list(legacy.values())
 
 
 def create_teaching_group(connection: Any, school_id: int, profile_id: int,
