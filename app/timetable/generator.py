@@ -687,6 +687,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 "programme_id": int(req["programme_id"]) if req["programme_id"] is not None else None,
                 "group_id": int(req["teaching_group_id"]) if req["teaching_group_id"] is not None else None,
                 "session_type": str(req["session_type"]), "room_type": req["room_type"],
+                "room_assignment_mode": str(req["room_assignment_mode"] or "automatic"),
+                "preferred_room_id": int(req["preferred_room_id"]) if req["preferred_room_id"] is not None else None,
                 "preferred_day_id": int(pattern["preferred_day_id"]) if pattern["preferred_day_id"] is not None else None,
                 "name": str(req["name"]),
             })
@@ -763,18 +765,32 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 ).fetchone()
                 if unavailable:
                     continue
-                if task["room_type"]:
-                    rooms = cur.execute(
-                        """SELECT id,allocation_mode,assigned_class_id FROM ds_timetable_rooms
-                           WHERE school_id=? AND is_active=1 AND room_type=?
-                           ORDER BY capacity DESC,id""",
-                        (school_id, task["room_type"]),
-                    ).fetchall()
+                room_enrolment = len(task["learners"])
+                if task["classes"]:
+                    class_marks = ",".join("?" for _ in task["classes"])
+                    room_enrolment = max(room_enrolment, int(cur.execute(
+                        f"SELECT COUNT(*) FROM students WHERE school_id=? AND class_id IN ({class_marks})",
+                        (school_id, *task["classes"]),
+                    ).fetchone()[0] or 0))
+                if task["room_assignment_mode"] == "fixed":
+                    room_ids = [task["preferred_room_id"]] if task["preferred_room_id"] is not None else []
+                elif task["room_type"] or task["room_assignment_mode"] == "preferred":
+                    room_params = [school_id]
+                    room_sql = """SELECT id,capacity,allocation_mode,assigned_class_id FROM ds_timetable_rooms
+                                  WHERE school_id=? AND is_active=1"""
+                    if task["room_type"]:
+                        room_sql += " AND room_type=?"
+                        room_params.append(task["room_type"])
+                    room_sql += " ORDER BY capacity DESC,id"
+                    rooms = cur.execute(room_sql, tuple(room_params)).fetchall()
                     room_ids = [
                         int(r["id"]) for r in rooms
-                        if str(r["allocation_mode"] or "shared") != "dedicated"
-                        or int(r["assigned_class_id"] or 0) in task["classes"]
+                        if (str(r["allocation_mode"] or "shared") != "dedicated"
+                            or int(r["assigned_class_id"] or 0) in task["classes"])
+                        and (r["capacity"] is None or int(r["capacity"]) >= room_enrolment)
                     ]
+                    if task["room_assignment_mode"] == "preferred" and task["preferred_room_id"] is not None:
+                        room_ids = [task["preferred_room_id"]] + [value for value in room_ids if value != task["preferred_room_id"]]
                 else:
                     room_ids = [None]
                 for room_id in room_ids:
