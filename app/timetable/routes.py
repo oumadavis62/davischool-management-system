@@ -251,7 +251,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         break_candidate_rows = "".join(
             f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>"
             + ("" if g["selected"] else (
-                "<form method='post' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
+                "<form method='post' data-native-post='true' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
                 + hidden
                 + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
                 + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
