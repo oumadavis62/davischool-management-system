@@ -146,11 +146,6 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                 summary = {}
             status = str(run_detail["status"] or "unknown").lower()
             result_html = f"""<section class='ag-result'><div class='ag-result-head'><div><span class='ag-kicker'>GENERATION RESULT · RUN #{int(run_detail['id'])}</span><h3>{'Timetable generated' if status=='completed' else 'Generation needs attention'}</h3></div><span class='ag-state { 'good' if status=='completed' else 'bad' }'>{esc(status.upper())}</span></div><p>{esc(summary.get('message','No result details available.'))}</p><div class='ag-metrics'><span><b>{esc(summary.get('generated_lessons',0))}</b>Generated lessons</span><span><b>{esc(summary.get('manual_lessons_kept',0))}</b>Manual lessons kept</span><span><b>{esc(summary.get('quality_score','—'))}</b>Quality score</span><span><b>{esc(summary.get('search_nodes',0))}</b>Search steps</span></div></section>"""
-        run_rows = "".join(
-            f"<tr><td>#{int(r['id'])}</td><td>{esc(r['created_at'])}</td><td><span class='ag-state {'good' if r['status']=='completed' else 'bad'}'>{esc(r['status'])}</span></td><td>{esc(r['engine_version'])}</td><td><a href='/app/timetable/automatic?profile_id={pid}&run_id={int(r['id'])}'>View result</a></td><td><form method='post' action='/app/timetable/automatic/generation-report/delete' class='ag-delete-form' onsubmit=\"return confirm('Delete generation report run #"+str(int(r['id']))+"? This removes only the audit report. Existing timetable lessons will remain unchanged.');\"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='run_id' value='{int(r['id'])}'>{tab_field}<button type='submit' class='ag-delete-btn' {'disabled' if str(r['status']).lower() in ('queued','running','processing') else ''}>Delete</button></form></td></tr>"
-            for r in runs
-        ) or "<tr><td colspan='6' class='ag-muted'>No generation runs yet.</td></tr>"
-        ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         # Bind the generation form to the already-authenticated browser tab on
         # the server. Do not rely on the deferred tab-session JavaScript to add
         # ds_tab at submit time: mobile browsers can submit before that handler
@@ -162,6 +157,11 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         if tab_id:
             generate_action += "?ds_tab=" + quote(tab_id)
         tab_field = f"<input type='hidden' name='ds_tab' value='{esc(tab_id)}'>" if tab_id else ""
+        run_rows = "".join(
+            f"<tr><td>#{int(r['id'])}</td><td>{esc(r['created_at'])}</td><td><span class='ag-state {'good' if r['status']=='completed' else 'bad'}'>{esc(r['status'])}</span></td><td>{esc(r['engine_version'])}</td><td><a href='/app/timetable/automatic?profile_id={pid}&run_id={int(r['id'])}'>View result</a></td><td><form method='post' action='/app/timetable/automatic/generation-report/delete' class='ag-delete-form' onsubmit=\"return confirm('Delete generation report run #{int(r['id'])}? This removes only the audit report. Existing timetable lessons will remain unchanged.');\"><input type='hidden' name='profile_id' value='{pid}'><input type='hidden' name='run_id' value='{int(r['id'])}'>{tab_field}<button type='submit' class='ag-delete-btn' {'disabled' if str(r['status']).lower() in ('queued','running','processing') else ''}>Delete</button></form></td></tr>"
+            for r in runs
+        ) or "<tr><td colspan='6' class='ag-muted'>No generation runs yet.</td></tr>"
+        ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         action_html = (
             f"""<form method='post' action='{esc(generate_action)}' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
