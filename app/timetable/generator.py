@@ -134,12 +134,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     ).fetchall()
     if not days or not periods:
         raise TimetableSetupError("Configure instructional days and teaching periods before automatic generation.")
-    # Reconcile shared instructional sessions against each participating
-    # class/subject/teacher weekly requirement. A shared occurrence credits
-    # every assigned teacher for the periods they jointly deliver.
+    # Reconcile each shared weekly occurrence with the matching duration
+    # in every participating class/subject/teacher allocation.
     covered_rows = cur.execute(
-        """SELECT rc.class_id,r.subject_id,rt.teacher_id,
-                  r.weekly_occurrences AS covered_occurrences
+        """SELECT rc.class_id,r.subject_id,rt.teacher_id,p.duration_periods
            FROM ds_timetable_scheduling_requirements r
            JOIN ds_timetable_scheduling_requirement_classes rc
              ON rc.school_id=r.school_id AND rc.profile_id=r.profile_id
@@ -147,14 +145,18 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
            JOIN ds_timetable_scheduling_requirement_teachers rt
              ON rt.school_id=r.school_id AND rt.profile_id=r.profile_id
             AND rt.requirement_id=r.id
+           JOIN ds_timetable_scheduling_patterns p
+             ON p.school_id=r.school_id AND p.profile_id=r.profile_id
+            AND p.requirement_id=r.id
            WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
-             AND r.schedule_layer='instructional' AND r.subject_id IS NOT NULL""",
+             AND r.schedule_layer='instructional' AND r.subject_id IS NOT NULL
+           ORDER BY r.id,p.session_no""",
         (school_id, profile_id),
     ).fetchall()
     normalized_coverage = {}
     for row in covered_rows:
         key = (int(row["class_id"]), int(row["subject_id"]), int(row["teacher_id"]))
-        normalized_coverage[key] = normalized_coverage.get(key, 0) + int(row["covered_occurrences"] or 0)
+        normalized_coverage.setdefault(key, []).append(int(row["duration_periods"] or 1))
     allocations = cur.execute(
         """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id
            FROM teacher_allocations ta
@@ -273,13 +275,13 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         if weekly < 1:
             raise TimetableSetupError("Every lesson requirement must request at least one lesson per week.")
         already = manual_counts.get(key, 0)
-        covered = int(normalized_coverage.get(key, 0))
-        if already + covered > weekly:
+        covered_sessions = list(normalized_coverage.get(key, []))
+        if already + len(covered_sessions) > weekly:
             raise TimetableSetupError(
                 "Manual placements and shared combined/co-teaching sessions exceed the weekly requirement for class ID "
                 + str(key[0]) + ", subject ID " + str(key[1]) + "."
             )
-        remaining = weekly - already - covered
+        remaining = weekly - already - len(covered_sessions)
         duration = int(req["duration_periods"] or 1)
         if duration < 1 or duration > 4:
             raise TimetableSetupError("Lesson duration must be between one and four periods.")
@@ -308,17 +310,27 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                 {"duration": 1, "preferred_period_id": None}
                 for _ in range(expected_periods - pattern_periods)
             )
-            if covered > len(planned_sessions):
-                raise TimetableSetupError("Shared instructional sessions exceed the configured weekly lesson pattern.")
-            for _ in range(covered):
-                planned_sessions.pop()
-            if len(planned_sessions) > remaining:
-                planned_sessions = planned_sessions[:remaining]
         else:
             planned_sessions = [
                 {"duration": duration, "preferred_period_id": None}
-                for _ in range(remaining)
+                for _ in range(weekly)
             ]
+
+        for shared_duration in covered_sessions:
+            match = next(
+                (index for index, item in enumerate(planned_sessions)
+                 if int(item["duration"]) == int(shared_duration)),
+                None,
+            )
+            if match is None:
+                raise TimetableSetupError(
+                    "A combined/co-teaching session duration does not match the weekly requirement pattern for class ID "
+                    + str(key[0]) + ", subject ID " + str(key[1])
+                    + ". Align the shared session and subject lesson durations."
+                )
+            planned_sessions.pop(match)
+        if len(planned_sessions) > remaining:
+            planned_sessions = planned_sessions[:remaining]
         total_required += remaining
         for occurrence, planned in enumerate(planned_sessions):
             tasks.append({
