@@ -94,7 +94,21 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
         starts, continued = cell_map(result)
         headers = [Paragraph("Period", header_style), Paragraph("Time", header_style)] + [Paragraph(pdf_text(str(d["day_name"])), header_style) for d in result["days"]]
         data = [headers]
-        for period in result["periods"]:
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(b["start_time"]), "break", b) for b in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        break_row_indexes = []
+        for _, item_type, item in timeline:
+            if item_type == "break":
+                row = [Paragraph("<b>" + pdf_text(str(item["label"])) + "</b>", cell_style),
+                       Paragraph(pdf_text(str(item["start_time"])) + " - " + pdf_text(str(item["end_time"])), cell_style)]
+                row.extend(Paragraph("<b>" + pdf_text(str(item["label"])) + "</b>", cell_style) for _day in result["days"])
+                data.append(row)
+                break_row_indexes.append(len(data)-1)
+                continue
+            period = item
             row = [Paragraph(pdf_text(str(period["label"])), cell_style), Paragraph(pdf_text(str(period["start_time"])) + " - " + pdf_text(str(period["end_time"])), cell_style)]
             for day in result["days"]:
                 key = (int(day["id"]),int(period["id"]))
@@ -129,6 +143,11 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             ("TOPPADDING",(0,0),(-1,-1),5),
             ("BOTTOMPADDING",(0,0),(-1,-1),5),
         ]))
+        for break_index in break_row_indexes:
+            table.setStyle(TableStyle([
+                ("BACKGROUND",(0,break_index),(-1,break_index),colors.HexColor("#f1ead8")),
+                ("TEXTCOLOR",(0,break_index),(-1,break_index),colors.HexColor("#75551d")),
+            ]))
         story.append(table)
         doc.build(story)
         buffer.seek(0)
@@ -175,7 +194,27 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
             cell.fill = PatternFill("solid",fgColor="17633B")
             cell.alignment = Alignment(horizontal="center",vertical="center")
         starts, continued = cell_map(result)
-        for row_index, period in enumerate(result["periods"],header_row+1):
+        timeline = sorted(
+            [(str(p["start_time"]), "period", p) for p in result["periods"]] +
+            [(str(b["start_time"]), "break", b) for b in result.get("breaks", [])],
+            key=lambda item: (item[0], 0 if item[1] == "period" else 1),
+        )
+        row_index = header_row + 1
+        for _, item_type, item in timeline:
+            if item_type == "break":
+                label = str(item["label"])
+                sheet.cell(row_index,1,label)
+                sheet.cell(row_index,2,str(item["start_time"])+"–"+str(item["end_time"]))
+                for col in range(3,last_col+1):
+                    sheet.cell(row_index,col,label)
+                for cell in sheet[row_index][:last_col]:
+                    cell.fill = PatternFill("solid",fgColor="F1EAD8")
+                    cell.font = Font(bold=True,color="75551D")
+                    cell.alignment = Alignment(horizontal="center",vertical="center")
+                sheet.row_dimensions[row_index].height = 26
+                row_index += 1
+                continue
+            period = item
             sheet.cell(row_index,1,str(period["label"]))
             sheet.cell(row_index,2,str(period["start_time"])+"–"+str(period["end_time"]))
             for col, day in enumerate(result["days"],3):
@@ -192,13 +231,14 @@ def register_timetable_export_routes(app, get_db, get_school_obj):
                     value = ""
                 sheet.cell(row_index,col,value).alignment = Alignment(wrap_text=True,vertical="top")
             sheet.row_dimensions[row_index].height = 48
+            row_index += 1
         sheet.column_dimensions["A"].width = 16
         sheet.column_dimensions["B"].width = 18
         for col in range(3,last_col+1):
             sheet.column_dimensions[chr(64+col)].width = 24
         sheet.freeze_panes = "C6"
         sheet.sheet_view.showGridLines = False
-        sheet.auto_filter.ref = f"A{header_row}:{chr(64+last_col)}{header_row+len(result['periods'])}"
+        sheet.auto_filter.ref = f"A{header_row}:{chr(64+last_col)}{row_index-1}"
 
         details = workbook.create_sheet("Lesson Details")
         detail_headers = ["Day","Period","Start","End","Class","Stream","Subject","Teacher","Room","Duration"]
