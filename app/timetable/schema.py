@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-SCHEMA_VERSION = "003"
+SCHEMA_VERSION = "004"
 
 
 _TABLES = (
@@ -115,6 +115,17 @@ _TABLES = (
         allow_double INTEGER NOT NULL DEFAULT 0,
         preferred_days_json TEXT NOT NULL DEFAULT '[]',
         UNIQUE (school_id, profile_id, class_id, subject_id, teacher_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS ds_timetable_class_limits (
+        id INTEGER PRIMARY KEY,
+        school_id INTEGER NOT NULL,
+        profile_id INTEGER NOT NULL,
+        class_id INTEGER NOT NULL,
+        max_lessons_per_week INTEGER,
+        max_periods_per_day INTEGER,
+        notes TEXT,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (school_id, profile_id, class_id)
     )""",
     """CREATE TABLE IF NOT EXISTS ds_timetable_lessons (
         id INTEGER PRIMARY KEY,
