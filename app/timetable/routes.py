@@ -904,6 +904,28 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         """
         return module_page(request, "Timetable Constraints", "timetable", body)
 
+    @app.post("/app/timetable/constraints/delete")
+    def delete_timetable_constraint(request: Request, profile_id: int = Form(...), constraint_id: int = Form(...)):
+        school = school_for(request)
+        if not school:
+            return RedirectResponse("/", 303)
+        con = get_db()
+        try:
+            _profile(con.cursor(), int(school["id"]), profile_id)
+            result = con.execute(
+                "DELETE FROM ds_timetable_constraints WHERE id=? AND school_id=? AND profile_id=?",
+                (constraint_id, int(school["id"]), profile_id),
+            )
+            if result.rowcount != 1:
+                raise TimetableSetupError("That constraint was not found in this timetable profile.")
+            con.commit()
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&message=Constraint%20deleted", 303)
+        except (TimetableSetupError, ValueError) as exc:
+            con.rollback()
+            return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&error=1&message={quote(str(exc))}", 303)
+        finally:
+            con.close()
+
     @app.post("/app/timetable/constraints")
     def create_timetable_constraint(request: Request, profile_id: int = Form(...),
         name: str = Form(...), constraint_type: str = Form("prohibit"),
@@ -911,7 +933,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         subject_id: str = Form(""), teacher_id: str = Form(""), class_id: str = Form(""),
         room_id: str = Form(""), day_id: str = Form(""), period_id: str = Form(""),
         start_time: str = Form(""), end_time: str = Form(""), effective_from: str = Form(""),
-        effective_to: str = Form(""), reason: str = Form("")):
+        effective_to: str = Form(""), reason: str = Form(""), constraint_id: str = Form("")):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
@@ -923,6 +945,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 int(class_id) if class_id else None, int(room_id) if room_id else None,
                 int(day_id) if day_id else None, int(period_id) if period_id else None,
                 start_time or None, end_time or None, effective_from or None, effective_to or None, reason,
+                int(constraint_id) if constraint_id else None,
             )
             return RedirectResponse(f"/app/timetable/constraints?profile_id={profile_id}&message=Constraint%20saved", 303)
         except (TimetableSetupError, ValueError) as exc:
