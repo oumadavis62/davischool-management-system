@@ -401,6 +401,10 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     raise TimetableSetupError("The manually placed lessons already contain a class, teacher or room clash. Resolve it before automatic generation.")
 
     room_ids = [int(r["id"]) for r in rooms] or [None]
+    # Reuse the profile's constraint rules and period spans across all candidate
+    # cells. Without this cache, candidate enumeration performs repeated SQL
+    # reads for the same rules and period ordering thousands of times.
+    constraint_cache = {}
     candidates_by_task = []
     for task_index, task in enumerate(tasks):
         candidates = []
@@ -433,6 +437,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                         task["subject_id"], [task["class_id"]], [task["teacher_id"]],
                         None, day_id, int(period["id"]),
                         str(span[0]["start_time"]), str(span[-1]["end_time"]), None,
+                        cache=constraint_cache,
                     )
                 except TimetableSetupError:
                     continue
@@ -500,26 +505,57 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     nodes = 0
     exhausted = False
 
-    # Database-backed normalized-session conflict checks do not depend on the
-    # partial DFS placement. Evaluate them once per task/slot/room candidate,
-    # rather than repeating the same SQL queries every time backtracking
-    # revisits that candidate. The DFS below handles conflicts between newly
-    # placed legacy lessons in memory.
-    from app.timetable.session_engine import find_session_conflicts
+    # Read normalized sessions once, then evaluate resource conflicts in
+    # memory. The previous implementation issued several SQL queries for every
+    # task/day/period/room combination, multiplying database round-trips.
+    from collections import defaultdict
     blocked_candidates = set()
+    existing_by_id = {}
+    conflict_rows = cur.execute(
+        """SELECT s.id,s.day_id,s.start_time,s.end_time,s.room_id,
+                  sc.class_id,st.teacher_id
+           FROM ds_timetable_sessions s
+           LEFT JOIN ds_timetable_session_classes sc
+             ON sc.session_id=s.id AND sc.school_id=s.school_id
+           LEFT JOIN ds_timetable_session_teachers st
+             ON st.session_id=s.id AND st.school_id=s.school_id
+           WHERE s.school_id=? AND s.profile_id=?
+             AND s.session_date IS NULL
+             AND s.status NOT IN ('cancelled','void')
+             AND (s.generation_run_id IS NULL OR s.generation_run_id=?)
+           ORDER BY s.id""",
+        (school_id, profile_id, int(normalized_run_id)),
+    ).fetchall()
+    for row in conflict_rows:
+        item = existing_by_id.setdefault(int(row["id"]), {
+            "day_id": int(row["day_id"]) if row["day_id"] is not None else None,
+            "start_time": str(row["start_time"]), "end_time": str(row["end_time"]),
+            "room_id": int(row["room_id"]) if row["room_id"] is not None else None,
+            "classes": set(), "teachers": set(),
+        })
+        if row["class_id"] is not None:
+            item["classes"].add(int(row["class_id"]))
+        if row["teacher_id"] is not None:
+            item["teachers"].add(int(row["teacher_id"]))
+    existing_sessions = list(existing_by_id.values())
     for task_index, task in enumerate(tasks):
         for candidate in candidate_lookup[task_index]:
             for room_id in room_ids:
-                if find_session_conflicts(
-                    connection, school_id, profile_id,
-                    candidate["start_time"], candidate["end_time"],
-                    class_ids=[task["class_id"]], teacher_ids=[task["teacher_id"]],
-                    room_id=room_id, day_id=candidate["day_id"],
-                    include_legacy_lessons=False, generated_run_id=normalized_run_id,
-                ):
-                    blocked_candidates.add((
-                        task_index, candidate["day_id"], candidate["period_id"], room_id
-                    ))
+                for existing in existing_sessions:
+                    if existing["day_id"] != int(candidate["day_id"]):
+                        continue
+                    if not _overlap(candidate["start_time"], candidate["end_time"],
+                                    existing["start_time"], existing["end_time"]):
+                        continue
+                    if (
+                        int(task["class_id"]) in existing["classes"]
+                        or int(task["teacher_id"]) in existing["teachers"]
+                        or (room_id is not None and existing["room_id"] == int(room_id))
+                    ):
+                        blocked_candidates.add((
+                            task_index, candidate["day_id"], candidate["period_id"], room_id
+                        ))
+                        break
 
     # All database-backed inputs and conflict checks are now materialised.
     # End the read transaction before CPU-heavy recursive backtracking so this
