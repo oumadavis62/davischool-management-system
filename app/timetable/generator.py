@@ -846,7 +846,7 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     candidates = []
     for task in tasks:
         options = []
-        class_key = tuple(sorted(task["classes"]))
+        class_key = (tuple(sorted(task["classes"])), tuple(sorted(task["learners"])))
         if class_key not in enrolment_cache:
             room_enrolment = len(task["learners"])
             if task["classes"]:
