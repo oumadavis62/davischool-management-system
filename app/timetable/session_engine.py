@@ -165,6 +165,21 @@ def _validate_resources(cur: Any, school_id: int, profile_id: int,
                 previous = span[index - 1]
                 if int(slot["period_no"]) != int(previous["period_no"]) + 1 or str(previous["end_time"]) != str(slot["start_time"]):
                     raise TimetableSetupError("An extended lesson must occupy consecutive periods without a break.")
+        # A configured break is a hard boundary even if period times were
+        # accidentally configured as touching/continuous. Never let an
+        # instructional double, triple or longer block straddle it.
+        if schedule_layer == "instructional":
+            for configured_break in cur.execute(
+                """SELECT label,start_time,end_time FROM ds_timetable_breaks
+                   WHERE school_id=? AND profile_id=?""",
+                (school_id, profile_id),
+            ).fetchall():
+                if (str(span[0]["start_time"]) < str(configured_break["end_time"])
+                        and str(span[-1]["end_time"]) > str(configured_break["start_time"])):
+                    raise TimetableSetupError(
+                        "An instructional lesson cannot overlap or cross the configured "
+                        + str(configured_break["label"]) + " break."
+                    )
         if day_id is not None:
             span_ids = [int(slot["id"]) for slot in span]
             marks = ",".join("?" for _ in span_ids)
