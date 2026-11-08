@@ -22,7 +22,7 @@ def get_timetable_view(connection: Any, school_id: int, profile_id: int, view_ty
     ).fetchone()
     days = cur.execute(
         """SELECT * FROM ds_timetable_days
-           WHERE school_id=? AND profile_id=? AND is_instructional=1 ORDER BY day_order,id""",
+           WHERE school_id=? AND profile_id=? AND is_instructional=1 AND day_code NOT IN ('SAT','SUN') ORDER BY day_order,id""",
         (school_id, profile_id),
     ).fetchall()
     periods = cur.execute(
