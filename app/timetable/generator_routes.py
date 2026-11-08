@@ -117,8 +117,19 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             for r in runs
         ) or "<tr><td colspan='5' class='ag-muted'>No generation runs yet.</td></tr>"
         ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
+        # Bind the generation form to the already-authenticated browser tab on
+        # the server. Do not rely on the deferred tab-session JavaScript to add
+        # ds_tab at submit time: mobile browsers can submit before that handler
+        # has run, which selects the legacy/empty session and redirects to "/".
+        tab_id = str(request.scope.get("davischool_tab_id") or "").strip()
+        if not (16 <= len(tab_id) <= 64 and all(ch.isalnum() or ch in "_-" for ch in tab_id)):
+            tab_id = ""
+        generate_action = "/app/timetable/automatic/generate"
+        if tab_id:
+            generate_action += "?ds_tab=" + quote(tab_id)
+        tab_field = f"<input type='hidden' name='ds_tab' value='{esc(tab_id, quote=True)}'>" if tab_id else ""
         action_html = (
-            f"""<form method='post' action='/app/timetable/automatic/generate' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'><button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
+            f"""<form method='post' action='{esc(generate_action, quote=True)}' class='ag-generate-form' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.');"><input type='hidden' name='profile_id' value='{pid}'>{tab_field}<button type='submit' class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
