@@ -567,10 +567,44 @@ def compare_timetable_versions(connection: Any, school_id: int, first_version_id
     second_lessons = lesson_map(second_snapshot)
     added = [second_lessons[k] for k in second_lessons.keys()-first_lessons.keys()]
     removed = [first_lessons[k] for k in first_lessons.keys()-second_lessons.keys()]
+
+    def advanced_session_map(snapshot):
+        day_codes = {int(d["id"]):str(d["day_code"]) for d in snapshot.get("days", [])}
+        classes, teachers, learners = {}, {}, {}
+        for key, target in (("session_classes", classes), ("session_teachers", teachers), ("session_learners", learners)):
+            for link in snapshot.get(key, []):
+                target.setdefault(int(link["session_id"]), []).append(
+                    int(link.get("class_id", link.get("teacher_id", link.get("student_id"))))
+                )
+        result = {}
+        for session in snapshot.get("sessions", []):
+            sid = int(session["id"])
+            key = (
+                str(session.get("schedule_layer") or ""), str(session.get("session_type") or ""),
+                int(session["subject_id"]) if session.get("subject_id") is not None else None,
+                int(session["programme_id"]) if session.get("programme_id") is not None else None,
+                int(session["teaching_group_id"]) if session.get("teaching_group_id") is not None else None,
+                tuple(sorted(classes.get(sid, []))), tuple(sorted(teachers.get(sid, []))),
+                tuple(sorted(learners.get(sid, []))),
+                day_codes.get(int(session["day_id"]), "") if session.get("day_id") is not None else "",
+                str(session.get("session_date") or ""), str(session.get("start_time") or ""),
+                str(session.get("end_time") or ""),
+                int(session["room_id"]) if session.get("room_id") is not None else None,
+            )
+            result[key] = session
+        return result
+
+    first_advanced = advanced_session_map(first_snapshot)
+    second_advanced = advanced_session_map(second_snapshot)
+    advanced_added = [second_advanced[k] for k in second_advanced.keys()-first_advanced.keys()]
+    advanced_removed = [first_advanced[k] for k in first_advanced.keys()-second_advanced.keys()]
     return {
         "first_version":first,
         "second_version":second,
         "added":added,
         "removed":removed,
         "unchanged":len(first_lessons.keys() & second_lessons.keys()),
+        "advanced_added":advanced_added,
+        "advanced_removed":advanced_removed,
+        "advanced_unchanged":len(first_advanced.keys() & second_advanced.keys()),
     }
