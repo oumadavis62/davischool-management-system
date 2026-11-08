@@ -13,6 +13,7 @@ from app.timetable.setup import (
     save_room,
     save_teacher_availability,
     save_class_requirement,
+    save_subject_requirements,
     save_class_limits,
 )
 
@@ -37,6 +38,33 @@ class TimetableSetupTests(unittest.TestCase):
         self.db.execute("INSERT INTO teacher_allocations VALUES(1,1,10,30,20)")
         self.db.commit()
         self.profile_id = create_profile(self.db, 1, "2027 Term 1", "2027", "Term 1")
+
+    def test_subject_requirements_apply_to_every_allocated_class_and_preserve_customized_rows(self):
+        self.db.execute("INSERT INTO teachers VALUES(11,1,'Teacher B')")
+        self.db.execute("INSERT INTO classes VALUES(21,1,'Grade 8','Green')")
+        self.db.execute("INSERT INTO teacher_allocations VALUES(2,1,11,30,21)")
+        save_class_requirement(self.db, 1, self.profile_id, 20, 30, 10, 3, 2, 2, True)
+
+        selected, created, preserved = save_subject_requirements(
+            self.db, 1, self.profile_id, [30], 5, 1
+        )
+
+        self.assertEqual((selected, created, preserved), (1, 1, 1))
+        rows = self.db.execute(
+            """SELECT class_id,teacher_id,lessons_per_week,duration_periods
+               FROM ds_timetable_class_requirements
+               WHERE school_id=1 AND profile_id=? AND subject_id=30
+               ORDER BY class_id""",
+            (self.profile_id,),
+        ).fetchall()
+        self.assertEqual(
+            [tuple(row) for row in rows],
+            [(20, 10, 3, 2), (21, 11, 5, 1)],
+        )
+
+    def test_subject_requirements_reject_unallocated_subjects(self):
+        with self.assertRaisesRegex(TimetableSetupError, "no active class and teacher allocations"):
+            save_subject_requirements(self.db, 1, self.profile_id, [999], 5, 1)
 
     def tearDown(self):
         self.db.close()
