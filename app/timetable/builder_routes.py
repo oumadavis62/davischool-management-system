@@ -68,7 +68,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 """SELECT r.id,r.name,r.weekly_occurrences,r.weekly_periods
                    FROM ds_timetable_scheduling_requirements r
                    WHERE r.school_id=? AND r.profile_id=? AND r.is_active=1
-                     AND r.schedule_layer='instructional' ORDER BY r.name""",
+                   ORDER BY r.schedule_layer,r.name""",
                 (school_id,pid),
             ).fetchall()
             allocations = cur.execute(
@@ -212,7 +212,7 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
              "<section class='tb-panel'><h3>Complete setup first</h3><p>Configure school days, teaching periods and weekly class-subject requirements before placing lessons.</p><a class='tb-btn' href='/app/timetable/setup'>Open Timetable Setup</a></section>")
         )
         advanced_options = "".join(
-            f"<option value='{int(r['id'])}'>{esc(r['name'])} · {int(r['weekly_occurrences'])} sessions / {int(r['weekly_periods'])} periods weekly</option>"
+            f"<option value='{int(r['id'])}'>{esc(r['name'])} · {esc(r['schedule_layer'])} · {int(r['weekly_occurrences'])} sessions / {int(r['weekly_periods'])} periods weekly</option>"
             for r in advanced_requirements
         )
         advanced_form = (
@@ -227,10 +227,10 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
             if not read_only and advanced_requirements and days and periods else ""
         )
         dated_form = (
-            f"""<section class='tb-panel tb-dated-panel'><div><span class='tb-kicker'>CALENDAR-DATED MANUAL SCHEDULING</span><h3>Place a lesson on a specific date</h3><p>Choose the actual date first. Available slots are loaded from that date's assigned day template, including its instructional periods and breaks.</p></div>
+            f"""<section class='tb-panel tb-dated-panel'><div><span class='tb-kicker'>CALENDAR-DATED MANUAL SCHEDULING</span><h3>Place a session on a specific date</h3><p>Choose an instructional lesson, remedial programme or school activity. Available slots are filtered to the selected session layer and that date's assigned schedule template.</p></div>
             <form method='post' action='/app/timetable/builder/add-dated' class='tb-add-form' id='tb-dated-session-form'>
             <input type='hidden' name='profile_id' value='{pid}'>
-            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select instructional requirement</option>{advanced_options}</select></label>
+            <label class='wide'>Scheduling requirement<select name='requirement_id' required><option value=''>Select scheduling requirement</option>{advanced_options}</select></label>
             <label>Session number<input type='number' name='session_no' min='1' value='1' required></label>
             <label>Calendar date<input type='date' name='session_date' id='tb-session-date' min='{esc(selected['academic_start_date'] or '')}' max='{esc(selected['academic_end_date'] or '')}' required></label>
             <label class='wide'>Available date slots<select name='slot_no' id='tb-date-slot' required disabled><option value=''>Choose a date to load available slots</option></select></label>
@@ -242,15 +242,16 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
               const slotSelect=document.getElementById('tb-date-slot');
               const submitButton=document.getElementById('tb-place-dated');
               const status=document.getElementById('tb-date-slot-status');
+              const requirementSelect=document.querySelector('#tb-dated-session-form select[name="requirement_id"]');
               const profileId='{pid}';
-              if(!dateInput||!slotSelect)return;
-              dateInput.addEventListener('change',async function(){{
+              if(!dateInput||!slotSelect||!requirementSelect)return;
+              async function loadDateSlots(){{
                 slotSelect.disabled=true;submitButton.disabled=true;
-                slotSelect.innerHTML='<option value="">Loading date schedule…</option>';
+                slotSelect.innerHTML='<option value="">Loading available slots…</option>';
+                if(!dateInput.value||!requirementSelect.value){{slotSelect.innerHTML='<option value="">Choose a requirement and date first</option>';status.textContent='Choose a scheduling requirement and date to load suitable slots.';return;}}
                 status.textContent='Loading the selected date schedule…';
-                if(!dateInput.value){{status.textContent='Select a date to see its configured schedule.';return;}}
                 try{{
-                  const response=await fetch('/app/timetable/builder/date-slots?profile_id='+encodeURIComponent(profileId)+'&session_date='+encodeURIComponent(dateInput.value),{{credentials:'same-origin',headers:{{'Accept':'application/json'}}}});
+                  const response=await fetch('/app/timetable/builder/date-slots?profile_id='+encodeURIComponent(profileId)+'&requirement_id='+encodeURIComponent(requirementSelect.value)+'&session_date='+encodeURIComponent(dateInput.value),{{credentials:'same-origin',headers:{{'Accept':'application/json'}}}});
                   const data=await response.json();
                   if(!response.ok||!data.ok)throw new Error(data.error||'Could not load this date schedule.');
                   slotSelect.innerHTML='<option value="">Select a configured slot</option>';
@@ -266,7 +267,9 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                   slotSelect.innerHTML='<option value="">Schedule unavailable</option>';
                   status.textContent=error.message||'Could not load this date schedule.';
                 }}
-              }});
+              }}
+              dateInput.addEventListener('change',loadDateSlots);
+              requirementSelect.addEventListener('change',loadDateSlots);
               slotSelect.addEventListener('change',function(){{submitButton.disabled=!slotSelect.value;}});
             }})();
             </script>"""
@@ -339,12 +342,26 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
         return module_page(request, "Timetable Builder", "timetable", body)
 
     @app.get("/app/timetable/builder/date-slots")
-    def timetable_builder_date_slots(request: Request, profile_id: int = 0, session_date: str = ""):
+    def timetable_builder_date_slots(request: Request, profile_id: int = 0, requirement_id: int = 0, session_date: str = ""):
         school = school_for(request)
         if not school:
             return JSONResponse({"ok": False, "error": "Your session has expired. Sign in again."}, status_code=401)
         con = get_db()
         try:
+            cur = con.cursor()
+            requirement = cur.execute(
+                """SELECT schedule_layer FROM ds_timetable_scheduling_requirements
+                   WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+                (requirement_id, int(school["id"]), profile_id),
+            ).fetchone()
+            if not requirement:
+                raise TimetableSetupError("Select an active scheduling requirement from this timetable profile.")
+            layer = str(requirement["schedule_layer"])
+            allowed_types = {
+                "instructional": {"instructional"},
+                "additional_learning": {"remedial", "study"},
+                "school_activity": {"activity", "assembly", "other"},
+            }.get(layer, set())
             occurrence = resolve_calendar_occurrence(con, int(school["id"]), profile_id, session_date)
             slots = [
                 {
@@ -355,7 +372,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                     "end_time": str(slot["end_time"]),
                 }
                 for slot in occurrence["schedule_slots"]
-                if occurrence["is_instructional"] and str(slot["slot_type"]).lower() == "instructional"
+                if str(slot["slot_type"]).lower() in allowed_types
+                and (layer != "instructional" or occurrence["is_instructional"])
             ]
             rotations = [
                 str((item.get("week") or {}).get("label") or item.get("cycle_name") or "Active rotation")
@@ -366,7 +384,8 @@ def register_timetable_builder_routes(app, get_db, get_school_obj, module_page):
                 "date": session_date,
                 "day_code": occurrence.get("day_code"),
                 "day_name": occurrence.get("day_name"),
-                "instructional": bool(occurrence.get("instructional")),
+                "is_instructional": bool(occurrence.get("is_instructional")),
+                "schedule_layer": layer,
                 "slots": slots,
                 "rotations": rotations,
             })
