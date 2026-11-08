@@ -388,6 +388,12 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
             for start_index, period in enumerate(periods):
                 if task.get("preferred_period_id") is not None and int(period["id"]) != int(task["preferred_period_id"]):
                     continue
+                # A single configured lesson must fit the class's daily
+                # period ceiling on its own; otherwise no placement can ever
+                # satisfy the workload limit, regardless of the search order.
+                if (task.get("max_periods_per_day") is not None
+                        and int(task["duration"]) > int(task["max_periods_per_day"])):
+                    continue
                 span = _period_span(periods, start_index, task["duration"])
                 if not span:
                     continue
