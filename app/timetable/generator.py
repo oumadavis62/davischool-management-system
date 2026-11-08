@@ -879,7 +879,14 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
     def active_rotation(occurrence, programme_id):
         if programme_id is None:
             return True
-        relevant = [r for r in occurrence["rotations"] if r.get("week")]
+        programme = cur.execute(
+            """SELECT rotation_cycle_id FROM ds_timetable_learning_programmes
+               WHERE id=? AND school_id=? AND profile_id=? AND is_active=1""",
+            (programme_id, school_id, profile_id),
+        ).fetchone()
+        cycle_id = int(programme["rotation_cycle_id"]) if programme and programme["rotation_cycle_id"] is not None else None
+        relevant = [r for r in occurrence["rotations"]
+                    if r.get("week") and (cycle_id is None or int(r["cycle_id"]) == cycle_id)]
         if not relevant:
             return True
         return any(r.get("programme_id") == programme_id for r in relevant)
@@ -960,6 +967,36 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                         (school_id, task["room_type"]),
                     ).fetchall()]
                 for room_id in room_ids:
+                    try:
+                        _validate_constraints(
+                            cur, school_id, profile_id, task["layer"], task["session_type"],
+                            task["subject_id"], task["classes"], task["teachers"], room_id,
+                            int(occurrence["day_id"]), period_id, start_time, end_time, occurrence_date,
+                        )
+                    except TimetableSetupError:
+                        continue
+                    period_ids = [
+                        int(p["id"]) for p in cur.execute(
+                            "SELECT id FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_no BETWEEN ? AND ?",
+                            (school_id, profile_id,
+                             int(selected[0]["period_no"] or 0),
+                             int(selected[-1]["period_no"] or 0)),
+                        ).fetchall()
+                    ] if selected[0]["period_no"] is not None else []
+                    if period_ids and teachers:
+                        marks = ",".join("?" for _ in period_ids)
+                        unavailable = cur.execute(
+                            """SELECT 1 FROM ds_timetable_teacher_availability
+                               WHERE school_id=? AND profile_id=? AND day_id=?
+                                 AND availability='unavailable' AND teacher_id IN (
+                                   SELECT teacher_id FROM ds_timetable_scheduling_requirement_teachers
+                                   WHERE school_id=? AND profile_id=? AND requirement_id=?
+                                 ) AND period_id IN (""" + marks + ") LIMIT 1",
+                            (school_id, profile_id, int(occurrence["day_id"]),
+                             school_id, profile_id, task["requirement_id"], *period_ids),
+                        ).fetchone()
+                        if unavailable:
+                            continue
                     if find_session_conflicts(
                         connection, school_id, profile_id, start_time, end_time,
                         task["classes"], task["teachers"], task["learners"],
