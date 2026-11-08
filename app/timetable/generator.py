@@ -613,79 +613,123 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
     # solver does not hold AccessShare locks on school tables for minutes.
     connection.commit()
 
-    def search(position: int, fallback: bool = False) -> bool:
+    # Keep interchangeable occurrences in a stable order, but choose between
+    # independent requirement groups dynamically. A fixed global order can
+    # spend most of the node budget exploring easy lessons while a highly
+    # constrained teacher/class combination becomes impossible much later.
+    symmetry_members = {}
+    for task_index, group_id in symmetry_group_by_task.items():
+        symmetry_members.setdefault(group_id, []).append(task_index)
+    for members in symmetry_members.values():
+        members.sort(key=lambda index: int(tasks[index]["occurrence"]))
+
+    placements = list(fixed)
+    nodes = 0
+    exhausted = False
+    assigned = set()
+
+    def search(fallback: bool = False) -> bool:
         nonlocal nodes, exhausted
-        if position >= len(order):
+        if len(assigned) >= len(tasks):
             return True
         if nodes >= int(node_limit):
             exhausted = True
             return False
-        task_index = order[position]
-        task = tasks[task_index]
-        symmetry_group = symmetry_group_by_task[task_index]
-        prior_ranks = [
-            int(placed["_candidate_rank"])
-            for placed in placements
-            if placed.get("_symmetry_group") == symmetry_group
-        ]
-        minimum_rank = max(prior_ranks, default=-1)
-        eligible_candidates = [
-            (rank, candidate)
-            for rank, candidate in enumerate(candidate_lookup[task_index])
-            if rank > minimum_rank
-            and (fallback or candidate.get("explicitly_available"))
-        ]
-        # Preserve the precomputed candidate order during recursion. Dynamic
-        # scoring here was the dominant cost for large school workloads.
-        for candidate_rank, candidate in eligible_candidates:
-            room_order = sorted(
-                _rooms_for_task(task),
-                key=lambda room: sum(
-                    1 for placed in placements
-                    if int(placed["day_id"]) == int(candidate["day_id"])
-                    and placed.get("room_id") is not None
-                    and room is not None
-                    and int(placed["room_id"]) == int(room)
-                    and _overlap(candidate["start_time"], candidate["end_time"], placed["start_time"], placed["end_time"])
-                ),
+
+        # Only the next occurrence in each symmetry group is eligible. This
+        # retains the permutation reduction while allowing MRV across groups.
+        best_choices = None
+        best_task_index = None
+        best_rank_key = None
+        for members in symmetry_members.values():
+            task_index = next((index for index in members if index not in assigned), None)
+            if task_index is None:
+                continue
+            task = tasks[task_index]
+            symmetry_group = symmetry_group_by_task[task_index]
+            prior_ranks = [
+                int(placed["_candidate_rank"])
+                for placed in placements
+                if placed.get("_symmetry_group") == symmetry_group
+            ]
+            minimum_rank = max(prior_ranks, default=-1)
+            choices = []
+            for candidate_rank, candidate in enumerate(candidate_lookup[task_index]):
+                if candidate_rank <= minimum_rank:
+                    continue
+                if not fallback and not candidate.get("explicitly_available"):
+                    continue
+                room_order = sorted(
+                    _rooms_for_task(task),
+                    key=lambda room: sum(
+                        1 for placed in placements
+                        if int(placed["day_id"]) == int(candidate["day_id"])
+                        and placed.get("room_id") is not None
+                        and room is not None
+                        and int(placed["room_id"]) == int(room)
+                        and _overlap(candidate["start_time"], candidate["end_time"],
+                                     placed["start_time"], placed["end_time"])
+                    ),
+                )
+                for room_id in room_order:
+                    if (task_index, candidate["day_id"], candidate["period_id"], room_id) in blocked_candidates:
+                        continue
+                    placement = dict(candidate, room_id=room_id)
+                    if not _can_place(task, placement, placements):
+                        continue
+                    choices.append((candidate_rank, candidate, room_id))
+            # Fail immediately on an empty remaining domain (forward checking).
+            if not choices:
+                return False
+            rank_key = (
+                len(choices),
+                -int(task["duration"]),
+                len(candidate_lookup[task_index]),
+                int(task["class_id"]),
+                int(task["subject_id"]),
             )
-            for room_id in room_order:
-                nodes += 1
-                if nodes > int(node_limit):
-                    exhausted = True
-                    return False
-                placement = dict(candidate, room_id=room_id)
-                if (
-                    task_index, candidate["day_id"], candidate["period_id"], room_id
-                ) in blocked_candidates:
-                    continue
-                if not _can_place(task, placement, placements):
-                    continue
-                placement.update({
-                    "class_id": task["class_id"],
-                    "subject_id": task["subject_id"],
-                    "teacher_id": task["teacher_id"],
-                    "fixed": False,
-                    "_symmetry_group": symmetry_group,
-                    "_candidate_rank": candidate_rank,
-                })
-                placements.append(placement)
-                if search(position + 1, fallback):
-                    return True
-                placements.pop()
-                if exhausted:
-                    return False
+            if best_rank_key is None or rank_key < best_rank_key:
+                best_rank_key = rank_key
+                best_task_index = task_index
+                best_choices = choices
+
+        if best_task_index is None:
+            return True
+        task = tasks[best_task_index]
+        symmetry_group = symmetry_group_by_task[best_task_index]
+        for candidate_rank, candidate, room_id in best_choices:
+            nodes += 1
+            if nodes > int(node_limit):
+                exhausted = True
+                return False
+            placement = dict(candidate, room_id=room_id)
+            placement.update({
+                "class_id": task["class_id"],
+                "subject_id": task["subject_id"],
+                "teacher_id": task["teacher_id"],
+                "fixed": False,
+                "_symmetry_group": symmetry_group,
+                "_candidate_rank": candidate_rank,
+            })
+            placements.append(placement)
+            assigned.add(best_task_index)
+            if search(fallback):
+                return True
+            assigned.remove(best_task_index)
+            placements.pop()
+            if exhausted:
+                return False
         return False
 
     # First attempt a complete timetable using only explicitly available
     # cells. If that cannot satisfy all requirements, retry with blank cells
     # as fallback placements. X cells remain hard exclusions.
-    generated = search(0, False)
+    generated = search(False)
     if not generated:
         placements[:] = list(fixed)
         nodes = 0
         exhausted = False
-        generated = search(0, True)
+        generated = search(True)
 
     snapshot = {
         "profile_id": profile_id,
