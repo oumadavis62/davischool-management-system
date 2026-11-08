@@ -29,7 +29,7 @@ def _unique_ids(values: Iterable[Any], field: str) -> list[int]:
 def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
                                 session_date: str | None, day_id: int | None,
                                 start: str, end: str, schedule_layer: str) -> None:
-    """Ensure dated instructional sessions obey the resolved school calendar."""
+    """Ensure every dated session fits its calendar day and configured layer slots."""
     if not session_date:
         return
     occurrence = resolve_calendar_occurrence(
@@ -37,23 +37,39 @@ def _validate_calendar_session(cur: Any, school_id: int, profile_id: int,
     )
     if day_id is not None and occurrence["day_id"] != int(day_id):
         raise TimetableSetupError("The selected timetable day does not match the session date.")
-    if schedule_layer != "instructional":
-        return
-    if not occurrence["is_instructional"]:
+
+    allowed_types = {
+        "instructional": {"instructional", "lesson", "teaching"},
+        "additional_learning": {"remedial", "study"},
+        "school_activity": {"activity", "assembly", "other"},
+    }.get(schedule_layer, set())
+    if schedule_layer == "instructional" and not occurrence["is_instructional"]:
         raise TimetableSetupError("The selected date is closed for instructional lessons.")
+    if schedule_layer == "additional_learning" and not (
+        occurrence["is_instructional"] or occurrence["template_id"] is not None
+    ):
+        raise TimetableSetupError("Additional learning requires an instructional day or a configured day template.")
     slots = occurrence["schedule_slots"]
     if not slots:
-        return
+        raise TimetableSetupError("The selected date has no configured day template; dated sessions cannot be placed.")
     matching = [
         slot for slot in slots
-        if str(slot["slot_type"]).lower() in {"lesson", "instructional", "teaching"}
+        if str(slot["slot_type"]).lower() in allowed_types
         and str(slot["start_time"]) >= start and str(slot["end_time"]) <= end
     ]
     if not matching or str(matching[0]["start_time"]) != start or str(matching[-1]["end_time"]) != end:
-        raise TimetableSetupError("The session time does not match the selected date's instructional template.")
+        layer_name = {
+            "instructional": "instructional",
+            "additional_learning": "remedial or study",
+            "school_activity": "activity",
+        }.get(schedule_layer, "configured")
+        raise TimetableSetupError(
+            f"The session time does not match the selected date's {layer_name} slots."
+        )
     for previous, current in zip(matching, matching[1:]):
-        if str(previous["end_time"]) != str(current["start_time"]):
-            raise TimetableSetupError("An instructional session cannot span a break or non-teaching slot.")
+        if (str(previous["end_time"]) != str(current["start_time"])
+                or int(current["slot_no"]) != int(previous["slot_no"]) + 1):
+            raise TimetableSetupError("A session cannot span a break or non-teaching slot.")
 
 
 def _validate_resources(cur: Any, school_id: int, profile_id: int,
