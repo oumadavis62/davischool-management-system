@@ -425,49 +425,55 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const form=event.target;
             if(form&&form.matches&&form.matches('form[method="post" i]')) attachTabSession(form);
           }},true);
-          // Save and Delete actions use an asynchronous POST so the browser
-          // stays on the current setup page. Other forms keep normal behavior.
-          root.addEventListener('submit',async event=>{{
-            const form=event.target;
-            if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
-            const submitter=event.submitter;
-            const actionLabel=(submitter?.textContent||'').trim().toLowerCase();
-            if(!(actionLabel.startsWith('save')||actionLabel==='delete')) return;
-            event.preventDefault();
-            if(form.dataset.ajaxBusy==='1') return;
-            form.dataset.ajaxBusy='1';
-            const buttons=Array.from(form.querySelectorAll('button[type="submit"],button:not([type])'));
-            buttons.forEach(button=>button.disabled=true);
-            const oldText=submitter?.textContent;
-            if(submitter) submitter.textContent=actionLabel==='delete'?'Deleting…':'Saving…';
-            try{{
-              attachTabSession(form);
-              const response=await fetch(form.action||window.location.href,{{
-                method:'POST',body:new FormData(form),credentials:'same-origin',
-                headers:{{'X-Requested-With':'XMLHttpRequest'}}
-              }});
-              if(!response.ok) throw new Error('The request could not be completed ('+response.status+').');
-              const html=await response.text();
-              const parsed=new DOMParser().parseFromString(html,'text/html');
-              const nextRoot=parsed.querySelector('.tt-wrap');
-              if(!nextRoot) throw new Error('The server response did not contain the timetable setup page.');
-              const currentRoot=document.querySelector('.tt-wrap');
-              if(currentRoot) currentRoot.replaceWith(nextRoot);
-              // Re-run the setup-page initializer for the newly rendered controls.
-              const initializer=Array.from(parsed.scripts).find(script=>script.textContent.includes('Turn the seven long setup panels')||script.textContent.includes('Keep every setup panel collapsed'));
-              if(initializer&&initializer.textContent){{
-                const fresh=document.createElement('script');
-                fresh.textContent=initializer.textContent;
-                document.body.appendChild(fresh);
-                fresh.remove();
+          // Keep one document-level handler so it survives replacing .tt-wrap.
+          // Identify supported actions by endpoint, not button text or submitter support.
+          if(!document.documentElement.dataset.ttSetupAjaxBound){{
+            document.documentElement.dataset.ttSetupAjaxBound='1';
+            document.addEventListener('submit',async event=>{{
+              const form=event.target;
+              if(!form||!form.matches||!form.matches('form[method="post" i]')) return;
+              const action=new URL(form.getAttribute('action')||window.location.href,window.location.origin);
+              const endpoint=action.pathname;
+              const isSetupWrite=/^\\/app\\/timetable\\/setup\\/(day|period|break|calendar-event|room|availability|requirement|class-limits|row-delete|break-gap)$/.test(endpoint);
+              if(!isSetupWrite) return;
+              event.preventDefault();
+              if(form.dataset.ajaxBusy==='1') return;
+              form.dataset.ajaxBusy='1';
+              const submitter=event.submitter||null;
+              const isDelete=endpoint.endsWith('/row-delete');
+              const buttons=Array.from(form.querySelectorAll('button[type="submit"],button:not([type])'));
+              buttons.forEach(button=>button.disabled=true);
+              const oldText=submitter?.textContent;
+              if(submitter) submitter.textContent=isDelete?'Deleting…':'Saving…';
+              try{{
+                attachTabSession(form);
+                const response=await fetch(action.href,{{
+                  method:'POST',body:new FormData(form),credentials:'same-origin',
+                  headers:{{'X-Requested-With':'XMLHttpRequest'}}
+                }});
+                if(!response.ok) throw new Error('The request could not be completed ('+response.status+').');
+                const html=await response.text();
+                const parsed=new DOMParser().parseFromString(html,'text/html');
+                const nextRoot=parsed.querySelector('.tt-wrap');
+                if(!nextRoot) throw new Error('The server response did not contain the timetable setup page. The server may have redirected your session.');
+                const currentRoot=document.querySelector('.tt-wrap');
+                if(!currentRoot) throw new Error('The timetable setup page is no longer available.');
+                currentRoot.replaceWith(nextRoot);
+                const initializer=Array.from(parsed.scripts).find(script=>script.textContent.includes('Keep every setup panel collapsed'));
+                if(initializer&&initializer.textContent){{
+                  const fresh=document.createElement('script');
+                  fresh.textContent=initializer.textContent;
+                  document.body.appendChild(fresh);
+                  fresh.remove();
+                }}
+              }}catch(error){{
+                window.alert(error.message||'Unable to save this change. Please try again.');
+                if(submitter&&oldText) submitter.textContent=oldText;
+                buttons.forEach(button=>button.disabled=false);
+                delete form.dataset.ajaxBusy;
               }}
-            }}catch(error){{
-              window.alert(error.message||'Unable to save this change. Please try again.');
-              if(submitter&&oldText) submitter.textContent=oldText;
-              buttons.forEach(button=>button.disabled=false);
-              delete form.dataset.ajaxBusy;
-            }}
-          }});
+            }},true);
+          }}
           let serial=0;
           root.querySelectorAll('.tt-section').forEach(section=>{{
             const form=section.querySelector('.tt-form.compact'); if(!form) return;
