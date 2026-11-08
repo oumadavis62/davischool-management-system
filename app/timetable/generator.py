@@ -325,7 +325,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         else:
             planned_sessions = [
                 {"duration": duration, "preferred_period_id": None}
-                for _ in range(weekly)
+                for _ in range(remaining)
             ]
 
         for shared_duration in covered_sessions:
