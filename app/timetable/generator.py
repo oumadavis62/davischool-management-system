@@ -957,6 +957,16 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
          now, created_by, now),
     )
     run_id = int(cur.lastrowid or 0)
+    if not run_id:
+        run_row = cur.execute(
+            """SELECT id FROM ds_timetable_generation_runs
+               WHERE school_id=? AND profile_id=? AND created_at=?
+               ORDER BY id DESC LIMIT 1""",
+            (school_id, profile_id, now),
+        ).fetchone()
+        run_id = int(run_row["id"]) if run_row else 0
+    if not run_id:
+        raise TimetableSetupError("Could not create a generation run record for the normalized weekly timetable.")
     created = []
     try:
         for item in planned:
