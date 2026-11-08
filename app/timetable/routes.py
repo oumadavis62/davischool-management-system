@@ -311,7 +311,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 if status == "preferred":
                     status = "available"
                 symbol = "✓" if status == "available" else ("X" if status == "unavailable" else "")
-                cells.append(f"<td><button type='button' class='tt-av-cell' data-day='{int(day['id'])}' data-period='{int(period['id'])}' data-status='{status}'>{symbol}</button><input type='hidden' name='cell_status' value='{int(day['id'])}|{int(period['id'])}|{status}'></td>")
+                status_by_teacher = ";".join(f"{tid}:{str(value or '')}" for (tid, did, pid), value in availability_status.items() if did == int(day["id"]) and pid == int(period["id"]))
+                cells.append(f"<td><button type='button' class='tt-av-cell' data-day='{int(day['id'])}' data-period='{int(period['id'])}' data-statuses='{status_by_teacher}' data-status='{status}'>{symbol}</button><input type='hidden' name='cell_status' value='{int(day['id'])}|{int(period['id'])}|{status}'></td>")
             matrix_cells.append(f"<tr><th>{esc(day['day_name'])}</th>{''.join(cells)}</tr>")
         matrix_period_headers = "".join(f"<th>{esc(p['label'])}<small>{esc(p['start_time'])}–{esc(p['end_time'])}</small></th>" for p in periods)
         matrix_day_rows = "".join(matrix_cells) or "<tr><td colspan='2' class='tt-muted'>Configure school days and teaching periods first.</td></tr>"
@@ -440,6 +441,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             const form=event.target;
             if(form&&form.matches&&form.matches('form[method="post" i]')) attachTabSession(form);
           }},true);
+          const teacherPicker=root.querySelector('#tt-availability-teacher');
+          function setAvailabilityCell(button,teacherId){{
+            const statusMap={{}};
+            (button.dataset.statuses||'').split(';').filter(Boolean).forEach(item=>{{const parts=item.split(':');statusMap[parts[0]]=parts[1]||'';}});
+            const status=statusMap[String(teacherId)]||'';
+            button.dataset.status=status;
+            button.textContent=status==='available'?'✓':(status==='unavailable'?'X':'');
+            const hidden=button.nextElementSibling;
+            if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+status;
+          }}
           root.querySelectorAll('.tt-av-cell').forEach(button=>{{
             button.addEventListener('click',()=>{{
               const states=['','available','unavailable'];
@@ -451,6 +462,10 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               if(hidden) hidden.value=button.dataset.day+'|'+button.dataset.period+'|'+next;
             }});
           }});
+          if(teacherPicker){{
+            teacherPicker.addEventListener('change',()=>root.querySelectorAll('.tt-av-cell').forEach(button=>setAvailabilityCell(button,teacherPicker.value)));
+            root.querySelectorAll('.tt-av-cell').forEach(button=>setAvailabilityCell(button,teacherPicker.value));
+          }}
           // Keep one document-level handler so it survives replacing .tt-wrap.
           // Identify supported actions by endpoint, not button text or submitter support.
           if(!document.documentElement.dataset.ttSetupAjaxBound){{
@@ -924,7 +939,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 if day_id not in configured_days or period_id not in configured_periods or status not in ("", "available", "unavailable"):
                     raise TimetableSetupError("The availability matrix contains an invalid day, period or status.")
                 if status:
-                    save_teacher_availability(con, int(school["id"]), profile_id, teacher_id, day_id, period_id, status)
+                    con.execute(
+                        """INSERT INTO ds_timetable_teacher_availability
+                           (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+                           VALUES(?,?,?,?,?,?, '')
+                           ON CONFLICT(school_id,profile_id,teacher_id,day_id,period_id)
+                           DO UPDATE SET availability=excluded.availability,reason=''""",
+                        (int(school["id"]), profile_id, teacher_id, day_id, period_id, status),
+                    )
                 else:
                     con.execute("DELETE FROM ds_timetable_teacher_availability WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=? AND period_id=?", (int(school["id"]), profile_id, teacher_id, day_id, period_id))
             con.commit()

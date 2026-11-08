@@ -463,7 +463,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         run_id = int(run["id"])
     connection.commit()
 
-    success = search(0)
+    success = generated
     if not success:
         summary = {
             "status": "failed",
