@@ -323,7 +323,7 @@ def save_requirement_session_pattern(connection: Any, school_id: int, profile_id
                            int(slot_id) if slot_id is not None else None,
                            int(period_id) if period_id is not None else None, label))
         total_periods += duration
-    expected = int(requirement["lessons_per_week"])
+    expected = int(requirement["lessons_per_week"]) * int(requirement["duration_periods"] or 1)
     if total_periods != expected:
         raise TimetableSetupError(
             f"Lesson pattern totals {total_periods} periods; this subject requires exactly {expected} periods per week."
