@@ -55,6 +55,9 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             periods = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_periods WHERE school_id=? AND profile_id=? AND period_type='lesson'", (school_id,pid)).fetchone()["total"]
             requirements = cur.execute("SELECT COUNT(*) AS total FROM ds_timetable_class_requirements WHERE school_id=? AND profile_id=?", (school_id,pid)).fetchone()["total"]
             advanced_requirements = cur.execute("""SELECT COUNT(*) AS total FROM ds_timetable_scheduling_requirements
+                WHERE school_id=? AND profile_id=? AND is_active=1""",
+                (school_id,pid)).fetchone()["total"]
+            advanced_instructional_requirements = cur.execute("""SELECT COUNT(*) AS total FROM ds_timetable_scheduling_requirements
                 WHERE school_id=? AND profile_id=? AND is_active=1 AND schedule_layer='instructional'""",
                 (school_id,pid)).fetchone()["total"]
             allocations_count = cur.execute("""SELECT COUNT(*) AS total FROM (SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id FROM teacher_allocations ta JOIN classes c ON c.id=ta.class_id AND c.school_id=ta.school_id JOIN subjects s ON s.id=ta.subject_id AND s.school_id=ta.school_id JOIN teachers t ON t.id=ta.teacher_id AND t.school_id=ta.school_id WHERE ta.school_id=?) a""", (school_id,)).fetchone()["total"]
@@ -85,7 +88,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             f"""<form method='post' action='/app/timetable/automatic/generate-advanced'
                 onsubmit="return confirm('Generate normalized sessions, including combined classes and teaching teams?')">
                 <input type='hidden' name='profile_id' value='{pid}'>
-                <button class='ag-btn secondary'>Generate advanced requirements ({int(advanced_requirements)})</button></form>"""
+                <button class='ag-btn secondary'>Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button></form>"""
             if advanced_requirements and not read_only else ""
         )
         date_range_action = (
