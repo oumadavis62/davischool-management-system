@@ -242,7 +242,16 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         period_rows = "".join(f"<tr><td>{esc(p['period_no'])}</td><td><b>{esc(p['label'])}</b></td><td>{esc(p['start_time'])}–{esc(p['end_time'])}</td><td>{esc(p['duration_minutes'])} min</td><td>{esc(p['period_type'])}</td></tr>" for p in periods) or "<tr><td colspan='5' class='tt-muted'>No periods configured.</td></tr>"
         break_rows = "".join(f"<tr><td>{esc(b['break_no'])}</td><td><b>{esc(b['label'])}</b></td><td>{esc(b['start_time'])}–{esc(b['end_time'])}</td><td>{esc(b['applies_to'])}</td></tr>" for b in breaks) or "<tr><td colspan='4' class='tt-muted'>No breaks configured.</td></tr>"
         break_candidate_rows = "".join(
-            f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>{'' if g['selected'] else f\"<form method='post' action='/app/timetable/setup/break-gap' class='tt-form compact'>{hidden}<input type='hidden' name='start_time' value='{esc(g['start_time'])}'><input type='hidden' name='end_time' value='{esc(g['end_time'])}'><label>Break name<input name='label' required placeholder='e.g. Tea break'></label><button class='tt-btn'>Select this gap</button></form>\"}</td></tr>"
+            f"<tr><td><b>{esc(g['label'])}</b></td><td>{esc(g['start_time'])}–{esc(g['end_time'])}</td><td>{'Selected' if g['selected'] else 'Available'}</td><td>"
+            + ("" if g["selected"] else (
+                "<form method='post' action='/app/timetable/setup/break-gap' class='tt-form compact'>"
+                + hidden
+                + "<input type='hidden' name='start_time' value='" + esc(g["start_time"]) + "'>"
+                + "<input type='hidden' name='end_time' value='" + esc(g["end_time"]) + "'>"
+                + "<label>Break name<input name='label' required placeholder='e.g. Tea break'></label>"
+                + "<button class='tt-btn'>Select this gap</button></form>"
+            ))
+            + "</td></tr>"
             for g in break_candidates
         ) or "<tr><td colspan='4' class='tt-muted'>No gaps detected. Adjust period times to create a gap.</td></tr>"
 
