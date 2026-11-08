@@ -9,7 +9,7 @@ from app.timetable.advanced_setup import (
     create_rotation_cycle,
     create_schedule_template,
     save_rotation_week,
-    resolve_calendar_occurrence,
+    resolve_calendar_occurrence,\n    expand_calendar_occurrences,
     save_schedule_slot,
     save_requirement_session_pattern,
 )
@@ -174,6 +174,44 @@ class AdvancedTimetableSetupTests(unittest.TestCase):
         self.assertEqual(week_one["rotations"][0]["week"]["department_code"], "SCI")
         self.assertEqual(week_three["rotations"][0]["week"]["department_code"], "HUM")
         self.assertEqual(week_four["rotations"][0]["week_number"], 1)
+
+
+    def test_calendar_expansion_includes_weekend_template_and_closure_when_requested(self):
+        from app.timetable.setup import save_day, save_calendar_exception
+        from app.timetable.advanced_setup import create_schedule_template, assign_day_template
+
+        save_day(self.db, 12, self.profile_id, "MON", "Monday", 1)
+        save_day(self.db, 12, self.profile_id, "SAT", "Saturday", 6, instructional=False)
+        saturday = self.db.execute(
+            "SELECT id FROM ds_timetable_days WHERE profile_id=? AND day_code='SAT'",
+            (self.profile_id,),
+        ).fetchone()["id"]
+        weekend_template = create_schedule_template(
+            self.db, 12, self.profile_id, "Saturday programme", "weekend"
+        )
+        assign_day_template(self.db, 12, self.profile_id, saturday, weekend_template)
+        save_calendar_exception(
+            self.db, 12, self.profile_id, "2027-03-02", "School closure",
+            "holiday", instructional=False,
+        )
+        active = expand_calendar_occurrences(
+            self.db, 12, self.profile_id, "2027-03-01", "2027-03-07"
+        )
+        all_days = expand_calendar_occurrences(
+            self.db, 12, self.profile_id, "2027-03-01", "2027-03-07",
+            include_closed=True,
+        )
+        self.assertNotIn("2027-03-02", [x["date"] for x in active])
+        self.assertIn("2027-03-06", [x["date"] for x in active])
+        self.assertEqual(len(all_days), 7)
+        saturday_row = next(x for x in active if x["date"] == "2027-03-06")
+        self.assertEqual(saturday_row["template_id"], weekend_template)
+
+    def test_calendar_expansion_rejects_ranges_over_one_year(self):
+        with self.assertRaises(TimetableSetupError):
+            expand_calendar_occurrences(
+                self.db, 12, self.profile_id, "2027-01-01", "2028-01-02"
+            )
 
     def test_rotation_programme_requires_a_cycle(self):
         with self.assertRaises(TimetableSetupError):
