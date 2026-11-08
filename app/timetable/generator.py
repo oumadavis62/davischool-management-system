@@ -175,14 +175,14 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
         for a in availability
     }
-    available_rows = cur.execute(
+    fallback_rows = cur.execute(
         """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
-           WHERE school_id=? AND profile_id=? AND availability IN ('available','preferred')""",
+           WHERE school_id=? AND profile_id=? AND availability='fallback'""",
         (school_id, profile_id),
     ).fetchall()
-    explicitly_available = {
+    fallback_only = {
         (int(a["teacher_id"]), int(a["day_id"]), int(a["period_id"]))
-        for a in available_rows
+        for a in fallback_rows
     }
     preferred_rows = cur.execute(
         """SELECT teacher_id,day_id,period_id FROM ds_timetable_teacher_availability
@@ -323,7 +323,7 @@ def generate_timetable(connection: Any, school_id: int, profile_id: int, created
                     "end_time": span[-1]["end_time"],
                     "period_no": int(period["period_no"]),
                     "preferred": any((task["teacher_id"], day_id, int(p["id"])) in preferred for p in span),
-                    "explicitly_available": all((task["teacher_id"], day_id, int(p["id"])) in explicitly_available for p in span),
+                    "explicitly_available": all((task["teacher_id"], day_id, int(p["id"])) not in fallback_only for p in span),
                 })
         if not candidates:
             message = (

@@ -205,7 +205,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                    JOIN teachers t ON t.id=a.teacher_id AND t.school_id=a.school_id
                    JOIN ds_timetable_days d ON d.id=a.day_id AND d.profile_id=a.profile_id
                    JOIN ds_timetable_periods p ON p.id=a.period_id AND p.profile_id=a.profile_id
-                   WHERE a.school_id=? AND a.profile_id=? AND a.availability='unavailable' ORDER BY d.day_order,p.period_no,t.name""",
+                   WHERE a.school_id=? AND a.profile_id=? AND a.availability IN ('fallback','unavailable') ORDER BY d.day_order,p.period_no,t.name""",
                 (school_id,pid),
             ).fetchall()
             requirements = cur.execute(
@@ -317,7 +317,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
         matrix_period_headers = "".join(f"<th>{esc(p['label'])}<small>{esc(p['start_time'])}–{esc(p['end_time'])}</small></th>" for p in periods)
         matrix_day_rows = "".join(matrix_cells) or "<tr><td colspan='2' class='tt-muted'>Configure school days and teaching periods first.</td></tr>"
         availability_rows = "".join(
-            f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{'✓ Available' if a['availability'] in ('available','preferred') else 'X Unavailable'}</span></td><td>{esc(a['reason'] or '—')}</td><td><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Clear this availability cell?&quot;)'>{hidden}<input type='hidden' name='kind' value='availability'><input type='hidden' name='row_id' value='{int(a['id'])}'><button class='tt-btn danger'>Clear</button></form></td></tr>" for a in availability
+            f"<tr><td>{esc(a['teacher_name'])}</td><td>{esc(a['day_name'])}</td><td>{esc(a['period_label'])}</td><td><span class='tt-pill'>{'Fallback only' if a['availability']=='fallback' else 'X Unavailable'}</span></td><td>{esc(a['reason'] or '—')}</td><td><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Clear this availability cell?&quot;)'>{hidden}<input type='hidden' name='kind' value='availability'><input type='hidden' name='row_id' value='{int(a['id'])}'><button class='tt-btn danger'>Clear</button></form></td></tr>" for a in availability
         ) or "<tr><td colspan='6' class='tt-muted'>No teacher availability rules yet.</td></tr>"
         requirement_rows = "".join(
             f"<tr><td>{esc(r['class_name'])} {esc(r['stream'] or '')}</td><td>{esc(r['subject_name'])}</td><td>{esc(r['teacher_name'])}</td><td>{esc(r['lessons_per_week'])}</td><td>{esc(r['duration_periods'])}</td><td>{'Yes' if r['allow_double'] else 'No'}</td><td><details><summary>Edit</summary><form method='post' data-native-post='true' action='/app/timetable/setup/requirement' class='tt-form compact'>{hidden}<input type='hidden' name='allocation' value='{int(r['class_id'])}|{int(r['subject_id'])}|{int(r['teacher_id'])}'><label>Lessons / week<input type='number' min='1' max='30' name='lessons_per_week' value='{int(r['lessons_per_week'])}' required></label><label>Duration<input type='number' min='1' max='4' name='duration_periods' value='{int(r['duration_periods'])}' required></label><label>Max / day<input type='number' min='1' max='10' name='max_lessons_per_day' value='{esc(r['max_lessons_per_day'] or '')}'></label><label class='tt-check'><input type='checkbox' name='allow_double' value='1' {'checked' if r['allow_double'] else ''}> Allow double</label><button class='tt-btn'>Save changes</button></form></details><form method='post' data-native-post='true' action='/app/timetable/setup/row-delete' onsubmit='return confirm(&quot;Delete this subject requirement?&quot;)'>{hidden}<input type='hidden' name='kind' value='requirement'><input type='hidden' name='row_id' value='{int(r['id'])}'><button class='tt-btn danger'>Delete</button></form></td></tr>" for r in requirements
@@ -941,17 +941,15 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 status = parts[2].strip()
                 if day_id not in configured_days or period_id not in configured_periods or status not in ("", "available", "unavailable"):
                     raise TimetableSetupError("The availability matrix contains an invalid day, period or status.")
-                if status:
-                    con.execute(
-                        """INSERT INTO ds_timetable_teacher_availability
-                           (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
-                           VALUES(?,?,?,?,?,?, '')
-                           ON CONFLICT(school_id,profile_id,teacher_id,day_id,period_id)
-                           DO UPDATE SET availability=excluded.availability,reason=''""",
-                        (int(school["id"]), profile_id, teacher_id, day_id, period_id, status),
-                    )
-                else:
-                    con.execute("DELETE FROM ds_timetable_teacher_availability WHERE school_id=? AND profile_id=? AND teacher_id=? AND day_id=? AND period_id=?", (int(school["id"]), profile_id, teacher_id, day_id, period_id))
+                stored_status = status or "fallback"
+                con.execute(
+                    """INSERT INTO ds_timetable_teacher_availability
+                       (school_id,profile_id,teacher_id,day_id,period_id,availability,reason)
+                       VALUES(?,?,?,?,?,?, '')
+                       ON CONFLICT(school_id,profile_id,teacher_id,day_id,period_id)
+                       DO UPDATE SET availability=excluded.availability,reason=''""",
+                    (int(school["id"]), profile_id, teacher_id, day_id, period_id, stored_status),
+                )
             con.commit()
             return redirect_setup(profile_id, "Teacher availability matrix saved.")
         except (TimetableSetupError, ValueError) as exc:
