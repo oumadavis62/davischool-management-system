@@ -301,7 +301,10 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                            room_id: int | None = None,
                            day_id: int | None = None,
                            session_date: str | None = None,
-                           exclude_session_id: int | None = None) -> list[dict[str, Any]]:
+                           exclude_session_id: int | None = None,
+                           ignore_generated_sessions: bool = False,
+                           include_legacy_lessons: bool = True,
+                           generated_run_id: int | None = None) -> list[dict[str, Any]]:
     """Return every overlapping new-engine session sharing a resource."""
     classes = _unique_ids(class_ids, "class")
     teachers = _unique_ids(teacher_ids, "teacher")
@@ -328,6 +331,11 @@ def find_session_conflicts(connection: Any, school_id: int, profile_id: int,
                 AND s.start_time < ? AND s.end_time > ?
                 AND s.status NOT IN ('cancelled','void')"""
     params: tuple[Any, ...] = (school_id, profile_id, end_time, start_time)
+    if ignore_generated_sessions:
+        base += " AND s.generation_run_id IS NULL"
+    elif generated_run_id is not None:
+        base += " AND (s.generation_run_id IS NULL OR s.generation_run_id=?)"
+        params += (int(generated_run_id),)
     if exclude_session_id is not None:
         base += " AND s.id<>?"
         params += (exclude_session_id,)
