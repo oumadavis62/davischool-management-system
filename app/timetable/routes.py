@@ -454,22 +454,56 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
                 f"<tr><td>{esc(item['subject'])}</td><td>{esc(item['teacher'])}</td><td><b>{item['lessons']}</b> / week</td><td>{'Configured' if item['configured'] else 'Not configured'}</td></tr>"
                 for item in sorted(group["subjects"], key=lambda x: x["subject"].lower())
             )
+            modal_id = f"tt-subject-breakdown-{cid}"
+            allocation_editor_url = "/school/subject-allocation"
+            current_tab_id = str(request.scope.get("davischool_tab_id") or "")
+            if current_tab_id:
+                allocation_editor_url += "?ds_tab=" + quote(current_tab_id, safe="")
             allocation_monitor_rows.append(
                 f"<tr class='tt-allocation-summary'><td><b>{esc(group['class_name'])} {esc(group['stream'])}</b><small>{group['configured']} of {len(group['subjects'])} subject loads configured</small></td>"
                 f"<td><b>{group['total']}</b> lessons / week</td><td>{maximum_value if maximum_value is not None else 'Not set'}</td>"
                 f"<td><span class='tt-allocation-status {status_class}'>{esc(status_text)}</span></td>"
-                f"<td><a class='tt-btn secondary' href='/school/subject-allocation'>Edit allocations</a></td></tr>"
-                f"<tr class='tt-allocation-details'><td colspan='5'><details><summary>View subject breakdown ({len(group['subjects'])})</summary>"
-                f"<div class='tt-table'><table><thead><tr><th>Subject</th><th>Allocated teacher</th><th>Weekly lessons</th><th>Setup</th></tr></thead><tbody>{subject_lines}</tbody></table></div></details></td></tr>"
+                f"<td><a class='tt-btn secondary' href='{allocation_editor_url}'>Edit allocation</a></td></tr>"
+                f"<tr class='tt-allocation-details'><td colspan='5'><button type='button' class='tt-breakdown-open' data-breakdown-target='{modal_id}' aria-haspopup='dialog'>View subject breakdown ({len(group['subjects'])})</button>"
+                f"<div class='tt-breakdown-modal' id='{modal_id}' role='dialog' aria-modal='true' aria-label='Subject breakdown for {esc(group['class_name'])} {esc(group['stream'])}' hidden>"
+                f"<div class='tt-breakdown-dialog'><div class='tt-breakdown-head'><div><span class='tt-kicker'>CURRENT ALLOCATIONS</span><h4>{esc(group['class_name'])} {esc(group['stream'])} · Subject breakdown</h4></div><button type='button' class='tt-breakdown-close' aria-label='Close'>&times;</button></div>"
+                f"<div class='tt-table'><table><thead><tr><th>Subject</th><th>Allocated teacher</th><th>Weekly lessons</th><th>Setup</th></tr></thead><tbody>{subject_lines}</tbody></table></div></div></div></td></tr>"
             )
         allocation_monitor_section = f"""
         <section class='tt-section tt-allocation-monitor'>
+          <style>
+            .tt-allocation-monitor .tt-breakdown-open{{border:0;background:transparent;color:#267348;font:700 12px inherit;text-decoration:underline;text-underline-offset:3px;padding:9px 2px;cursor:pointer}}
+            .tt-allocation-monitor .tt-breakdown-modal[hidden]{{display:none!important}}
+            .tt-allocation-monitor .tt-breakdown-modal{{position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,35,27,.55)}}
+            .tt-allocation-monitor .tt-breakdown-dialog{{width:min(760px,100%);max-height:min(82vh,720px);overflow:auto;background:#fff;border:1px solid #dce9df;border-radius:18px;padding:20px;box-shadow:0 24px 70px rgba(0,0,0,.22)}}
+            .tt-allocation-monitor .tt-breakdown-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:15px}}
+            .tt-allocation-monitor .tt-breakdown-head h4{{margin:5px 0 0;color:#214b35;font-size:17px}}
+            .tt-allocation-monitor .tt-breakdown-close{{width:34px;height:34px;border:1px solid #dce8df;border-radius:10px;background:#f7faf7;color:#345b43;font-size:23px;cursor:pointer;line-height:1}}
+            .tt-allocation-monitor .tt-breakdown-modal table{{min-width:540px}}
+            @media(max-width:600px){{.tt-allocation-monitor .tt-breakdown-dialog{{padding:14px;border-radius:14px}}}}
+          </style>
           <div class='tt-section-title'><div><span class='tt-kicker'>CURRENT ALLOCATIONS</span><h3>Track class lesson allocations</h3>
-          <p>Compare the weekly lessons assigned to each class or stream with its configured maximum. Expand a row to inspect subject and teacher allocations.</p></div>
-          <a class='tt-btn' href='/school/subject-allocation'>Manage subject allocations</a></div>
+          <p>Compare the weekly lessons assigned to each class or stream with its configured maximum. Open a breakdown to inspect subject and teacher allocations.</p></div></div>
           <div class='tt-table'><table><thead><tr><th>Class / stream</th><th>Current weekly load</th><th>Maximum</th><th>Balance</th><th>Action</th></tr></thead>
           <tbody>{"".join(allocation_monitor_rows) or "<tr><td colspan='5' class='tt-muted'>No current subject allocations found. Add allocations to begin tracking class lesson loads.</td></tr>"}</tbody></table></div>
           <p class='tt-muted'>Weekly totals are calculated from the saved subject requirements. If a subject has no weekly lesson requirement yet, it is shown as not configured and contributes zero until configured.</p>
+          <script>
+          (function(){{
+            const root=document.currentScript.closest('.tt-allocation-monitor');
+            if(!root||root.dataset.breakdownReady)return;
+            root.dataset.breakdownReady='1';
+            let active=null;
+            function closeModal(modal){{if(!modal)return;modal.hidden=true;if(active===modal)active=null;}}
+            root.addEventListener('click',event=>{{
+              const opener=event.target.closest('[data-breakdown-target]');
+              if(opener){{active=root.querySelector('#'+CSS.escape(opener.dataset.breakdownTarget));if(active){{active.hidden=false;active.querySelector('.tt-breakdown-close')?.focus();}}return;}}
+              const close=event.target.closest('.tt-breakdown-close');
+              if(close){{closeModal(close.closest('.tt-breakdown-modal'));return;}}
+              if(event.target.classList.contains('tt-breakdown-modal'))closeModal(event.target);
+            }});
+            root.addEventListener('keydown',event=>{{if(event.key==='Escape'&&active)closeModal(active);}});
+          }})();
+          </script>
         </section>
         """
         bulk_requirement_form = (
