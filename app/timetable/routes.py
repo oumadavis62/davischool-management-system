@@ -339,7 +339,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             # The write handlers independently enforce draft-only edits; hiding the
             # entire workspace here made a valid saved profile look like creation failed.
             sections = f"""
-            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>01 · SCHOOL WEEK</span><h3>School days</h3><p>Set instructional days and their order.</p></div><form method='post' data-native-post='true' action='/app/timetable/setup/standard-week'>{hidden}<button class='tt-btn secondary'>Add Monday–Friday</button></form></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/day' class='tt-form compact'>{hidden}<label>Day name<input name='day_name' required placeholder='Saturday'></label><label>Day code<input name='day_code' required maxlength='8' placeholder='SAT'></label><label>Display order<input name='day_order' required type='number' min='1' max='7' value='6'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1' checked> Instructional day</label><button class='tt-btn'>Save day</button></form><div class='tt-table'><table><tr><th>Order</th><th>Day</th><th>Code</th><th>Type</th><th>Actions</th></tr>{day_rows}</table></div></div></section>
+            <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>01 · SCHOOL WEEK</span><h3>School days</h3><p>Set instructional days and their order.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/day' class='tt-form compact'>{hidden}<label>Day name<input name='day_name' required placeholder='Saturday'></label><label>Day code<input name='day_code' required maxlength='8' placeholder='SAT'></label><label>Display order<input name='day_order' required type='number' min='1' max='7' value='6'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1' checked> Instructional day</label><button class='tt-btn'>Save day</button></form><div class='tt-table'><table><tr><th>Order</th><th>Day</th><th>Code</th><th>Type</th><th>Actions</th></tr>{day_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>02 · DAILY STRUCTURE</span><h3>Teaching periods</h3><p>Define period numbering and exact time boundaries.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/period' class='tt-form compact'>{hidden}<label>Period number<input name='period_no' type='number' min='1' max='30' required></label><label>Period label<input name='label' required placeholder='Period 1'></label><label>Start time<input name='start_time' type='time' required value='08:00'></label><label>End time<input name='end_time' type='time' required value='08:40'></label><label>Period type<select name='period_type'><option value='lesson'>Lesson</option><option value='study'>Study</option><option value='assembly'>Assembly</option></select></label><button class='tt-btn'>Save period</button></form><div class='tt-table'><table><tr><th>#</th><th>Period</th><th>Time</th><th>Duration</th><th>Type</th><th>Actions</th></tr>{period_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>03 · AUTOMATIC BREAK DETECTION</span><h3>Break gaps between periods</h3><p>Every positive time gap between consecutive periods is detected automatically. Select a gap, give it a name, and it becomes a break column. Unselected gaps remain available.</p></div></div><div class='tt-split'><div class='tt-table'><table><tr><th>Detected gap</th><th>Time</th><th>Status</th><th>Action</th></tr>{break_candidate_rows}</table></div><div class='tt-table'><h4>Selected breaks</h4><table><tr><th>#</th><th>Break</th><th>Time</th><th>Scope</th><th>Actions</th></tr>{break_rows}</table></div></div></section>
             <section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>04 · ACADEMIC CALENDAR</span><h3>Holidays and special dates</h3><p>Mark closures, holidays and exceptional instructional days inside this term.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/calendar-event' class='tt-form compact'>{hidden}<label>Date<input name='exception_date' type='date' required></label><label>Event name<input name='label' required placeholder='National holiday'></label><label>Event type<select name='exception_type'><option value='holiday'>Public / school holiday</option><option value='school_closure'>School closure</option><option value='special_instructional_day'>Special instructional day</option><option value='event'>School event</option></select></label><label>Notes<input name='notes' maxlength='180' placeholder='Optional details'></label><label class='tt-check'><input type='checkbox' name='instructional' value='1'> Instructional day</label><button class='tt-btn'>Save calendar date</button></form><div class='tt-table'><table><tr><th>Date</th><th>Event</th><th>Type</th><th>Day type</th><th>Notes</th><th>Actions</th></tr>{calendar_rows}</table></div></div></section>
@@ -445,9 +445,9 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             close.addEventListener('click',closeModal); host.addEventListener('click',e=>{{if(e.target===host)closeModal();}});
             host.addEventListener('keydown',e=>{{if(e.key==='Escape')closeModal();}});
           }});
-          // Turn the seven long setup panels into a compact, accessible accordion.
-          // Keep the first step open; all remaining steps stay visible as concise headers.
-          root.querySelectorAll('.tt-section').forEach((section,index)=>{{
+          // Keep every setup panel collapsed on initial page load.
+          // A panel opens only after its own Open section control is activated.
+          root.querySelectorAll('.tt-section').forEach(section=>{{
             const heading=section.querySelector('.tt-section-title');
             if(!heading) return;
             const content=document.createElement('div');
@@ -459,14 +459,14 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
               node=next;
             }}
             section.appendChild(content);
+            content.hidden=true;
+            section.classList.remove('tt-step-open');
             const toggle=document.createElement('button');
             toggle.type='button';
             toggle.className='tt-section-toggle';
-            toggle.setAttribute('aria-expanded',index===0?'true':'false');
-            toggle.innerHTML='<span class="tt-toggle-label">'+(index===0?'Close section':'Open section')+'</span><span class="tt-chevron" aria-hidden="true">⌄</span>';
+            toggle.setAttribute('aria-expanded','false');
+            toggle.innerHTML='<span class="tt-toggle-label">Open section</span><span class="tt-chevron" aria-hidden="true">⌄</span>';
             heading.appendChild(toggle);
-            if(index!==0) content.hidden=true;
-            else section.classList.add('tt-step-open');
             toggle.addEventListener('click',()=>{{
               const opening=content.hidden;
               content.hidden=!opening;
