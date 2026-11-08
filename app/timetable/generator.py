@@ -551,6 +551,17 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
     if not days or not periods:
         raise TimetableSetupError("Configure instructional days and periods before generating advanced sessions.")
 
+    class_limits = {
+        int(row["class_id"]): row for row in cur.execute(
+            """SELECT class_id,max_lessons_per_week,max_periods_per_day
+               FROM ds_timetable_class_limits WHERE school_id=? AND profile_id=?""",
+            (school_id, profile_id),
+        ).fetchall()
+    }
+    configured_breaks = cur.execute(
+        "SELECT label,start_time,end_time FROM ds_timetable_breaks WHERE school_id=? AND profile_id=?",
+        (school_id, profile_id),
+    ).fetchall()
     tasks = []
     for req in requirements:
         rid = int(req["id"])
@@ -641,6 +652,8 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
                 if not span:
                     continue
                 start, end = str(span[0]["start_time"]), str(span[-1]["end_time"])
+                if any(_overlap(start, end, str(br["start_time"]), str(br["end_time"])) for br in configured_breaks):
+                    continue
                 try:
                     _validate_constraints(cur, school_id, profile_id, "instructional", "lesson",
                         task["subject_id"], task["classes"], task["teachers"], None,
@@ -697,6 +710,22 @@ def generate_advanced_instructional_sessions(connection: Any, school_id: int,
         return a["day_id"] == b["day_id"] and a["start"] < b["end"] and a["end"] > b["start"]
 
     def compatible(task, option):
+        for class_id in task["classes"]:
+            limit = class_limits.get(int(class_id))
+            if not limit:
+                continue
+            same_class_week = sum(
+                1 for placed in planned if int(class_id) in placed["task"]["classes"]
+            )
+            if limit["max_lessons_per_week"] is not None and same_class_week >= int(limit["max_lessons_per_week"]):
+                return False
+            same_class_day_periods = sum(
+                int(placed["option"]["duration"]) for placed in planned
+                if int(class_id) in placed["task"]["classes"]
+                and int(placed["option"]["day_id"]) == int(option["day_id"])
+            )
+            if limit["max_periods_per_day"] is not None and same_class_day_periods + int(option["duration"]) > int(limit["max_periods_per_day"]):
+                return False
         for placed in planned:
             if not overlaps(option, placed["option"]):
                 continue
