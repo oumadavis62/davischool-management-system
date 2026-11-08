@@ -292,8 +292,8 @@ class TimetableSessionEngineTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["generated_sessions"], 2)
         dates = [r["session_date"] for r in self.db.execute(
-            "SELECT session_date FROM ds_timetable_sessions WHERE scheduling_requirement_id=? ORDER BY session_date",
-            (requirement,),
+            "SELECT session_date FROM ds_timetable_sessions WHERE school_id=8 AND profile_id=? AND subject_id=5 AND session_date IS NOT NULL ORDER BY session_date",
+            (self.profile_id,),
         ).fetchall()]
         self.assertEqual(dates, ["2027-03-01", "2027-03-08"])
 
