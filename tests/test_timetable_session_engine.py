@@ -456,6 +456,14 @@ class TimetableSessionEngineTests(unittest.TestCase):
             "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
             ("2027-03-01", "2027-12-31", self.profile_id),
         )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday remedial day", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Remedial session",
+            "remedial", "08:00", "09:00",
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
         create_scheduled_session(
             self.db, 8, self.profile_id, "08:00", "09:00",
             schedule_layer="additional_learning", session_type="remedial",
