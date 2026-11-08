@@ -1048,10 +1048,16 @@ def generate_dated_advanced_sessions(connection: Any, school_id: int, profile_id
                     continue
                 room_ids = [None]
                 if task["room_type"]:
-                    room_ids = [int(r["id"]) for r in cur.execute(
-                        "SELECT id FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 AND room_type=? ORDER BY capacity DESC,id",
-                        (school_id, task["room_type"]),
-                    ).fetchall()]
+                    room_ids = [
+                        int(r["id"]) for r in cur.execute(
+                            """SELECT id,allocation_mode,assigned_class_id FROM ds_timetable_rooms
+                               WHERE school_id=? AND is_active=1 AND room_type=?
+                               ORDER BY capacity DESC,id""",
+                            (school_id, task["room_type"]),
+                        ).fetchall()
+                        if str(r["allocation_mode"] or "shared") != "dedicated"
+                        or int(r["assigned_class_id"] or 0) in task["classes"]
+                    ]
                 for room_id in room_ids:
                     try:
                         _validate_constraints(
