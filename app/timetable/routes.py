@@ -165,7 +165,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             selected = profiles[0]
         selected_status = str(selected["status"] or "draft").strip().lower() if selected else ""
         has_draft_profile = any(str(p["status"] or "draft").strip().lower() == "draft" for p in profiles)
-        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = class_limits = []
+        days = periods = breaks = calendar_events = rooms = teachers = allocations = availability = requirements = class_limits = class_records = []
         if selected:
             pid = int(selected["id"])
             days = cur.execute("SELECT * FROM ds_timetable_days WHERE school_id=? AND profile_id=? ORDER BY day_order,id", (school_id,pid)).fetchall()
@@ -174,6 +174,7 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             calendar_events = cur.execute("SELECT * FROM ds_timetable_calendar_exceptions WHERE school_id=? AND profile_id=? ORDER BY exception_date,label", (school_id,pid)).fetchall()
             rooms = cur.execute("SELECT * FROM ds_timetable_rooms WHERE school_id=? AND is_active=1 ORDER BY name", (school_id,)).fetchall()
             teachers = cur.execute("SELECT id,name FROM teachers WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+            class_records = cur.execute("SELECT id,name,stream FROM classes WHERE school_id=? ORDER BY name,stream", (school_id,)).fetchall()
             allocations = cur.execute(
                 """SELECT DISTINCT ta.class_id,ta.subject_id,ta.teacher_id,c.name class_name,c.stream,
                           s.name subject_name,t.name teacher_name
@@ -240,8 +241,8 @@ def register_timetable_setup_routes(app, get_db, get_school_obj, module_page):
             for x in class_limits
         ) or "<tr><td colspan='4' class='tt-muted'>No class workload limits configured.</td></tr>"
         class_limit_class_opts = "".join(
-            f"<option value='{int(x['class_id'])}'>{esc(x['class_name'])} {esc(x['stream'] or '')}{' · existing limit will be updated' if int(x['class_id']) in {int(y['class_id']) for y in class_limits} else ''}</option>"
-            for x in {int(x['class_id']): x for x in allocations}.values()
+            f"<option value='{int(x['id'])}'>{esc(x['name'])} {esc(x['stream'] or '')}{' · existing limit will be updated' if int(x['id']) in {int(y['class_id']) for y in class_limits} else ''}</option>"
+            for x in class_records
         )
         class_limit_form = f"""<section class='tt-section'><div class='tt-section-title'><div><span class='tt-kicker'>08 · CLASS WORKLOAD LIMITS</span><h3>Maximum weekly lessons and daily periods</h3><p>Set a ceiling independently for each class or stream. Double and triple lessons count by their actual period duration toward the daily period ceiling.</p></div></div><div class='tt-split'><form method='post' data-native-post='true' action='/app/timetable/setup/class-limits' class='tt-form compact'>{hidden}<label class='wide'>Class / stream<select name='class_id' required><option value=''>Select class or stream</option>{class_limit_class_opts}</select></label><label>Maximum lessons per week<input name='max_lessons_per_week' type='number' min='1' max='100' placeholder='No limit'></label><label>Maximum periods per day<input name='max_periods_per_day' type='number' min='1' max='30' placeholder='No limit'></label><label class='wide'>Notes<input name='notes' maxlength='180' placeholder='Optional workload guidance'></label><button class='tt-btn'>Save class workload limits</button></form><div class='tt-table'><table><tr><th>Class / stream</th><th>Max lessons / week</th><th>Max periods / day</th><th>Notes</th></tr>{class_limit_rows}</table></div></div></section>"""
         bulk_requirement_form = (
