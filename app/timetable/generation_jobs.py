@@ -157,8 +157,9 @@ def _execute_job(get_db, job):
                 get_db, job_id, status="failed", stage="failed",
                 result_run_id=int(result.get("run_id") or 0) or None,
                 message=str(result.get("message") or "The solver could not find a complete timetable."),
-                finished_at="CURRENT_TIMESTAMP",
             )
+            con.execute("UPDATE ds_timetable_generation_jobs SET finished_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,))
+            con.commit()
             return
 
         if advanced_result:
@@ -221,7 +222,7 @@ def _worker_loop(get_db):
         job = None
         try:
             con = get_db()
-            ensure_generation_jobs_table(con)
+            # Queue schema is created once when the worker starts.
             # One consumer per web process; the conditional update also prevents
             # duplicate claims if a second consumer is accidentally started.
             row = con.execute(
@@ -259,6 +260,11 @@ def _worker_loop(get_db):
 
 def start_generation_worker(get_db) -> None:
     global _worker_thread
+    setup = get_db()
+    try:
+        ensure_generation_jobs_table(setup)
+    finally:
+        setup.close()
     with _worker_lock:
         if _worker_thread and _worker_thread.is_alive():
             return
