@@ -241,6 +241,18 @@ def _startup_database_initialization():
             "to serve requests against an unready database. "
             + str(DB_INIT_ERROR or "Unknown database initialization error")
         )
+    # Start the durable timetable job consumer only after the production
+    # database and timetable schema are ready. A worker startup problem must
+    # not take down authentication or ordinary school operations.
+    try:
+        from app.timetable.generation_jobs import start_generation_worker
+        start_generation_worker(get_db)
+        print("DAVISCHOOL TIMETABLE BACKGROUND WORKER INITIALIZED", flush=True)
+    except Exception:
+        import logging
+        logging.getLogger("davischool.timetable.jobs").exception(
+            "Timetable background worker could not be initialized"
+        )
 
 def send_school_verification_email(recipient: str, school_name: str, auth_code: str) -> None:
     """Send a one-time school registration code; prefer Gmail HTTPS API on Render Free."""
