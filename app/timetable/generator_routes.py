@@ -248,11 +248,20 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         )
 
     @app.post("/app/timetable/automatic/generation-report/delete")
-    def delete_generation_report(request: Request, profile_id: int = Form(...), run_id: int = Form(...)):
+    def delete_generation_report(request: Request, profile_id: int = Form(...), run_id: int = Form(...), ds_tab: str = Form("")):
         school = school_for(request)
         if not school:
             return RedirectResponse("/", 303)
         school_id = int(school["id"])
+        tab_id = str(ds_tab or "").strip()
+        if not (16 <= len(tab_id) <= 64 and all(ch.isalnum() or ch in "_-" for ch in tab_id)):
+            tab_id = ""
+        def report_redirect(message, error=False):
+            response = redirect_generator(profile_id, message=message, error=error)
+            location = response.headers.get("location", "/app/timetable/automatic")
+            if tab_id:
+                location += ("&" if "?" in location else "?") + "ds_tab=" + quote(tab_id)
+            return RedirectResponse(location, 303)
         con = get_db()
         try:
             cur = con.cursor()
@@ -262,16 +271,16 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                 (int(run_id), school_id, int(profile_id)),
             ).fetchone()
             if not run:
-                return redirect_generator(profile_id, message="That generation report was not found.", error=True)
+                return report_redirect("That generation report was not found.", error=True)
             if str(run["status"] or "").lower() in ("queued", "running", "processing"):
-                return redirect_generator(profile_id, message="An active generation run cannot be deleted.", error=True)
+                return report_redirect("An active generation run cannot be deleted.", error=True)
             cur.execute(
                 """DELETE FROM ds_timetable_generation_runs
                    WHERE id=? AND school_id=? AND profile_id=?""",
                 (int(run_id), school_id, int(profile_id)),
             )
             con.commit()
-            return redirect_generator(profile_id, message=f"Generation report run #{int(run_id)} deleted. Existing timetable lessons were not changed.")
+            return report_redirect(f"Generation report run #{int(run_id)} deleted. Existing timetable lessons were not changed.")
         except Exception:
             con.rollback()
             import logging
@@ -279,7 +288,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
                 "Could not delete generation report (school_id=%s profile_id=%s run_id=%s)",
                 school_id, int(profile_id), int(run_id),
             )
-            return redirect_generator(profile_id, message="The generation report could not be deleted. No timetable lessons were changed.", error=True)
+            return report_redirect("The generation report could not be deleted. No timetable lessons were changed.", error=True)
         finally:
             con.close()
 
