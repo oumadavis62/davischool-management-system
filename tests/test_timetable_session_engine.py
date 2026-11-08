@@ -264,6 +264,38 @@ class TimetableSessionEngineTests(unittest.TestCase):
 
 
 
+    def test_dated_manual_builder_rejects_break_and_non_instructional_slots(self):
+        self.db.execute(
+            "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
+            ("2027-03-01", "2027-12-31", self.profile_id),
+        )
+        template = create_schedule_template(
+            self.db, 8, self.profile_id, "Monday with break", "instructional"
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 1, "Period 1",
+            "instructional", "08:00", "08:40", 1,
+        )
+        save_schedule_slot(
+            self.db, 8, self.profile_id, template, 2, "Morning break",
+            "break", "08:40", "09:00",
+        )
+        assign_day_template(self.db, 8, self.profile_id, self.day_id, template)
+        requirement = create_scheduling_requirement(
+            self.db, 8, self.profile_id, "Manual dated Mathematics",
+            class_ids=[1], teacher_ids=[11], subject_id=9,
+            weekly_occurrences=1, weekly_periods=1,
+        )
+        save_scheduling_pattern(
+            self.db, 8, self.profile_id, requirement,
+            [{"duration_periods": 1}],
+        )
+        with self.assertRaisesRegex(TimetableSetupError, "not have enough consecutive slots"):
+            place_dated_advanced_requirement_session(
+                self.db, 8, self.profile_id, requirement, 1,
+                "2027-03-01", 2,
+            )
+
     def test_date_range_generator_repeats_weekly_pattern_on_calendar_dates(self):
         self.db.execute(
             "UPDATE ds_timetable_profiles SET academic_start_date=?,academic_end_date=? WHERE id=?",
