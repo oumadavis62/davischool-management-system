@@ -89,14 +89,14 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
             return module_page(request, "Automatic Timetabling", "timetable", body)
         read_only = str(selected['status']) != 'draft'
         advanced_action = (
-            f"""<form method='post' action='/app/timetable/automatic/generate-advanced'
+            f"""<form method='post' data-native-post='true' action='/app/timetable/automatic/generate-advanced'
                 onsubmit="return confirm('Generate normalized sessions, including combined classes and teaching teams?')">
                 <input type='hidden' name='profile_id' value='{pid}'>
                 <button class='ag-btn secondary'>Generate weekly instructional sessions ({int(advanced_instructional_requirements)})</button></form>"""
             if advanced_instructional_requirements and not read_only else ""
         )
         date_range_action = (
-            f"""<form method='post' action='/app/timetable/automatic/generate-dated'
+            f"""<form method='post' data-native-post='true' action='/app/timetable/automatic/generate-dated'
                 class='ag-date-form'
                 onsubmit="return confirm('Generate dated sessions for every active instructional, remedial and activity requirement in this date range?')">
                 <input type='hidden' name='profile_id' value='{pid}'>
@@ -123,7 +123,7 @@ def register_timetable_generator_routes(app, get_db, get_school_obj, module_page
         ) or "<tr><td colspan='5' class='ag-muted'>No generation runs yet.</td></tr>"
         ready = bool(days and periods and (requirements or advanced_instructional_requirements) and not read_only)
         action_html = (
-            f"""<form method='post' action='/app/timetable/automatic/generate' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.')"><input type='hidden' name='profile_id' value='{pid}'><button class='ag-btn'>⚡ Generate complete timetable</button></form>"""
+            f"""<form method='post' data-native-post='true' action='/app/timetable/automatic/generate' onsubmit="return confirm('Generate a complete timetable using the current setup? Existing manual lessons will be preserved.')"><input type='hidden' name='profile_id' value='{pid}'><button class='ag-btn'>⚡ Generate complete timetable</button></form>"""
             if ready else
             (f"""<div class='ag-warning'>This profile is {esc(selected['status']).replace('_',' ')} and is read-only. Create a new draft revision before generating or changing its timetable.</div><a class='ag-btn secondary' href='/app/timetable/publishing?profile_id={pid}'>Create Revision</a>""" if read_only else
              f"""<div class='ag-warning'>Complete the setup requirements first: add instructional days, teaching periods and a weekly requirement for every current class-subject-teacher allocation.</div><a class='ag-btn secondary' href='/app/timetable/setup?profile_id={pid}'>Complete Setup</a>""")
